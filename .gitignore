@@ -60,3 +60,51 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Supabase (if used in server context)
+.supabase/
+supabase/.env
+supabase/.env.*
+supabase/migrations/
+supabase/functions/
+supabase/config.toml
+supabase/docker/
+supabase/.output/
+supabase/.next/
+supabase/.cache/
+supabase/logs/
+supabase/tmp/
+supabase/backups/
+supabase/dumps/
+supabase/node_modules/
+# General environment files (do not commit secrets)
+.env
+.env.*
+# Reference: https://supabase.com/docs/guides/hosting/overview — cross-check with @Web for updates
+
+# FastAPI and Python server ignores
+venv/
+.env
+.env.*
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+instance/
+*.db
+*.sqlite3
+*.log
+
+htmlcov/
+.coverage
+.tox/
+.pytest_cache/
+.cache/
+
+staticfiles/
+mediafiles/
+
+local_settings.py
+
+# Reference: https://fastapi.tiangolo.com/deployment/ — cross-check with @Web for latest best practices
