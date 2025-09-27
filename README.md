@@ -1277,8 +1277,6 @@ web: gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$POR
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ### Third-Party Licenses
 - **FastAPI**: MIT License
 - **SwiftUI**: Apple License
