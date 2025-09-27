@@ -43,16 +43,24 @@ async def register_user(user_data: UserCreate):
     Creates a new user account with email and password authentication
     """
     try:
+        from app.utils.security import SecurityValidator
+        
+        # Validate and sanitize input
+        validated_email = SecurityValidator.validate_email(user_data.email)
+        validated_password = SecurityValidator.validate_password(user_data.password)
+        sanitized_first_name = SecurityValidator.sanitize_text(user_data.first_name or "", max_length=100)
+        sanitized_last_name = SecurityValidator.sanitize_text(user_data.last_name or "", max_length=100)
+        
         supabase = get_supabase_client()
         
         # Create user with Supabase Auth
         response = supabase.auth.sign_up({
-            "email": user_data.email,
-            "password": user_data.password,
+            "email": validated_email,
+            "password": validated_password,
             "options": {
                 "data": {
-                    "first_name": user_data.first_name,
-                    "last_name": user_data.last_name,
+                    "first_name": sanitized_first_name,
+                    "last_name": sanitized_last_name,
                     "role": user_data.role.value
                 }
             }
@@ -89,11 +97,17 @@ async def login_user(email: str, password: str):
     Validates user credentials and returns JWT token for API access
     """
     try:
+        from app.utils.security import SecurityValidator
+        
+        # Validate and sanitize input
+        validated_email = SecurityValidator.validate_email(email)
+        # Note: Don't validate password here as it's already hashed
+        
         supabase = get_supabase_client()
         
         # Authenticate with Supabase
         response = supabase.auth.sign_in_with_password({
-            "email": email,
+            "email": validated_email,
             "password": password
         })
         

@@ -101,8 +101,10 @@ async def analyze_scan(
         
         pet = pet_response.data[0]
         
-        # Extract ingredients from text
-        ingredients = extract_ingredients_from_text(analysis_request.extracted_text)
+        # Sanitize and extract ingredients from text
+        from app.utils.security import SecurityValidator
+        sanitized_text = SecurityValidator.sanitize_text(analysis_request.extracted_text, max_length=10000)
+        ingredients = extract_ingredients_from_text(sanitized_text)
         
         # Analyze ingredients
         ingredient_analyses = await analyze_ingredients(
