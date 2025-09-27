@@ -23,6 +23,27 @@ class AuthService: ObservableObject {
     private init() {
         // Check for existing authentication on app launch
         checkAuthenticationStatus()
+        
+        // Attempt to restore existing auth token and user session
+        // Token is persisted securely using Keychain inside APIService
+        if apiService.hasAuthToken {
+            isAuthenticated = true
+            isLoading = true
+            apiService.getCurrentUser()
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        self?.isLoading = false
+                        if case .failure(_) = completion {
+                            self?.logout()
+                        }
+                    },
+                    receiveValue: { [weak self] user in
+                        self?.currentUser = user
+                    }
+                )
+                .store(in: &cancellables)
+        }
     }
     
     /// Check if user is currently authenticated
@@ -127,7 +148,7 @@ class AuthService: ObservableObject {
     
     /// Handle authentication response
     private func handleAuthResponse(_ authResponse: AuthResponse) {
-        apiService.setAuthToken(authResponse.accessToken)
+        // Token is persisted securely using Keychain inside APIService
         isAuthenticated = true
         currentUser = authResponse.user
         errorMessage = nil

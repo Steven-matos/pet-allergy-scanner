@@ -7,13 +7,24 @@
 
 import Foundation
 import Combine
+import Security
 
 /// Main API service for communicating with the backend
 class APIService: ObservableObject {
     static let shared = APIService()
     
-    private let baseURL = "http://localhost:8000/api/v1"
-    private var authToken: String?
+    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "http://localhost:8000/api/v1"
+    private let authTokenKey = "authToken"
+    private var authToken: String? {
+        get { KeychainHelper.read(forKey: authTokenKey) }
+        set {
+            if let token = newValue {
+                KeychainHelper.save(token, forKey: authTokenKey)
+            } else {
+                KeychainHelper.delete(forKey: authTokenKey)
+            }
+        }
+    }
     
     private init() {}
     
@@ -337,3 +348,4 @@ extension APIService {
         return performRequest(request, responseType: [String].self)
     }
 }
+
