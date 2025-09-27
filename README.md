@@ -1299,4 +1299,4 @@ web: gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$POR
 
 **Built with ❤️ for pet owners everywhere**
 
-*Last updated: January 2025*
+*Last updated: October 2025*
