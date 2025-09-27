@@ -222,6 +222,26 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/pet_allergy_scanner
+DATABASE_POOL_SIZE=10
+DATABASE_TIMEOUT=30
+
+# Rate Limiting
+RATE_LIMIT_PER_MINUTE=60
+AUTH_RATE_LIMIT_PER_MINUTE=5
+
+# File Upload Limits
+MAX_FILE_SIZE_MB=10
+MAX_REQUEST_SIZE_MB=50
+
+# Security Features
+ENABLE_MFA=true
+ENABLE_AUDIT_LOGGING=true
+SESSION_TIMEOUT_MINUTES=480
+
+# GDPR Compliance
+DATA_RETENTION_DAYS=365
+ENABLE_DATA_EXPORT=true
+ENABLE_DATA_DELETION=true
 
 # Environment
 ENVIRONMENT=development
@@ -269,6 +289,37 @@ The API will be available at:
 - **API**: `http://localhost:8000`
 - **Docs**: `http://localhost:8000/docs`
 - **Health**: `http://localhost:8000/health`
+- **Monitoring**: `http://localhost:8000/api/v1/monitoring/health`
+
+### 5. Security Configuration
+
+The server includes comprehensive security features that are automatically enabled:
+
+#### Security Middleware Stack
+The security middleware is applied in the following order (order matters):
+
+1. **SecurityHeadersMiddleware** - Adds security headers
+2. **AuditLogMiddleware** - Logs security events
+3. **RateLimitMiddleware** - Enforces rate limits
+4. **RequestSizeMiddleware** - Validates request sizes
+5. **APIVersionMiddleware** - Handles API versioning
+6. **RequestTimeoutMiddleware** - Handles request timeouts
+7. **CORSMiddleware** - Handles CORS
+8. **TrustedHostMiddleware** - Validates trusted hosts
+
+#### Security Headers
+The server automatically adds the following security headers:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- `Content-Security-Policy: default-src 'self'`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+
+#### Rate Limiting
+- **General API**: 60 requests/minute per IP
+- **Authentication endpoints**: 5 requests/minute per IP
+- **Headers**: Rate limit information included in responses
 
 ## iOS App Setup
 
@@ -533,31 +584,368 @@ CREATE POLICY "Users can insert own pets" ON pets
 ## Security Features
 
 ### Authentication & Authorization
-- **JWT Tokens**: Secure token-based authentication
-- **Multi-Factor Authentication**: TOTP-based MFA support
-- **Session Management**: Configurable session timeouts
+- **JWT Tokens**: Secure token-based authentication with HS256 algorithm
+- **Multi-Factor Authentication**: TOTP-based MFA with QR code generation
+- **Session Management**: Configurable session timeouts (default: 8 hours)
 - **Password Security**: Bcrypt hashing with salt
+- **Backup Codes**: 10 backup codes per user for MFA recovery
 
 ### API Security
-- **Rate Limiting**: Per-user and per-endpoint limits
-- **Request Validation**: Pydantic model validation
-- **SQL Injection Protection**: Parameterized queries
-- **CORS Configuration**: Restricted origins
-- **Security Headers**: HSTS, CSP, X-Frame-Options
+- **Rate Limiting**: Multi-tier rate limiting system
+  - General API: 60 requests/minute per IP
+  - Auth endpoints: 5 requests/minute per IP
+- **Request Validation**: Pydantic model validation with input sanitization
+- **SQL Injection Protection**: Parameterized queries with Supabase
+- **CORS Configuration**: Environment-specific origins
+- **Security Headers**: Comprehensive security header middleware
+- **Request Size Limits**: Configurable file upload and request size limits
 
 ### Data Protection
 - **Encryption at Rest**: Supabase encryption
 - **Encryption in Transit**: TLS 1.3
-- **Keychain Storage**: iOS secure storage
-- **Audit Logging**: Comprehensive activity tracking
-- **Data Anonymization**: GDPR compliance
+- **Keychain Storage**: iOS secure storage for tokens
+- **Audit Logging**: Comprehensive activity tracking with structured logs
+- **Data Anonymization**: GDPR compliance with data anonymization
+- **Input Sanitization**: XSS, SQL injection, and HTML injection protection
 
 ### Privacy & Compliance
-- **GDPR Compliance**: Data export and deletion
-- **Data Retention**: Configurable retention policies
-- **Privacy by Design**: Minimal data collection
-- **User Consent**: Clear privacy policies
-- **Data Portability**: Export user data
+- **GDPR Compliance**: Full GDPR compliance implementation
+  - Right of Access: Data export endpoint
+  - Right to Rectification: Profile update functionality
+  - Right to Erasure: Complete data deletion
+  - Right to Data Portability: Structured JSON export
+  - Right to Object: Data anonymization
+- **Data Retention**: Configurable retention policies (default: 365 days)
+- **Privacy by Design**: Minimal data collection principles
+- **User Consent**: Clear privacy policies and consent management
+- **Data Portability**: Export user data in structured format
+
+### Security Monitoring
+- **Health Checks**: Real-time system health monitoring
+- **Performance Metrics**: Response time and throughput tracking
+- **Security Events**: Automated security event logging
+- **Alerting System**: Critical event notifications
+- **Audit Trail**: Comprehensive audit logging for compliance
+
+### Security Testing
+- **Automated Security Tests**: Comprehensive security test suite
+- **Vulnerability Scanning**: Dependency vulnerability checks
+- **Penetration Testing**: Regular security assessments
+- **Security Audit**: Automated security audit tool
+
+## iOS CORS Configuration
+
+### Overview
+iOS apps use custom URL schemes rather than traditional HTTP origins, which requires special CORS configuration for the Pet Allergy Scanner API.
+
+### iOS App URL Schemes
+
+#### Capacitor/Ionic Apps
+- **Development**: `capacitor://localhost` or `ionic://localhost`
+- **Production**: `capacitor://your-app-id` or `ionic://your-app-id`
+
+#### React Native Apps
+- **Development**: `http://localhost:8081` (Metro bundler)
+- **Production**: Custom scheme like `yourapp://`
+
+#### Native iOS Apps
+- **Custom Scheme**: `yourapp://` (defined in Info.plist)
+
+### Current Configuration
+
+The server is configured to allow the following origins by default:
+
+```python
+allowed_origins = [
+    "http://localhost:3000",      # Web development
+    "http://localhost:8080",      # Web development
+    "capacitor://localhost",      # Capacitor iOS development
+    "ionic://localhost",          # Ionic iOS development
+    "http://localhost",           # General localhost
+    "https://localhost"           # HTTPS localhost
+]
+```
+
+### Production Configuration
+
+For production, update the `ALLOWED_ORIGINS` environment variable:
+
+```bash
+# Example production configuration
+ALLOWED_ORIGINS=https://yourdomain.com,capacitor://com.yourcompany.petallergyscanner,yourapp://
+```
+
+### iOS App Setup
+
+#### 1. Capacitor/Ionic Apps
+
+In your `capacitor.config.ts`:
+
+```typescript
+import { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'com.yourcompany.petallergyscanner',
+  appName: 'Pet Allergy Scanner',
+  webDir: 'dist',
+  server: {
+    androidScheme: 'https',
+    iosScheme: 'capacitor'
+  }
+};
+
+export default config;
+```
+
+#### 2. Native iOS Apps
+
+In your `Info.plist`:
+
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key>
+        <string>com.yourcompany.petallergyscanner</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>yourapp</string>
+        </array>
+    </dict>
+</array>
+```
+
+### API Client Configuration
+
+#### Swift/iOS Example
+
+```swift
+import Foundation
+
+class APIClient {
+    private let baseURL = "https://your-api-domain.com/api/v1"
+    
+    func makeRequest<T: Codable>(
+        endpoint: String,
+        method: HTTPMethod,
+        body: Data? = nil,
+        completion: @escaping (Result<T, Error>) -> Void
+    ) {
+        guard let url = URL(string: baseURL + endpoint) else {
+            completion(.failure(APIError.invalidURL))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Add authentication token if available
+        if let token = UserDefaults.standard.string(forKey: "auth_token") {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        if let body = body {
+            request.httpBody = body
+        }
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            // Handle response
+        }.resume()
+    }
+}
+```
+
+### Testing CORS Configuration
+
+#### Test with curl
+
+```bash
+# Test from iOS app origin
+curl -H "Origin: capacitor://localhost" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: Content-Type,Authorization" \
+     -X OPTIONS \
+     https://your-api-domain.com/api/v1/auth/login
+```
+
+#### Test with JavaScript
+
+```javascript
+// Test CORS from iOS app
+fetch('https://your-api-domain.com/api/v1/health', {
+  method: 'GET',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+.then(response => response.json())
+.then(data => console.log('CORS test successful:', data))
+.catch(error => console.error('CORS test failed:', error));
+```
+
+### Troubleshooting
+
+#### Common Issues
+
+1. **CORS Error**: "Access to fetch at '...' from origin 'capacitor://localhost' has been blocked by CORS policy"
+   - **Solution**: Add your iOS app's URL scheme to `ALLOWED_ORIGINS`
+
+2. **Preflight Request Fails**: OPTIONS request returns 403
+   - **Solution**: Ensure CORS middleware is properly configured and origins are correct
+
+3. **Authentication Issues**: JWT tokens not being sent
+   - **Solution**: Check that Authorization header is properly set in your API client
+
+#### Debug Steps
+
+1. Check server logs for CORS-related errors
+2. Verify the Origin header in browser dev tools
+3. Test with different URL schemes
+4. Check that the CORS middleware is applied in the correct order
+
+### Security Considerations
+
+1. **Production Origins**: Only add production app schemes to avoid security issues
+2. **HTTPS**: Always use HTTPS in production
+3. **Token Security**: Store JWT tokens securely (Keychain on iOS)
+4. **Certificate Pinning**: Consider implementing certificate pinning for additional security
+
+### Environment-Specific Configuration
+
+#### Development
+```bash
+ALLOWED_ORIGINS=http://localhost:3000,capacitor://localhost,ionic://localhost
+```
+
+#### Staging
+```bash
+ALLOWED_ORIGINS=https://staging.yourdomain.com,capacitor://com.yourcompany.petallergyscanner.staging
+```
+
+#### Production
+```bash
+ALLOWED_ORIGINS=https://yourdomain.com,capacitor://com.yourcompany.petallergyscanner
+```
+
+## Monitoring & Health Checks
+
+### Health Check Endpoints
+
+#### Basic Health Check
+```http
+GET /health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "version": "1.0.0"
+}
+```
+
+#### Detailed Health Check
+```http
+GET /api/v1/monitoring/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "version": "1.0.0",
+  "database": {
+    "status": "connected",
+    "response_time_ms": 15
+  },
+  "memory": {
+    "used_mb": 128,
+    "available_mb": 896
+  },
+  "disk": {
+    "used_gb": 2.5,
+    "available_gb": 47.5
+  }
+}
+```
+
+### Metrics Endpoint
+
+```http
+GET /api/v1/monitoring/metrics
+```
+
+Response:
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "requests": {
+    "total": 15420,
+    "successful": 15380,
+    "failed": 40,
+    "rate_per_minute": 45
+  },
+  "response_times": {
+    "average_ms": 120,
+    "p95_ms": 250,
+    "p99_ms": 500
+  },
+  "errors": {
+    "4xx": 25,
+    "5xx": 15
+  }
+}
+```
+
+### Audit Logging
+
+The server maintains comprehensive audit logs in `audit.log`:
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "event_type": "authentication",
+  "user_id": "uuid-here",
+  "ip_address": "192.168.1.100",
+  "user_agent": "PetAllergyScanner/1.0.0",
+  "success": true,
+  "details": {
+    "method": "login",
+    "endpoint": "/api/v1/auth/login"
+  }
+}
+```
+
+### Security Testing
+
+#### Run Security Tests
+
+```bash
+# Run all security tests
+cd server
+pytest tests/test_security.py -v
+
+# Run specific test categories
+pytest tests/test_security.py::TestSecurityValidation -v
+pytest tests/test_security.py::TestRateLimiting -v
+pytest tests/test_security.py::TestInputValidation -v
+```
+
+#### Run Security Audit
+
+```bash
+# Run comprehensive security audit
+python security_audit.py
+
+# Check for dependency vulnerabilities
+pip-audit
+
+# Run security tests with coverage
+pytest tests/test_security.py --cov=app --cov-report=html
+```
 
 ## Development
 
@@ -663,17 +1051,55 @@ xcodebuild test -scheme pet-allergy-scanner -destination 'platform=iOS Simulator
 
 #### Environment Setup
 ```env
+# Production Environment
 ENVIRONMENT=production
 DEBUG=false
-SECRET_KEY=your_production_secret_key
+
+# Security Configuration
+SECRET_KEY=your_production_secret_key_32_chars_minimum
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Supabase Production
 SUPABASE_URL=your_production_supabase_url
 SUPABASE_KEY=your_production_supabase_key
+SUPABASE_SERVICE_ROLE_KEY=your_production_service_role_key
+
+# CORS Production
+ALLOWED_ORIGINS=https://yourdomain.com,capacitor://com.yourcompany.petallergyscanner
+ALLOWED_HOSTS=yourdomain.com
+
+# Database Production
+DATABASE_URL=postgresql://user:password@your-db-host:5432/pet_allergy_scanner
+DATABASE_POOL_SIZE=20
+DATABASE_TIMEOUT=30
+
+# Rate Limiting Production
+RATE_LIMIT_PER_MINUTE=100
+AUTH_RATE_LIMIT_PER_MINUTE=10
+
+# Security Features
+ENABLE_MFA=true
+ENABLE_AUDIT_LOGGING=true
+SESSION_TIMEOUT_MINUTES=480
+
+# GDPR Compliance
+DATA_RETENTION_DAYS=365
+ENABLE_DATA_EXPORT=true
+ENABLE_DATA_DELETION=true
 ```
 
 #### Production Server
 ```bash
-# Using Gunicorn
-gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# Using Gunicorn (Recommended)
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --timeout 120 \
+  --keep-alive 2 \
+  --max-requests 1000 \
+  --max-requests-jitter 100 \
+  --access-logfile - \
+  --error-logfile -
 
 # Using Uvicorn
 uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
@@ -683,15 +1109,132 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 ```dockerfile
 FROM python:3.9-slim
 
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash app
+RUN chown -R app:app /app
+USER app
+
+# Expose port
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application
+CMD ["gunicorn", "main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000"]
 ```
+
+#### Docker Compose
+```yaml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://user:password@db:5432/pet_allergy_scanner
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=pet_allergy_scanner
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+```
+
+#### Platform Deployment
+
+##### Vercel
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "main.py"
+    }
+  ],
+  "env": {
+    "ENVIRONMENT": "production",
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_KEY": "@supabase_key",
+    "SECRET_KEY": "@secret_key"
+  }
+}
+```
+
+##### Railway
+```toml
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+```
+
+##### Heroku
+```procfile
+web: gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+```
+
+#### Production Checklist
+
+- [ ] Environment variables configured
+- [ ] Database migrations applied
+- [ ] SSL/TLS certificates installed
+- [ ] CORS origins updated for production
+- [ ] Rate limiting configured
+- [ ] Monitoring and logging set up
+- [ ] Backup strategy implemented
+- [ ] Security audit completed
+- [ ] Performance testing done
+- [ ] Health checks configured
 
 ### iOS App Deployment
 
