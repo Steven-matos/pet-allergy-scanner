@@ -9,7 +9,7 @@ import SwiftUI
 
 struct FavoritesView: View {
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 Image(systemName: "heart.fill")
                     .font(.system(size: 60))

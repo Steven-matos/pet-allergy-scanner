@@ -13,7 +13,7 @@ struct PetsView: View {
     @State private var showingAlert = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 if petService.isLoading {
                     ProgressView("Loading pets...")

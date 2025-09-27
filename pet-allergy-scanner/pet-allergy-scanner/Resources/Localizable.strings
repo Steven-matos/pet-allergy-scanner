@@ -1,0 +1,115 @@
+/* 
+  Localizable.strings
+  pet-allergy-scanner
+  
+  Created by Steven Matos on 9/26/25.
+*/
+
+// MARK: - Common
+"OK" = "OK";
+"Cancel" = "Cancel";
+"Save" = "Save";
+"Delete" = "Delete";
+"Edit" = "Edit";
+"Add" = "Add";
+"Remove" = "Remove";
+"Done" = "Done";
+"Retry" = "Retry";
+"Try Again" = "Try Again";
+"Settings" = "Settings";
+"Error" = "Error";
+"Success" = "Success";
+"Loading" = "Loading";
+"Processing" = "Processing";
+
+// MARK: - Navigation
+"Profile" = "Profile";
+"Scan" = "Scan";
+"Pets" = "Pets";
+"History" = "History";
+"Favorites" = "Favorites";
+
+// MARK: - Profile View
+"Edit Profile" = "Edit Profile";
+"Subscription" = "Subscription";
+"Help & Support" = "Help & Support";
+"Settings" = "Settings";
+"Sign Out" = "Sign Out";
+"Are you sure you want to sign out?" = "Are you sure you want to sign out?";
+"Configuration Error" = "Configuration Error";
+"Required services are not available. Please restart the app." = "Required services are not available. Please restart the app.";
+
+// MARK: - Scan View
+"Scan Pet Food" = "Scan Pet Food";
+"Point your camera at the ingredient list" = "Point your camera at the ingredient list";
+"Tap to Scan" = "Tap to Scan";
+"Processing image..." = "Processing image...";
+"Analyzing ingredients..." = "Analyzing ingredients...";
+"Extracted Text:" = "Extracted Text:";
+"Analyze Ingredients" = "Analyze Ingredients";
+"Recent Scans" = "Recent Scans";
+"Select Pet" = "Select Pet";
+"Camera Permission" = "Camera Permission";
+"Camera Error" = "Camera Error";
+"Camera access is required to scan ingredient labels. Please allow camera access in Settings." = "Camera access is required to scan ingredient labels. Please allow camera access in Settings.";
+"Camera access is denied. Please enable camera access in Settings to scan ingredient labels." = "Camera access is denied. Please enable camera access in Settings to scan ingredient labels.";
+"Camera access is granted." = "Camera access is granted.";
+"Unknown camera permission status." = "Unknown camera permission status.";
+"Failed to capture image" = "Failed to capture image";
+
+// MARK: - Pet Management
+"Add Pet" = "Add Pet";
+"Add Your First Pet" = "Add Your First Pet";
+"No Pets Added" = "No Pets Added";
+"Add your pet's profile to start scanning ingredient labels for allergies and safety." = "Add your pet's profile to start scanning ingredient labels for allergies and safety.";
+"Basic Information" = "Basic Information";
+"Pet Name" = "Pet Name";
+"Species" = "Species";
+"Breed (Optional)" = "Breed (Optional)";
+"Physical Information" = "Physical Information";
+"Age" = "Age";
+"Months" = "Months";
+"Weight" = "Weight";
+"kg" = "kg";
+"Known Allergies" = "Known Allergies";
+"Add allergy" = "Add allergy";
+"Veterinary Information (Optional)" = "Veterinary Information (Optional)";
+"Vet Name" = "Vet Name";
+"Vet Phone" = "Vet Phone";
+
+// MARK: - Pet Species
+"Dog" = "Dog";
+"Cat" = "Cat";
+
+// MARK: - Scan Status
+"Pending" = "Pending";
+"Processing" = "Processing";
+"Completed" = "Completed";
+"Failed" = "Failed";
+
+// MARK: - Safety Levels
+"Safe" = "Safe";
+"Caution" = "Caution";
+"Unsafe" = "Unsafe";
+"Unknown" = "Unknown";
+
+// MARK: - Validation Messages
+"Pet name is required" = "Pet name is required";
+"Pet name must be at least 2 characters" = "Pet name must be at least 2 characters";
+"Pet name must be less than 50 characters" = "Pet name must be less than 50 characters";
+"Age cannot be negative" = "Age cannot be negative";
+"Weight must be positive" = "Weight must be positive";
+"Pet ID is required" = "Pet ID is required";
+"Either image or text data is required" = "Either image or text data is required";
+"Extracted text is required" = "Extracted text is required";
+
+// MARK: - OCR Messages
+"Invalid image" = "Invalid image";
+"OCR failed: %@" = "OCR failed: %@";
+"No text found in image" = "No text found in image";
+"OCR processing failed: %@" = "OCR processing failed: %@";
+"Invalid image data" = "Invalid image data";
+
+// MARK: - Safety Messages
+"Contains %d potentially unsafe ingredient" = "Contains %d potentially unsafe ingredient";
+"Contains %d potentially unsafe ingredients" = "Contains %d potentially unsafe ingredients";

@@ -17,7 +17,7 @@ struct AuthenticationView: View {
     @State private var showingAlert = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 // App Logo and Title
                 VStack(spacing: 16) {

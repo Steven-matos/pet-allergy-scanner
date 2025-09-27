@@ -11,6 +11,7 @@ import UIKit
 
 struct CameraView: UIViewControllerRepresentable {
     let onImageCaptured: (UIImage) -> Void
+    let onError: (String) -> Void
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
@@ -38,6 +39,8 @@ struct CameraView: UIViewControllerRepresentable {
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
                 parent.onImageCaptured(image)
+            } else {
+                parent.onError("Failed to capture image")
             }
             picker.dismiss(animated: true)
         }
@@ -49,7 +52,12 @@ struct CameraView: UIViewControllerRepresentable {
 }
 
 #Preview {
-    CameraView { image in
-        print("Image captured: \(image)")
-    }
+    CameraView(
+        onImageCaptured: { image in
+            print("Image captured: \(image)")
+        },
+        onError: { error in
+            print("Camera error: \(error)")
+        }
+    )
 }

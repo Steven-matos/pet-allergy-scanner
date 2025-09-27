@@ -8,7 +8,7 @@
 import Foundation
 
 /// Pet data model representing a pet profile
-struct Pet: Codable, Identifiable {
+struct Pet: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let userId: String
     let name: String
@@ -21,6 +21,36 @@ struct Pet: Codable, Identifiable {
     let vetPhone: String?
     let createdAt: Date
     let updatedAt: Date
+    
+    /// Validation for pet data
+    var isValid: Bool {
+        return !id.isEmpty && !userId.isEmpty && !name.isEmpty && name.count >= 2
+    }
+    
+    /// Display name for the pet
+    var displayName: String {
+        if let breed = breed, !breed.isEmpty {
+            return "\(name) (\(breed))"
+        }
+        return name
+    }
+    
+    /// Age description in human-readable format
+    var ageDescription: String? {
+        guard let ageMonths = ageMonths else { return nil }
+        
+        if ageMonths < 12 {
+            return "\(ageMonths) month\(ageMonths == 1 ? "" : "s") old"
+        } else {
+            let years = ageMonths / 12
+            let remainingMonths = ageMonths % 12
+            if remainingMonths == 0 {
+                return "\(years) year\(years == 1 ? "" : "s") old"
+            } else {
+                return "\(years) year\(years == 1 ? "" : "s"), \(remainingMonths) month\(remainingMonths == 1 ? "" : "s") old"
+            }
+        }
+    }
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -72,6 +102,34 @@ struct PetCreate: Codable {
     let knownAllergies: [String]
     let vetName: String?
     let vetPhone: String?
+    
+    /// Validation for pet creation data
+    var isValid: Bool {
+        return !name.isEmpty && name.count >= 2 && name.count <= 50
+    }
+    
+    /// Validation errors for pet creation
+    var validationErrors: [String] {
+        var errors: [String] = []
+        
+        if name.isEmpty {
+            errors.append("Pet name is required")
+        } else if name.count < 2 {
+            errors.append("Pet name must be at least 2 characters")
+        } else if name.count > 50 {
+            errors.append("Pet name must be less than 50 characters")
+        }
+        
+        if let ageMonths = ageMonths, ageMonths < 0 {
+            errors.append("Age cannot be negative")
+        }
+        
+        if let weightKg = weightKg, weightKg <= 0 {
+            errors.append("Weight must be positive")
+        }
+        
+        return errors
+    }
     
     enum CodingKeys: String, CodingKey {
         case name

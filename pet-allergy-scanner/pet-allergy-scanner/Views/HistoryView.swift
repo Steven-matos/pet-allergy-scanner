@@ -11,7 +11,7 @@ struct HistoryView: View {
     @StateObject private var scanService = ScanService.shared
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack {
                 if scanService.isLoading {
                     ProgressView("Loading history...")

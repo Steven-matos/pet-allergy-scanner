@@ -6,19 +6,20 @@
 //
 
 import Foundation
-import Combine
+import Observation
 
-/// Authentication service for managing user authentication state
-class AuthService: ObservableObject {
+/// Authentication service for managing user authentication state using Swift Concurrency
+@Observable
+@MainActor
+class AuthService {
     static let shared = AuthService()
     
-    @Published var isAuthenticated = false
-    @Published var currentUser: User?
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+    var isAuthenticated = false
+    var currentUser: User?
+    var isLoading = false
+    var errorMessage: String?
     
     private let apiService = APIService.shared
-    private var cancellables = Set<AnyCancellable>()
     
     private init() {
         // Check for existing authentication on app launch
@@ -27,22 +28,24 @@ class AuthService: ObservableObject {
         // Attempt to restore existing auth token and user session
         // Token is persisted securely using Keychain inside APIService
         if apiService.hasAuthToken {
-            isAuthenticated = true
-            isLoading = true
-            apiService.getCurrentUser()
-                .receive(on: DispatchQueue.main)
-                .sink(
-                    receiveCompletion: { [weak self] completion in
-                        self?.isLoading = false
-                        if case .failure(_) = completion {
-                            self?.logout()
-                        }
-                    },
-                    receiveValue: { [weak self] user in
-                        self?.currentUser = user
-                    }
-                )
-                .store(in: &cancellables)
+            Task {
+                await restoreUserSession()
+            }
+        }
+    }
+    
+    /// Restore user session from stored token
+    private func restoreUserSession() async {
+        isAuthenticated = true
+        isLoading = true
+        
+        do {
+            let user = try await apiService.getCurrentUser()
+            currentUser = user
+            isLoading = false
+        } catch {
+            isLoading = false
+            logout()
         }
     }
     
@@ -60,7 +63,7 @@ class AuthService: ObservableObject {
         password: String,
         firstName: String? = nil,
         lastName: String? = nil
-    ) {
+    ) async {
         isLoading = true
         errorMessage = nil
         
@@ -72,41 +75,27 @@ class AuthService: ObservableObject {
             role: .free
         )
         
-        apiService.register(user: userCreate)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] authResponse in
-                    self?.handleAuthResponse(authResponse)
-                }
-            )
-            .store(in: &cancellables)
+        do {
+            let authResponse = try await apiService.register(user: userCreate)
+            handleAuthResponse(authResponse)
+        } catch {
+            isLoading = false
+            errorMessage = error.localizedDescription
+        }
     }
     
     /// Login user with email and password
-    func login(email: String, password: String) {
+    func login(email: String, password: String) async {
         isLoading = true
         errorMessage = nil
         
-        apiService.login(email: email, password: password)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] authResponse in
-                    self?.handleAuthResponse(authResponse)
-                }
-            )
-            .store(in: &cancellables)
+        do {
+            let authResponse = try await apiService.login(email: email, password: password)
+            handleAuthResponse(authResponse)
+        } catch {
+            isLoading = false
+            errorMessage = error.localizedDescription
+        }
     }
     
     /// Logout current user
@@ -118,7 +107,7 @@ class AuthService: ObservableObject {
     }
     
     /// Update current user profile
-    func updateProfile(firstName: String?, lastName: String?) {
+    func updateProfile(firstName: String?, lastName: String?) async {
         guard isAuthenticated else { return }
         
         isLoading = true
@@ -130,20 +119,14 @@ class AuthService: ObservableObject {
             role: nil
         )
         
-        apiService.updateUser(userUpdate)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] user in
-                    self?.currentUser = user
-                }
-            )
-            .store(in: &cancellables)
+        do {
+            let user = try await apiService.updateUser(userUpdate)
+            currentUser = user
+            isLoading = false
+        } catch {
+            isLoading = false
+            errorMessage = error.localizedDescription
+        }
     }
     
     /// Handle authentication response

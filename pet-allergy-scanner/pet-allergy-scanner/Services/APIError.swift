@@ -15,6 +15,7 @@ enum APIError: Error, LocalizedError {
     case encodingError
     case authenticationError
     case serverError(Int)
+    case serverMessage(String)
     case unknownError
     
     var errorDescription: String? {
@@ -31,8 +32,17 @@ enum APIError: Error, LocalizedError {
             return "Authentication failed"
         case .serverError(let code):
             return "Server error: \(code)"
+        case .serverMessage(let message):
+            return "Server error: \(message)"
         case .unknownError:
             return "Unknown error occurred"
         }
     }
+}
+
+/// API error response model for decoding server error messages
+struct APIErrorResponse: Codable {
+    let message: String
+    let code: String?
+    let details: [String: String]?
 }

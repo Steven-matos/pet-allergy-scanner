@@ -21,13 +21,30 @@ struct AddPetView: View {
     @State private var vetPhone = ""
     @State private var newAllergy = ""
     @State private var showingAlert = false
+    @State private var validationErrors: [String] = []
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             Form {
                 // Basic Information Section
                 Section("Basic Information") {
-                    TextField("Pet Name", text: $name)
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Pet Name", text: $name)
+                            .accessibilityIdentifier("petNameTextField")
+                            .accessibilityLabel("Pet name")
+                            .onChange(of: name) { _ in
+                                validateForm()
+                            }
+                        
+                        if validationErrors.contains(where: { $0.contains("name") }) {
+                            Text(validationErrors.first(where: { $0.contains("name") }) ?? "")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .accessibilityIdentifier("petNameError")
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                                .animation(.easeInOut(duration: 0.2), value: validationErrors)
+                        }
+                    }
                     
                     Picker("Species", selection: $species) {
                         ForEach(PetSpecies.allCases, id: \.self) { species in
@@ -39,26 +56,50 @@ struct AddPetView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .accessibilityIdentifier("speciesPicker")
+                    .accessibilityLabel("Pet species")
                     
                     TextField("Breed (Optional)", text: $breed)
                 }
                 
                 // Physical Information Section
                 Section("Physical Information") {
-                    HStack {
-                        Text("Age")
-                        Spacer()
-                        TextField("Months", value: $ageMonths, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Age")
+                            Spacer()
+                            TextField("Months", value: $ageMonths, format: .number)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: ageMonths) { _ in
+                                    validateForm()
+                                }
+                        }
+                        
+                        if validationErrors.contains(where: { $0.contains("Age") }) {
+                            Text(validationErrors.first(where: { $0.contains("Age") }) ?? "")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                     }
                     
-                    HStack {
-                        Text("Weight")
-                        Spacer()
-                        TextField("kg", value: $weightKg, format: .number)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Weight")
+                            Spacer()
+                            TextField("kg", value: $weightKg, format: .number)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .onChange(of: weightKg) { _ in
+                                    validateForm()
+                                }
+                        }
+                        
+                        if validationErrors.contains(where: { $0.contains("Weight") }) {
+                            Text(validationErrors.first(where: { $0.contains("Weight") }) ?? "")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                     }
                 }
                 
@@ -110,7 +151,10 @@ struct AddPetView: View {
                     Button("Save") {
                         savePet()
                     }
-                    .disabled(name.isEmpty)
+                    .disabled(!isFormValid)
+                    .accessibilityIdentifier("savePetButton")
+                    .accessibilityLabel("Save pet profile")
+                    .accessibilityHint("Saves the pet information to your profile")
                 }
             }
             .alert("Error", isPresented: $showingAlert) {
@@ -124,6 +168,36 @@ struct AddPetView: View {
                 }
             }
         }
+    }
+    
+    /// Check if form is valid
+    private var isFormValid: Bool {
+        let petCreate = PetCreate(
+            name: name,
+            species: species,
+            breed: breed.isEmpty ? nil : breed,
+            ageMonths: ageMonths,
+            weightKg: weightKg,
+            knownAllergies: knownAllergies,
+            vetName: vetName.isEmpty ? nil : vetName,
+            vetPhone: vetPhone.isEmpty ? nil : vetPhone
+        )
+        return petCreate.isValid
+    }
+    
+    /// Validate form and update error messages
+    private func validateForm() {
+        let petCreate = PetCreate(
+            name: name,
+            species: species,
+            breed: breed.isEmpty ? nil : breed,
+            ageMonths: ageMonths,
+            weightKg: weightKg,
+            knownAllergies: knownAllergies,
+            vetName: vetName.isEmpty ? nil : vetName,
+            vetPhone: vetPhone.isEmpty ? nil : vetPhone
+        )
+        validationErrors = petCreate.validationErrors
     }
     
     private func savePet() {
@@ -152,4 +226,13 @@ struct AddPetView: View {
 #Preview {
     AddPetView()
         .environmentObject(PetService.shared)
+}
+
+#Preview("With Mock Data") {
+    let mockPetService = PetService()
+    // Note: In a real implementation, you would inject mock data
+    // For now, this serves as a placeholder for preview purposes
+    
+    return AddPetView()
+        .environmentObject(mockPetService)
 }

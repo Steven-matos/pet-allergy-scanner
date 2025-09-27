@@ -8,7 +8,7 @@
 import Foundation
 
 /// Scan data model representing a scan record
-struct Scan: Codable, Identifiable {
+struct Scan: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let userId: String
     let petId: String
@@ -18,6 +18,26 @@ struct Scan: Codable, Identifiable {
     let result: ScanResult?
     let createdAt: Date
     let updatedAt: Date
+    
+    /// Validation for scan data
+    var isValid: Bool {
+        return !id.isEmpty && !userId.isEmpty && !petId.isEmpty
+    }
+    
+    /// Check if scan has completed analysis
+    var hasResult: Bool {
+        return result != nil && status == .completed
+    }
+    
+    /// Check if scan is currently processing
+    var isProcessing: Bool {
+        return status == .processing || status == .pending
+    }
+    
+    /// Check if scan failed
+    var hasFailed: Bool {
+        return status == .failed
+    }
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -54,7 +74,7 @@ enum ScanStatus: String, Codable, CaseIterable {
 }
 
 /// Scan result model containing analysis results
-struct ScanResult: Codable {
+struct ScanResult: Codable, Equatable, Hashable {
     let productName: String?
     let brand: String?
     let ingredientsFound: [String]
@@ -63,6 +83,24 @@ struct ScanResult: Codable {
     let overallSafety: String
     let confidenceScore: Double
     let analysisDetails: [String: String]
+    
+    /// Validation for scan result data
+    var isValid: Bool {
+        return confidenceScore >= 0.0 && confidenceScore <= 1.0
+    }
+    
+    /// Check if result indicates safety concerns
+    var hasSafetyConcerns: Bool {
+        return !unsafeIngredients.isEmpty || overallSafety == "unsafe" || overallSafety == "caution"
+    }
+    
+    /// Get primary safety concern message
+    var primarySafetyMessage: String? {
+        if !unsafeIngredients.isEmpty {
+            return "Contains \(unsafeIngredients.count) potentially unsafe ingredient\(unsafeIngredients.count == 1 ? "" : "s")"
+        }
+        return nil
+    }
     
     enum CodingKeys: String, CodingKey {
         case productName = "product_name"
@@ -111,6 +149,26 @@ struct ScanCreate: Codable {
     let rawText: String?
     let status: ScanStatus
     
+    /// Validation for scan creation data
+    var isValid: Bool {
+        return !petId.isEmpty
+    }
+    
+    /// Validation errors for scan creation
+    var validationErrors: [String] {
+        var errors: [String] = []
+        
+        if petId.isEmpty {
+            errors.append("Pet ID is required")
+        }
+        
+        if rawText?.isEmpty ?? true && imageUrl?.isEmpty ?? true {
+            errors.append("Either image or text data is required")
+        }
+        
+        return errors
+    }
+    
     enum CodingKeys: String, CodingKey {
         case petId = "pet_id"
         case imageUrl = "image_url"
@@ -124,6 +182,26 @@ struct ScanAnalysisRequest: Codable {
     let petId: String
     let extractedText: String
     let productName: String?
+    
+    /// Validation for analysis request data
+    var isValid: Bool {
+        return !petId.isEmpty && !extractedText.isEmpty
+    }
+    
+    /// Validation errors for analysis request
+    var validationErrors: [String] {
+        var errors: [String] = []
+        
+        if petId.isEmpty {
+            errors.append("Pet ID is required")
+        }
+        
+        if extractedText.isEmpty {
+            errors.append("Extracted text is required")
+        }
+        
+        return errors
+    }
     
     enum CodingKeys: String, CodingKey {
         case petId = "pet_id"

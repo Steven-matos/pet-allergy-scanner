@@ -8,12 +8,19 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @EnvironmentObject var authService: AuthService
+    @State private var authService = AuthService.shared
     @State private var showingLogoutAlert = false
     
+    /// Safety check for required environment objects
+    private var isEnvironmentValid: Bool {
+        return authService != nil
+    }
+    
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
+        Group {
+            if isEnvironmentValid {
+                NavigationStack {
+                    VStack(spacing: 20) {
                 // User Profile Header
                 VStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
@@ -46,7 +53,7 @@ struct ProfileView: View {
                 VStack(spacing: 16) {
                     ProfileOptionRow(
                         icon: "person.circle",
-                        title: "Edit Profile",
+                        title: LocalizationKeys.editProfile.localized,
                         action: {
                             // TODO: Implement edit profile
                         }
@@ -54,7 +61,7 @@ struct ProfileView: View {
                     
                     ProfileOptionRow(
                         icon: "creditcard",
-                        title: "Subscription",
+                        title: LocalizationKeys.subscription.localized,
                         action: {
                             // TODO: Implement subscription management
                         }
@@ -62,7 +69,7 @@ struct ProfileView: View {
                     
                     ProfileOptionRow(
                         icon: "questionmark.circle",
-                        title: "Help & Support",
+                        title: LocalizationKeys.helpSupport.localized,
                         action: {
                             // TODO: Implement help & support
                         }
@@ -70,7 +77,7 @@ struct ProfileView: View {
                     
                     ProfileOptionRow(
                         icon: "gear",
-                        title: "Settings",
+                        title: LocalizationKeys.settings.localized,
                         action: {
                             // TODO: Implement settings
                         }
@@ -84,25 +91,59 @@ struct ProfileView: View {
                 Button(action: {
                     showingLogoutAlert = true
                 }) {
-                    Text("Sign Out")
-                        .font(.headline)
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(10)
+                    HStack {
+                        if authService.isLoading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        }
+                        Text(LocalizationKeys.signOut.localized)
+                            .font(.headline)
+                            .foregroundColor(.red)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(10)
                 }
+                .disabled(authService.isLoading)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
-            .navigationTitle("Profile")
-            .alert("Sign Out", isPresented: $showingLogoutAlert) {
-                Button("Cancel", role: .cancel) { }
-                Button("Sign Out", role: .destructive) {
+            .navigationTitle(LocalizationKeys.profile.localized)
+            .alert(LocalizationKeys.signOut.localized, isPresented: $showingLogoutAlert) {
+                Button(LocalizationKeys.cancel.localized, role: .cancel) { }
+                Button(LocalizationKeys.signOut.localized, role: .destructive) {
                     authService.logout()
                 }
             } message: {
-                Text("Are you sure you want to sign out?")
+                Text(LocalizationKeys.signOutConfirmation.localized)
+            }
+            .alert(LocalizationKeys.error.localized, isPresented: .constant(authService.errorMessage != nil)) {
+                Button(LocalizationKeys.ok.localized) {
+                    authService.clearError()
+                }
+            } message: {
+                Text(authService.errorMessage ?? LocalizationKeys.error.localized)
+            }
+                }
+            } else {
+                // Fallback view when environment objects are not available
+                VStack(spacing: 20) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 60))
+                        .foregroundColor(.orange)
+                    
+                    Text(LocalizationKeys.configurationError.localized)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text(LocalizationKeys.servicesNotAvailable.localized)
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .padding()
             }
         }
     }
@@ -141,4 +182,13 @@ struct ProfileOptionRow: View {
 #Preview {
     ProfileView()
         .environmentObject(AuthService.shared)
+}
+
+#Preview("With Mock Data") {
+    let mockAuthService = AuthService()
+    mockAuthService.currentUser = MockData.mockUser
+    mockAuthService.isAuthenticated = true
+    
+    return ProfileView()
+        .environmentObject(mockAuthService)
 }

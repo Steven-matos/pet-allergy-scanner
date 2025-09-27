@@ -7,17 +7,21 @@
 
 import Foundation
 import Combine
+import Observation
 
 /// Scan service for managing scan operations and history
-class ScanService: ObservableObject {
+@Observable
+class ScanService {
     static let shared = ScanService()
     
-    @Published var recentScans: [Scan] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
+    var recentScans: [Scan] = []
+    var isLoading = false
+    var errorMessage: String?
+    var isAnalyzing = false
     
     private let apiService = APIService.shared
     private var cancellables = Set<AnyCancellable>()
+    private var currentAnalysisTask: AnyCancellable?
     
     private init() {}
     
@@ -70,16 +74,19 @@ class ScanService: ObservableObject {
             .store(in: &cancellables)
     }
     
-    /// Analyze scan text
+    /// Analyze scan text with proper task management
     func analyzeScan(_ analysisRequest: ScanAnalysisRequest, completion: @escaping (Scan) -> Void) {
-        isLoading = true
+        // Cancel any existing analysis task
+        currentAnalysisTask?.cancel()
+        
+        isAnalyzing = true
         errorMessage = nil
         
-        apiService.analyzeScan(analysisRequest)
+        currentAnalysisTask = apiService.analyzeScan(analysisRequest)
             .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
+                    self?.isAnalyzing = false
                     if case .failure(let error) = completion {
                         self?.errorMessage = error.localizedDescription
                     }
@@ -93,7 +100,14 @@ class ScanService: ObservableObject {
                     completion(scan)
                 }
             )
-            .store(in: &cancellables)
+        
+        currentAnalysisTask?.store(in: &cancellables)
+    }
+    
+    /// Cancel current analysis task
+    func cancelAnalysis() {
+        currentAnalysisTask?.cancel()
+        isAnalyzing = false
     }
     
     /// Get scan by ID

@@ -6,10 +6,10 @@
 //
 
 import Foundation
-import Combine
 import Security
 
-/// Main API service for communicating with the backend
+/// Main API service for communicating with the backend using Swift Concurrency
+@MainActor
 class APIService: ObservableObject {
     static let shared = APIService()
     
@@ -24,6 +24,11 @@ class APIService: ObservableObject {
                 KeychainHelper.delete(forKey: authTokenKey)
             }
         }
+    }
+    
+    /// Check if user has authentication token
+    var hasAuthToken: Bool {
+        return authToken != nil
     }
     
     private init() {}
@@ -55,19 +60,45 @@ class APIService: ObservableObject {
         return request
     }
     
-    /// Perform network request with error handling
-    private func performRequest<T: Codable>(_ request: URLRequest, responseType: T.Type) -> AnyPublisher<T, APIError> {
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .map(\.data)
-            .decode(type: T.self, decoder: JSONDecoder())
-            .mapError { error in
-                if error is DecodingError {
-                    return APIError.decodingError
-                } else {
-                    return APIError.networkError(error.localizedDescription)
+    /// Perform network request with error handling using async/await
+    private func performRequest<T: Codable>(_ request: URLRequest, responseType: T.Type) async throws -> T {
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            // Check for HTTP errors
+            if let httpResponse = response as? HTTPURLResponse {
+                switch httpResponse.statusCode {
+                case 200...299:
+                    break // Success
+                case 401:
+                    throw APIError.authenticationError
+                case 400...499:
+                    // Try to decode error response
+                    if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        throw APIError.serverMessage(errorResponse.message)
+                    }
+                    throw APIError.serverError(httpResponse.statusCode)
+                case 500...599:
+                    throw APIError.serverError(httpResponse.statusCode)
+                default:
+                    throw APIError.unknownError
                 }
             }
-            .eraseToAnyPublisher()
+            
+            // Decode successful response
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(T.self, from: data)
+            
+        } catch let error as APIError {
+            throw error
+        } catch {
+            if error is DecodingError {
+                throw APIError.decodingError
+            } else {
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
     }
 }
 
@@ -75,10 +106,9 @@ class APIService: ObservableObject {
 
 extension APIService {
     /// Register a new user
-    func register(user: UserCreate) -> AnyPublisher<AuthResponse, APIError> {
+    func register(user: UserCreate) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/register") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -86,18 +116,16 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(user)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: AuthResponse.self)
+        return try await performRequest(request, responseType: AuthResponse.self)
     }
     
     /// Login user
-    func login(email: String, password: String) -> AnyPublisher<AuthResponse, APIError> {
+    func login(email: String, password: String) async throws -> AuthResponse {
         guard let url = URL(string: "\(baseURL)/auth/login") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -106,29 +134,26 @@ extension APIService {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: AuthResponse.self)
+        return try await performRequest(request, responseType: AuthResponse.self)
     }
     
     /// Get current user information
-    func getCurrentUser() -> AnyPublisher<User, APIError> {
+    func getCurrentUser() async throws -> User {
         guard let url = URL(string: "\(baseURL)/auth/me") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: User.self)
+        return try await performRequest(request, responseType: User.self)
     }
     
     /// Update current user
-    func updateUser(_ userUpdate: UserUpdate) -> AnyPublisher<User, APIError> {
+    func updateUser(_ userUpdate: UserUpdate) async throws -> User {
         guard let url = URL(string: "\(baseURL)/auth/me") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "PUT")
@@ -136,11 +161,10 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(userUpdate)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: User.self)
+        return try await performRequest(request, responseType: User.self)
     }
 }
 
@@ -148,10 +172,9 @@ extension APIService {
 
 extension APIService {
     /// Create a new pet profile
-    func createPet(_ pet: PetCreate) -> AnyPublisher<Pet, APIError> {
+    func createPet(_ pet: PetCreate) async throws -> Pet {
         guard let url = URL(string: "\(baseURL)/pets/") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -159,40 +182,36 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(pet)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: Pet.self)
+        return try await performRequest(request, responseType: Pet.self)
     }
     
     /// Get all pets for current user
-    func getPets() -> AnyPublisher<[Pet], APIError> {
+    func getPets() async throws -> [Pet] {
         guard let url = URL(string: "\(baseURL)/pets/") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: [Pet].self)
+        return try await performRequest(request, responseType: [Pet].self)
     }
     
     /// Get specific pet
-    func getPet(id: String) -> AnyPublisher<Pet, APIError> {
+    func getPet(id: String) async throws -> Pet {
         guard let url = URL(string: "\(baseURL)/pets/\(id)") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: Pet.self)
+        return try await performRequest(request, responseType: Pet.self)
     }
     
     /// Update pet profile
-    func updatePet(id: String, petUpdate: PetUpdate) -> AnyPublisher<Pet, APIError> {
+    func updatePet(id: String, petUpdate: PetUpdate) async throws -> Pet {
         guard let url = URL(string: "\(baseURL)/pets/\(id)") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "PUT")
@@ -200,28 +219,42 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(petUpdate)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: Pet.self)
+        return try await performRequest(request, responseType: Pet.self)
     }
     
     /// Delete pet profile
-    func deletePet(id: String) -> AnyPublisher<Void, APIError> {
+    func deletePet(id: String) async throws {
         guard let url = URL(string: "\(baseURL)/pets/\(id)") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url, method: "DELETE")
         
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .map { _ in () }
-            .mapError { error in
-                APIError.networkError(error.localizedDescription)
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return // Success
+                case 401:
+                    throw APIError.authenticationError
+                case 400...499:
+                    throw APIError.serverError(httpResponse.statusCode)
+                case 500...599:
+                    throw APIError.serverError(httpResponse.statusCode)
+                default:
+                    throw APIError.unknownError
+                }
             }
-            .eraseToAnyPublisher()
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
+        }
     }
 }
 
@@ -229,10 +262,9 @@ extension APIService {
 
 extension APIService {
     /// Create a new scan
-    func createScan(_ scan: ScanCreate) -> AnyPublisher<Scan, APIError> {
+    func createScan(_ scan: ScanCreate) async throws -> Scan {
         guard let url = URL(string: "\(baseURL)/scans/") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -240,18 +272,16 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(scan)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: Scan.self)
+        return try await performRequest(request, responseType: Scan.self)
     }
     
     /// Analyze scan text
-    func analyzeScan(_ analysisRequest: ScanAnalysisRequest) -> AnyPublisher<Scan, APIError> {
+    func analyzeScan(_ analysisRequest: ScanAnalysisRequest) async throws -> Scan {
         guard let url = URL(string: "\(baseURL)/scans/analyze") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -259,38 +289,35 @@ extension APIService {
         do {
             request.httpBody = try JSONEncoder().encode(analysisRequest)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: Scan.self)
+        return try await performRequest(request, responseType: Scan.self)
     }
     
     /// Get user's scans
-    func getScans(petId: String? = nil) -> AnyPublisher<[Scan], APIError> {
+    func getScans(petId: String? = nil) async throws -> [Scan] {
         var urlString = "\(baseURL)/scans/"
         if let petId = petId {
             urlString += "?pet_id=\(petId)"
         }
         
         guard let url = URL(string: urlString) else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: [Scan].self)
+        return try await performRequest(request, responseType: [Scan].self)
     }
     
     /// Get specific scan
-    func getScan(id: String) -> AnyPublisher<Scan, APIError> {
+    func getScan(id: String) async throws -> Scan {
         guard let url = URL(string: "\(baseURL)/scans/\(id)") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: Scan.self)
+        return try await performRequest(request, responseType: Scan.self)
     }
 }
 
@@ -302,10 +329,9 @@ extension APIService {
         ingredients: [String],
         petSpecies: PetSpecies,
         petAllergies: [String] = []
-    ) -> AnyPublisher<[IngredientAnalysis], APIError> {
+    ) async throws -> [IngredientAnalysis] {
         guard let url = URL(string: "\(baseURL)/ingredients/analyze") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         var request = createRequest(url: url, method: "POST")
@@ -319,33 +345,30 @@ extension APIService {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: analysisData)
         } catch {
-            return Fail(error: APIError.encodingError)
-                .eraseToAnyPublisher()
+            throw APIError.encodingError
         }
         
-        return performRequest(request, responseType: [IngredientAnalysis].self)
+        return try await performRequest(request, responseType: [IngredientAnalysis].self)
     }
     
     /// Get common allergens
-    func getCommonAllergens() -> AnyPublisher<[String], APIError> {
+    func getCommonAllergens() async throws -> [String] {
         guard let url = URL(string: "\(baseURL)/ingredients/common-allergens") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: [String].self)
+        return try await performRequest(request, responseType: [String].self)
     }
     
     /// Get safe alternatives
-    func getSafeAlternatives() -> AnyPublisher<[String], APIError> {
+    func getSafeAlternatives() async throws -> [String] {
         guard let url = URL(string: "\(baseURL)/ingredients/safe-alternatives") else {
-            return Fail(error: APIError.invalidURL)
-                .eraseToAnyPublisher()
+            throw APIError.invalidURL
         }
         
         let request = createRequest(url: url)
-        return performRequest(request, responseType: [String].self)
+        return try await performRequest(request, responseType: [String].self)
     }
 }
 
