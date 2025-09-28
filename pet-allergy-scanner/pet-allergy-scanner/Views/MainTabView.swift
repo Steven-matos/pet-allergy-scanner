@@ -52,6 +52,8 @@ struct MainTabView: View {
         .onAppear {
             petService.loadPets()
         }
+        .accentColor(ModernDesignSystem.Colors.tabBarActive)
+        .background(ModernDesignSystem.Colors.tabBarBackground)
     }
 }
 

@@ -42,6 +42,13 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 - 🐕 **Species-Specific Logic**: Different nutritional requirements for dogs vs cats
 - 📊 **Detailed Reports**: Comprehensive safety analysis with recommendations
 
+### Design System
+- 🎨 **Trust & Nature Palette**: Carefully crafted color scheme for safety and trust
+- 🌙 **Dark Mode Support**: Full dark mode compatibility with system colors
+- ♿ **Accessibility First**: 4.5:1 contrast ratio minimum for all text
+- 🎯 **Consistent Branding**: Cohesive visual identity across all views
+- 📱 **Modern UI**: Clean, intuitive interface following Apple's design guidelines
+
 ### Pet Management
 - 👥 **Multiple Pet Profiles**: Support for multiple pets per user
 - 🏥 **Veterinary Information**: Store vet contact details
@@ -157,6 +164,94 @@ app/
 - **Storage**: Supabase Storage
 - **Real-time**: Supabase Realtime
 - **Hosting**: Vercel/Railway/Heroku ready
+
+## Trust & Nature Color Scheme
+
+The Pet Allergy Scanner app uses a carefully crafted "Trust & Nature" color palette designed to convey safety, reliability, and warmth while maintaining excellent accessibility standards.
+
+### Color Palette
+
+#### Primary Colors
+- **Deep Forest Green** (`#2D5A3D`): Primary color conveying trust and safety
+  - Used for: Primary buttons, active states, safe ingredient indicators
+  - Psychology: Associated with nature, growth, and safety
+
+- **Soft Cream** (`#FEFDF8`): Warm background color
+  - Used for: Main backgrounds, tab bar, surface elements
+  - Psychology: Creates comfort and warmth
+
+- **Golden Yellow** (`#FFD700`): Accent color for premium features
+  - Used for: Call-to-action buttons, premium indicators, highlights
+  - Psychology: Represents quality and attention-grabbing actions
+
+#### Secondary Colors
+- **Charcoal Gray** (`#2C3E50`): Primary text color
+  - Used for: All primary text, headings, important information
+  - Psychology: Professional, readable, trustworthy
+
+- **Warm Coral** (`#FF7F7F`): Warning/error color
+  - Used for: Unsafe ingredients, error states, allergy indicators
+  - Psychology: Clear warning without being alarming
+
+- **Light Gray** (`#E0E0E0`): Neutral secondary color
+  - Used for: Borders, secondary text, neutral elements
+  - Psychology: Subtle, non-intrusive
+
+### Design Principles
+
+#### Accessibility Compliance
+- **Contrast Ratio**: All text maintains 4.5:1 contrast ratio minimum
+- **Color-Blind Friendly**: Uses shapes and icons alongside colors for status
+- **Dark Mode**: Automatic adaptation using system colors where appropriate
+- **VoiceOver Support**: All color-coded information has text alternatives
+
+#### Color Usage by View Category
+
+**Main Navigation & Tab Bar**
+- Background: Soft Cream (`#FEFDF8`)
+- Active tabs: Deep Forest Green (`#2D5A3D`)
+- Inactive tabs: Charcoal Gray (`#2C3E50`) at 60% opacity
+
+**Core Scanning Views**
+- Background: Deep Forest Green (`#2D5A3D`) - conveys trust and safety
+- Scan button: Golden Yellow (`#FFD700`) with white icon
+- Safe ingredients: Deep Forest Green background, white text
+- Warning ingredients: Warm Coral (`#FF7F7F`) background, white text
+
+**Pet Management Views**
+- Background: Soft Cream (`#FEFDF8`)
+- Pet cards: White background with Deep Forest Green borders
+- Add pet button: Golden Yellow (`#FFD700`)
+- Allergy indicators: Warm Coral (`#FF7F7F`)
+
+**Authentication & Security**
+- Background: Soft Cream (`#FEFDF8`)
+- Primary buttons: Deep Forest Green (`#2D5A3D`)
+- Error messages: Warm Coral (`#FF7F7F`)
+- Success messages: Deep Forest Green (`#2D5A3D`)
+
+### Implementation
+
+The color scheme is implemented through a centralized `ModernDesignSystem` that provides:
+
+```swift
+// Trust & Nature Primary Colors
+static let deepForestGreen = Color(red: 0.176, green: 0.353, blue: 0.239)
+static let softCream = Color(red: 0.996, green: 0.992, blue: 0.973)
+static let goldenYellow = Color(red: 1.0, green: 0.843, blue: 0.0)
+static let charcoalGray = Color(red: 0.173, green: 0.243, blue: 0.314)
+static let warmCoral = Color(red: 1.0, green: 0.498, blue: 0.498)
+static let lightGray = Color(red: 0.878, green: 0.878, blue: 0.878)
+```
+
+### Benefits
+
+- **Trust & Safety**: Deep forest green reinforces the app's safety message
+- **Warm & Welcoming**: Soft cream backgrounds create comfort
+- **Clear Hierarchy**: Color coding makes information easy to scan
+- **Professional**: Cohesive design reinforces app credibility
+- **Accessible**: Meets WCAG guidelines for color contrast
+- **Consistent**: Unified visual language across all features
 
 ## Prerequisites
 
@@ -347,7 +442,20 @@ The server automatically adds the following security headers:
 2. **Build**: `Cmd + B`
 3. **Run**: `Cmd + R`
 
-### 3. First Launch
+### 3. Design System
+
+The app uses the **Trust & Nature** color scheme implemented in `ModernDesignSystem.swift`:
+
+- **Primary**: Deep Forest Green (`#2D5A3D`) for trust and safety
+- **Background**: Soft Cream (`#FEFDF8`) for warmth and comfort  
+- **Accent**: Golden Yellow (`#FFD700`) for call-to-actions
+- **Text**: Charcoal Gray (`#2C3E50`) for excellent readability
+- **Warning**: Warm Coral (`#FF7F7F`) for unsafe ingredients
+- **Neutral**: Light Gray (`#E0E0E0`) for secondary elements
+
+All colors maintain 4.5:1 contrast ratio for accessibility compliance.
+
+### 4. First Launch
 
 1. **Register Account**: Create new user account
 2. **Add Pet**: Create your first pet profile

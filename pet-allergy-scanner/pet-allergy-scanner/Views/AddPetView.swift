@@ -39,7 +39,7 @@ struct AddPetView: View {
                         if validationErrors.contains(where: { $0.contains("name") }) {
                             Text(validationErrors.first(where: { $0.contains("name") }) ?? "")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                                 .accessibilityIdentifier("petNameError")
                                 .transition(.opacity.combined(with: .move(edge: .top)))
                                 .animation(.easeInOut(duration: 0.2), value: validationErrors)
@@ -79,7 +79,7 @@ struct AddPetView: View {
                         if validationErrors.contains(where: { $0.contains("Age") }) {
                             Text(validationErrors.first(where: { $0.contains("Age") }) ?? "")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                         }
                     }
                     
@@ -98,7 +98,7 @@ struct AddPetView: View {
                         if validationErrors.contains(where: { $0.contains("Weight") }) {
                             Text(validationErrors.first(where: { $0.contains("Weight") }) ?? "")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                         }
                     }
                 }
@@ -108,13 +108,14 @@ struct AddPetView: View {
                     ForEach(knownAllergies, id: \.self) { allergy in
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
+                                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             Text(allergy)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             Spacer()
                             Button("Remove") {
                                 knownAllergies.removeAll { $0 == allergy }
                             }
-                            .foregroundColor(.red)
+                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             .font(.caption)
                         }
                     }

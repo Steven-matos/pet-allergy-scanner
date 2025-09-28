@@ -17,6 +17,8 @@ struct PetsView: View {
             VStack {
                 if petService.isLoading {
                     ProgressView("Loading pets...")
+                        .tint(ModernDesignSystem.Colors.deepForestGreen)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if petService.pets.isEmpty {
                     EmptyPetsView {
@@ -73,25 +75,25 @@ struct PetRowView: View {
             // Pet Icon
             Image(systemName: pet.species.icon)
                 .font(.system(size: 24))
-                .foregroundColor(.blue)
+                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                 .frame(width: 40, height: 40)
-                .background(Color.blue.opacity(0.1))
+                .background(ModernDesignSystem.Colors.deepForestGreen.opacity(0.1))
                 .cornerRadius(20)
             
             // Pet Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(pet.name)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text(pet.species.displayName)
                     .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
                 if let breed = pet.breed {
                     Text(breed)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
             }
             
@@ -103,15 +105,15 @@ struct PetRowView: View {
                     Text("\(pet.knownAllergies.count)")
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.red)
+                        .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     
                     Text("allergies")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.red.opacity(0.1))
+                .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
                 .cornerRadius(8)
             }
         }

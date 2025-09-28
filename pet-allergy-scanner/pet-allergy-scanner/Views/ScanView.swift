@@ -37,11 +37,12 @@ struct ScanView: View {
                     Text(LocalizationKeys.scanPetFood.localized)
                         .font(.largeTitle)
                         .fontWeight(.bold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                     
                     Text(LocalizationKeys.pointCameraAtIngredients.localized)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 20)
@@ -55,7 +56,7 @@ struct ScanView: View {
                     VStack(spacing: 16) {
                         Image(systemName: "camera.viewfinder")
                             .font(.system(size: 60))
-                            .foregroundColor(.white)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                             .accessibilityHidden(true)
                             .scaleEffect(ocrService.isProcessing ? 0.9 : 1.0)
                             .animation(.easeInOut(duration: 0.2), value: ocrService.isProcessing)
@@ -63,18 +64,18 @@ struct ScanView: View {
                         Text(LocalizationKeys.tapToScan.localized)
                             .font(.title2)
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                     }
                     .frame(width: 200, height: 200)
                     .background(
                         LinearGradient(
-                            gradient: Gradient(colors: [.blue, .purple]),
+                            gradient: Gradient(colors: [ModernDesignSystem.Colors.deepForestGreen, ModernDesignSystem.Colors.deepForestGreen.opacity(0.8)]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .clipShape(Circle())
-                    .shadow(color: .blue.opacity(0.3), radius: 10, x: 0, y: 5)
+                    .shadow(color: ModernDesignSystem.Colors.deepForestGreen.opacity(0.3), radius: 10, x: 0, y: 5)
                     .scaleEffect(ocrService.isProcessing ? 0.95 : 1.0)
                     .animation(.easeInOut(duration: 0.3), value: ocrService.isProcessing)
                 }
@@ -89,10 +90,11 @@ struct ScanView: View {
                     VStack(spacing: 12) {
                         ProgressView()
                             .scaleEffect(1.2)
+                            .tint(ModernDesignSystem.Colors.deepForestGreen)
                             .accessibilityLabel("Processing")
                         Text(LocalizationKeys.processingImage.localized)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     .padding(.top, 20)
                     .accessibilityElement(children: .combine)
@@ -105,10 +107,11 @@ struct ScanView: View {
                     VStack(spacing: 12) {
                         ProgressView()
                             .scaleEffect(1.2)
+                            .tint(ModernDesignSystem.Colors.deepForestGreen)
                             .accessibilityLabel("Analyzing")
                         Text(LocalizationKeys.analyzingIngredients.localized)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     .padding(.top, 20)
                     .accessibilityElement(children: .combine)
@@ -120,16 +123,16 @@ struct ScanView: View {
                 if let errorMessage = ocrService.errorMessage {
                     VStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
+                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             .font(.title2)
                         Text(errorMessage)
                             .font(.subheadline)
-                            .foregroundColor(.red)
+                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             .multilineTextAlignment(.center)
                         Button("Try Again") {
                             ocrService.clearResults()
                         }
-                        .buttonStyle(.bordered)
+                        .modernButton(style: .error)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
@@ -140,14 +143,14 @@ struct ScanView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(LocalizationKeys.extractedText.localized)
                             .font(.headline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             .accessibilityAddTraits(.isHeader)
                         
                         ScrollView {
                             Text(ocrService.extractedText)
                                 .font(.body)
                                 .padding()
-                                .background(Color.gray.opacity(0.1))
+                                .background(ModernDesignSystem.Colors.surfaceVariant)
                                 .cornerRadius(8)
                                 .accessibilityLabel("Extracted text from image")
                         }
@@ -157,7 +160,7 @@ struct ScanView: View {
                             Button(LocalizationKeys.analyzeIngredients.localized) {
                                 analyzeIngredients()
                             }
-                            .buttonStyle(.borderedProminent)
+                            .modernButton(style: .primary)
                             .disabled(scanService.isAnalyzing)
                             .accessibilityIdentifier("analyzeIngredientsButton")
                             .accessibilityHint("Analyzes the extracted text for pet allergens")
@@ -166,7 +169,7 @@ struct ScanView: View {
                                 Button(LocalizationKeys.cancel.localized) {
                                     scanService.cancelAnalysis()
                                 }
-                                .buttonStyle(.bordered)
+                                .modernButton(style: .secondary)
                                 .accessibilityIdentifier("cancelAnalysisButton")
                                 .accessibilityHint("Cancels the current analysis")
                             }
@@ -185,6 +188,7 @@ struct ScanView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Recent Scans")
                             .font(.headline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             .padding(.horizontal, 20)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -337,10 +341,11 @@ struct RecentScanCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "pawprint.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                 Text(scan.result?.productName ?? "Unknown Product")
                     .font(.caption)
                     .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             }
             
             if let result = scan.result {
@@ -350,30 +355,34 @@ struct RecentScanCard: View {
                         .frame(width: 8, height: 8)
                     Text(result.safetyDisplayName)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
             }
             
             Text(scan.createdAt, style: .relative)
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
         .padding(12)
-        .background(Color.gray.opacity(0.1))
+        .background(ModernDesignSystem.Colors.surface)
         .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(ModernDesignSystem.Colors.borderSecondary, lineWidth: 1)
+        )
         .frame(width: 120)
     }
     
     private func colorForSafety(_ safety: String) -> Color {
         switch safety {
         case "safe":
-            return .green
+            return ModernDesignSystem.Colors.safe
         case "caution":
-            return .yellow
+            return ModernDesignSystem.Colors.caution
         case "unsafe":
-            return .red
+            return ModernDesignSystem.Colors.unsafe
         default:
-            return .gray
+            return ModernDesignSystem.Colors.unknown
         }
     }
 }

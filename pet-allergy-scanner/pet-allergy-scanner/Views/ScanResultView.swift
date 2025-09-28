@@ -31,7 +31,7 @@ struct ScanResultView: View {
                     } else {
                         Text("Analysis in progress...")
                             .font(.headline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             .frame(maxWidth: .infinity)
                             .padding()
                     }
@@ -71,7 +71,7 @@ struct SafetyResultCard: View {
                     
                     Text("Overall Safety")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
                 Spacer()
@@ -82,11 +82,12 @@ struct SafetyResultCard: View {
                     HStack {
                         Text("Confidence Score")
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         Spacer()
                         Text("\(Int(result.confidenceScore * 100))%")
                             .font(.subheadline)
                             .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     }
                     
                     ProgressView(value: result.confidenceScore)
@@ -103,13 +104,13 @@ struct SafetyResultCard: View {
     private func colorForSafety(_ safety: String) -> Color {
         switch safety {
         case "safe":
-            return .green
+            return ModernDesignSystem.Colors.safe
         case "caution":
-            return .yellow
+            return ModernDesignSystem.Colors.caution
         case "unsafe":
-            return .red
+            return ModernDesignSystem.Colors.unsafe
         default:
-            return .gray
+            return ModernDesignSystem.Colors.unknown
         }
     }
     
@@ -134,6 +135,7 @@ struct IngredientsAnalysisSection: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Ingredients Analysis")
                 .font(.headline)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if !result.unsafeIngredients.isEmpty {
                 UnsafeIngredientsList(ingredients: result.unsafeIngredients)
@@ -153,21 +155,22 @@ struct UnsafeIngredientsList: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
+                    .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     .accessibilityLabel("Warning icon")
                 Text("Unsafe Ingredients (\(ingredients.count))")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.red)
+                    .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     .accessibilityAddTraits(.isHeader)
             }
             
             ForEach(ingredients, id: \.self) { ingredient in
                 HStack {
                     Text("•")
-                        .foregroundColor(.red)
+                        .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     Text(ingredient)
                         .font(.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .accessibilityLabel("Unsafe ingredient: \(ingredient)")
                     Spacer()
                 }
@@ -175,7 +178,7 @@ struct UnsafeIngredientsList: View {
             }
         }
         .padding()
-        .background(Color.red.opacity(0.1))
+        .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
         .cornerRadius(8)
     }
 }
@@ -187,21 +190,22 @@ struct SafeIngredientsList: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                    .foregroundColor(ModernDesignSystem.Colors.safe)
                     .accessibilityLabel("Safe icon")
                 Text("Safe Ingredients (\(ingredients.count))")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                    .foregroundColor(.green)
+                    .foregroundColor(ModernDesignSystem.Colors.safe)
                     .accessibilityAddTraits(.isHeader)
             }
             
             ForEach(ingredients, id: \.self) { ingredient in
                 HStack {
                     Text("•")
-                        .foregroundColor(.green)
+                        .foregroundColor(ModernDesignSystem.Colors.safe)
                     Text(ingredient)
                         .font(.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .accessibilityLabel("Safe ingredient: \(ingredient)")
                     Spacer()
                 }
@@ -209,7 +213,7 @@ struct SafeIngredientsList: View {
             }
         }
         .padding()
-        .background(Color.green.opacity(0.1))
+        .background(ModernDesignSystem.Colors.safe.opacity(0.1))
         .cornerRadius(8)
     }
 }
@@ -221,21 +225,23 @@ struct AnalysisDetailsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Analysis Details")
                 .font(.headline)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             ForEach(Array(details.keys.sorted()), id: \.self) { key in
                 HStack {
                     Text(key.capitalized)
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     Spacer()
                     Text(details[key] ?? "")
                         .font(.subheadline)
                         .fontWeight(.medium)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
             }
         }
         .padding()
-        .background(Color.gray.opacity(0.1))
+        .background(ModernDesignSystem.Colors.surfaceVariant)
         .cornerRadius(8)
     }
 }

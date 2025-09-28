@@ -18,18 +18,18 @@ struct EmptyPetsView: View {
             // Empty State Icon
             Image(systemName: "pawprint.circle")
                 .font(.system(size: 80))
-                .foregroundColor(.gray.opacity(0.6))
+                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen.opacity(0.4))
             
             // Empty State Text
             VStack(spacing: 12) {
                 Text("No Pets Added")
                     .font(.title2)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text("Add your pet's profile to start scanning ingredient labels for allergies and safety.")
                     .font(.body)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
@@ -41,10 +41,10 @@ struct EmptyPetsView: View {
                     Text("Add Your First Pet")
                 }
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(ModernDesignSystem.Colors.textOnAccent)
                 .padding(.horizontal, 24)
                 .padding(.vertical, 12)
-                .background(Color.blue)
+                .background(ModernDesignSystem.Colors.goldenYellow)
                 .cornerRadius(25)
             }
             

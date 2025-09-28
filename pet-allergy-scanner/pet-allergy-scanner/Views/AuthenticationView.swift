@@ -26,15 +26,16 @@ struct AuthenticationView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "pawprint.circle.fill")
                         .font(.system(size: 80))
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                     
                     Text("SniffSafe")
                         .font(.largeTitle)
                         .fontWeight(.bold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     Text("Keep your pets safe with ingredient scanning")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 40)
@@ -66,13 +67,14 @@ struct AuthenticationView: View {
                             if authService.isLoading {
                                 ProgressView()
                                     .scaleEffect(0.8)
+                                    .tint(ModernDesignSystem.Colors.textOnPrimary)
                             }
                             Text(isLoginMode ? "Sign In" : "Create Account")
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
+                        .background(ModernDesignSystem.Colors.buttonPrimary)
+                        .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                         .cornerRadius(10)
                     }
                     .disabled(authService.isLoading || !isFormValid)
@@ -82,7 +84,7 @@ struct AuthenticationView: View {
                         VStack(spacing: 12) {
                             Text("Multi-Factor Authentication")
                                 .font(.headline)
-                                .foregroundColor(.primary)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             
                             TextField("Enter 6-digit code", text: $mfaToken)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -96,8 +98,8 @@ struct AuthenticationView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.green)
-                            .foregroundColor(.white)
+                            .background(ModernDesignSystem.Colors.safe)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                             .cornerRadius(10)
                             .disabled(mfaToken.count != 6)
                         }
@@ -112,7 +114,7 @@ struct AuthenticationView: View {
                     clearForm()
                 }) {
                     Text(isLoginMode ? "Don't have an account? Sign up" : "Already have an account? Sign in")
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                 }
                 .padding(.top, 16)
                 
