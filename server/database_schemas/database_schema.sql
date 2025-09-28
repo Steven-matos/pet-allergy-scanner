@@ -8,6 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID REFERENCES auth.users(id) PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE,
     first_name TEXT,
     last_name TEXT,
     role TEXT DEFAULT 'free' CHECK (role IN ('free', 'premium')),
@@ -74,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.favorites (
 );
 
 -- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
 CREATE INDEX IF NOT EXISTS idx_pets_user_id ON public.pets(user_id);
 CREATE INDEX IF NOT EXISTS idx_pets_species ON public.pets(species);
 CREATE INDEX IF NOT EXISTS idx_scans_user_id ON public.scans(user_id);

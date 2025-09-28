@@ -121,6 +121,7 @@ struct MockData {
     static let mockUser = User(
         id: "user-1",
         email: "john.doe@example.com",
+        username: "johndoe",
         firstName: "John",
         lastName: "Doe",
         role: .premium,

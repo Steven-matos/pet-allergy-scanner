@@ -175,7 +175,7 @@ extension APIService {
         
         var request = createRequest(url: url, method: "POST")
         
-        let loginData = ["email": email, "password": password]
+        let loginData = ["email_or_username": email, "password": password]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
         } catch {

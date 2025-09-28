@@ -11,6 +11,7 @@ import Foundation
 struct User: Codable, Identifiable {
     let id: String
     let email: String
+    let username: String?
     let firstName: String?
     let lastName: String?
     let role: UserRole
@@ -20,6 +21,7 @@ struct User: Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id
         case email
+        case username
         case firstName = "first_name"
         case lastName = "last_name"
         case role
@@ -47,6 +49,7 @@ enum UserRole: String, Codable, CaseIterable {
 struct UserCreate: Codable {
     let email: String
     let password: String
+    let username: String?
     let firstName: String?
     let lastName: String?
     let role: UserRole
@@ -54,6 +57,7 @@ struct UserCreate: Codable {
     enum CodingKeys: String, CodingKey {
         case email
         case password
+        case username
         case firstName = "first_name"
         case lastName = "last_name"
         case role
@@ -62,11 +66,13 @@ struct UserCreate: Codable {
 
 /// User update model for profile updates
 struct UserUpdate: Codable {
+    let username: String?
     let firstName: String?
     let lastName: String?
     let role: UserRole?
     
     enum CodingKeys: String, CodingKey {
+        case username
         case firstName = "first_name"
         case lastName = "last_name"
         case role

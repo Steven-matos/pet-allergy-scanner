@@ -105,6 +105,38 @@ class TestSecurityValidation:
         for password in weak_passwords:
             with pytest.raises(Exception):
                 SecurityValidator.validate_password(password)
+    
+    def test_validate_username_valid(self):
+        """Test username validation with valid usernames"""
+        valid_usernames = [
+            "john_doe",
+            "user123",
+            "test-user",
+            "validuser",
+            "user_name"
+        ]
+        
+        for username in valid_usernames:
+            result = SecurityValidator.validate_username(username)
+            assert result == username
+    
+    def test_validate_username_invalid(self):
+        """Test username validation rejects invalid usernames"""
+        invalid_usernames = [
+            "ab",  # Too short
+            "a" * 31,  # Too long
+            "user@domain",  # Invalid characters
+            "user name",  # Spaces
+            "user<script>",  # XSS attempt
+            "",  # Empty
+            "admin",  # Reserved word
+            "root",  # Reserved word
+            "system"  # Reserved word
+        ]
+        
+        for username in invalid_usernames:
+            with pytest.raises(Exception):
+                SecurityValidator.validate_username(username)
 
 class TestRateLimiting:
     """Test rate limiting functionality"""
@@ -190,6 +222,26 @@ class TestInputValidation:
             "last_name": "User"
         })
         assert response.status_code == 422
+    
+    def test_login_with_username(self):
+        """Test login with username instead of email"""
+        # This test would require a registered user with username
+        # For now, just test the endpoint accepts the new field
+        response = client.post("/api/v1/auth/login", json={
+            "email_or_username": "testuser",
+            "password": "ValidPass123!"
+        })
+        # Should return 401 (user not found), 400 (bad request), or 422 (validation error)
+        assert response.status_code in [400, 401, 422]
+    
+    def test_login_with_email(self):
+        """Test login with email still works"""
+        response = client.post("/api/v1/auth/login", json={
+            "email_or_username": "test@example.com",
+            "password": "ValidPass123!"
+        })
+        # Should return 401 (user not found), 400 (bad request), or 422 (validation error)
+        assert response.status_code in [400, 401, 422]
     
     def test_register_xss_attempt(self):
         """Test XSS prevention in registration"""

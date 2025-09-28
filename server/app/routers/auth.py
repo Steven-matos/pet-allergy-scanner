@@ -14,6 +14,49 @@ router = APIRouter()
 security = HTTPBearer()
 logger = logging.getLogger(__name__)
 
+async def get_user_email_by_username_or_email(identifier: str) -> str:
+    """
+    Get user email by username or email
+    
+    Args:
+        identifier: Either username or email
+        
+    Returns:
+        User's email address
+        
+    Raises:
+        HTTPException: If user not found
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Check if identifier is an email (contains @)
+        if "@" in identifier:
+            # It's an email, validate and return
+            from app.utils.security import SecurityValidator
+            validated_email = SecurityValidator.validate_email(identifier)
+            return validated_email
+        
+        # It's a username, look up the user
+        response = supabase.table("users").select("email").eq("username", identifier).execute()
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or email"
+            )
+        
+        return response.data[0]["email"]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error looking up user: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or email"
+        )
+
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
     Get current authenticated user from JWT token
@@ -49,6 +92,7 @@ async def register_user(user_data: UserCreate):
         # Validate and sanitize input
         validated_email = SecurityValidator.validate_email(user_data.email)
         validated_password = SecurityValidator.validate_password(user_data.password)
+        validated_username = SecurityValidator.validate_username(user_data.username) if user_data.username else None
         sanitized_first_name = SecurityValidator.sanitize_text(user_data.first_name or "", max_length=100)
         sanitized_last_name = SecurityValidator.sanitize_text(user_data.last_name or "", max_length=100)
         
@@ -56,15 +100,22 @@ async def register_user(user_data: UserCreate):
         
         # Create user with Supabase Auth
         try:
+            # Prepare user metadata
+            user_metadata = {
+                "first_name": sanitized_first_name,
+                "last_name": sanitized_last_name,
+                "role": user_data.role.value
+            }
+            
+            # Add username if provided
+            if validated_username:
+                user_metadata["username"] = validated_username
+            
             response = supabase.auth.sign_up({
                 "email": validated_email,
                 "password": validated_password,
                 "options": {
-                    "data": {
-                        "first_name": sanitized_first_name,
-                        "last_name": sanitized_last_name,
-                        "role": user_data.role.value
-                    }
+                    "data": user_metadata
                 }
             })
             
@@ -77,6 +128,26 @@ async def register_user(user_data: UserCreate):
                     detail="Failed to create user account - no user returned"
                 )
             
+            # Manually insert user into public.users table
+            try:
+                user_insert_data = {
+                    "id": response.user.id,
+                    "email": response.user.email,
+                    "username": response.user.user_metadata.get("username"),
+                    "first_name": response.user.user_metadata.get("first_name"),
+                    "last_name": response.user.user_metadata.get("last_name"),
+                    "role": response.user.user_metadata.get("role", "free")
+                }
+                
+                # Insert into public.users table
+                supabase.table("users").insert(user_insert_data).execute()
+                logger.info(f"User inserted into public.users: {response.user.id}")
+                
+            except Exception as insert_error:
+                logger.warning(f"Failed to insert user into public.users: {insert_error}")
+                # Don't fail registration if public.users insert fails
+                # The database trigger should handle this automatically
+            
             # Check if email confirmation is required
             if not response.session:
                 # Email confirmation required - return success message
@@ -86,6 +157,7 @@ async def register_user(user_data: UserCreate):
                     "user": UserResponse(
                         id=response.user.id,
                         email=response.user.email,
+                        username=response.user.user_metadata.get("username"),
                         first_name=response.user.user_metadata.get("first_name"),
                         last_name=response.user.user_metadata.get("last_name"),
                         role=response.user.user_metadata.get("role", "free"),
@@ -101,6 +173,7 @@ async def register_user(user_data: UserCreate):
                     "user": UserResponse(
                         id=response.user.id,
                         email=response.user.email,
+                        username=response.user.user_metadata.get("username"),
                         first_name=response.user.user_metadata.get("first_name"),
                         last_name=response.user.user_metadata.get("last_name"),
                         role=response.user.user_metadata.get("role", "free"),
@@ -131,24 +204,21 @@ async def login_user(login_data: UserLogin):
     Validates user credentials and returns JWT token for API access
     """
     try:
-        from app.utils.security import SecurityValidator
-        
-        # Validate and sanitize input
-        validated_email = SecurityValidator.validate_email(login_data.email)
-        # Note: Don't validate password here as it's already hashed
+        # Get user email by username or email
+        user_email = await get_user_email_by_username_or_email(login_data.email_or_username)
         
         supabase = get_supabase_client()
         
-        # Authenticate with Supabase
+        # Authenticate with Supabase using the resolved email
         response = supabase.auth.sign_in_with_password({
-            "email": validated_email,
+            "email": user_email,
             "password": login_data.password
         })
         
         if not response.user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail="Invalid username/email or password"
             )
         
         # Check if email is verified
@@ -161,7 +231,7 @@ async def login_user(login_data: UserLogin):
         if not response.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail="Invalid username/email or password"
             )
         
         return {
@@ -170,6 +240,7 @@ async def login_user(login_data: UserLogin):
             "user": UserResponse(
                 id=response.user.id,
                 email=response.user.email,
+                username=response.user.user_metadata.get("username"),
                 first_name=response.user.user_metadata.get("first_name"),
                 last_name=response.user.user_metadata.get("last_name"),
                 role=response.user.user_metadata.get("role", "free"),
@@ -185,7 +256,7 @@ async def login_user(login_data: UserLogin):
         logger.error(f"Login error: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid username/email or password"
         )
 
 @router.get("/me", response_model=UserResponse)
@@ -198,6 +269,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
+        username=current_user.user_metadata.get("username"),
         first_name=current_user.user_metadata.get("first_name"),
         last_name=current_user.user_metadata.get("last_name"),
         role=current_user.user_metadata.get("role", "free"),
@@ -220,6 +292,11 @@ async def update_current_user(
         
         # Update user metadata
         update_data = {}
+        if user_update.username is not None:
+            # Validate username if provided
+            from app.utils.security import SecurityValidator
+            validated_username = SecurityValidator.validate_username(user_update.username)
+            update_data["username"] = validated_username
         if user_update.first_name is not None:
             update_data["first_name"] = user_update.first_name
         if user_update.last_name is not None:
@@ -240,6 +317,7 @@ async def update_current_user(
         return UserResponse(
             id=response.user.id,
             email=response.user.email,
+            username=response.user.user_metadata.get("username"),
             first_name=response.user.user_metadata.get("first_name"),
             last_name=response.user.user_metadata.get("last_name"),
             role=response.user.user_metadata.get("role", "free"),

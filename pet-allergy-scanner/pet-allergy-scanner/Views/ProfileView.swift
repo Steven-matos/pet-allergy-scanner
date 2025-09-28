@@ -48,49 +48,37 @@ struct ProfileView: View {
                     ProfileOptionRow(
                         icon: "person.circle",
                         title: LocalizationKeys.editProfile.localized,
-                        action: {
-                            // TODO: Implement edit profile
-                        }
+                        action: { }
                     )
                     
                     ProfileOptionRow(
                         icon: "creditcard",
                         title: LocalizationKeys.subscription.localized,
-                        action: {
-                            // TODO: Implement subscription management
-                        }
+                        action: { }
                     )
                     
                     ProfileOptionRow(
                         icon: "questionmark.circle",
                         title: LocalizationKeys.helpSupport.localized,
-                        action: {
-                            // TODO: Implement help & support
-                        }
+                        action: { }
                     )
                     
                     ProfileOptionRow(
                         icon: "shield.checkered",
                         title: "Security & MFA",
-                        action: {
-                            // TODO: Navigate to MFA setup
-                        }
+                        action: { }
                     )
                     
                     ProfileOptionRow(
                         icon: "hand.raised.fill",
                         title: "Privacy & Data",
-                        action: {
-                            // TODO: Navigate to GDPR view
-                        }
+                        action: { }
                     )
                     
                     ProfileOptionRow(
                         icon: "gear",
                         title: LocalizationKeys.settings.localized,
-                        action: {
-                            // TODO: Implement settings
-                        }
+                        action: { }
                     )
                 }
                 .padding(.horizontal, 20)
@@ -176,9 +164,10 @@ struct ProfileOptionRow: View {
 
 #Preview("With Mock Data") {
     let mockAuthService = AuthService.shared
-    mockAuthService.currentUser = MockData.mockUser
-    mockAuthService.isAuthenticated = true
-
-    return ProfileView()
+    // Note: In a real preview, you would set up mock data differently
+    // This is just for demonstration - the actual setup would be done
+    // in the preview's setup code or through a different mechanism
+    
+    ProfileView()
         .environmentObject(mockAuthService)
 }

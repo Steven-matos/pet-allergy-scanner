@@ -15,6 +15,7 @@ class UserRole(str, Enum):
 class UserBase(BaseModel):
     """Base user model with common fields"""
     email: EmailStr
+    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role: UserRole = UserRole.FREE
@@ -25,6 +26,7 @@ class UserCreate(UserBase):
 
 class UserUpdate(BaseModel):
     """User update model"""
+    username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role: Optional[UserRole] = None
@@ -43,6 +45,6 @@ class UserInDB(UserResponse):
     hashed_password: str
 
 class UserLogin(BaseModel):
-    """User login model"""
-    email: EmailStr
+    """User login model - accepts either email or username"""
+    email_or_username: str
     password: str

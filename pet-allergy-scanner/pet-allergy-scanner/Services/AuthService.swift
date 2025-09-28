@@ -66,6 +66,7 @@ class AuthService: ObservableObject {
     func register(
         email: String,
         password: String,
+        username: String? = nil,
         firstName: String? = nil,
         lastName: String? = nil
     ) async {
@@ -75,6 +76,7 @@ class AuthService: ObservableObject {
         let userCreate = UserCreate(
             email: email,
             password: password,
+            username: username,
             firstName: firstName,
             lastName: lastName,
             role: .free
@@ -120,13 +122,14 @@ class AuthService: ObservableObject {
     }
     
     /// Update current user profile
-    func updateProfile(firstName: String?, lastName: String?) async {
+    func updateProfile(username: String?, firstName: String?, lastName: String?) async {
         guard isAuthenticated else { return }
         
         isLoading = true
         errorMessage = nil
         
         let userUpdate = UserUpdate(
+            username: username,
             firstName: firstName,
             lastName: lastName,
             role: nil

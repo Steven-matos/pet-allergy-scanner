@@ -381,6 +381,369 @@ class SecurityValidator:
         return password
     
     @classmethod
+    def validate_username(cls, username: str) -> str:
+        """
+        Validate and sanitize username with profanity filtering
+        
+        Args:
+            username: Username to validate
+            
+        Returns:
+            Sanitized username
+            
+        Raises:
+            HTTPException: If username is invalid or contains inappropriate content
+        """
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username is required"
+            )
+        
+        # Check length
+        if len(username) < 3:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username must be at least 3 characters long"
+            )
+        
+        if len(username) > 30:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username must be less than 30 characters"
+            )
+        
+        # Check for valid characters (alphanumeric, underscore, hyphen)
+        if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username can only contain letters, numbers, underscores, and hyphens"
+            )
+        
+        # Check if starts with letter or number
+        if not re.match(r'^[a-zA-Z0-9]', username):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username must start with a letter or number"
+            )
+        
+        # Check for profanity and inappropriate content
+        if cls._contains_inappropriate_content(username):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username contains inappropriate content. Please choose a different username."
+            )
+        
+        # Check for reserved usernames
+        reserved_usernames = [
+            'admin', 'administrator', 'root', 'user', 'guest', 'test', 'api',
+            'www', 'mail', 'ftp', 'support', 'help', 'info', 'contact',
+            'about', 'privacy', 'terms', 'legal', 'security', 'auth',
+            'login', 'logout', 'register', 'signup', 'signin', 'signout',
+            'password', 'reset', 'forgot', 'verify', 'confirm', 'activate',
+            'deactivate', 'delete', 'remove', 'update', 'edit', 'create',
+            'new', 'old', 'current', 'previous', 'next', 'first', 'last',
+            'home', 'dashboard', 'profile', 'settings', 'account', 'billing',
+            'payment', 'subscription', 'premium', 'free', 'basic', 'pro',
+            'enterprise', 'business', 'personal', 'private', 'public',
+            'system', 'service', 'app', 'application', 'mobile', 'web',
+            'desktop', 'client', 'server', 'database', 'api', 'rest',
+            'graphql', 'oauth', 'jwt', 'token', 'session', 'cookie',
+            'cache', 'redis', 'postgres', 'mysql', 'sqlite', 'mongodb',
+            'elasticsearch', 'kibana', 'logstash', 'beats', 'filebeat',
+            'metricbeat', 'packetbeat', 'heartbeat', 'auditbeat', 'functionbeat',
+            'journalbeat', 'winlogbeat', 'apm', 'rum', 'uptime', 'synthetics',
+            'monitoring', 'observability', 'telemetry', 'metrics', 'logs',
+            'traces', 'spans', 'events', 'alerts', 'notifications', 'webhooks',
+            'integrations', 'plugins', 'extensions', 'modules', 'packages',
+            'libraries', 'frameworks', 'tools', 'utilities', 'scripts',
+            'automation', 'ci', 'cd', 'deployment', 'infrastructure', 'devops',
+            'sre', 'reliability', 'availability', 'scalability', 'performance',
+            'optimization', 'tuning', 'profiling', 'debugging', 'testing',
+            'qa', 'quality', 'assurance', 'validation', 'verification',
+            'compliance', 'governance', 'security', 'privacy', 'gdpr',
+            'ccpa', 'hipaa', 'sox', 'pci', 'iso', 'certification', 'audit',
+            'logging', 'monitoring', 'alerting', 'incident', 'response',
+            'recovery', 'backup', 'restore', 'disaster', 'business',
+            'continuity', 'planning', 'strategy', 'roadmap', 'milestone',
+            'deliverable', 'artifact', 'documentation', 'wiki', 'knowledge',
+            'base', 'repository', 'source', 'code', 'version', 'control',
+            'git', 'github', 'gitlab', 'bitbucket', 'azure', 'devops',
+            'aws', 'amazon', 'microsoft', 'google', 'cloud', 'azure',
+            'gcp', 'google', 'cloud', 'platform', 'heroku', 'netlify',
+            'vercel', 'railway', 'render', 'fly', 'io', 'digital', 'ocean',
+            'linode', 'vultr', 'scaleway', 'ovh', 'hetzner', 'contabo',
+            'ionos', '1and1', 'godaddy', 'namecheap', 'cloudflare',
+            'fastly', 'keycdn', 'maxcdn', 'stackpath', 'limelight',
+            'akamai', 'amazon', 'cloudfront', 'route53', 's3', 'ec2',
+            'lambda', 'api', 'gateway', 'dynamodb', 'rds', 'aurora',
+            'redshift', 'elasticache', 'elasticsearch', 'kinesis', 'sns',
+            'sqs', 'ses', 'sns', 'pinpoint', 'cognito', 'iam', 'sts',
+            'kms', 'secrets', 'manager', 'parameter', 'store', 'ssm',
+            'cloudformation', 'cloudwatch', 'xray', 'codepipeline',
+            'codebuild', 'codedeploy', 'codestar', 'codepipeline',
+            'codecommit', 'codereview', 'codereview', 'codereview',
+            'codereview', 'codereview', 'codereview', 'codereview'
+        ]
+        
+        if username.lower() in reserved_usernames:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This username is reserved and cannot be used"
+            )
+        
+        # Sanitize username
+        sanitized_username = cls.sanitize_text(username.lower(), max_length=30)
+        
+        return sanitized_username
+    
+    @classmethod
+    def _contains_inappropriate_content(cls, text: str) -> bool:
+        """
+        Check if text contains profanity or inappropriate content
+        
+        Args:
+            text: Text to check
+            
+        Returns:
+            True if inappropriate content is found
+        """
+        text_lower = text.lower()
+        
+        # Comprehensive profanity and inappropriate content list
+        inappropriate_words = [
+            # Common profanity
+            'fuck', 'fucking', 'fucked', 'fucker', 'fucks', 'fuckin',
+            'shit', 'shitting', 'shitted', 'shitter', 'shits', 'shitty',
+            'bitch', 'bitches', 'bitching', 'bitched', 'bitchy',
+            'ass', 'asses', 'asshole', 'assholes', 'asshat', 'asshats',
+            'damn', 'damned', 'damning', 'damnit', 'dammit',
+            'hell', 'hells', 'hellish', 'hellishness',
+            'crap', 'crappy', 'crappier', 'crappiest',
+            'piss', 'pissing', 'pissed', 'pisser', 'pisses', 'pissy',
+            'dick', 'dicks', 'dickhead', 'dickheads', 'dickish',
+            'cock', 'cocks', 'cocky', 'cockhead', 'cockheads',
+            'pussy', 'pussies', 'pussycats', 'pussyfoot',
+            'tits', 'titties', 'tit', 'titty', 'titsy',
+            'boob', 'boobs', 'boobies', 'booby', 'boobish',
+            'whore', 'whores', 'whoring', 'whored', 'whorish',
+            'slut', 'sluts', 'slutting', 'slutty', 'sluttish',
+            'hoe', 'hoes', 'hoing', 'hoed', 'hoish',
+            'nigger', 'niggers', 'nigga', 'niggas', 'niggah', 'niggahs',
+            'chink', 'chinks', 'chinky', 'chinkish',
+            'kike', 'kikes', 'kikey', 'kikeish',
+            'spic', 'spics', 'spicky', 'spickish',
+            'wetback', 'wetbacks', 'wetbacky', 'wetbackish',
+            'towelhead', 'towelheads', 'towelheady', 'towelheadish',
+            'sandnigger', 'sandniggers', 'sandnigga', 'sandniggas',
+            'raghead', 'ragheads', 'ragheady', 'ragheadish',
+            'terrorist', 'terrorists', 'terroristy', 'terroristish',
+            'bomber', 'bombers', 'bombery', 'bomberish',
+            'suicide', 'suicides', 'suicidy', 'suicidish',
+            'bomb', 'bombs', 'bomby', 'bombish',
+            'kill', 'kills', 'killing', 'killed', 'killer', 'killers',
+            'murder', 'murders', 'murdering', 'murdered', 'murderer', 'murderers',
+            'death', 'deaths', 'deathy', 'deathish',
+            'die', 'dies', 'dying', 'died', 'dier', 'diers',
+            'dead', 'deads', 'deady', 'deadish',
+            'hate', 'hates', 'hating', 'hated', 'hater', 'haters',
+            'racist', 'racists', 'racisty', 'racistish',
+            'nazi', 'nazis', 'naziy', 'nazish',
+            'hitler', 'hitlers', 'hitlery', 'hitlerish',
+            'kkk', 'klan', 'klans', 'klany', 'klanish',
+            'white', 'whites', 'whitey', 'whiteish',
+            'black', 'blacks', 'blacky', 'blackish',
+            'yellow', 'yellows', 'yellowy', 'yellowish',
+            'red', 'reds', 'reddy', 'reddish',
+            'brown', 'browns', 'browny', 'brownish',
+            'gay', 'gays', 'gayy', 'gayish',
+            'lesbian', 'lesbians', 'lesbiany', 'lesbianish',
+            'fag', 'fags', 'faggy', 'faggish',
+            'faggot', 'faggots', 'faggoty', 'faggotish',
+            'dyke', 'dykes', 'dykey', 'dykish',
+            'tranny', 'trannies', 'trannyish', 'trannish',
+            'shemale', 'shemales', 'shemaley', 'shemaleish',
+            'ladyboy', 'ladyboys', 'ladyboyy', 'ladyboyish',
+            'retard', 'retards', 'retarding', 'retarded', 'retarder', 'retarders',
+            'retardation', 'retardations', 'retardationy', 'retardationish',
+            'idiot', 'idiots', 'idioty', 'idiotish',
+            'moron', 'morons', 'morony', 'moronish',
+            'stupid', 'stupids', 'stupidy', 'stupidish',
+            'dumb', 'dumbs', 'dumby', 'dumbish',
+            'retard', 'retards', 'retardy', 'retardish',
+            'autistic', 'autistics', 'autisticy', 'autisticish',
+            'downs', 'downsy', 'downsish',
+            'mongoloid', 'mongoloids', 'mongoloidy', 'mongoloidish',
+            'cripple', 'cripples', 'crippling', 'crippled', 'crippler', 'cripplers',
+            'handicap', 'handicaps', 'handicapping', 'handicapped', 'handicapper', 'handicappers',
+            'disabled', 'disableds', 'disabledy', 'disabledish',
+            'blind', 'blinds', 'blindy', 'blindish',
+            'deaf', 'deafs', 'deafy', 'deafish',
+            'mute', 'mutes', 'muty', 'muteish',
+            'dwarf', 'dwarfs', 'dwarfy', 'dwarfish',
+            'midget', 'midgets', 'midgety', 'midgetish',
+            'fat', 'fats', 'fatty', 'fatish',
+            'skinny', 'skinnies', 'skinniy', 'skinnish',
+            'ugly', 'uglies', 'ugliy', 'uglish',
+            'stupid', 'stupids', 'stupidy', 'stupidish',
+            'dumb', 'dumbs', 'dumby', 'dumbish',
+            'idiot', 'idiots', 'idioty', 'idiotish',
+            'moron', 'morons', 'morony', 'moronish',
+            'retard', 'retards', 'retardy', 'retardish',
+            'autistic', 'autistics', 'autisticy', 'autisticish',
+            'downs', 'downsy', 'downsish',
+            'mongoloid', 'mongoloids', 'mongoloidy', 'mongoloidish',
+            'cripple', 'cripples', 'crippling', 'crippled', 'crippler', 'cripplers',
+            'handicap', 'handicaps', 'handicapping', 'handicapped', 'handicapper', 'handicappers',
+            'disabled', 'disableds', 'disabledy', 'disabledish',
+            'blind', 'blinds', 'blindy', 'blindish',
+            'deaf', 'deafs', 'deafy', 'deafish',
+            'mute', 'mutes', 'muty', 'muteish',
+            'dwarf', 'dwarfs', 'dwarfy', 'dwarfish',
+            'midget', 'midgets', 'midgety', 'midgetish',
+            'fat', 'fats', 'fatty', 'fatish',
+            'skinny', 'skinnies', 'skinniy', 'skinnish',
+            'ugly', 'uglies', 'ugliy', 'uglish',
+            # Obscured profanity patterns
+            'f*ck', 'f**k', 'f***', 'f*ck*ng', 'f**k*ng', 'f***ng',
+            'sh*t', 'sh**', 'sh***', 'sh*tt*ng', 'sh**t*ng', 'sh***ng',
+            'b*tch', 'b**ch', 'b***h', 'b*tch*ng', 'b**ch*ng', 'b***h*ng',
+            'a*s', 'a**', 'a***', 'a*sh*le', 'a**h*le', 'a***h*le',
+            'd*mn', 'd**n', 'd***', 'd*mn*t', 'd**n*t', 'd***n*t',
+            'h*ll', 'h**l', 'h***', 'h*ll*sh', 'h**l*sh', 'h***l*sh',
+            'cr*p', 'cr**', 'cr***', 'cr*pp*', 'cr**p*', 'cr***p*',
+            'p*ss', 'p**s', 'p***', 'p*ss*ng', 'p**s*ng', 'p***s*ng',
+            'd*ck', 'd**k', 'd***', 'd*ck*ng', 'd**k*ng', 'd***k*ng',
+            'c*ck', 'c**k', 'c***', 'c*ck*ng', 'c**k*ng', 'c***k*ng',
+            'p*ssy', 'p**sy', 'p***y', 'p*ssy*ng', 'p**sy*ng', 'p***sy*ng',
+            't*ts', 't**s', 't***', 't*ts*ng', 't**s*ng', 't***s*ng',
+            'b**bs', 'b***s', 'b****', 'b**bs*ng', 'b***s*ng', 'b****s*ng',
+            'wh*re', 'wh**e', 'wh***', 'wh*re*ng', 'wh**e*ng', 'wh***e*ng',
+            'sl*t', 'sl**', 'sl***', 'sl*t*ng', 'sl**t*ng', 'sl***t*ng',
+            'h*e', 'h**', 'h***', 'h*e*ng', 'h**e*ng', 'h***e*ng',
+            'n*gg*r', 'n**g*r', 'n***g*r', 'n*gg*ng', 'n**g*ng', 'n***g*ng',
+            'ch*nk', 'ch**k', 'ch***k', 'ch*nk*ng', 'ch**k*ng', 'ch***k*ng',
+            'k*ke', 'k**e', 'k***e', 'k*ke*ng', 'k**e*ng', 'k***e*ng',
+            'sp*c', 'sp**', 'sp***', 'sp*c*ng', 'sp**c*ng', 'sp***c*ng',
+            'w*tb*ck', 'w**tb*ck', 'w***tb*ck', 'w*tb*ck*ng', 'w**tb*ck*ng', 'w***tb*ck*ng',
+            't*w*lh*ad', 't**w*lh*ad', 't***w*lh*ad', 't*w*lh*ad*ng', 't**w*lh*ad*ng', 't***w*lh*ad*ng',
+            's*ndn*gg*r', 's**ndn*gg*r', 's***ndn*gg*r', 's*ndn*gg*r*ng', 's**ndn*gg*r*ng', 's***ndn*gg*r*ng',
+            'r*gh*ad', 'r**gh*ad', 'r***gh*ad', 'r*gh*ad*ng', 'r**gh*ad*ng', 'r***gh*ad*ng',
+            't*rr*r*st', 't**rr*r*st', 't***rr*r*st', 't*rr*r*st*ng', 't**rr*r*st*ng', 't***rr*r*st*ng',
+            'b*mber', 'b**mber', 'b***mber', 'b*mber*ng', 'b**mber*ng', 'b***mber*ng',
+            's*ic*de', 's**ic*de', 's***ic*de', 's*ic*de*ng', 's**ic*de*ng', 's***ic*de*ng',
+            'b*mb', 'b**mb', 'b***mb', 'b*mb*ng', 'b**mb*ng', 'b***mb*ng',
+            'k*ll', 'k**ll', 'k***ll', 'k*ll*ng', 'k**ll*ng', 'k***ll*ng',
+            'm*rd*r', 'm**rd*r', 'm***rd*r', 'm*rd*r*ng', 'm**rd*r*ng', 'm***rd*r*ng',
+            'd*ath', 'd**ath', 'd***ath', 'd*ath*ng', 'd**ath*ng', 'd***ath*ng',
+            'd*e', 'd**e', 'd***e', 'd*e*ng', 'd**e*ng', 'd***e*ng',
+            'd*ad', 'd**ad', 'd***ad', 'd*ad*ng', 'd**ad*ng', 'd***ad*ng',
+            'h*te', 'h**te', 'h***te', 'h*te*ng', 'h**te*ng', 'h***te*ng',
+            'r*c*st', 'r**c*st', 'r***c*st', 'r*c*st*ng', 'r**c*st*ng', 'r***c*st*ng',
+            'n*z*', 'n**z*', 'n***z*', 'n*z**ng', 'n**z**ng', 'n***z**ng',
+            'h*tl*r', 'h**tl*r', 'h***tl*r', 'h*tl*r*ng', 'h**tl*r*ng', 'h***tl*r*ng',
+            'k*k', 'k**k', 'k***k', 'k*k*ng', 'k**k*ng', 'k***k*ng',
+            'wh*te', 'wh**te', 'wh***te', 'wh*te*ng', 'wh**te*ng', 'wh***te*ng',
+            'bl*ck', 'bl**ck', 'bl***ck', 'bl*ck*ng', 'bl**ck*ng', 'bl***ck*ng',
+            'y*ll*w', 'y**ll*w', 'y***ll*w', 'y*ll*w*ng', 'y**ll*w*ng', 'y***ll*w*ng',
+            'r*d', 'r**d', 'r***d', 'r*d*ng', 'r**d*ng', 'r***d*ng',
+            'br*wn', 'br**wn', 'br***wn', 'br*wn*ng', 'br**wn*ng', 'br***wn*ng',
+            'g*y', 'g**y', 'g***y', 'g*y*ng', 'g**y*ng', 'g***y*ng',
+            'l*sb*an', 'l**sb*an', 'l***sb*an', 'l*sb*an*ng', 'l**sb*an*ng', 'l***sb*an*ng',
+            'f*g', 'f**g', 'f***g', 'f*g*ng', 'f**g*ng', 'f***g*ng',
+            'f*gg*t', 'f**gg*t', 'f***gg*t', 'f*gg*t*ng', 'f**gg*t*ng', 'f***gg*t*ng',
+            'd*ke', 'd**ke', 'd***ke', 'd*ke*ng', 'd**ke*ng', 'd***ke*ng',
+            'tr*nny', 'tr**nny', 'tr***nny', 'tr*nny*ng', 'tr**nny*ng', 'tr***nny*ng',
+            'sh*m*le', 'sh**m*le', 'sh***m*le', 'sh*m*le*ng', 'sh**m*le*ng', 'sh***m*le*ng',
+            'l*dyb*y', 'l**dyb*y', 'l***dyb*y', 'l*dyb*y*ng', 'l**dyb*y*ng', 'l***dyb*y*ng',
+            'r*t*rd', 'r**t*rd', 'r***t*rd', 'r*t*rd*ng', 'r**t*rd*ng', 'r***t*rd*ng',
+            'r*t*rd*t*on', 'r**t*rd*t*on', 'r***t*rd*t*on', 'r*t*rd*t*on*ng', 'r**t*rd*t*on*ng', 'r***t*rd*t*on*ng',
+            '*d*ot', '**d*ot', '***d*ot', '*d*ot*ng', '**d*ot*ng', '***d*ot*ng',
+            'm*ron', 'm**ron', 'm***ron', 'm*ron*ng', 'm**ron*ng', 'm***ron*ng',
+            'st*p*d', 'st**p*d', 'st***p*d', 'st*p*d*ng', 'st**p*d*ng', 'st***p*d*ng',
+            'd*mb', 'd**mb', 'd***mb', 'd*mb*ng', 'd**mb*ng', 'd***mb*ng',
+            'r*t*rd', 'r**t*rd', 'r***t*rd', 'r*t*rd*ng', 'r**t*rd*ng', 'r***t*rd*ng',
+            'a*t*st*c', 'a**t*st*c', 'a***t*st*c', 'a*t*st*c*ng', 'a**t*st*c*ng', 'a***t*st*c*ng',
+            'd*wns', 'd**wns', 'd***wns', 'd*wns*ng', 'd**wns*ng', 'd***wns*ng',
+            'm*ng*l*id', 'm**ng*l*id', 'm***ng*l*id', 'm*ng*l*id*ng', 'm**ng*l*id*ng', 'm***ng*l*id*ng',
+            'cr*ppl*', 'cr**ppl*', 'cr***ppl*', 'cr*ppl*ng', 'cr**ppl*ng', 'cr***ppl*ng',
+            'h*nd*c*p', 'h**nd*c*p', 'h***nd*c*p', 'h*nd*c*p*ng', 'h**nd*c*p*ng', 'h***nd*c*p*ng',
+            'd*s*bl*d', 'd**s*bl*d', 'd***s*bl*d', 'd*s*bl*d*ng', 'd**s*bl*d*ng', 'd***s*bl*d*ng',
+            'bl*nd', 'bl**nd', 'bl***nd', 'bl*nd*ng', 'bl**nd*ng', 'bl***nd*ng',
+            'd*f', 'd**f', 'd***f', 'd*f*ng', 'd**f*ng', 'd***f*ng',
+            'm*te', 'm**te', 'm***te', 'm*te*ng', 'm**te*ng', 'm***te*ng',
+            'dw*rf', 'dw**rf', 'dw***rf', 'dw*rf*ng', 'dw**rf*ng', 'dw***rf*ng',
+            'm*dg*t', 'm**dg*t', 'm***dg*t', 'm*dg*t*ng', 'm**dg*t*ng', 'm***dg*t*ng',
+            'f*t', 'f**t', 'f***t', 'f*t*ng', 'f**t*ng', 'f***t*ng',
+            'sk*nny', 'sk**nny', 'sk***nny', 'sk*nny*ng', 'sk**nny*ng', 'sk***nny*ng',
+            '*gly', '**gly', '***gly', '*gly*ng', '**gly*ng', '***gly*ng',
+            'st*p*d', 'st**p*d', 'st***p*d', 'st*p*d*ng', 'st**p*d*ng', 'st***p*d*ng',
+            'd*mb', 'd**mb', 'd***mb', 'd*mb*ng', 'd**mb*ng', 'd***mb*ng',
+            '*d*ot', '**d*ot', '***d*ot', '*d*ot*ng', '**d*ot*ng', '***d*ot*ng',
+            'm*ron', 'm**ron', 'm***ron', 'm*ron*ng', 'm**ron*ng', 'm***ron*ng',
+            'r*t*rd', 'r**t*rd', 'r***t*rd', 'r*t*rd*ng', 'r**t*rd*ng', 'r***t*rd*ng',
+            'a*t*st*c', 'a**t*st*c', 'a***t*st*c', 'a*t*st*c*ng', 'a**t*st*c*ng', 'a***t*st*c*ng',
+            'd*wns', 'd**wns', 'd***wns', 'd*wns*ng', 'd**wns*ng', 'd***wns*ng',
+            'm*ng*l*id', 'm**ng*l*id', 'm***ng*l*id', 'm*ng*l*id*ng', 'm**ng*l*id*ng', 'm***ng*l*id*ng',
+            'cr*ppl*', 'cr**ppl*', 'cr***ppl*', 'cr*ppl*ng', 'cr**ppl*ng', 'cr***ppl*ng',
+            'h*nd*c*p', 'h**nd*c*p', 'h***nd*c*p', 'h*nd*c*p*ng', 'h**nd*c*p*ng', 'h***nd*c*p*ng',
+            'd*s*bl*d', 'd**s*bl*d', 'd***s*bl*d', 'd*s*bl*d*ng', 'd**s*bl*d*ng', 'd***s*bl*d*ng',
+            'bl*nd', 'bl**nd', 'bl***nd', 'bl*nd*ng', 'bl**nd*ng', 'bl***nd*ng',
+            'd*f', 'd**f', 'd***f', 'd*f*ng', 'd**f*ng', 'd***f*ng',
+            'm*te', 'm**te', 'm***te', 'm*te*ng', 'm**te*ng', 'm***te*ng',
+            'dw*rf', 'dw**rf', 'dw***rf', 'dw*rf*ng', 'dw**rf*ng', 'dw***rf*ng',
+            'm*dg*t', 'm**dg*t', 'm***dg*t', 'm*dg*t*ng', 'm**dg*t*ng', 'm***dg*t*ng',
+            'f*t', 'f**t', 'f***t', 'f*t*ng', 'f**t*ng', 'f***t*ng',
+            'sk*nny', 'sk**nny', 'sk***nny', 'sk*nny*ng', 'sk**nny*ng', 'sk***nny*ng',
+            '*gly', '**gly', '***gly', '*gly*ng', '**gly*ng', '***gly*ng'
+        ]
+        
+        # Check for exact matches
+        for word in inappropriate_words:
+            if word in text_lower:
+                return True
+        
+        # Check for obfuscated patterns (common substitutions)
+        obfuscated_patterns = [
+            # Common character substitutions
+            (r'[0o]', 'o'),  # 0 or o
+            (r'[1i!l]', 'i'),  # 1, i, !, or l
+            (r'[3e]', 'e'),  # 3 or e
+            (r'[4a@]', 'a'),  # 4, a, or @
+            (r'[5s$]', 's'),  # 5, s, or $
+            (r'[6g]', 'g'),  # 6 or g
+            (r'[7t]', 't'),  # 7 or t
+            (r'[8b]', 'b'),  # 8 or b
+            (r'[9g]', 'g'),  # 9 or g
+            (r'[|!1]', 'i'),  # |, !, or 1
+            (r'[*]', ''),  # Remove asterisks
+            (r'[-_]', ''),  # Remove hyphens and underscores
+        ]
+        
+        # Normalize text by applying obfuscation patterns
+        normalized_text = text_lower
+        for pattern, replacement in obfuscated_patterns:
+            normalized_text = re.sub(pattern, replacement, normalized_text)
+        
+        # Check normalized text against inappropriate words
+        for word in inappropriate_words:
+            if word in normalized_text:
+                return True
+        
+        # Check for repeated characters (e.g., "fuuuuck")
+        repeated_pattern = r'(.)\1{2,}'
+        if re.search(repeated_pattern, text_lower):
+            # Check if the repeated character forms an inappropriate word
+            for word in inappropriate_words:
+                if len(word) > 2:  # Only check longer words
+                    # Create pattern with repeated characters
+                    repeated_word = ''.join([char + '{1,}' for char in word])
+                    if re.search(repeated_word, text_lower):
+                        return True
+        
+        return False
+    
+    @classmethod
     def validate_phone_number(cls, phone: str) -> str:
         """
         Validate and sanitize phone number

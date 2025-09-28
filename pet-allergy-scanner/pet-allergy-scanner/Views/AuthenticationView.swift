@@ -12,6 +12,7 @@ struct AuthenticationView: View {
     @State private var isLoginMode = true
     @State private var email = ""
     @State private var password = ""
+    @State private var username = ""
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var showingAlert = false
@@ -24,6 +25,7 @@ struct AuthenticationView: View {
     @State private var confirmEmail = ""
     @State private var isEmailValid = false
     @State private var doEmailsMatch = false
+    @State private var isUsernameValid = false
     
     var body: some View {
         NavigationStack {
@@ -52,6 +54,28 @@ struct AuthenticationView: View {
                 VStack(spacing: 16) {
                     if !isLoginMode {
                         // Registration fields
+                        VStack(alignment: .leading, spacing: 8) {
+                            TextField("Username", text: $username)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .autocapitalization(.none)
+                                .onChange(of: username) { _, newUsername in
+                                    isUsernameValid = InputValidator.isValidUsername(newUsername)
+                                }
+                            
+                            // Username validation feedback
+                            if !username.isEmpty {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isUsernameValid ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(isUsernameValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                        .font(.caption)
+                                    
+                                    Text(isUsernameValid ? "Valid username" : username.isEmpty ? "Username must be 3-30 characters, letters, numbers, underscores, and hyphens only" : "Username contains inappropriate content or invalid characters")
+                                        .font(.caption)
+                                        .foregroundColor(isUsernameValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                }
+                            }
+                        }
+                        
                         TextField("First Name", text: $firstName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                         
@@ -60,25 +84,26 @@ struct AuthenticationView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("Email", text: $email)
+                        TextField("Email/Username", text: $email)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .keyboardType(.emailAddress)
+                            .keyboardType(.default)
                             .autocapitalization(.none)
                             .onChange(of: email) { _, newEmail in
                                 isEmailValid = InputValidator.isValidEmail(newEmail)
                                 doEmailsMatch = newEmail == confirmEmail && !newEmail.isEmpty
                             }
                         
-                        // Email validation feedback
+                        // Email/Username validation feedback
                         if !email.isEmpty {
+                            let isValidInput = isEmailValid || (!email.isEmpty && !email.contains("@"))
                             HStack(spacing: 6) {
-                                Image(systemName: isEmailValid ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                Image(systemName: isValidInput ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundColor(isValidInput ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
                                     .font(.caption)
                                 
-                                Text(isEmailValid ? "Valid email format" : "Invalid email format")
+                                Text(isValidInput ? (isEmailValid ? "Valid email format" : "Valid username format") : "Enter email or username")
                                     .font(.caption)
-                                    .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                    .foregroundColor(isValidInput ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
                             }
                         }
                         
@@ -266,10 +291,13 @@ struct AuthenticationView: View {
     
     private var isFormValid: Bool {
         if isLoginMode {
-            return !email.isEmpty && !password.isEmpty && isEmailValid
+            // For login, allow either valid email or non-empty username
+            let isValidInput = isEmailValid || (!email.isEmpty && !email.contains("@"))
+            return !email.isEmpty && !password.isEmpty && isValidInput
         } else {
             return !email.isEmpty && !password.isEmpty && !firstName.isEmpty && 
-                   isEmailValid && doEmailsMatch && passwordValidation.isValid
+                   isEmailValid && doEmailsMatch && passwordValidation.isValid && 
+                   (username.isEmpty || isUsernameValid)
         }
     }
     
@@ -287,6 +315,7 @@ struct AuthenticationView: View {
                 await authService.register(
                     email: email,
                     password: password,
+                    username: username.isEmpty ? nil : username,
                     firstName: firstName.isEmpty ? nil : firstName,
                     lastName: lastName.isEmpty ? nil : lastName
                 )
@@ -306,6 +335,7 @@ struct AuthenticationView: View {
     private func clearForm() {
         email = ""
         password = ""
+        username = ""
         firstName = ""
         lastName = ""
         mfaToken = ""
@@ -314,6 +344,7 @@ struct AuthenticationView: View {
         confirmEmail = ""
         isEmailValid = false
         doEmailsMatch = false
+        isUsernameValid = false
         passwordValidation = PasswordValidationResult(isValid: false, issues: [])
         authService.clearError()
     }
