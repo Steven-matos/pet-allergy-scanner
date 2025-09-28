@@ -18,6 +18,11 @@ struct AuthenticationView: View {
     @State private var mfaToken = ""
     @State private var showingMFA = false
     @State private var isMFARequired = false
+    @State private var passwordValidation: PasswordValidationResult = PasswordValidationResult(isValid: false, issues: [])
+    @State private var isPasswordVisible = false
+    @State private var confirmEmail = ""
+    @State private var isEmailValid = false
+    @State private var doEmailsMatch = false
     
     var body: some View {
         NavigationStack {
@@ -53,13 +58,125 @@ struct AuthenticationView: View {
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                     }
                     
-                    TextField("Email", text: $email)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Email", text: $email)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .onChange(of: email) { _, newEmail in
+                                isEmailValid = InputValidator.isValidEmail(newEmail)
+                                doEmailsMatch = newEmail == confirmEmail && !newEmail.isEmpty
+                            }
+                        
+                        // Email validation feedback
+                        if !email.isEmpty {
+                            HStack(spacing: 6) {
+                                Image(systemName: isEmailValid ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                    .font(.caption)
+                                
+                                Text(isEmailValid ? "Valid email format" : "Invalid email format")
+                                    .font(.caption)
+                                    .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                            }
+                        }
+                        
+                        // Confirm Email Field (only show during registration)
+                        if !isLoginMode {
+                            TextField("Confirm Email", text: $confirmEmail)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                .onChange(of: confirmEmail) { _, newConfirmEmail in
+                                    doEmailsMatch = email == newConfirmEmail && !newConfirmEmail.isEmpty && !email.isEmpty
+                                }
+                            
+                            // Email match validation feedback
+                            if !confirmEmail.isEmpty {
+                                HStack(spacing: 6) {
+                                    Image(systemName: doEmailsMatch ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                        .foregroundColor(doEmailsMatch ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                        .font(.caption)
+                                    
+                                    Text(doEmailsMatch ? "Emails match" : "Emails do not match")
+                                        .font(.caption)
+                                        .foregroundColor(doEmailsMatch ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                                }
+                            }
+                        }
+                    }
                     
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    VStack(alignment: .leading, spacing: 8) {
+                        ZStack(alignment: .trailing) {
+                            if isPasswordVisible {
+                                TextField("Password", text: $password)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                            } else {
+                                SecureField("Password", text: $password)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                            }
+                            
+                            Button(action: {
+                                isPasswordVisible.toggle()
+                            }) {
+                                Image(systemName: isPasswordVisible ? "eye.slash.fill" : "eye.fill")
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    .font(.system(size: 16))
+                            }
+                            .padding(.trailing, 12)
+                        }
+                        .onChange(of: password) { _, newPassword in
+                            passwordValidation = InputValidator.validatePassword(newPassword)
+                        }
+                        
+                        // Password validation feedback (only show during registration)
+                        if !isLoginMode && !password.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                // Password strength indicator
+                                HStack {
+                                    Text("Password Strength:")
+                                        .font(.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    
+                                    Text(passwordValidation.strength.description)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(passwordValidation.strength == .strong ? 
+                                                       ModernDesignSystem.Colors.safe : 
+                                                       passwordValidation.strength == .medium ? 
+                                                       ModernDesignSystem.Colors.caution : 
+                                                       ModernDesignSystem.Colors.unsafe)
+                                }
+                                
+                                // Validation requirements
+                                ForEach(passwordValidation.issues, id: \.self) { issue in
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(ModernDesignSystem.Colors.unsafe)
+                                            .font(.caption)
+                                        
+                                        Text(issue)
+                                            .font(.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    }
+                                }
+                                
+                                // Show success message when password is valid
+                                if passwordValidation.isValid {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(ModernDesignSystem.Colors.safe)
+                                            .font(.caption)
+                                        
+                                        Text("Password meets all requirements")
+                                            .font(.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.safe)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                        }
+                    }
                     
                     // Submit Button
                     Button(action: handleSubmit) {
@@ -136,9 +253,10 @@ struct AuthenticationView: View {
     
     private var isFormValid: Bool {
         if isLoginMode {
-            return !email.isEmpty && !password.isEmpty
+            return !email.isEmpty && !password.isEmpty && isEmailValid
         } else {
-            return !email.isEmpty && !password.isEmpty && !firstName.isEmpty
+            return !email.isEmpty && !password.isEmpty && !firstName.isEmpty && 
+                   isEmailValid && doEmailsMatch && passwordValidation.isValid
         }
     }
     
@@ -179,6 +297,11 @@ struct AuthenticationView: View {
         lastName = ""
         mfaToken = ""
         isMFARequired = false
+        isPasswordVisible = false
+        confirmEmail = ""
+        isEmailValid = false
+        doEmailsMatch = false
+        passwordValidation = PasswordValidationResult(isValid: false, issues: [])
         authService.clearError()
     }
 }
