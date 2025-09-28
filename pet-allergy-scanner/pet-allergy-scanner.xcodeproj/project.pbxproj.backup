@@ -263,12 +263,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely access your pet's allergy information and scan history.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app does not use location services. This key is included for completeness.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app does not use the microphone. This key is included for completeness.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save and share scan results for your pet's safety records.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "This app does not track users across other apps or websites. This key is included for App Store compliance.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to scan pet food ingredient labels and analyze them for potential allergens. The camera captures images of ingredient lists, nutrition facts, and product labels to help identify ingredients that may be harmful to your pet. No images are stored permanently on your device - they are only processed to extract text information for allergy analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -307,12 +302,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely access your pet's allergy information and scan history.";
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "This app does not use location services. This key is included for completeness.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app does not use the microphone. This key is included for completeness.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "This app needs photo library access to save and share scan results for your pet's safety records.";
-				INFOPLIST_KEY_NSUserTrackingUsageDescription = "This app does not track users across other apps or websites. This key is included for App Store compliance.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "This app uses the camera to scan pet food ingredient labels and analyze them for potential allergens. The camera captures images of ingredient lists, nutrition facts, and product labels to help identify ingredients that may be harmful to your pet. No images are stored permanently on your device - they are only processed to extract text information for allergy analysis.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

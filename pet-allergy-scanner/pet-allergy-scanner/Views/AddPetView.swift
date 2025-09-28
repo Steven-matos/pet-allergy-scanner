@@ -229,10 +229,9 @@ struct AddPetView: View {
 }
 
 #Preview("With Mock Data") {
-    let mockPetService = PetService()
-    // Note: In a real implementation, you would inject mock data
-    // For now, this serves as a placeholder for preview purposes
+    let petService = PetService.shared
+    // Note: Using shared instance for preview purposes
     
     return AddPetView()
-        .environmentObject(mockPetService)
+        .environmentObject(petService)
 }

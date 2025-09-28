@@ -32,7 +32,16 @@ class CameraPermissionService {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             DispatchQueue.main.async {
                 self?.updateAuthorizationStatus()
-                completion(self?.authorizationStatus ?? .denied)
+                let status = self?.authorizationStatus ?? .denied
+                
+                // Provide haptic feedback based on permission result
+                if status == .authorized {
+                    HapticFeedback.success()
+                } else {
+                    HapticFeedback.warning()
+                }
+                
+                completion(status)
             }
         }
     }

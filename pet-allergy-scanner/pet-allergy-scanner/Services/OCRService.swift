@@ -76,9 +76,7 @@ class OCRService {
         request.customWords = ["ingredients", "chicken", "beef", "salmon", "rice", "wheat", "corn", "soy"] // Common pet food terms
         
         // Enhanced image processing options
-        let options: [VNImageOption: Any] = [
-            .cameraIntrinsics: image.cameraIntrinsics as Any
-        ]
+        let options: [VNImageOption: Any] = [:]
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: options)
         

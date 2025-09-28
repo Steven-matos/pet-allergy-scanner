@@ -60,12 +60,14 @@ struct SafetyResultCard: View {
                 Image(systemName: iconForSafety(result.overallSafety))
                     .font(.system(size: 40))
                     .foregroundColor(colorForSafety(result.overallSafety))
+                    .accessibilityLabel("Safety status: \(result.safetyDisplayName)")
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(result.safetyDisplayName)
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(colorForSafety(result.overallSafety))
+                        .accessibilityAddTraits(.isHeader)
                     
                     Text("Overall Safety")
                         .font(.subheadline)
@@ -89,6 +91,7 @@ struct SafetyResultCard: View {
                     
                     ProgressView(value: result.confidenceScore)
                         .progressViewStyle(LinearProgressViewStyle(tint: colorForSafety(result.overallSafety)))
+                        .accessibilityLabel("Confidence score: \(Int(result.confidenceScore * 100)) percent")
                 }
             }
         }
@@ -151,10 +154,12 @@ struct UnsafeIngredientsList: View {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
+                    .accessibilityLabel("Warning icon")
                 Text("Unsafe Ingredients (\(ingredients.count))")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.red)
+                    .accessibilityAddTraits(.isHeader)
             }
             
             ForEach(ingredients, id: \.self) { ingredient in
@@ -163,6 +168,7 @@ struct UnsafeIngredientsList: View {
                         .foregroundColor(.red)
                     Text(ingredient)
                         .font(.body)
+                        .accessibilityLabel("Unsafe ingredient: \(ingredient)")
                     Spacer()
                 }
                 .padding(.leading, 16)
@@ -182,10 +188,12 @@ struct SafeIngredientsList: View {
             HStack {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
+                    .accessibilityLabel("Safe icon")
                 Text("Safe Ingredients (\(ingredients.count))")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.green)
+                    .accessibilityAddTraits(.isHeader)
             }
             
             ForEach(ingredients, id: \.self) { ingredient in
@@ -194,6 +202,7 @@ struct SafeIngredientsList: View {
                         .foregroundColor(.green)
                     Text(ingredient)
                         .font(.body)
+                        .accessibilityLabel("Safe ingredient: \(ingredient)")
                     Spacer()
                 }
                 .padding(.leading, 16)

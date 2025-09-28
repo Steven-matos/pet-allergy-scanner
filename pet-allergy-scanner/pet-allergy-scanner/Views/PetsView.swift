@@ -19,7 +19,9 @@ struct PetsView: View {
                     ProgressView("Loading pets...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if petService.pets.isEmpty {
-                    EmptyPetsView()
+                    EmptyPetsView {
+                        showingAddPet = true
+                    }
                 } else {
                     List {
                         ForEach(petService.pets) { pet in
@@ -60,27 +62,6 @@ struct PetsView: View {
             let pet = petService.pets[index]
             petService.deletePet(id: pet.id)
         }
-    }
-}
-
-struct EmptyPetsView: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "pawprint")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            Text("No Pets Added")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Add your first pet to start scanning ingredients")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

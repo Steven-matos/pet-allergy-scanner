@@ -16,6 +16,12 @@ enum APIError: Error, LocalizedError {
     case authenticationError
     case serverError(Int)
     case serverMessage(String)
+    case rateLimitExceeded
+    case requestTimeout
+    case invalidResponse
+    case mfaRequired
+    case mfaInvalid
+    case gdprError(String)
     case unknownError
     
     var errorDescription: String? {
@@ -34,6 +40,18 @@ enum APIError: Error, LocalizedError {
             return "Server error: \(code)"
         case .serverMessage(let message):
             return "Server error: \(message)"
+        case .rateLimitExceeded:
+            return "Rate limit exceeded. Please try again later."
+        case .requestTimeout:
+            return "Request timed out. Please check your connection."
+        case .invalidResponse:
+            return "Invalid response from server"
+        case .mfaRequired:
+            return "Multi-factor authentication required"
+        case .mfaInvalid:
+            return "Invalid MFA token"
+        case .gdprError(let message):
+            return "GDPR error: \(message)"
         case .unknownError:
             return "Unknown error occurred"
         }

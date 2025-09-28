@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 /// Pet service for managing pet profiles
 class PetService: ObservableObject {
@@ -17,7 +16,6 @@ class PetService: ObservableObject {
     @Published var errorMessage: String?
     
     private let apiService = APIService.shared
-    private var cancellables = Set<AnyCancellable>()
     
     private init() {}
     
@@ -26,20 +24,16 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        apiService.getPets()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] pets in
-                    self?.pets = pets
-                }
-            )
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                let pets = try await apiService.getPets()
+                self.pets = pets
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Create a new pet profile
@@ -47,20 +41,16 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        apiService.createPet(pet)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] newPet in
-                    self?.pets.append(newPet)
-                }
-            )
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                let newPet = try await apiService.createPet(pet)
+                self.pets.append(newPet)
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Update an existing pet profile
@@ -68,22 +58,18 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        apiService.updatePet(id: id, petUpdate: petUpdate)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] updatedPet in
-                    if let index = self?.pets.firstIndex(where: { $0.id == updatedPet.id }) {
-                        self?.pets[index] = updatedPet
-                    }
+        Task { @MainActor in
+            do {
+                let updatedPet = try await apiService.updatePet(id: id, petUpdate: petUpdate)
+                if let index = self.pets.firstIndex(where: { $0.id == updatedPet.id }) {
+                    self.pets[index] = updatedPet
                 }
-            )
-            .store(in: &cancellables)
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Delete a pet profile
@@ -91,20 +77,16 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        apiService.deletePet(id: id)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] _ in
-                    self?.pets.removeAll { $0.id == id }
-                }
-            )
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                try await apiService.deletePet(id: id)
+                self.pets.removeAll { $0.id == id }
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Get pet by ID

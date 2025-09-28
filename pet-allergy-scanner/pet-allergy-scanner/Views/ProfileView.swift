@@ -76,6 +76,22 @@ struct ProfileView: View {
                     )
                     
                     ProfileOptionRow(
+                        icon: "shield.checkered",
+                        title: "Security & MFA",
+                        action: {
+                            // TODO: Navigate to MFA setup
+                        }
+                    )
+                    
+                    ProfileOptionRow(
+                        icon: "hand.raised.fill",
+                        title: "Privacy & Data",
+                        action: {
+                            // TODO: Navigate to GDPR view
+                        }
+                    )
+                    
+                    ProfileOptionRow(
                         icon: "gear",
                         title: LocalizationKeys.settings.localized,
                         action: {
@@ -185,10 +201,10 @@ struct ProfileOptionRow: View {
 }
 
 #Preview("With Mock Data") {
-    let mockAuthService = AuthService()
-    mockAuthService.currentUser = MockData.mockUser
-    mockAuthService.isAuthenticated = true
+    let authService = AuthService.shared
+    authService.currentUser = MockData.mockUser
+    authService.isAuthenticated = true
     
     return ProfileView()
-        .environmentObject(mockAuthService)
+        .environmentObject(authService)
 }

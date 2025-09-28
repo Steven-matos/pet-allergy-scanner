@@ -6,22 +6,22 @@
 //
 
 import Foundation
+import UIKit
 import Combine
-import Observation
 
 /// Scan service for managing scan operations and history
-@Observable
-class ScanService {
+@MainActor
+class ScanService: ObservableObject {
     static let shared = ScanService()
     
-    var recentScans: [Scan] = []
-    var isLoading = false
-    var errorMessage: String?
-    var isAnalyzing = false
+    @Published var recentScans: [Scan] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+    @Published var isAnalyzing = false
     
     private let apiService = APIService.shared
     private var cancellables = Set<AnyCancellable>()
-    private var currentAnalysisTask: AnyCancellable?
+    private var currentAnalysisTask: Task<Void, Never>?
     
     private init() {}
     
@@ -30,20 +30,16 @@ class ScanService {
         isLoading = true
         errorMessage = nil
         
-        apiService.getScans()
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] scans in
-                    self?.recentScans = scans.sorted { $0.createdAt > $1.createdAt }
-                }
-            )
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                let scans = try await apiService.getScans()
+                recentScans = scans.sorted { $0.createdAt > $1.createdAt }
+                isLoading = false
+            } catch {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Create a new scan
@@ -58,20 +54,16 @@ class ScanService {
             status: .pending
         )
         
-        apiService.createScan(scanCreate)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isLoading = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] scan in
-                    self?.recentScans.insert(scan, at: 0)
-                }
-            )
-            .store(in: &cancellables)
+        Task { @MainActor in
+            do {
+                let scan = try await apiService.createScan(scanCreate)
+                recentScans.insert(scan, at: 0)
+                isLoading = false
+            } catch {
+                isLoading = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Analyze scan text with proper task management
@@ -82,26 +74,25 @@ class ScanService {
         isAnalyzing = true
         errorMessage = nil
         
-        currentAnalysisTask = apiService.analyzeScan(analysisRequest)
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { [weak self] completion in
-                    self?.isAnalyzing = false
-                    if case .failure(let error) = completion {
-                        self?.errorMessage = error.localizedDescription
-                    }
-                },
-                receiveValue: { [weak self] scan in
-                    if let index = self?.recentScans.firstIndex(where: { $0.id == scan.id }) {
-                        self?.recentScans[index] = scan
-                    } else {
-                        self?.recentScans.insert(scan, at: 0)
-                    }
-                    completion(scan)
+        // Use Task to handle async API call
+        currentAnalysisTask = Task { @MainActor in
+            do {
+                let analyzedScan = try await apiService.analyzeScan(analysisRequest)
+                
+                // Update the scan in our list
+                if let index = recentScans.firstIndex(where: { $0.id == analyzedScan.id }) {
+                    recentScans[index] = analyzedScan
+                } else {
+                    recentScans.insert(analyzedScan, at: 0)
                 }
-            )
-        
-        currentAnalysisTask?.store(in: &cancellables)
+                
+                isAnalyzing = false
+                completion(analyzedScan)
+            } catch {
+                isAnalyzing = false
+                errorMessage = error.localizedDescription
+            }
+        }
     }
     
     /// Cancel current analysis task

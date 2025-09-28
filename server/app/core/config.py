@@ -4,7 +4,7 @@ Application configuration settings with enhanced security
 
 import os
 from typing import List, Optional
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -21,21 +21,43 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, ge=5, le=1440, description="Token expiration in minutes")
     
     # CORS and Security Headers
-    allowed_origins: List[str] = Field(
-        default=[
+    allowed_origins_str: Optional[str] = Field(
+        default=None,
+        description="Comma-separated allowed CORS origins"
+    )
+    allowed_hosts_str: Optional[str] = Field(
+        default=None,
+        description="Comma-separated trusted hosts"
+    )
+    
+    @property
+    def allowed_origins(self) -> List[str]:
+        """Get allowed origins as a list"""
+        if self.allowed_origins_str:
+            return [origin.strip() for origin in self.allowed_origins_str.split(',') if origin.strip()]
+        return [
+            # Development origins
             "http://localhost:3000", 
             "http://localhost:8080",
+            "http://localhost",
+            "https://localhost",
+            # Capacitor/Ionic origins
             "capacitor://localhost",
             "ionic://localhost",
-            "http://localhost",
-            "https://localhost"
-        ],
-        description="Allowed CORS origins (includes iOS app schemes)"
-    )
-    allowed_hosts: List[str] = Field(
-        default=["localhost", "127.0.0.1"],
-        description="Trusted hosts"
-    )
+            # iOS app URL schemes
+            "sniffsafe://",
+            "sniffsafe://localhost",
+            # Production origins (update these with your actual domains)
+            "https://api.petallergyscanner.com",
+            "https://petallergyscanner.com"
+        ]
+    
+    @property
+    def allowed_hosts(self) -> List[str]:
+        """Get allowed hosts as a list"""
+        if self.allowed_hosts_str:
+            return [host.strip() for host in self.allowed_hosts_str.split(',') if host.strip()]
+        return ["localhost", "127.0.0.1"]
     
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60, ge=1, le=1000, description="Rate limit per minute")
@@ -68,7 +90,8 @@ class Settings(BaseSettings):
     enable_data_export: bool = Field(default=True, description="Enable data export for GDPR")
     enable_data_deletion: bool = Field(default=True, description="Enable data deletion for GDPR")
     
-    @validator('secret_key')
+    @field_validator('secret_key')
+    @classmethod
     def validate_secret_key(cls, v):
         """Validate secret key strength"""
         if len(v) < 32:
@@ -77,23 +100,20 @@ class Settings(BaseSettings):
             raise ValueError('Please set a proper secret key in environment variables')
         return v
     
-    @validator('environment')
+    @field_validator('environment')
+    @classmethod
     def validate_environment(cls, v):
         """Validate environment setting"""
         if v not in ['development', 'staging', 'production']:
             raise ValueError('Environment must be development, staging, or production')
         return v
     
-    @validator('allowed_origins', pre=True)
-    def parse_allowed_origins(cls, v):
-        """Parse allowed origins from string or list"""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(',')]
-        return v
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": False,
+        "env_parse_none_str": "None",
+    }
 
 # Global settings instance
 settings = Settings()

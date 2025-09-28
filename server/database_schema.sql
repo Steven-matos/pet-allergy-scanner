@@ -166,6 +166,13 @@ CREATE POLICY "Users can delete own favorites" ON public.favorites
 CREATE POLICY "Anyone can view ingredients" ON public.ingredients
     FOR SELECT USING (true);
 
+-- Optional: Require MFA for sensitive operations (uncomment if needed)
+-- CREATE POLICY "Require MFA for premium scans" ON public.scans
+--     FOR INSERT WITH CHECK (
+--         auth.uid() = user_id AND 
+--         auth.jwt()->>'aal' = 'aal2'
+--     );
+
 -- Insert initial ingredient data
 INSERT INTO public.ingredients (name, aliases, safety_level, species_compatibility, description, common_allergen) VALUES
 ('chicken', ARRAY['chicken meat', 'chicken breast', 'chicken thigh'], 'caution', 'both', 'Common protein source, but frequent allergen', true),

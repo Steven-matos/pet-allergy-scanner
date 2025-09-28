@@ -20,6 +20,11 @@ struct CameraView: UIViewControllerRepresentable {
         picker.cameraDevice = .rear
         picker.cameraFlashMode = .auto
         picker.allowsEditing = false
+        
+        // Accessibility
+        picker.accessibilityLabel = "Camera for scanning ingredient labels"
+        picker.accessibilityHint = "Point the camera at the ingredient list on pet food packaging"
+        
         return picker
     }
     
@@ -38,8 +43,12 @@ struct CameraView: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
+                // Provide haptic feedback for successful capture
+                HapticFeedback.success()
                 parent.onImageCaptured(image)
             } else {
+                // Provide haptic feedback for error
+                HapticFeedback.error()
                 parent.onError("Failed to capture image")
             }
             picker.dismiss(animated: true)

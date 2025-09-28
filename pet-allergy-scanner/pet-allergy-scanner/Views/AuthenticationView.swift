@@ -15,6 +15,9 @@ struct AuthenticationView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var showingAlert = false
+    @State private var mfaToken = ""
+    @State private var showingMFA = false
+    @State private var isMFARequired = false
     
     var body: some View {
         NavigationStack {
@@ -73,6 +76,33 @@ struct AuthenticationView: View {
                         .cornerRadius(10)
                     }
                     .disabled(authService.isLoading || !isFormValid)
+                    
+                    // MFA Token Field (shown when MFA is required)
+                    if isMFARequired {
+                        VStack(spacing: 12) {
+                            Text("Multi-Factor Authentication")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            
+                            TextField("Enter 6-digit code", text: $mfaToken)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.center)
+                                .font(.title2)
+                                .monospacedDigit()
+                            
+                            Button("Verify MFA") {
+                                handleMFAVerification()
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                            .disabled(mfaToken.count != 6)
+                        }
+                        .padding(.top, 20)
+                    }
                 }
                 .padding(.horizontal, 32)
                 
@@ -112,14 +142,31 @@ struct AuthenticationView: View {
     
     private func handleSubmit() {
         if isLoginMode {
-            authService.login(email: email, password: password)
+            Task {
+                await authService.login(email: email, password: password)
+                // Check if MFA is required after login
+                if authService.errorMessage?.contains("MFA") == true {
+                    isMFARequired = true
+                }
+            }
         } else {
-            authService.register(
-                email: email,
-                password: password,
-                firstName: firstName.isEmpty ? nil : firstName,
-                lastName: lastName.isEmpty ? nil : lastName
-            )
+            Task {
+                await authService.register(
+                    email: email,
+                    password: password,
+                    firstName: firstName.isEmpty ? nil : firstName,
+                    lastName: lastName.isEmpty ? nil : lastName
+                )
+            }
+        }
+    }
+    
+    private func handleMFAVerification() {
+        Task {
+            // This would integrate with the MFA service
+            // For now, we'll just clear the MFA requirement
+            isMFARequired = false
+            mfaToken = ""
         }
     }
     
@@ -128,6 +175,8 @@ struct AuthenticationView: View {
         password = ""
         firstName = ""
         lastName = ""
+        mfaToken = ""
+        isMFARequired = false
         authService.clearError()
     }
 }

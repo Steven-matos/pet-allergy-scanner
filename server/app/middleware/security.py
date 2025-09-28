@@ -22,13 +22,23 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     
     def __init__(self, app: ASGIApp):
         super().__init__(app)
+        # Different CSP policies for docs vs API endpoints
+        self.api_csp = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'"
+        self.docs_csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "font-src 'self' https://cdn.jsdelivr.net; "
+            "connect-src 'self'"
+        )
+        
         self.security_headers = {
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1; mode=block",
             "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
             "Referrer-Policy": "strict-origin-when-cross-origin",
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
             "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
             "Cross-Origin-Embedder-Policy": "require-corp",
             "Cross-Origin-Opener-Policy": "same-origin",
@@ -42,6 +52,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # Add security headers
         for header, value in self.security_headers.items():
             response.headers[header] = value
+        
+        # Apply appropriate CSP based on path
+        if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            response.headers["Content-Security-Policy"] = self.docs_csp
+        else:
+            response.headers["Content-Security-Policy"] = self.api_csp
         
         # Add custom headers
         response.headers["X-API-Version"] = settings.api_version

@@ -6,18 +6,17 @@
 //
 
 import Foundation
-import Observation
+import Combine
 
 /// Authentication service for managing user authentication state using Swift Concurrency
-@Observable
 @MainActor
-class AuthService {
+class AuthService: ObservableObject {
     static let shared = AuthService()
     
-    var isAuthenticated = false
-    var currentUser: User?
-    var isLoading = false
-    var errorMessage: String?
+    @Published var isAuthenticated = false
+    @Published var currentUser: User?
+    @Published var isLoading = false
+    @Published var errorMessage: String?
     
     private let apiService = APIService.shared
     

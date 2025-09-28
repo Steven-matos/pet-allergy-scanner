@@ -22,16 +22,10 @@ async def init_db():
     global supabase, connection_pool
     
     try:
-        # Initialize Supabase client with connection pooling settings
+        # Initialize Supabase client
         supabase = create_client(
             settings.supabase_url, 
-            settings.supabase_key,
-            options={
-                "db": {
-                    "pool_size": settings.database_pool_size,
-                    "timeout": settings.database_timeout
-                }
-            }
+            settings.supabase_key
         )
         
         # Test connection with retry logic

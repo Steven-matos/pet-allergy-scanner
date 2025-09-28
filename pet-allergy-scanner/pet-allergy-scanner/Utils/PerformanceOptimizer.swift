@@ -73,12 +73,17 @@ struct PerformanceOptimizer {
     ///   - action: Action to execute
     /// - Returns: Debounced function
     static func debounce(delay: TimeInterval, action: @escaping () -> Void) -> () -> Void {
-        var workItem: DispatchWorkItem?
+        // Use a class to maintain state across calls
+        class DebounceState {
+            var workItem: DispatchWorkItem?
+        }
+        
+        let state = DebounceState()
         
         return {
-            workItem?.cancel()
-            workItem = DispatchWorkItem(block: action)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem!)
+            state.workItem?.cancel()
+            state.workItem = DispatchWorkItem(block: action)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: state.workItem!)
         }
     }
     

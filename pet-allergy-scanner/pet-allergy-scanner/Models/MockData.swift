@@ -130,27 +130,7 @@ struct MockData {
     
     // MARK: - Mock Services
     
-    /// Create a mock PetService with sample data
-    static func createMockPetService() -> PetService {
-        let service = PetService()
-        // Note: In a real implementation, you would inject mock data
-        // For now, this serves as a placeholder for preview purposes
-        return service
-    }
-    
-    /// Create a mock AuthService with sample data
-    static func createMockAuthService() -> AuthService {
-        let service = AuthService()
-        // Note: In a real implementation, you would inject mock data
-        // For now, this serves as a placeholder for preview purposes
-        return service
-    }
-    
-    /// Create a mock ScanService with sample data
-    static func createMockScanService() -> ScanService {
-        let service = ScanService()
-        // Note: In a real implementation, you would inject mock data
-        // For now, this serves as a placeholder for preview purposes
-        return service
-    }
+    /// Note: Mock service creation methods removed as services use singleton pattern.
+    /// Use shared instances (PetService.shared, AuthService.shared, ScanService.shared) 
+    /// in SwiftUI previews instead of creating new instances.
 }

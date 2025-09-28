@@ -384,10 +384,9 @@ struct RecentScanCard: View {
 }
 
 #Preview("With Mock Data") {
-    let mockPetService = PetService()
-    // Note: In a real implementation, you would inject mock pets
-    // For now, this serves as a placeholder for preview purposes
+    let petService = PetService.shared
+    // Note: Using shared instance for preview purposes
     
     return ScanView()
-        .environmentObject(mockPetService)
+        .environmentObject(petService)
 }

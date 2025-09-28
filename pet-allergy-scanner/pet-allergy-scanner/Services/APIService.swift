@@ -13,7 +13,7 @@ import Security
 class APIService: ObservableObject {
     static let shared = APIService()
     
-    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "http://localhost:8000/api/v1"
+    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "https://your-api-domain.com/api/v1"
     private let authTokenKey = "authToken"
     private var authToken: String? {
         get { KeychainHelper.read(forKey: authTokenKey) }
@@ -43,11 +43,17 @@ class APIService: ObservableObject {
         authToken = nil
     }
     
-    /// Create URL request with authentication headers
+    /// Create URL request with authentication headers and security features
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("iOS", forHTTPHeaderField: "User-Agent")
+        request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
+        
+        // Add security headers
+        request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
+        request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -56,6 +62,9 @@ class APIService: ObservableObject {
         if let body = body {
             request.httpBody = body
         }
+        
+        // Set timeout for security
+        request.timeoutInterval = 30.0
         
         return request
     }
@@ -71,7 +80,14 @@ class APIService: ObservableObject {
                 case 200...299:
                     break // Success
                 case 401:
+                    // Clear invalid token
+                    clearAuthToken()
                     throw APIError.authenticationError
+                case 403:
+                    throw APIError.authenticationError
+                case 429:
+                    // Rate limit exceeded
+                    throw APIError.rateLimitExceeded
                 case 400...499:
                     // Try to decode error response
                     if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
@@ -336,7 +352,7 @@ extension APIService {
         
         var request = createRequest(url: url, method: "POST")
         
-        let analysisData = [
+        let analysisData: [String: Any] = [
             "ingredients": ingredients,
             "pet_species": petSpecies.rawValue,
             "pet_allergies": petAllergies
@@ -369,6 +385,145 @@ extension APIService {
         
         let request = createRequest(url: url)
         return try await performRequest(request, responseType: [String].self)
+    }
+}
+
+// MARK: - MFA Endpoints
+
+extension APIService {
+    /// Setup MFA for current user
+    func setupMFA() async throws -> MFASetupResponse {
+        guard let url = URL(string: "\(baseURL)/mfa/setup") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url, method: "POST")
+        return try await performRequest(request, responseType: MFASetupResponse.self)
+    }
+    
+    /// Enable MFA with verification token
+    func enableMFA(token: String) async throws {
+        guard let url = URL(string: "\(baseURL)/mfa/enable") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = createRequest(url: url, method: "POST")
+        
+        let mfaData = ["token": token]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: mfaData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
+    }
+    
+    /// Verify MFA token
+    func verifyMFA(token: String) async throws {
+        guard let url = URL(string: "\(baseURL)/mfa/verify") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = createRequest(url: url, method: "POST")
+        
+        let mfaData = ["token": token]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: mfaData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
+    }
+    
+    /// Get MFA status
+    func getMFAStatus() async throws -> MFAStatus {
+        guard let url = URL(string: "\(baseURL)/mfa/status") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: MFAStatus.self)
+    }
+}
+
+// MARK: - GDPR Endpoints
+
+extension APIService {
+    /// Export user data
+    func exportUserData() async throws -> Data {
+        guard let url = URL(string: "\(baseURL)/gdpr/export") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return data
+    }
+    
+    /// Delete user data
+    func deleteUserData() async throws {
+        guard let url = URL(string: "\(baseURL)/gdpr/delete") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url, method: "DELETE")
+        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
+    }
+    
+    /// Get data retention information
+    func getDataRetentionInfo() async throws -> DataRetentionInfo {
+        guard let url = URL(string: "\(baseURL)/gdpr/retention") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: DataRetentionInfo.self)
+    }
+    
+    /// Get data subject rights information
+    func getDataSubjectRights() async throws -> DataSubjectRights {
+        guard let url = URL(string: "\(baseURL)/gdpr/rights") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: DataSubjectRights.self)
+    }
+}
+
+// MARK: - Monitoring Endpoints
+
+extension APIService {
+    /// Get system health status
+    func getHealthStatus() async throws -> HealthStatus {
+        guard let url = URL(string: "\(baseURL)/monitoring/health") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: HealthStatus.self)
+    }
+    
+    /// Get system metrics
+    func getMetrics(hours: Int = 24) async throws -> SystemMetrics {
+        guard let url = URL(string: "\(baseURL)/monitoring/metrics?hours=\(hours)") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: SystemMetrics.self)
+    }
+    
+    /// Get system status
+    func getSystemStatus() async throws -> SystemStatus {
+        guard let url = URL(string: "\(baseURL)/monitoring/status") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url)
+        return try await performRequest(request, responseType: SystemStatus.self)
     }
 }
 
