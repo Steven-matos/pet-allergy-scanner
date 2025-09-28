@@ -15,6 +15,7 @@ struct AuthenticationView: View {
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var showingAlert = false
+    @State private var showingEmailVerificationMessage = false
     @State private var mfaToken = ""
     @State private var showingMFA = false
     @State private var isMFARequired = false
@@ -243,9 +244,21 @@ struct AuthenticationView: View {
             } message: {
                 Text(authService.errorMessage ?? "An error occurred")
             }
+            .alert("Email Verification Required", isPresented: $showingEmailVerificationMessage) {
+                Button("OK") { 
+                    authService.clearError()
+                }
+            } message: {
+                Text(authService.errorMessage ?? "Please check your email and click the verification link to activate your account.")
+            }
             .onChange(of: authService.errorMessage) { _, errorMessage in
-                if errorMessage != nil {
-                    showingAlert = true
+                if let message = errorMessage {
+                    // Check if this is an email verification message
+                    if message.contains("verify your email") || message.contains("verification link") || message.contains("check your email") {
+                        showingEmailVerificationMessage = true
+                    } else {
+                        showingAlert = true
+                    }
                 }
             }
         }

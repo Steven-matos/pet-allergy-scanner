@@ -41,7 +41,7 @@ async def register_user(user_data: UserCreate):
     Register a new user account
     
     Creates a new user account with email and password authentication
-    Returns access token and user information for immediate login
+    Returns success message instructing user to verify their email
     """
     try:
         from app.utils.security import SecurityValidator
@@ -77,12 +77,37 @@ async def register_user(user_data: UserCreate):
                     detail="Failed to create user account - no user returned"
                 )
             
+            # Check if email confirmation is required
             if not response.session:
-                logger.error("No session returned from Supabase sign_up")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Failed to create user account - no session returned"
-                )
+                # Email confirmation required - return success message
+                return {
+                    "message": "Account created successfully! Please check your email and click the verification link to activate your account.",
+                    "email_verification_required": True,
+                    "user": UserResponse(
+                        id=response.user.id,
+                        email=response.user.email,
+                        first_name=response.user.user_metadata.get("first_name"),
+                        last_name=response.user.user_metadata.get("last_name"),
+                        role=response.user.user_metadata.get("role", "free"),
+                        created_at=response.user.created_at,
+                        updated_at=response.user.updated_at
+                    )
+                }
+            else:
+                # Email already confirmed - return tokens
+                return {
+                    "access_token": response.session.access_token,
+                    "token_type": "bearer",
+                    "user": UserResponse(
+                        id=response.user.id,
+                        email=response.user.email,
+                        first_name=response.user.user_metadata.get("first_name"),
+                        last_name=response.user.user_metadata.get("last_name"),
+                        role=response.user.user_metadata.get("role", "free"),
+                        created_at=response.user.created_at,
+                        updated_at=response.user.updated_at
+                    )
+                }
                 
         except Exception as supabase_error:
             logger.error(f"Supabase sign_up error: {supabase_error}")
@@ -90,21 +115,6 @@ async def register_user(user_data: UserCreate):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to create user account: {str(supabase_error)}"
             )
-        
-        # Return the same format as login endpoint for consistency
-        return {
-            "access_token": response.session.access_token,
-            "token_type": "bearer",
-            "user": UserResponse(
-                id=response.user.id,
-                email=response.user.email,
-                first_name=response.user.user_metadata.get("first_name"),
-                last_name=response.user.user_metadata.get("last_name"),
-                role=response.user.user_metadata.get("role", "free"),
-                created_at=response.user.created_at,
-                updated_at=response.user.updated_at
-            )
-        }
         
     except Exception as e:
         logger.error(f"Registration error: {e}")
@@ -141,6 +151,19 @@ async def login_user(login_data: UserLogin):
                 detail="Invalid email or password"
             )
         
+        # Check if email is verified
+        if not response.user.email_confirmed_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email address before logging in. Check your inbox for a verification link."
+            )
+        
+        if not response.session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
         return {
             "access_token": response.session.access_token,
             "token_type": "bearer",
@@ -155,6 +178,9 @@ async def login_user(login_data: UserLogin):
             )
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(

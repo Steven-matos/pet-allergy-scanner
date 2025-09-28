@@ -81,8 +81,8 @@ class AuthService: ObservableObject {
         )
         
         do {
-            let authResponse = try await apiService.register(user: userCreate)
-            handleAuthResponse(authResponse)
+            let registrationResponse = try await apiService.register(user: userCreate)
+            handleRegistrationResponse(registrationResponse)
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
@@ -97,6 +97,14 @@ class AuthService: ObservableObject {
         do {
             let authResponse = try await apiService.login(email: email, password: password)
             handleAuthResponse(authResponse)
+        } catch let apiError as APIError {
+            isLoading = false
+            // Handle email verification errors as informational messages, not errors
+            if case .emailNotVerified(let message) = apiError {
+                errorMessage = message
+            } else {
+                errorMessage = apiError.localizedDescription
+            }
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
@@ -131,6 +139,29 @@ class AuthService: ObservableObject {
         } catch {
             isLoading = false
             errorMessage = error.localizedDescription
+        }
+    }
+    
+    /// Handle registration response
+    private func handleRegistrationResponse(_ registrationResponse: RegistrationResponse) {
+        isLoading = false
+        
+        if let emailVerificationRequired = registrationResponse.emailVerificationRequired, emailVerificationRequired {
+            // Email verification required - show message instead of error
+            errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
+            isAuthenticated = false
+            currentUser = nil
+        } else if let accessToken = registrationResponse.accessToken, let user = registrationResponse.user {
+            // Email already verified - proceed with login
+            apiService.setAuthToken(accessToken)
+            isAuthenticated = true
+            currentUser = user
+            errorMessage = nil
+        } else {
+            // Fallback error
+            errorMessage = "Registration failed. Please try again."
+            isAuthenticated = false
+            currentUser = nil
         }
     }
     

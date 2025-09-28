@@ -84,6 +84,12 @@ class APIService: ObservableObject {
                     clearAuthToken()
                     throw APIError.authenticationError
                 case 403:
+                    // Check if this is an email verification error
+                    if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        if errorResponse.message.contains("verify your email") {
+                            throw APIError.emailNotVerified(errorResponse.message)
+                        }
+                    }
                     throw APIError.authenticationError
                 case 429:
                     // Rate limit exceeded
@@ -145,7 +151,7 @@ class APIService: ObservableObject {
 
 extension APIService {
     /// Register a new user
-    func register(user: UserCreate) async throws -> AuthResponse {
+    func register(user: UserCreate) async throws -> RegistrationResponse {
         guard let url = URL(string: "\(baseURL)/auth/register") else {
             throw APIError.invalidURL
         }
@@ -158,7 +164,7 @@ extension APIService {
             throw APIError.encodingError
         }
         
-        return try await performRequest(request, responseType: AuthResponse.self)
+        return try await performRequest(request, responseType: RegistrationResponse.self)
     }
     
     /// Login user

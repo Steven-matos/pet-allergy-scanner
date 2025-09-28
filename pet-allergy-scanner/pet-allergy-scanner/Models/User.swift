@@ -85,3 +85,20 @@ struct AuthResponse: Codable {
         case user
     }
 }
+
+/// Registration response model for email verification scenarios
+struct RegistrationResponse: Codable {
+    let message: String?
+    let emailVerificationRequired: Bool?
+    let accessToken: String?
+    let tokenType: String?
+    let user: User?
+    
+    enum CodingKeys: String, CodingKey {
+        case message
+        case emailVerificationRequired = "email_verification_required"
+        case accessToken = "access_token"
+        case tokenType = "token_type"
+        case user
+    }
+}

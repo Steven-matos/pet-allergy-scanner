@@ -22,6 +22,8 @@ enum APIError: Error, LocalizedError {
     case mfaRequired
     case mfaInvalid
     case gdprError(String)
+    case emailVerificationRequired(String)
+    case emailNotVerified(String)
     case unknownError
     
     var errorDescription: String? {
@@ -52,6 +54,10 @@ enum APIError: Error, LocalizedError {
             return "Invalid MFA token"
         case .gdprError(let message):
             return "GDPR error: \(message)"
+        case .emailVerificationRequired(let message):
+            return message
+        case .emailNotVerified(let message):
+            return message
         case .unknownError:
             return "Unknown error occurred"
         }
