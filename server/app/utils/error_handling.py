@@ -4,6 +4,8 @@ Enhanced error handling and logging utilities
 
 import logging
 import traceback
+import re
+from datetime import datetime
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse

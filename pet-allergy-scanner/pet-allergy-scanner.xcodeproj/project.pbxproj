@@ -10,9 +10,22 @@
 		293A6DBB2E873DAC00B33495 /* pet-allergy-scanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "pet-allergy-scanner.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2920B9BE2E89B7B600773244 /* Exceptions for "pet-allergy-scanner" folder in "pet-allergy-scanner" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 293A6DBA2E873DAC00B33495 /* pet-allergy-scanner */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		293A6DBD2E873DAC00B33495 /* pet-allergy-scanner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2920B9BE2E89B7B600773244 /* Exceptions for "pet-allergy-scanner" folder in "pet-allergy-scanner" target */,
+			);
 			path = "pet-allergy-scanner";
 			sourceTree = "<group>";
 		};
@@ -261,6 +274,7 @@
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "pet-allergy-scanner/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";
@@ -305,6 +319,7 @@
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "pet-allergy-scanner/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";

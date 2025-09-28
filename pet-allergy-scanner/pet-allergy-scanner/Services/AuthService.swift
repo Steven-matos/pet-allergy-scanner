@@ -136,10 +136,89 @@ class AuthService: ObservableObject {
     
     /// Handle authentication response
     private func handleAuthResponse(_ authResponse: AuthResponse) {
-        // Token is persisted securely using Keychain inside APIService
+        // Store the access token in the API service for future requests
+        apiService.setAuthToken(authResponse.accessToken)
         isAuthenticated = true
         currentUser = authResponse.user
+        isLoading = false
         errorMessage = nil
+    }
+    
+    /// Handle email confirmation from URL redirect
+    func handleEmailConfirmation(accessToken: String, refreshToken: String) {
+        print("AuthService: Handling email confirmation")
+        
+        // Store the tokens
+        apiService.setAuthToken(accessToken)
+        
+        // Update authentication state
+        isAuthenticated = true
+        isLoading = true
+        errorMessage = nil
+        
+        // Fetch user information
+        Task {
+            do {
+                let user = try await apiService.getCurrentUser()
+                currentUser = user
+                isLoading = false
+                print("AuthService: Email confirmation successful")
+            } catch {
+                print("AuthService: Email confirmation failed - \(error)")
+                isLoading = false
+                logout()
+            }
+        }
+    }
+    
+    /// Handle password reset from URL redirect
+    func handlePasswordReset(accessToken: String) {
+        print("AuthService: Handling password reset")
+        
+        // Store the token for password reset flow
+        apiService.setAuthToken(accessToken)
+        
+        // You might want to show a password reset form or navigate to a specific screen
+        // For now, we'll just set the user as authenticated
+        isAuthenticated = true
+        isLoading = true
+        
+        Task {
+            do {
+                let user = try await apiService.getCurrentUser()
+                currentUser = user
+                isLoading = false
+                print("AuthService: Password reset token validated")
+            } catch {
+                print("AuthService: Password reset validation failed - \(error)")
+                isLoading = false
+                logout()
+            }
+        }
+    }
+    
+    /// Handle general auth callback
+    func handleAuthCallback(accessToken: String) {
+        print("AuthService: Handling auth callback")
+        
+        apiService.setAuthToken(accessToken)
+        isAuthenticated = true
+        isLoading = true
+        errorMessage = nil
+        
+        // Fetch user information
+        Task {
+            do {
+                let user = try await apiService.getCurrentUser()
+                currentUser = user
+                isLoading = false
+                print("AuthService: Auth callback successful")
+            } catch {
+                print("AuthService: Auth callback failed - \(error)")
+                isLoading = false
+                logout()
+            }
+        }
     }
     
     /// Clear error message

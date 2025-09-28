@@ -13,7 +13,7 @@ import Security
 class APIService: ObservableObject {
     static let shared = APIService()
     
-    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "https://your-api-domain.com/api/v1"
+    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "http://localhost:8000/api/v1"
     private let authTokenKey = "authToken"
     private var authToken: String? {
         get { KeychainHelper.read(forKey: authTokenKey) }
@@ -93,6 +93,11 @@ class APIService: ObservableObject {
                     if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
                         throw APIError.serverMessage(errorResponse.message)
                     }
+                    // Try to decode as generic error response
+                    if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorMessage = errorDict["error"] as? String {
+                        throw APIError.serverMessage(errorMessage)
+                    }
                     throw APIError.serverError(httpResponse.statusCode)
                 case 500...599:
                     throw APIError.serverError(httpResponse.statusCode)
@@ -104,13 +109,31 @@ class APIService: ObservableObject {
             // Decode successful response
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(T.self, from: data)
+            
+            do {
+                return try decoder.decode(T.self, from: data)
+            } catch let decodingError as DecodingError {
+                // Log the raw response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("Failed to decode response. Raw response: \(responseString)")
+                    print("Decoding error: \(decodingError)")
+                }
+                throw APIError.networkError("Failed to decode response: \(decodingError.localizedDescription)")
+            } catch {
+                // Log the raw response for debugging
+                if let responseString = String(data: data, encoding: .utf8) {
+                    print("Failed to decode response. Raw response: \(responseString)")
+                }
+                throw error
+            }
             
         } catch let error as APIError {
             throw error
         } catch {
-            if error is DecodingError {
-                throw APIError.decodingError
+            if let decodingError = error as? DecodingError {
+                // Provide more detailed decoding error information
+                let errorMessage = "Failed to decode response: \(decodingError.localizedDescription)"
+                throw APIError.networkError(errorMessage)
             } else {
                 throw APIError.networkError(error.localizedDescription)
             }

@@ -61,7 +61,7 @@ class SecureDataManager {
     
     /// Clear all sensitive data
     func clearAllSensitiveData() {
-        for (key, var item) in secureStorage {
+        for (_, var item) in secureStorage {
             // Securely wipe each item
             item.data = Data(count: item.data.count)
         }

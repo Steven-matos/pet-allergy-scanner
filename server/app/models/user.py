@@ -41,3 +41,8 @@ class UserResponse(UserBase):
 class UserInDB(UserResponse):
     """User model with internal fields"""
     hashed_password: str
+
+class UserLogin(BaseModel):
+    """User login model"""
+    email: EmailStr
+    password: str

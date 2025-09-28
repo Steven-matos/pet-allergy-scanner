@@ -4,7 +4,7 @@ Authentication router for user management
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.models.user import UserCreate, UserResponse, UserUpdate
+from app.models.user import UserCreate, UserResponse, UserUpdate, UserLogin
 from app.core.config import settings
 from app.database import get_supabase_client
 from supabase import Client
@@ -35,12 +35,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             detail="Invalid authentication credentials"
         )
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register")
 async def register_user(user_data: UserCreate):
     """
     Register a new user account
     
     Creates a new user account with email and password authentication
+    Returns access token and user information for immediate login
     """
     try:
         from app.utils.security import SecurityValidator
@@ -54,33 +55,56 @@ async def register_user(user_data: UserCreate):
         supabase = get_supabase_client()
         
         # Create user with Supabase Auth
-        response = supabase.auth.sign_up({
-            "email": validated_email,
-            "password": validated_password,
-            "options": {
-                "data": {
-                    "first_name": sanitized_first_name,
-                    "last_name": sanitized_last_name,
-                    "role": user_data.role.value
+        try:
+            response = supabase.auth.sign_up({
+                "email": validated_email,
+                "password": validated_password,
+                "options": {
+                    "data": {
+                        "first_name": sanitized_first_name,
+                        "last_name": sanitized_last_name,
+                        "role": user_data.role.value
+                    }
                 }
-            }
-        })
-        
-        if not response.user:
+            })
+            
+            logger.info(f"Supabase sign_up response: {response}")
+            
+            if not response.user:
+                logger.error("No user returned from Supabase sign_up")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to create user account - no user returned"
+                )
+            
+            if not response.session:
+                logger.error("No session returned from Supabase sign_up")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to create user account - no session returned"
+                )
+                
+        except Exception as supabase_error:
+            logger.error(f"Supabase sign_up error: {supabase_error}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create user account"
+                detail=f"Failed to create user account: {str(supabase_error)}"
             )
         
-        return UserResponse(
-            id=response.user.id,
-            email=user_data.email,
-            first_name=user_data.first_name,
-            last_name=user_data.last_name,
-            role=user_data.role,
-            created_at=response.user.created_at,
-            updated_at=response.user.updated_at
-        )
+        # Return the same format as login endpoint for consistency
+        return {
+            "access_token": response.session.access_token,
+            "token_type": "bearer",
+            "user": UserResponse(
+                id=response.user.id,
+                email=response.user.email,
+                first_name=response.user.user_metadata.get("first_name"),
+                last_name=response.user.user_metadata.get("last_name"),
+                role=response.user.user_metadata.get("role", "free"),
+                created_at=response.user.created_at,
+                updated_at=response.user.updated_at
+            )
+        }
         
     except Exception as e:
         logger.error(f"Registration error: {e}")
@@ -90,7 +114,7 @@ async def register_user(user_data: UserCreate):
         )
 
 @router.post("/login")
-async def login_user(email: str, password: str):
+async def login_user(login_data: UserLogin):
     """
     Authenticate user and return access token
     
@@ -100,7 +124,7 @@ async def login_user(email: str, password: str):
         from app.utils.security import SecurityValidator
         
         # Validate and sanitize input
-        validated_email = SecurityValidator.validate_email(email)
+        validated_email = SecurityValidator.validate_email(login_data.email)
         # Note: Don't validate password here as it's already hashed
         
         supabase = get_supabase_client()
@@ -108,7 +132,7 @@ async def login_user(email: str, password: str):
         # Authenticate with Supabase
         response = supabase.auth.sign_in_with_password({
             "email": validated_email,
-            "password": password
+            "password": login_data.password
         })
         
         if not response.user:
