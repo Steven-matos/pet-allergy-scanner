@@ -154,7 +154,7 @@ struct MFASetupView: View {
             } message: {
                 Text(mfaService.errorMessage ?? "An error occurred")
             }
-            .onChange(of: mfaService.errorMessage) { errorMessage in
+            .onChange(of: mfaService.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }

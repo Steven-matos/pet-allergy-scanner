@@ -32,7 +32,7 @@ struct AddPetView: View {
                         TextField("Pet Name", text: $name)
                             .accessibilityIdentifier("petNameTextField")
                             .accessibilityLabel("Pet name")
-                            .onChange(of: name) { _ in
+                            .onChange(of: name) { _, _ in
                                 validateForm()
                             }
                         
@@ -71,7 +71,7 @@ struct AddPetView: View {
                             TextField("Months", value: $ageMonths, format: .number)
                                 .keyboardType(.numberPad)
                                 .multilineTextAlignment(.trailing)
-                                .onChange(of: ageMonths) { _ in
+                                .onChange(of: ageMonths) { _, _ in
                                     validateForm()
                                 }
                         }
@@ -90,7 +90,7 @@ struct AddPetView: View {
                             TextField("kg", value: $weightKg, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
-                                .onChange(of: weightKg) { _ in
+                                .onChange(of: weightKg) { _, _ in
                                     validateForm()
                                 }
                         }
@@ -163,7 +163,7 @@ struct AddPetView: View {
             } message: {
                 Text(petService.errorMessage ?? "An error occurred")
             }
-            .onChange(of: petService.errorMessage) { errorMessage in
+            .onChange(of: petService.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }

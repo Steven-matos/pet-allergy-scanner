@@ -8,6 +8,7 @@
 import Foundation
 
 /// Pet service for managing pet profiles
+@MainActor
 class PetService: ObservableObject {
     static let shared = PetService()
     
@@ -24,7 +25,7 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task { @MainActor in
+        Task {
             do {
                 let pets = try await apiService.getPets()
                 self.pets = pets
@@ -41,7 +42,7 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task { @MainActor in
+        Task {
             do {
                 let newPet = try await apiService.createPet(pet)
                 self.pets.append(newPet)
@@ -58,7 +59,7 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task { @MainActor in
+        Task {
             do {
                 let updatedPet = try await apiService.updatePet(id: id, petUpdate: petUpdate)
                 if let index = self.pets.firstIndex(where: { $0.id == updatedPet.id }) {
@@ -77,7 +78,7 @@ class PetService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task { @MainActor in
+        Task {
             do {
                 try await apiService.deletePet(id: id)
                 self.pets.removeAll { $0.id == id }

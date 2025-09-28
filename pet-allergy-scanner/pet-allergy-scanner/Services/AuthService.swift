@@ -32,6 +32,12 @@ class AuthService: ObservableObject {
             }
         }
     }
+
+    /// Internal initializer for SwiftUI previews and testing only
+    init(preview: Bool) {
+        // Do not perform authentication checks or restore session
+        // Allows setting properties for preview/test use
+    }
     
     /// Restore user session from stored token
     private func restoreUserSession() async {

@@ -22,14 +22,7 @@ struct ScanView: View {
     @State private var cameraError: String?
     @State private var showingAddPet = false
     
-    /// Safety check for required environment objects
-    private var isEnvironmentValid: Bool {
-        return petService != nil
-    }
-    
     var body: some View {
-        Group {
-            if isEnvironmentValid {
                 NavigationStack {
                     VStack(spacing: 20) {
                 // Header
@@ -261,26 +254,6 @@ struct ScanView: View {
             } message: {
                 Text(cameraError ?? "An error occurred")
             }
-                }
-            } else {
-                // Fallback view when environment objects are not available
-                VStack(spacing: 20) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 60))
-                        .foregroundColor(.orange)
-                    
-                    Text("Configuration Error")
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text("Required services are not available. Please restart the app.")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                .padding()
-            }
         }
     }
     
@@ -290,7 +263,7 @@ struct ScanView: View {
             return 
         }
         
-        let ingredients = ocrService.processIngredients(from: ocrService.extractedText)
+        _ = ocrService.processIngredients(from: ocrService.extractedText)
         
         let analysisRequest = ScanAnalysisRequest(
             petId: pet.id,
@@ -396,6 +369,6 @@ struct RecentScanCard: View {
     let petService = PetService.shared
     // Note: Using shared instance for preview purposes
     
-    return ScanView()
+    ScanView()
         .environmentObject(petService)
 }

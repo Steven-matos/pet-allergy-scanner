@@ -8,40 +8,34 @@
 import SwiftUI
 
 struct ProfileView: View {
-    @State private var authService = AuthService.shared
+    @EnvironmentObject var authService: AuthService
     @State private var showingLogoutAlert = false
     
-    /// Safety check for required environment objects
-    private var isEnvironmentValid: Bool {
-        return authService != nil
-    }
-    
     var body: some View {
-        Group {
-            if isEnvironmentValid {
-                NavigationStack {
+        NavigationStack {
                     VStack(spacing: 20) {
                 // User Profile Header
                 VStack(spacing: 16) {
                     Image(systemName: "person.circle.fill")
                         .font(.system(size: 80))
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                     
                     if let user = authService.currentUser {
                         Text("\(user.firstName ?? "") \(user.lastName ?? "")")
                             .font(.title2)
                             .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         
                         Text(user.email)
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         
                         Text(user.role.displayName)
                             .font(.caption)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 4)
-                            .background(user.role == .premium ? Color.blue : Color.gray)
-                            .foregroundColor(.white)
+                            .background(user.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.lightGray)
+                            .foregroundColor(user.role == .premium ? ModernDesignSystem.Colors.textOnAccent : ModernDesignSystem.Colors.textPrimary)
                             .cornerRadius(12)
                     }
                 }
@@ -114,11 +108,11 @@ struct ProfileView: View {
                         }
                         Text(LocalizationKeys.signOut.localized)
                             .font(.headline)
-                            .foregroundColor(.red)
+                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.red.opacity(0.1))
+                    .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
                     .cornerRadius(10)
                 }
                 .disabled(authService.isLoading)
@@ -141,26 +135,6 @@ struct ProfileView: View {
             } message: {
                 Text(authService.errorMessage ?? LocalizationKeys.error.localized)
             }
-                }
-            } else {
-                // Fallback view when environment objects are not available
-                VStack(spacing: 20) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 60))
-                        .foregroundColor(.orange)
-                    
-                    Text(LocalizationKeys.configurationError.localized)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    
-                    Text(LocalizationKeys.servicesNotAvailable.localized)
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                }
-                .padding()
-            }
         }
     }
 }
@@ -175,21 +149,21 @@ struct ProfileOptionRow: View {
             HStack(spacing: 16) {
                 Image(systemName: icon)
                     .font(.system(size: 20))
-                    .foregroundColor(.blue)
+                    .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                     .frame(width: 24)
                 
                 Text(title)
                     .font(.headline)
-                    .foregroundColor(.primary)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
             .padding()
-            .background(Color.gray.opacity(0.1))
+            .background(ModernDesignSystem.Colors.surfaceVariant)
             .cornerRadius(10)
         }
     }
@@ -201,10 +175,10 @@ struct ProfileOptionRow: View {
 }
 
 #Preview("With Mock Data") {
-    let authService = AuthService.shared
-    authService.currentUser = MockData.mockUser
-    authService.isAuthenticated = true
-    
+    let mockAuthService = AuthService.shared
+    mockAuthService.currentUser = MockData.mockUser
+    mockAuthService.isAuthenticated = true
+
     return ProfileView()
-        .environmentObject(authService)
+        .environmentObject(mockAuthService)
 }

@@ -172,7 +172,7 @@ struct GDPRView: View {
             } message: {
                 Text("Your data has been exported and saved to your device.")
             }
-            .onChange(of: gdprService.errorMessage) { errorMessage in
+            .onChange(of: gdprService.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }

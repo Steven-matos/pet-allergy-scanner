@@ -51,7 +51,7 @@ struct PetsView: View {
             } message: {
                 Text(petService.errorMessage ?? "An error occurred")
             }
-            .onChange(of: petService.errorMessage) { errorMessage in
+            .onChange(of: petService.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }

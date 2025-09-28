@@ -146,7 +146,7 @@ app/
 - **Networking**: URLSession with async/await
 - **Storage**: Keychain for secure data
 - **Camera**: AVFoundation for OCR
-- **Minimum iOS**: 16.0+
+- **Minimum iOS**: 17.0+
 
 ### Backend Server
 - **Language**: Python 3.9+

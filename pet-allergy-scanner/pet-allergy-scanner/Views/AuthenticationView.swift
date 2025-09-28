@@ -126,7 +126,7 @@ struct AuthenticationView: View {
             } message: {
                 Text(authService.errorMessage ?? "An error occurred")
             }
-            .onChange(of: authService.errorMessage) { errorMessage in
+            .onChange(of: authService.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }
