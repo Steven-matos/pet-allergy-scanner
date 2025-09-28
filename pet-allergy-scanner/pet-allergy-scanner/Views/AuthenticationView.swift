@@ -28,7 +28,7 @@ struct AuthenticationView: View {
                         .font(.system(size: 80))
                         .foregroundColor(.blue)
                     
-                    Text("Pet Allergy Scanner")
+                    Text("SniffSafe")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                     
