@@ -18,7 +18,7 @@ struct MockData {
         name: "Buddy",
         species: .dog,
         breed: "Golden Retriever",
-        ageMonths: 24,
+        birthday: Calendar.current.date(from: DateComponents(year: 2022, month: 6, day: 1)),
         weightKg: 25.5,
         knownAllergies: ["chicken", "wheat"],
         vetName: "Dr. Smith",
@@ -33,7 +33,7 @@ struct MockData {
         name: "Whiskers",
         species: .cat,
         breed: "Persian",
-        ageMonths: 18,
+        birthday: Calendar.current.date(from: DateComponents(year: 2023, month: 3, day: 1)),
         weightKg: 4.2,
         knownAllergies: ["fish", "dairy"],
         vetName: "Dr. Johnson",
@@ -125,6 +125,7 @@ struct MockData {
         firstName: "John",
         lastName: "Doe",
         role: .premium,
+        onboarded: true,
         createdAt: Date().addingTimeInterval(-86400 * 90), // 90 days ago
         updatedAt: Date().addingTimeInterval(-86400 * 7)    // 7 days ago
     )

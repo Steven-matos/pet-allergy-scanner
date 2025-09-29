@@ -14,7 +14,8 @@ struct AddPetView: View {
     @State private var name = ""
     @State private var species = PetSpecies.dog
     @State private var breed = ""
-    @State private var ageMonths: Int?
+    @State private var birthYear: Int?
+    @State private var birthMonth: Int?
     @State private var weightKg: Double?
     @State private var knownAllergies: [String] = []
     @State private var vetName = ""
@@ -22,6 +23,8 @@ struct AddPetView: View {
     @State private var newAllergy = ""
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
+    @State private var showingYearPicker = false
+    @State private var showingMonthPicker = false
     
     var body: some View {
         NavigationStack {
@@ -64,20 +67,80 @@ struct AddPetView: View {
                 
                 // Physical Information Section
                 Section("Physical Information") {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("Age")
-                            Spacer()
-                            TextField("Months", value: $ageMonths, format: .number)
-                                .keyboardType(.numberPad)
-                                .multilineTextAlignment(.trailing)
-                                .onChange(of: ageMonths) { _, _ in
-                                    validateForm()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Birthday (Optional)")
+                            .font(.headline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Year")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                
+                                Button(action: {
+                                    showingYearPicker = true
+                                }) {
+                                    HStack {
+                                        Text(birthYear != nil ? "\(birthYear!, specifier: "%d")" : "Select Year")
+                                            .foregroundColor(birthYear != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                            .font(.caption)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(ModernDesignSystem.Colors.lightGray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .cornerRadius(8)
                                 }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Month")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                
+                                Button(action: {
+                                    showingMonthPicker = true
+                                }) {
+                                    HStack {
+                                        Text(birthMonth != nil ? monthName(for: birthMonth!) : "Select Month")
+                                            .foregroundColor(birthMonth != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
+                                        Spacer()
+                                        Image(systemName: "chevron.down")
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                            .font(.caption)
+                                    }
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 10)
+                                    .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(ModernDesignSystem.Colors.lightGray.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .cornerRadius(8)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
                         }
                         
-                        if validationErrors.contains(where: { $0.contains("Age") }) {
-                            Text(validationErrors.first(where: { $0.contains("Age") }) ?? "")
+                        if let birthYear = birthYear, let birthMonth = birthMonth {
+                            if let birthday = createBirthday(year: birthYear, month: birthMonth) {
+                                let age = calculateAge(from: birthday)
+                                Text("Age: \(age)")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        
+                        if validationErrors.contains(where: { $0.contains("Birthday") }) {
+                            Text(validationErrors.first(where: { $0.contains("Birthday") }) ?? "")
                                 .font(.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                         }
@@ -168,6 +231,18 @@ struct AddPetView: View {
                     showingAlert = true
                 }
             }
+            .overlay(
+                Group {
+                    if showingYearPicker {
+                        YearPickerView(selectedYear: $birthYear, availableYears: availableYears, showingYearPicker: $showingYearPicker)
+                            .transition(.opacity)
+                    }
+                    if showingMonthPicker {
+                        MonthPickerView(selectedMonth: $birthMonth, showingMonthPicker: $showingMonthPicker)
+                            .transition(.opacity)
+                    }
+                }
+            )
         }
     }
     
@@ -177,7 +252,7 @@ struct AddPetView: View {
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
-            ageMonths: ageMonths,
+            birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
             knownAllergies: knownAllergies,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -192,7 +267,7 @@ struct AddPetView: View {
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
-            ageMonths: ageMonths,
+            birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
             knownAllergies: knownAllergies,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -206,7 +281,7 @@ struct AddPetView: View {
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
-            ageMonths: ageMonths,
+            birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
             knownAllergies: knownAllergies,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -222,7 +297,65 @@ struct AddPetView: View {
             }
         }
     }
+    
+    // MARK: - Computed Properties
+    
+    /// Available years for selection (from 1900 to current year)
+    private var availableYears: [Int] {
+        let currentYear = Calendar.current.component(.year, from: Date())
+        return Array(1900...currentYear).reversed()
+    }
+    
+    // MARK: - Helper Functions
+    
+    /// Create a Date from year and month inputs
+    private func createBirthday(year: Int?, month: Int?) -> Date? {
+        guard let year = year, let month = month else { return nil }
+        
+        // Validate year and month
+        let currentYear = Calendar.current.component(.year, from: Date())
+        guard year >= 1900 && year <= currentYear else { return nil }
+        guard month >= 1 && month <= 12 else { return nil }
+        
+        // Create date with first day of the month at midnight UTC
+        var components = DateComponents()
+        components.year = year
+        components.month = month
+        components.day = 1
+        components.hour = 0
+        components.minute = 0
+        components.second = 0
+        components.timeZone = TimeZone(identifier: "UTC")
+        
+        return Calendar.current.date(from: components)
+    }
+    
+    /// Calculate age description from birthday
+    private func calculateAge(from birthday: Date) -> String {
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.year, .month], from: birthday, to: now)
+        
+        guard let years = components.year, let months = components.month else { return "Unknown" }
+        
+        if years == 0 {
+            return "\(months) month\(months == 1 ? "" : "s") old"
+        } else if months == 0 {
+            return "\(years) year\(years == 1 ? "" : "s") old"
+        } else {
+            return "\(years) year\(years == 1 ? "" : "s"), \(months) month\(months == 1 ? "" : "s") old"
+        }
+    }
+    
+    /// Get month name for display
+    private func monthName(for month: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM"
+        let date = Calendar.current.date(from: DateComponents(year: 2024, month: month, day: 1))!
+        return formatter.string(from: date)
+    }
 }
+
 
 #Preview {
     AddPetView()

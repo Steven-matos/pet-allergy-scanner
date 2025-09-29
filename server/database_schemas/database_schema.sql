@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     first_name TEXT,
     last_name TEXT,
     role TEXT DEFAULT 'free' CHECK (role IN ('free', 'premium')),
+    onboarded BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -23,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.pets (
     name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 100),
     species TEXT NOT NULL CHECK (species IN ('dog', 'cat')),
     breed TEXT,
-    age_months INTEGER CHECK (age_months >= 0 AND age_months <= 300),
+    birthday DATE,
     weight_kg DECIMAL(5,2) CHECK (weight_kg >= 0.1 AND weight_kg <= 200.0),
     known_allergies TEXT[] DEFAULT '{}',
     vet_name TEXT,

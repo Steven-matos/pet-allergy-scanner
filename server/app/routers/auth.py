@@ -280,7 +280,8 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     user_update: UserUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Update current user information
@@ -288,7 +289,18 @@ async def update_current_user(
     Updates the authenticated user's profile information
     """
     try:
-        supabase = get_supabase_client()
+        # Create authenticated Supabase client with user's JWT token
+        from app.core.config import settings
+        from supabase import create_client
+        
+        # Create an authenticated Supabase client using the JWT token
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        
+        # Set the session with the user's JWT token
+        supabase.auth.set_session(credentials.credentials, "")
         
         # Update user metadata
         update_data = {}
@@ -304,25 +316,45 @@ async def update_current_user(
         if user_update.role is not None:
             update_data["role"] = user_update.role.value
         
-        response = supabase.auth.update_user({
-            "data": update_data
-        })
+        # Update auth user metadata
+        if update_data:
+            response = supabase.auth.update_user({
+                "data": update_data
+            })
         
-        if not response.user:
+        # Update public.users table for fields not in auth metadata
+        public_update_data = {}
+        if user_update.onboarded is not None:
+            public_update_data["onboarded"] = user_update.onboarded
+        
+        if public_update_data:
+            # Update the public.users table
+            supabase.table("users").update(public_update_data).eq("id", current_user.id).execute()
+        
+        # Get updated user data
+        updated_user = supabase.auth.get_user().user
+        if not updated_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to update user"
             )
         
+        # Get onboarded status from public.users table
+        user_data_response = supabase.table("users").select("onboarded").eq("id", current_user.id).execute()
+        onboarded_status = False
+        if user_data_response.data:
+            onboarded_status = user_data_response.data[0].get("onboarded", False)
+        
         return UserResponse(
-            id=response.user.id,
-            email=response.user.email,
-            username=response.user.user_metadata.get("username"),
-            first_name=response.user.user_metadata.get("first_name"),
-            last_name=response.user.user_metadata.get("last_name"),
-            role=response.user.user_metadata.get("role", "free"),
-            created_at=response.user.created_at,
-            updated_at=response.user.updated_at
+            id=updated_user.id,
+            email=updated_user.email,
+            username=updated_user.user_metadata.get("username"),
+            first_name=updated_user.user_metadata.get("first_name"),
+            last_name=updated_user.user_metadata.get("last_name"),
+            role=updated_user.user_metadata.get("role", "free"),
+            onboarded=onboarded_status,
+            created_at=updated_user.created_at,
+            updated_at=updated_user.updated_at
         )
         
     except Exception as e:

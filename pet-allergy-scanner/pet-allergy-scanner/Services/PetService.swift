@@ -95,6 +95,53 @@ class PetService: ObservableObject {
         return pets.first { $0.id == id }
     }
     
+    /// Check if user has any pets
+    var hasPets: Bool {
+        return !pets.isEmpty
+    }
+    
+    /// Complete onboarding by updating the user's onboarded status
+    func completeOnboarding() {
+        Task {
+            do {
+                let userUpdate = UserUpdate(
+                    username: nil,
+                    firstName: nil,
+                    lastName: nil,
+                    role: nil,
+                    onboarded: true
+                )
+                _ = try await apiService.updateUser(userUpdate)
+                
+                // Refresh user data to get updated onboarded status
+                await AuthService.shared.refreshCurrentUser()
+            } catch {
+                print("Failed to update onboarded status: \(error)")
+            }
+        }
+    }
+    
+    /// Reset onboarding (for testing purposes)
+    func resetOnboarding() {
+        Task {
+            do {
+                let userUpdate = UserUpdate(
+                    username: nil,
+                    firstName: nil,
+                    lastName: nil,
+                    role: nil,
+                    onboarded: false
+                )
+                _ = try await apiService.updateUser(userUpdate)
+                
+                // Refresh user data to get updated onboarded status
+                await AuthService.shared.refreshCurrentUser()
+            } catch {
+                print("Failed to reset onboarded status: \(error)")
+            }
+        }
+    }
+    
     /// Clear error message
     func clearError() {
         errorMessage = nil

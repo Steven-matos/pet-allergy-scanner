@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var petService: PetService
     @State private var showingLogoutAlert = false
     
     var body: some View {
@@ -105,7 +106,27 @@ struct ProfileView: View {
                 }
                 .disabled(authService.isLoading)
                 .padding(.horizontal, 20)
+                
+                // Debug Section (only in development)
+                #if DEBUG
+                VStack(spacing: 12) {
+                    Text("Debug Options")
+                        .font(.headline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Button("Reset Onboarding") {
+                        petService.resetOnboarding()
+                    }
+                    .font(.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(ModernDesignSystem.Colors.lightGray.opacity(0.3))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal, 20)
                 .padding(.bottom, 20)
+                #endif
             }
             .navigationTitle(LocalizationKeys.profile.localized)
             .alert(LocalizationKeys.signOut.localized, isPresented: $showingLogoutAlert) {

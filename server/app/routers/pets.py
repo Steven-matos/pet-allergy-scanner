@@ -3,9 +3,10 @@ Pet management router
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from app.models.pet import PetCreate, PetResponse, PetUpdate
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, security
 from app.database import get_supabase_client
 from supabase import Client
 import logging
@@ -16,7 +17,8 @@ logger = logging.getLogger(__name__)
 @router.post("/", response_model=PetResponse)
 async def create_pet(
     pet_data: PetCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Create a new pet profile
@@ -24,7 +26,18 @@ async def create_pet(
     Creates a new pet profile for the authenticated user with species-specific validation
     """
     try:
-        supabase = get_supabase_client()
+        # Create authenticated Supabase client with user's JWT token
+        from app.core.config import settings
+        from supabase import create_client
+        
+        # Create an authenticated Supabase client using the JWT token
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        
+        # Set the session with the user's JWT token
+        supabase.auth.set_session(credentials.credentials, "")
         
         # Validate species-specific requirements
         if pet_data.species == "cat" and pet_data.weight_kg and pet_data.weight_kg > 15:
@@ -45,7 +58,7 @@ async def create_pet(
             "name": pet_data.name,
             "species": pet_data.species.value,
             "breed": pet_data.breed,
-            "age_months": pet_data.age_months,
+            "birthday": pet_data.birthday.isoformat() if pet_data.birthday else None,
             "weight_kg": pet_data.weight_kg,
             "known_allergies": pet_data.known_allergies,
             "vet_name": pet_data.vet_name,
@@ -67,7 +80,7 @@ async def create_pet(
             name=pet["name"],
             species=pet["species"],
             breed=pet["breed"],
-            age_months=pet["age_months"],
+            birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
             known_allergies=pet["known_allergies"],
             vet_name=pet["vet_name"],
@@ -105,7 +118,7 @@ async def get_user_pets(current_user: dict = Depends(get_current_user)):
                 name=pet["name"],
                 species=pet["species"],
                 breed=pet["breed"],
-                age_months=pet["age_months"],
+                birthday=pet["birthday"],
                 weight_kg=pet["weight_kg"],
                 known_allergies=pet["known_allergies"],
                 vet_name=pet["vet_name"],
@@ -152,7 +165,7 @@ async def get_pet(
             name=pet["name"],
             species=pet["species"],
             breed=pet["breed"],
-            age_months=pet["age_months"],
+            birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
             known_allergies=pet["known_allergies"],
             vet_name=pet["vet_name"],
@@ -199,8 +212,8 @@ async def update_pet(
             update_data["name"] = pet_update.name
         if pet_update.breed is not None:
             update_data["breed"] = pet_update.breed
-        if pet_update.age_months is not None:
-            update_data["age_months"] = pet_update.age_months
+        if pet_update.birthday is not None:
+            update_data["birthday"] = pet_update.birthday.isoformat()
         if pet_update.weight_kg is not None:
             update_data["weight_kg"] = pet_update.weight_kg
         if pet_update.known_allergies is not None:
@@ -225,7 +238,7 @@ async def update_pet(
             name=pet["name"],
             species=pet["species"],
             breed=pet["breed"],
-            age_months=pet["age_months"],
+            birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
             known_allergies=pet["known_allergies"],
             vet_name=pet["vet_name"],

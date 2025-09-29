@@ -19,6 +19,7 @@ class UserBase(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role: UserRole = UserRole.FREE
+    onboarded: bool = False
 
 class UserCreate(UserBase):
     """User creation model"""
@@ -30,6 +31,7 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     role: Optional[UserRole] = None
+    onboarded: Optional[bool] = None
 
 class UserResponse(UserBase):
     """User response model"""

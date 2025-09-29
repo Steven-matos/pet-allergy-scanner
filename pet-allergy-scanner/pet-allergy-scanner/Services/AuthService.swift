@@ -79,7 +79,8 @@ class AuthService: ObservableObject {
             username: username,
             firstName: firstName,
             lastName: lastName,
-            role: .free
+            role: .free,
+            onboarded: false
         )
         
         do {
@@ -137,7 +138,8 @@ class AuthService: ObservableObject {
             username: username,
             firstName: firstName,
             lastName: lastName,
-            role: nil
+            role: nil,
+            onboarded: nil
         )
         
         do {
@@ -257,6 +259,18 @@ class AuthService: ObservableObject {
                 isLoading = false
                 logout()
             }
+        }
+    }
+    
+    /// Refresh current user data from server
+    func refreshCurrentUser() async {
+        guard isAuthenticated else { return }
+        
+        do {
+            let user = try await apiService.getCurrentUser()
+            currentUser = user
+        } catch {
+            print("Failed to refresh user data: \(error)")
         }
     }
     

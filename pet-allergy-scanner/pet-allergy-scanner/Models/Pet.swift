@@ -14,7 +14,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
     let name: String
     let species: PetSpecies
     let breed: String?
-    let ageMonths: Int?
+    let birthday: Date?
     let weightKg: Double?
     let knownAllergies: [String]
     let vetName: String?
@@ -33,6 +33,30 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
             return "\(name) (\(breed))"
         }
         return name
+    }
+    
+    /// Calculate age in months from birthday
+    var ageMonths: Int? {
+        guard let birthday = birthday else { return nil }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.year, .month], from: birthday, to: now)
+        
+        guard let years = components.year, let months = components.month else { return nil }
+        return years * 12 + months
+    }
+    
+    /// Calculate age in years from birthday
+    var ageYears: Double? {
+        guard let birthday = birthday else { return nil }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        let components = calendar.dateComponents([.year, .month], from: birthday, to: now)
+        
+        guard let years = components.year, let months = components.month else { return nil }
+        return Double(years) + (Double(months) / 12.0)
     }
     
     /// Age description in human-readable format
@@ -58,7 +82,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
         case name
         case species
         case breed
-        case ageMonths = "age_months"
+        case birthday
         case weightKg = "weight_kg"
         case knownAllergies = "known_allergies"
         case vetName = "vet_name"
@@ -97,7 +121,7 @@ struct PetCreate: Codable {
     let name: String
     let species: PetSpecies
     let breed: String?
-    let ageMonths: Int?
+    let birthday: Date?
     let weightKg: Double?
     let knownAllergies: [String]
     let vetName: String?
@@ -120,8 +144,8 @@ struct PetCreate: Codable {
             errors.append("Pet name must be less than 50 characters")
         }
         
-        if let ageMonths = ageMonths, ageMonths < 0 {
-            errors.append("Age cannot be negative")
+        if let birthday = birthday, birthday > Date() {
+            errors.append("Birthday cannot be in the future")
         }
         
         if let weightKg = weightKg, weightKg <= 0 {
@@ -135,7 +159,7 @@ struct PetCreate: Codable {
         case name
         case species
         case breed
-        case ageMonths = "age_months"
+        case birthday
         case weightKg = "weight_kg"
         case knownAllergies = "known_allergies"
         case vetName = "vet_name"
@@ -147,7 +171,7 @@ struct PetCreate: Codable {
 struct PetUpdate: Codable {
     let name: String?
     let breed: String?
-    let ageMonths: Int?
+    let birthday: Date?
     let weightKg: Double?
     let knownAllergies: [String]?
     let vetName: String?
@@ -156,7 +180,7 @@ struct PetUpdate: Codable {
     enum CodingKeys: String, CodingKey {
         case name
         case breed
-        case ageMonths = "age_months"
+        case birthday
         case weightKg = "weight_kg"
         case knownAllergies = "known_allergies"
         case vetName = "vet_name"

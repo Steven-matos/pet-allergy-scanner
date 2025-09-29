@@ -15,6 +15,7 @@ struct User: Codable, Identifiable {
     let firstName: String?
     let lastName: String?
     let role: UserRole
+    let onboarded: Bool
     let createdAt: Date
     let updatedAt: Date
     
@@ -25,6 +26,7 @@ struct User: Codable, Identifiable {
         case firstName = "first_name"
         case lastName = "last_name"
         case role
+        case onboarded
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -53,6 +55,7 @@ struct UserCreate: Codable {
     let firstName: String?
     let lastName: String?
     let role: UserRole
+    let onboarded: Bool
     
     enum CodingKeys: String, CodingKey {
         case email
@@ -61,6 +64,7 @@ struct UserCreate: Codable {
         case firstName = "first_name"
         case lastName = "last_name"
         case role
+        case onboarded
     }
 }
 
@@ -70,12 +74,14 @@ struct UserUpdate: Codable {
     let firstName: String?
     let lastName: String?
     let role: UserRole?
+    let onboarded: Bool?
     
     enum CodingKeys: String, CodingKey {
         case username
         case firstName = "first_name"
         case lastName = "last_name"
         case role
+        case onboarded
     }
 }
 
