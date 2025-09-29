@@ -243,6 +243,21 @@ class TestInputValidation:
         # Should return 401 (user not found), 400 (bad request), or 422 (validation error)
         assert response.status_code in [400, 401, 422]
     
+    def test_password_reset_endpoint(self):
+        """Test password reset endpoint"""
+        response = client.post("/api/v1/auth/reset-password", json={
+            "email": "test@example.com"
+        })
+        # Should return 200 (success) or 400 (bad request)
+        assert response.status_code in [200, 400]
+    
+    def test_password_reset_invalid_email(self):
+        """Test password reset with invalid email"""
+        response = client.post("/api/v1/auth/reset-password", json={
+            "email": "invalid-email"
+        })
+        assert response.status_code == 400
+    
     def test_register_xss_attempt(self):
         """Test XSS prevention in registration"""
         response = client.post("/api/v1/auth/register", json={

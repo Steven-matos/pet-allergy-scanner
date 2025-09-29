@@ -8,6 +8,9 @@
 import Foundation
 import Security
 
+/// Empty response model for API calls that don't return data
+struct EmptyResponse: Codable {}
+
 /// Main API service for communicating with the backend using Swift Concurrency
 @MainActor
 class APIService: ObservableObject {
@@ -183,6 +186,24 @@ extension APIService {
         }
         
         return try await performRequest(request, responseType: AuthResponse.self)
+    }
+    
+    /// Reset password for user
+    func resetPassword(email: String) async throws {
+        guard let url = URL(string: "\(baseURL)/auth/reset-password") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = createRequest(url: url, method: "POST")
+        
+        let resetData = ["email": email]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: resetData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        let _: EmptyResponse = try await performRequest(request, responseType: EmptyResponse.self)
     }
     
     /// Get current user information

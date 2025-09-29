@@ -26,6 +26,7 @@ struct AuthenticationView: View {
     @State private var isEmailValid = false
     @State private var doEmailsMatch = false
     @State private var isUsernameValid = false
+    @State private var showingForgotPassword = false
     
     var body: some View {
         NavigationStack {
@@ -204,6 +205,19 @@ struct AuthenticationView: View {
                         }
                     }
                     
+                    // Forgot Password Button (only show during login)
+                    if isLoginMode {
+                        HStack {
+                            Spacer()
+                            Button("Forgot Password?") {
+                                showingForgotPassword = true
+                            }
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                        }
+                        .padding(.top, 8)
+                    }
+                    
                     // Submit Button
                     Button(action: handleSubmit) {
                         HStack {
@@ -286,6 +300,9 @@ struct AuthenticationView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showingForgotPassword) {
+            ForgotPasswordView()
         }
     }
     

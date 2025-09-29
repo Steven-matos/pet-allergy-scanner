@@ -113,6 +113,11 @@ class AuthService: ObservableObject {
         }
     }
     
+    /// Reset password for user
+    func resetPassword(email: String) async throws {
+        try await apiService.resetPassword(email: email)
+    }
+    
     /// Logout current user
     func logout() {
         apiService.clearAuthToken()

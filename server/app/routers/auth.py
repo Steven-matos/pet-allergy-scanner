@@ -332,6 +332,47 @@ async def update_current_user(
             detail="Failed to update user"
         )
 
+@router.post("/reset-password")
+async def reset_password(reset_data: dict):
+    """
+    Send password reset email to user
+    
+    Sends a password reset email using Supabase Auth
+    """
+    try:
+        from app.utils.security import SecurityValidator
+        
+        email = reset_data.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is required"
+            )
+        
+        # Validate email format
+        validated_email = SecurityValidator.validate_email(email)
+        
+        supabase = get_supabase_client()
+        
+        # Send password reset email using Supabase
+        response = supabase.auth.reset_password_email(validated_email)
+        
+        logger.info(f"Password reset email sent to: {validated_email}")
+        
+        return {
+            "message": "Password reset email sent successfully. Please check your email for instructions.",
+            "email": validated_email
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to send password reset email"
+        )
+
 @router.post("/logout")
 async def logout_user(current_user: dict = Depends(get_current_user)):
     """
