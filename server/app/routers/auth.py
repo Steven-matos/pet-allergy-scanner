@@ -289,18 +289,8 @@ async def update_current_user(
     Updates the authenticated user's profile information
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
+        # Use the existing authenticated Supabase client
+        supabase = get_supabase_client()
         
         # Update user metadata
         update_data = {}
@@ -316,11 +306,57 @@ async def update_current_user(
         if user_update.role is not None:
             update_data["role"] = user_update.role.value
         
-        # Update auth user metadata
+        # Update auth user metadata using the JWT token
         if update_data:
-            response = supabase.auth.update_user({
+            # Create an authenticated Supabase client using the JWT token
+            from supabase import create_client
+            
+            auth_supabase = create_client(
+                settings.supabase_url,
+                settings.supabase_key
+            )
+            
+            # Set the session with the user's JWT token
+            auth_supabase.auth.set_session(credentials.credentials, "")
+            
+            # Update user metadata
+            auth_supabase.auth.update_user({
                 "data": update_data
             })
+        
+        # Check if user exists in public.users table, create if not
+        user_exists_response = supabase.table("users").select("id").eq("id", current_user.id).execute()
+        
+        if not user_exists_response.data:
+            # User doesn't exist in public.users table, create them using service role
+            logger.info(f"User {current_user.id} not found in public.users table, creating record")
+            
+            # Use the service role client to bypass RLS
+            from supabase import create_client
+            service_supabase = create_client(
+                settings.supabase_url,
+                settings.supabase_service_role_key  # Use service key to bypass RLS
+            )
+            
+            user_create_data = {
+                "id": current_user.id,
+                "email": current_user.email,
+                "username": current_user.user_metadata.get("username"),
+                "first_name": current_user.user_metadata.get("first_name"),
+                "last_name": current_user.user_metadata.get("last_name"),
+                "role": current_user.user_metadata.get("role", "free"),
+                "onboarded": False
+            }
+            try:
+                service_supabase.table("users").insert(user_create_data).execute()
+                logger.info(f"Created user record in public.users table: {current_user.id}")
+            except Exception as insert_error:
+                # User might already exist due to race condition or previous creation
+                if "duplicate key value violates unique constraint" in str(insert_error):
+                    logger.info(f"User {current_user.id} already exists in public.users table, continuing with update")
+                else:
+                    logger.error(f"Failed to create user record: {insert_error}")
+                    raise insert_error
         
         # Update public.users table for fields not in auth metadata
         public_update_data = {}
@@ -328,33 +364,46 @@ async def update_current_user(
             public_update_data["onboarded"] = user_update.onboarded
         
         if public_update_data:
-            # Update the public.users table
-            supabase.table("users").update(public_update_data).eq("id", current_user.id).execute()
+            # Update the public.users table using the service role client
+            logger.info(f"Updating public.users table with data: {public_update_data} for user: {current_user.id}")
+            response = supabase.table("users").update(public_update_data).eq("id", current_user.id).execute()
+            logger.info(f"Update response: {response}")
         
-        # Get updated user data
-        updated_user = supabase.auth.get_user().user
-        if not updated_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to update user"
-            )
+        # Get updated user data from the original current_user object
+        # and merge with any updates from the database
+        updated_username = current_user.user_metadata.get("username")
+        updated_first_name = current_user.user_metadata.get("first_name")
+        updated_last_name = current_user.user_metadata.get("last_name")
+        updated_role = current_user.user_metadata.get("role", "free")
+        
+        # Apply updates if they were provided
+        if user_update.username is not None:
+            updated_username = user_update.username
+        if user_update.first_name is not None:
+            updated_first_name = user_update.first_name
+        if user_update.last_name is not None:
+            updated_last_name = user_update.last_name
+        if user_update.role is not None:
+            updated_role = user_update.role.value
         
         # Get onboarded status from public.users table
         user_data_response = supabase.table("users").select("onboarded").eq("id", current_user.id).execute()
+        logger.info(f"Query for onboarded status response: {user_data_response}")
         onboarded_status = False
         if user_data_response.data:
             onboarded_status = user_data_response.data[0].get("onboarded", False)
+            logger.info(f"Retrieved onboarded status: {onboarded_status}")
         
         return UserResponse(
-            id=updated_user.id,
-            email=updated_user.email,
-            username=updated_user.user_metadata.get("username"),
-            first_name=updated_user.user_metadata.get("first_name"),
-            last_name=updated_user.user_metadata.get("last_name"),
-            role=updated_user.user_metadata.get("role", "free"),
+            id=current_user.id,
+            email=current_user.email,
+            username=updated_username,
+            first_name=updated_first_name,
+            last_name=updated_last_name,
+            role=updated_role,
             onboarded=onboarded_status,
-            created_at=updated_user.created_at,
-            updated_at=updated_user.updated_at
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at
         )
         
     except Exception as e:
@@ -404,6 +453,32 @@ async def reset_password(reset_data: dict):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to send password reset email"
         )
+
+@router.get("/debug/user-exists")
+async def debug_user_exists(current_user: dict = Depends(get_current_user)):
+    """
+    Debug endpoint to check if user exists in public.users table
+    """
+    try:
+        supabase = get_supabase_client()
+        
+        # Check if user exists in public.users table
+        user_response = supabase.table("users").select("*").eq("id", current_user.id).execute()
+        
+        # Check all users in public.users table
+        all_users_response = supabase.table("users").select("*").execute()
+        
+        return {
+            "user_id": current_user.id,
+            "user_exists_in_public": len(user_response.data) > 0,
+            "user_data": user_response.data[0] if user_response.data else None,
+            "total_users": len(user_response.data),
+            "all_users_count": len(all_users_response.data),
+            "all_users": all_users_response.data
+        }
+    except Exception as e:
+        logger.error(f"Debug user exists error: {e}")
+        return {"error": str(e)}
 
 @router.post("/logout")
 async def logout_user(current_user: dict = Depends(get_current_user)):
