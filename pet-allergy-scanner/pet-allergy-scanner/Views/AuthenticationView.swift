@@ -27,6 +27,7 @@ struct AuthenticationView: View {
     @State private var doEmailsMatch = false
     @State private var isUsernameValid = false
     @State private var showingForgotPassword = false
+    @State private var justSwitchedToLogin = false
     
     var body: some View {
         NavigationStack {
@@ -48,6 +49,34 @@ struct AuthenticationView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 40)
+                
+                // Show verification success message when switching to login
+                if justSwitchedToLogin {
+                    VStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(ModernDesignSystem.Colors.safe)
+                            Text("Email verification sent!")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(ModernDesignSystem.Colors.safe)
+                        }
+                        Text("Please check your email and click the verification link, then sign in below.")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(ModernDesignSystem.Colors.safe.opacity(0.1))
+                    .cornerRadius(8)
+                    .onAppear {
+                        // Clear the flag after 3 seconds
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                            justSwitchedToLogin = false
+                        }
+                    }
+                }
                 
                 Spacer()
                 
@@ -85,16 +114,16 @@ struct AuthenticationView: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("Email/Username", text: $email)
+                        TextField("Email", text: $email)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .keyboardType(.default)
+                            .keyboardType(.emailAddress)
                             .autocapitalization(.none)
                             .onChange(of: email) { _, newEmail in
                                 isEmailValid = InputValidator.isValidEmail(newEmail)
                                 doEmailsMatch = newEmail == confirmEmail && !newEmail.isEmpty
                             }
                         
-                        // Email/Username validation feedback
+                        // Email validation feedback
                         if !email.isEmpty {
                             let isValidInput = isEmailValid || (!email.isEmpty && !email.contains("@"))
                             HStack(spacing: 6) {
@@ -285,10 +314,14 @@ struct AuthenticationView: View {
             }
             .alert("Email Verification Required", isPresented: $showingEmailVerificationMessage) {
                 Button("OK") { 
+                    // Switch to login mode and clear all fields
+                    isLoginMode = true
+                    justSwitchedToLogin = true
+                    clearForm()
                     authService.clearError()
                 }
             } message: {
-                Text(authService.errorMessage ?? "Please check your email and click the verification link to activate your account.")
+                Text(authService.errorMessage ?? "Please check your email and click the verification link to activate your account. You can then sign in with your credentials.")
             }
             .onChange(of: authService.errorMessage) { _, errorMessage in
                 if let message = errorMessage {
@@ -363,6 +396,7 @@ struct AuthenticationView: View {
         doEmailsMatch = false
         isUsernameValid = false
         passwordValidation = PasswordValidationResult(isValid: false, issues: [])
+        justSwitchedToLogin = false
         authService.clearError()
     }
 }
