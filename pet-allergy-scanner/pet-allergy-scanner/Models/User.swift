@@ -14,6 +14,7 @@ struct User: Codable, Identifiable {
     let username: String?
     let firstName: String?
     let lastName: String?
+    let imageUrl: String?
     let role: UserRole
     let onboarded: Bool
     let createdAt: Date
@@ -25,6 +26,7 @@ struct User: Codable, Identifiable {
         case username
         case firstName = "first_name"
         case lastName = "last_name"
+        case imageUrl = "image_url"
         case role
         case onboarded
         case createdAt = "created_at"
@@ -38,6 +40,7 @@ struct User: Codable, Identifiable {
     ///   - username: Optional username
     ///   - firstName: Optional first name
     ///   - lastName: Optional last name
+    ///   - imageUrl: Optional profile image URL
     ///   - role: User role (free or premium)
     ///   - onboarded: Whether user has completed onboarding
     ///   - createdAt: Account creation timestamp
@@ -48,6 +51,7 @@ struct User: Codable, Identifiable {
         username: String? = nil,
         firstName: String? = nil,
         lastName: String? = nil,
+        imageUrl: String? = nil,
         role: UserRole,
         onboarded: Bool = false,
         createdAt: Date,
@@ -58,6 +62,7 @@ struct User: Codable, Identifiable {
         self.username = username
         self.firstName = firstName
         self.lastName = lastName
+        self.imageUrl = imageUrl
         self.role = role
         self.onboarded = onboarded
         self.createdAt = createdAt
@@ -74,6 +79,7 @@ struct User: Codable, Identifiable {
         username = try container.decodeIfPresent(String.self, forKey: .username)
         firstName = try container.decodeIfPresent(String.self, forKey: .firstName)
         lastName = try container.decodeIfPresent(String.self, forKey: .lastName)
+        imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         role = try container.decode(UserRole.self, forKey: .role)
         onboarded = try container.decodeIfPresent(Bool.self, forKey: .onboarded) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
@@ -122,6 +128,7 @@ struct UserUpdate: Codable {
     let username: String?
     let firstName: String?
     let lastName: String?
+    let imageUrl: String?
     let role: UserRole?
     let onboarded: Bool?
     
@@ -129,6 +136,7 @@ struct UserUpdate: Codable {
         case username
         case firstName = "first_name"
         case lastName = "last_name"
+        case imageUrl = "image_url"
         case role
         case onboarded
     }

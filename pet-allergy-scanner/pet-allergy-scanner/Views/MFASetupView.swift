@@ -95,9 +95,6 @@ struct MFASetupView: View {
                             .foregroundColor(.white)
                             .cornerRadius(10)
                             .disabled(verificationToken.count != 6 || mfaService.isLoading)
-                            .hapticFeedback(.success) {
-                                // Haptic feedback handled in button action
-                            }
                         }
                     }
                 } else if mfaService.isMFAEnabled {

@@ -24,6 +24,7 @@ class PetBase(BaseModel):
     breed: Optional[str] = None
     birthday: Optional[date] = None
     weight_kg: Optional[float] = Field(None, ge=0.1, le=200.0)
+    image_url: Optional[str] = None
     known_sensitivities: List[str] = Field(default_factory=list)
     vet_name: Optional[str] = None
     vet_phone: Optional[str] = None
@@ -38,6 +39,7 @@ class PetUpdate(BaseModel):
     breed: Optional[str] = None
     birthday: Optional[date] = None
     weight_kg: Optional[float] = Field(None, ge=0.1, le=200.0)
+    image_url: Optional[str] = None
     known_sensitivities: Optional[List[str]] = None
     vet_name: Optional[str] = None
     vet_phone: Optional[str] = None

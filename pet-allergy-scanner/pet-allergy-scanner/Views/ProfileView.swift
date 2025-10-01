@@ -11,80 +11,113 @@ struct ProfileView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var petService: PetService
     @State private var showingLogoutAlert = false
+    @State private var showingEditProfile = false
+    @State private var showingSubscription = false
+    @State private var showingHelpSupport = false
+    @State private var showingMFASetup = false
+    @State private var showingGDPR = false
+    @State private var showingSettings = false
     
     var body: some View {
         NavigationStack {
-                    VStack(spacing: 20) {
-                // User Profile Header
-                VStack(spacing: 16) {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                    
-                    if let user = authService.currentUser {
-                        Text("\(user.firstName ?? "") \(user.lastName ?? "")")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // User Profile Header
+                    VStack(spacing: 16) {
+                        // Profile Picture or Default Icon
+                        if let imageUrl = authService.currentUser?.imageUrl,
+                           let image = loadLocalImage(from: imageUrl) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 80, height: 80)
+                                .clipShape(Circle())
+                                .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 3))
+                        } else {
+                            Image(systemName: "person.circle.fill")
+                                .font(.system(size: 80))
+                                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                        }
                         
-                        Text(user.email)
-                            .font(.subheadline)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        
-                        Text(user.role.displayName)
-                            .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background(user.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.lightGray)
-                            .foregroundColor(user.role == .premium ? ModernDesignSystem.Colors.textOnAccent : ModernDesignSystem.Colors.textPrimary)
-                            .cornerRadius(12)
+                        if let user = authService.currentUser {
+                            Text("\(user.firstName ?? "") \(user.lastName ?? "")")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text(user.email)
+                                .font(.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Text(user.role.displayName)
+                                .font(.caption)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 4)
+                                .background(user.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.lightGray)
+                                .foregroundColor(user.role == .premium ? ModernDesignSystem.Colors.textOnAccent : ModernDesignSystem.Colors.textPrimary)
+                                .cornerRadius(12)
+                        }
                     }
-                }
-                .padding(.top, 40)
-                
-                Spacer()
+                    .padding(.top, 40)
                 
                 // Profile Options
                 VStack(spacing: 16) {
                     ProfileOptionRow(
                         icon: "person.circle",
                         title: LocalizationKeys.editProfile.localized,
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingEditProfile = true
+                        }
                     )
                     
                     ProfileOptionRow(
                         icon: "creditcard",
                         title: LocalizationKeys.subscription.localized,
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingSubscription = true
+                        }
                     )
                     
                     ProfileOptionRow(
                         icon: "questionmark.circle",
                         title: LocalizationKeys.helpSupport.localized,
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingHelpSupport = true
+                        }
                     )
                     
                     ProfileOptionRow(
                         icon: "shield.checkered",
                         title: "Security & MFA",
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingMFASetup = true
+                        }
                     )
                     
                     ProfileOptionRow(
                         icon: "hand.raised.fill",
                         title: "Privacy & Data",
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingGDPR = true
+                        }
                     )
                     
                     ProfileOptionRow(
                         icon: "gear",
                         title: LocalizationKeys.settings.localized,
-                        action: { }
+                        action: { 
+                            HapticFeedback.light()
+                            showingSettings = true
+                        }
                     )
                 }
                 .padding(.horizontal, 20)
-                
-                Spacer()
+                .padding(.top, 20)
                 
                 // Logout Button
                 Button(action: {
@@ -106,6 +139,7 @@ struct ProfileView: View {
                 }
                 .disabled(authService.isLoading)
                 .padding(.horizontal, 20)
+                .padding(.top, 20)
                 
                 // Debug Section (only in development)
                 #if DEBUG
@@ -125,8 +159,10 @@ struct ProfileView: View {
                     .cornerRadius(8)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 40)
                 #endif
+                }
             }
             .navigationTitle(LocalizationKeys.profile.localized)
             .alert(LocalizationKeys.signOut.localized, isPresented: $showingLogoutAlert) {
@@ -144,6 +180,42 @@ struct ProfileView: View {
             } message: {
                 Text(authService.errorMessage ?? LocalizationKeys.error.localized)
             }
+            .sheet(isPresented: $showingEditProfile) {
+                EditProfileView()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingSubscription) {
+                SubscriptionView()
+                    .environmentObject(authService)
+            }
+            .sheet(isPresented: $showingHelpSupport) {
+                HelpSupportView()
+            }
+            .sheet(isPresented: $showingMFASetup) {
+                MFASetupView()
+                    .environmentObject(MFAService.shared)
+            }
+            .sheet(isPresented: $showingGDPR) {
+                GDPRView()
+                    .environmentObject(GDPRService.shared)
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
+            }
+        }
+    }
+    
+    /// Load image from local file path
+    /// - Parameter path: The local file path
+    /// - Returns: UIImage if successfully loaded
+    private func loadLocalImage(from path: String) -> UIImage? {
+        // Check if path is a URL string or file path
+        if path.hasPrefix("http://") || path.hasPrefix("https://") {
+            // Remote URL - would need async loading (not implemented here)
+            return nil
+        } else {
+            // Local file path
+            return UIImage(contentsOfFile: path)
         }
     }
 }

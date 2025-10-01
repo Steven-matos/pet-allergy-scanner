@@ -17,6 +17,7 @@ struct AddPetView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
+    @State private var selectedImage: UIImage?
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
     @State private var vetPhone = ""
@@ -29,6 +30,19 @@ struct AddPetView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Pet Photo Section
+                Section {
+                    HStack {
+                        Spacer()
+                        PetImagePickerView(
+                            selectedImage: $selectedImage,
+                            species: species
+                        )
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+                
                 // Basic Information Section
                 Section("Basic Information") {
                     VStack(alignment: .leading, spacing: 4) {
@@ -277,12 +291,16 @@ struct AddPetView: View {
     }
     
     private func savePet() {
+        // Save image locally and get URL
+        let imageUrl = saveImageLocally(selectedImage)
+        
         let petCreate = PetCreate(
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            imageUrl: imageUrl,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
@@ -295,6 +313,57 @@ struct AddPetView: View {
             if petService.errorMessage == nil {
                 dismiss()
             }
+        }
+    }
+    
+    /// Save image locally with optimization and return file URL
+    /// - Parameter image: The UIImage to save
+    /// - Returns: Local file URL string or nil
+    private func saveImageLocally(_ image: UIImage?) -> String? {
+        guard let image = image else { return nil }
+        
+        // Optimize image before saving
+        let optimizedResult: OptimizedImageResult
+        do {
+            optimizedResult = try ImageOptimizer.optimizeForUpload(image: image)
+            print("📸 Image optimized for local storage: \(optimizedResult.summary)")
+        } catch {
+            print("⚠️ Image optimization failed: \(error), using default compression")
+            // Fallback to simple compression if optimization fails
+            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                return nil
+            }
+            return saveImageData(imageData)
+        }
+        
+        return saveImageData(optimizedResult.data)
+    }
+    
+    /// Save image data to local file system
+    /// - Parameter data: The image data to save
+    /// - Returns: Local file path string or nil
+    private func saveImageData(_ data: Data) -> String? {
+        // Create a unique filename
+        let filename = "\(UUID().uuidString).jpg"
+        
+        // Get documents directory
+        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        
+        // Create pet images directory if needed
+        let petImagesDirectory = documentsDirectory.appendingPathComponent("PetImages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: petImagesDirectory, withIntermediateDirectories: true)
+        
+        // Create full file URL
+        let fileURL = petImagesDirectory.appendingPathComponent(filename)
+        
+        do {
+            try data.write(to: fileURL)
+            return fileURL.path
+        } catch {
+            print("Failed to save image: \(error)")
+            return nil
         }
     }
     

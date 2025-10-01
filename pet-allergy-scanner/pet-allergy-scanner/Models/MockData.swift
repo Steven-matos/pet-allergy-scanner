@@ -124,6 +124,7 @@ struct MockData {
         username: "johndoe",
         firstName: "John",
         lastName: "Doe",
+        imageUrl: nil,
         role: .premium,
         onboarded: true,
         createdAt: Date().addingTimeInterval(-86400 * 90), // 90 days ago

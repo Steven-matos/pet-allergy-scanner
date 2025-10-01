@@ -182,7 +182,7 @@ class AuthService: ObservableObject {
     }
     
     /// Update current user profile
-    func updateProfile(username: String?, firstName: String?, lastName: String?) async {
+    func updateProfile(username: String?, firstName: String?, lastName: String?, imageUrl: String? = nil) async {
         guard case .authenticated(let currentUser) = authState else { return }
         
         authState = .loading
@@ -192,6 +192,7 @@ class AuthService: ObservableObject {
             username: username,
             firstName: firstName,
             lastName: lastName,
+            imageUrl: imageUrl,
             role: nil,
             onboarded: nil
         )

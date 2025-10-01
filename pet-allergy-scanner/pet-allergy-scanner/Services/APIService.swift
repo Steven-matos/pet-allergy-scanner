@@ -46,6 +46,12 @@ class APIService: ObservableObject {
         authToken = nil
     }
     
+    /// Get current authentication token
+    /// - Returns: The current auth token or nil if not set
+    func getAuthToken() -> String? {
+        return authToken
+    }
+    
     /// Create JSON encoder with consistent date encoding strategy
     private func createJSONEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

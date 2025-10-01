@@ -19,6 +19,7 @@ struct EditPetView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
+    @State private var selectedImage: UIImage?
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
     @State private var vetPhone = ""
@@ -31,6 +32,19 @@ struct EditPetView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Pet Photo Section
+                Section {
+                    HStack {
+                        Spacer()
+                        PetImagePickerView(
+                            selectedImage: $selectedImage,
+                            species: pet.species
+                        )
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+                
                 // Basic Information Section
                 Section("Basic Information") {
                     VStack(alignment: .leading, spacing: 4) {
@@ -258,6 +272,11 @@ struct EditPetView: View {
         vetName = pet.vetName ?? ""
         vetPhone = pet.vetPhone ?? ""
         
+        // Load pet image if available
+        if let imageUrl = pet.imageUrl {
+            selectedImage = UIImage(contentsOfFile: imageUrl)
+        }
+        
         // Extract year and month from birthday
         if let birthday = pet.birthday {
             let calendar = Calendar.current
@@ -274,6 +293,7 @@ struct EditPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            imageUrl: nil, // Not validating image URL
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
@@ -289,6 +309,7 @@ struct EditPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            imageUrl: nil, // Not validating image URL
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
@@ -298,11 +319,29 @@ struct EditPetView: View {
     
     /// Update the pet with the new data
     private func updatePet() {
+        // Save new image if changed
+        let newImageUrl: String?
+        if let selectedImage = selectedImage {
+            // Check if image changed by comparing with existing
+            let existingImage = pet.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
+            if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
+                newImageUrl = saveImageLocally(selectedImage)
+            } else {
+                newImageUrl = nil // No change
+            }
+        } else if pet.imageUrl != nil {
+            // Image was removed
+            newImageUrl = ""
+        } else {
+            newImageUrl = nil // No change
+        }
+        
         let petUpdate = PetUpdate(
             name: name != pet.name ? name : nil,
             breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg != pet.weightKg ? weightKg : nil,
+            imageUrl: newImageUrl,
             knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
             vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
             vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
@@ -316,6 +355,68 @@ struct EditPetView: View {
                 dismiss()
             }
         }
+    }
+    
+    /// Save image locally with optimization and return file URL
+    /// - Parameter image: The UIImage to save
+    /// - Returns: Local file URL string or nil
+    private func saveImageLocally(_ image: UIImage?) -> String? {
+        guard let image = image else { return nil }
+        
+        // Optimize image before saving
+        let optimizedResult: OptimizedImageResult
+        do {
+            optimizedResult = try ImageOptimizer.optimizeForUpload(image: image)
+            print("📸 Image optimized for local storage: \(optimizedResult.summary)")
+        } catch {
+            print("⚠️ Image optimization failed: \(error), using default compression")
+            // Fallback to simple compression if optimization fails
+            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+                return nil
+            }
+            return saveImageData(imageData)
+        }
+        
+        return saveImageData(optimizedResult.data)
+    }
+    
+    /// Save image data to local file system
+    /// - Parameter data: The image data to save
+    /// - Returns: Local file path string or nil
+    private func saveImageData(_ data: Data) -> String? {
+        // Create a unique filename
+        let filename = "\(UUID().uuidString).jpg"
+        
+        // Get documents directory
+        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        
+        // Create pet images directory if needed
+        let petImagesDirectory = documentsDirectory.appendingPathComponent("PetImages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: petImagesDirectory, withIntermediateDirectories: true)
+        
+        // Create full file URL
+        let fileURL = petImagesDirectory.appendingPathComponent(filename)
+        
+        do {
+            try data.write(to: fileURL)
+            return fileURL.path
+        } catch {
+            print("Failed to save image: \(error)")
+            return nil
+        }
+    }
+    
+    /// Compare two images for equality
+    /// - Parameters:
+    ///   - image1: First image
+    ///   - image2: Second image
+    /// - Returns: True if images are equal
+    private func imagesAreEqual(_ image1: UIImage, _ image2: UIImage?) -> Bool {
+        guard let image2 = image2 else { return false }
+        guard let data1 = image1.pngData(), let data2 = image2.pngData() else { return false }
+        return data1 == data2
     }
     
     // MARK: - Computed Properties

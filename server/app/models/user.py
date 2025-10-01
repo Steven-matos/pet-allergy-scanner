@@ -18,6 +18,7 @@ class UserBase(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    image_url: Optional[str] = None
     role: UserRole = UserRole.FREE
     onboarded: bool = False
 
@@ -30,6 +31,7 @@ class UserUpdate(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    image_url: Optional[str] = None
     role: Optional[UserRole] = None
     onboarded: Optional[bool] = None
 
