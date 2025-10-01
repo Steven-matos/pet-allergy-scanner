@@ -20,7 +20,7 @@ struct MockData {
         breed: "Golden Retriever",
         birthday: Calendar.current.date(from: DateComponents(year: 2022, month: 6, day: 1)),
         weightKg: 25.5,
-        knownAllergies: ["chicken", "wheat"],
+        knownSensitivities: ["chicken", "wheat"],
         vetName: "Dr. Smith",
         vetPhone: "(555) 123-4567",
         createdAt: Date().addingTimeInterval(-86400 * 30), // 30 days ago
@@ -35,7 +35,7 @@ struct MockData {
         breed: "Persian",
         birthday: Calendar.current.date(from: DateComponents(year: 2023, month: 3, day: 1)),
         weightKg: 4.2,
-        knownAllergies: ["fish", "dairy"],
+        knownSensitivities: ["fish", "dairy"],
         vetName: "Dr. Johnson",
         vetPhone: "(555) 987-6543",
         createdAt: Date().addingTimeInterval(-86400 * 15), // 15 days ago

@@ -106,17 +106,17 @@ async def get_ingredients(
 async def analyze_ingredients(
     ingredients: List[str],
     pet_species: PetSpecies,
-    pet_allergies: List[str] = None,
+    pet_sensitivities: List[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """
     Analyze ingredients for a specific pet
     
-    Analyzes a list of ingredients against pet species and known allergies
+    Analyzes a list of ingredients against pet species and known sensitivities
     """
     try:
-        if pet_allergies is None:
-            pet_allergies = []
+        if pet_sensitivities is None:
+            pet_sensitivities = []
         
         analyses = []
         
@@ -144,9 +144,9 @@ async def analyze_ingredients(
             is_unsafe_for_pet = False
             reason = None
             
-            if normalized_ingredient in [allergy.lower() for allergy in pet_allergies]:
+            if normalized_ingredient in [sensitivity.lower() for sensitivity in pet_sensitivities]:
                 is_unsafe_for_pet = True
-                reason = "Known allergen for this pet"
+                reason = "Known food sensitivity for this pet"
             elif allergen_info["safety"] == "unsafe":
                 is_unsafe_for_pet = True
                 reason = "Toxic to pets"

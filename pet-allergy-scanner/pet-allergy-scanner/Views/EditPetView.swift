@@ -1,18 +1,20 @@
 //
-//  AddPetView.swift
+//  EditPetView.swift
 //  pet-allergy-scanner
 //
-//  Created by Steven Matos on 9/26/25.
+//  Created by Steven Matos on 10/1/25.
 //
 
 import SwiftUI
 
-struct AddPetView: View {
+/// View for editing an existing pet's information
+struct EditPetView: View {
+    let pet: Pet
+    
     @EnvironmentObject var petService: PetService
     @Environment(\.dismiss) private var dismiss
     
     @State private var name = ""
-    @State private var species = PetSpecies.dog
     @State private var breed = ""
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
@@ -49,18 +51,16 @@ struct AddPetView: View {
                         }
                     }
                     
-                    Picker("Species", selection: $species) {
-                        ForEach(PetSpecies.allCases, id: \.self) { species in
-                            HStack {
-                                Image(systemName: species.icon)
-                                Text(species.displayName)
-                            }
-                            .tag(species)
+                    // Species is not editable
+                    HStack {
+                        Text("Species")
+                        Spacer()
+                        HStack {
+                            Image(systemName: pet.species.icon)
+                            Text(pet.species.displayName)
                         }
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
-                    .pickerStyle(.segmented)
-                    .accessibilityIdentifier("speciesPicker")
-                    .accessibilityLabel("Pet species")
                     
                     TextField("Breed (Optional)", text: $breed)
                 }
@@ -202,7 +202,7 @@ struct AddPetView: View {
                         .keyboardType(.phonePad)
                 }
             }
-            .navigationTitle("Add Pet")
+            .navigationTitle("Edit Pet")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -213,12 +213,12 @@ struct AddPetView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
-                        savePet()
+                        updatePet()
                     }
                     .disabled(!isFormValid)
                     .accessibilityIdentifier("savePetButton")
-                    .accessibilityLabel("Save pet profile")
-                    .accessibilityHint("Saves the pet information to your profile")
+                    .accessibilityLabel("Save pet changes")
+                    .accessibilityHint("Updates the pet information")
                 }
             }
             .alert("Error", isPresented: $showingAlert) {
@@ -243,6 +243,26 @@ struct AddPetView: View {
                     }
                 }
             )
+            .onAppear {
+                loadPetData()
+            }
+        }
+    }
+    
+    /// Load pet data into form fields
+    private func loadPetData() {
+        name = pet.name
+        breed = pet.breed ?? ""
+        weightKg = pet.weightKg
+        knownSensitivities = pet.knownSensitivities
+        vetName = pet.vetName ?? ""
+        vetPhone = pet.vetPhone ?? ""
+        
+        // Extract year and month from birthday
+        if let birthday = pet.birthday {
+            let calendar = Calendar.current
+            birthYear = calendar.component(.year, from: birthday)
+            birthMonth = calendar.component(.month, from: birthday)
         }
     }
     
@@ -250,7 +270,7 @@ struct AddPetView: View {
     private var isFormValid: Bool {
         let petCreate = PetCreate(
             name: name,
-            species: species,
+            species: pet.species, // Species doesn't change
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
@@ -265,7 +285,7 @@ struct AddPetView: View {
     private func validateForm() {
         let petCreate = PetCreate(
             name: name,
-            species: species,
+            species: pet.species,
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
@@ -276,21 +296,21 @@ struct AddPetView: View {
         validationErrors = petCreate.validationErrors
     }
     
-    private func savePet() {
-        let petCreate = PetCreate(
-            name: name,
-            species: species,
-            breed: breed.isEmpty ? nil : breed,
+    /// Update the pet with the new data
+    private func updatePet() {
+        let petUpdate = PetUpdate(
+            name: name != pet.name ? name : nil,
+            breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
             birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightKg,
-            knownSensitivities: knownSensitivities,
-            vetName: vetName.isEmpty ? nil : vetName,
-            vetPhone: vetPhone.isEmpty ? nil : vetPhone
+            weightKg: weightKg != pet.weightKg ? weightKg : nil,
+            knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
+            vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
+            vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
         )
         
-        petService.createPet(petCreate)
+        petService.updatePet(id: pet.id, petUpdate: petUpdate)
         
-        // Dismiss after successful creation
+        // Dismiss after successful update
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             if petService.errorMessage == nil {
                 dismiss()
@@ -356,16 +376,23 @@ struct AddPetView: View {
     }
 }
 
-
 #Preview {
-    AddPetView()
+    let mockPet = Pet(
+        id: "1",
+        userId: "user1",
+        name: "Max",
+        species: .dog,
+        breed: "Golden Retriever",
+        birthday: Calendar.current.date(from: DateComponents(year: 2020, month: 3))!,
+        weightKg: 25.5,
+        knownSensitivities: ["Chicken", "Wheat"],
+        vetName: "Dr. Smith",
+        vetPhone: "555-1234",
+        createdAt: Date(),
+        updatedAt: Date()
+    )
+    
+    return EditPetView(pet: mockPet)
         .environmentObject(PetService.shared)
 }
 
-#Preview("With Mock Data") {
-    let petService = PetService.shared
-    // Note: Using shared instance for preview purposes
-    
-    return AddPetView()
-        .environmentObject(petService)
-}

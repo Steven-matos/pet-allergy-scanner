@@ -16,7 +16,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
-    let knownAllergies: [String]
+    let knownSensitivities: [String]
     let vetName: String?
     let vetPhone: String?
     let createdAt: Date
@@ -84,7 +84,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
         case breed
         case birthday
         case weightKg = "weight_kg"
-        case knownAllergies = "known_allergies"
+        case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"
         case vetPhone = "vet_phone"
         case createdAt = "created_at"
@@ -123,7 +123,7 @@ struct PetCreate: Codable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
-    let knownAllergies: [String]
+    let knownSensitivities: [String]
     let vetName: String?
     let vetPhone: String?
     
@@ -161,7 +161,7 @@ struct PetCreate: Codable {
         case breed
         case birthday
         case weightKg = "weight_kg"
-        case knownAllergies = "known_allergies"
+        case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"
         case vetPhone = "vet_phone"
     }
@@ -173,7 +173,7 @@ struct PetUpdate: Codable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
-    let knownAllergies: [String]?
+    let knownSensitivities: [String]?
     let vetName: String?
     let vetPhone: String?
     
@@ -182,7 +182,7 @@ struct PetUpdate: Codable {
         case breed
         case birthday
         case weightKg = "weight_kg"
-        case knownAllergies = "known_allergies"
+        case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"
         case vetPhone = "vet_phone"
     }

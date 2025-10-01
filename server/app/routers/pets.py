@@ -60,7 +60,7 @@ async def create_pet(
             "breed": pet_data.breed,
             "birthday": pet_data.birthday.isoformat() if pet_data.birthday else None,
             "weight_kg": pet_data.weight_kg,
-            "known_allergies": pet_data.known_allergies,
+            "known_sensitivities": pet_data.known_sensitivities,
             "vet_name": pet_data.vet_name,
             "vet_phone": pet_data.vet_phone
         }
@@ -82,7 +82,7 @@ async def create_pet(
             breed=pet["breed"],
             birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
-            known_allergies=pet["known_allergies"],
+            known_sensitivities=pet["known_sensitivities"],
             vet_name=pet["vet_name"],
             vet_phone=pet["vet_phone"],
             created_at=pet["created_at"],
@@ -120,7 +120,7 @@ async def get_user_pets(current_user: dict = Depends(get_current_user)):
                 breed=pet["breed"],
                 birthday=pet["birthday"],
                 weight_kg=pet["weight_kg"],
-                known_allergies=pet["known_allergies"],
+                known_sensitivities=pet["known_sensitivities"],
                 vet_name=pet["vet_name"],
                 vet_phone=pet["vet_phone"],
                 created_at=pet["created_at"],
@@ -167,7 +167,7 @@ async def get_pet(
             breed=pet["breed"],
             birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
-            known_allergies=pet["known_allergies"],
+            known_sensitivities=pet["known_sensitivities"],
             vet_name=pet["vet_name"],
             vet_phone=pet["vet_phone"],
             created_at=pet["created_at"],
@@ -216,8 +216,8 @@ async def update_pet(
             update_data["birthday"] = pet_update.birthday.isoformat()
         if pet_update.weight_kg is not None:
             update_data["weight_kg"] = pet_update.weight_kg
-        if pet_update.known_allergies is not None:
-            update_data["known_allergies"] = pet_update.known_allergies
+        if pet_update.known_sensitivities is not None:
+            update_data["known_sensitivities"] = pet_update.known_sensitivities
         if pet_update.vet_name is not None:
             update_data["vet_name"] = pet_update.vet_name
         if pet_update.vet_phone is not None:
@@ -240,7 +240,7 @@ async def update_pet(
             breed=pet["breed"],
             birthday=pet["birthday"],
             weight_kg=pet["weight_kg"],
-            known_allergies=pet["known_allergies"],
+            known_sensitivities=pet["known_sensitivities"],
             vet_name=pet["vet_name"],
             vet_phone=pet["vet_phone"],
             created_at=pet["created_at"],

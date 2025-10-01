@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.pets (
     breed TEXT,
     birthday DATE,
     weight_kg DECIMAL(5,2) CHECK (weight_kg >= 0.1 AND weight_kg <= 200.0),
-    known_allergies TEXT[] DEFAULT '{}',
+    known_sensitivities TEXT[] DEFAULT '{}',
     vet_name TEXT,
     vet_phone TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

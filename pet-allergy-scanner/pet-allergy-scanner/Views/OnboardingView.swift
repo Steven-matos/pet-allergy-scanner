@@ -22,10 +22,10 @@ struct OnboardingView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
-    @State private var knownAllergies: [String] = []
+    @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
     @State private var vetPhone = ""
-    @State private var newAllergy = ""
+    @State private var newSensitivity = ""
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
     @State private var isCreatingPet = false
@@ -397,19 +397,19 @@ struct OnboardingView: View {
             VStack(spacing: 20) {
                 // Known allergies
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Known Allergies (Optional)")
+                    Text("Food Sensitivities (Optional)")
                         .font(.headline)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    ForEach(knownAllergies, id: \.self) { allergy in
+                    ForEach(knownSensitivities, id: \.self) { sensitivity in
                         HStack {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(ModernDesignSystem.Colors.warmCoral)
-                            Text(allergy)
+                            Text(sensitivity)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             Spacer()
                             Button("Remove") {
-                                knownAllergies.removeAll { $0 == allergy }
+                                knownSensitivities.removeAll { $0 == sensitivity }
                             }
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             .font(.caption)
@@ -418,15 +418,15 @@ struct OnboardingView: View {
                     }
                     
                     HStack {
-                        TextField("Add allergy", text: $newAllergy)
+                        TextField("Add sensitivity", text: $newSensitivity)
                             .textFieldStyle(.roundedBorder)
                         Button("Add") {
-                            if !newAllergy.isEmpty {
-                                knownAllergies.append(newAllergy)
-                                newAllergy = ""
+                            if !newSensitivity.isEmpty {
+                                knownSensitivities.append(newSensitivity)
+                                newSensitivity = ""
                             }
                         }
-                        .disabled(newAllergy.isEmpty)
+                        .disabled(newSensitivity.isEmpty)
                         .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                     }
                 }
@@ -483,7 +483,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
-            knownAllergies: knownAllergies,
+            knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
         )
@@ -500,7 +500,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
-            knownAllergies: knownAllergies,
+            knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
         )

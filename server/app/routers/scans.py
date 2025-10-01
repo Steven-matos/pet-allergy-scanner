@@ -110,7 +110,7 @@ async def analyze_scan(
         ingredient_analyses = await analyze_ingredients(
             ingredients=ingredients,
             pet_species=pet["species"],
-            pet_allergies=pet["known_allergies"],
+            pet_sensitivities=pet["known_sensitivities"],
             current_user=current_user
         )
         
