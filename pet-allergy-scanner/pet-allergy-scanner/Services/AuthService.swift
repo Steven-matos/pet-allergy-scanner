@@ -376,6 +376,7 @@ class AuthService: ObservableObject {
                     username: nil,
                     firstName: nil,
                     lastName: nil,
+                    imageUrl: nil,
                     role: nil,
                     onboarded: true
                 )

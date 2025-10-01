@@ -243,7 +243,9 @@ async def login_user(login_data: UserLogin):
                 username=response.user.user_metadata.get("username"),
                 first_name=response.user.user_metadata.get("first_name"),
                 last_name=response.user.user_metadata.get("last_name"),
+                image_url=None,  # Will be loaded from public.users on next /me call
                 role=response.user.user_metadata.get("role", "free"),
+                onboarded=False,  # Will be loaded from public.users on next /me call
                 created_at=response.user.created_at,
                 updated_at=response.user.updated_at
             )
@@ -266,16 +268,50 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     
     Returns the authenticated user's profile information
     """
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        username=current_user.user_metadata.get("username"),
-        first_name=current_user.user_metadata.get("first_name"),
-        last_name=current_user.user_metadata.get("last_name"),
-        role=current_user.user_metadata.get("role", "free"),
-        created_at=current_user.created_at,
-        updated_at=current_user.updated_at
-    )
+    try:
+        from supabase import create_client
+        
+        # Create service role client to fetch data from public.users table
+        service_supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key
+        )
+        
+        # Get onboarded status and image_url from public.users table
+        user_data_response = service_supabase.table("users").select("onboarded, image_url").eq("id", current_user.id).execute()
+        onboarded_status = False
+        image_url = None
+        if user_data_response.data:
+            onboarded_status = user_data_response.data[0].get("onboarded", False)
+            image_url = user_data_response.data[0].get("image_url")
+        
+        return UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            username=current_user.user_metadata.get("username"),
+            first_name=current_user.user_metadata.get("first_name"),
+            last_name=current_user.user_metadata.get("last_name"),
+            image_url=image_url,
+            role=current_user.user_metadata.get("role", "free"),
+            onboarded=onboarded_status,
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at
+        )
+    except Exception as e:
+        logger.error(f"Get current user error: {e}")
+        # Fallback to returning data without onboarded/image_url if query fails
+        return UserResponse(
+            id=current_user.id,
+            email=current_user.email,
+            username=current_user.user_metadata.get("username"),
+            first_name=current_user.user_metadata.get("first_name"),
+            last_name=current_user.user_metadata.get("last_name"),
+            image_url=None,
+            role=current_user.user_metadata.get("role", "free"),
+            onboarded=False,
+            created_at=current_user.created_at,
+            updated_at=current_user.updated_at
+        )
 
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
@@ -299,13 +335,28 @@ async def update_current_user(
         # Update user metadata
         update_data = {}
         if user_update.username is not None:
-            # Validate username if provided
-            validated_username = SecurityValidator.validate_username(user_update.username)
-            update_data["username"] = validated_username
+            # Validate username if provided (but skip if empty string)
+            if user_update.username:
+                validated_username = SecurityValidator.validate_username(user_update.username)
+                update_data["username"] = validated_username
         if user_update.first_name is not None:
-            update_data["first_name"] = user_update.first_name
+            # Basic length validation for first name (no aggressive sanitization for names)
+            if user_update.first_name:
+                if len(user_update.first_name) > 100:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="First name too long"
+                    )
+                update_data["first_name"] = user_update.first_name
         if user_update.last_name is not None:
-            update_data["last_name"] = user_update.last_name
+            # Basic length validation for last name (no aggressive sanitization for names)
+            if user_update.last_name:
+                if len(user_update.last_name) > 100:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Last name too long"
+                    )
+                update_data["last_name"] = user_update.last_name
         if user_update.role is not None:
             update_data["role"] = user_update.role.value
         
@@ -369,6 +420,15 @@ async def update_current_user(
         public_update_data = {}
         if user_update.onboarded is not None:
             public_update_data["onboarded"] = user_update.onboarded
+        if user_update.image_url is not None:
+            # Don't validate image_url as it's a file path, not user-facing text
+            # Just limit the length to prevent abuse
+            if len(user_update.image_url) > 500:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Image URL too long"
+                )
+            public_update_data["image_url"] = user_update.image_url
         
         if public_update_data:
             # Update the public.users table using the service role client
@@ -393,13 +453,15 @@ async def update_current_user(
         if user_update.role is not None:
             updated_role = user_update.role.value
         
-        # Get onboarded status from public.users table
-        user_data_response = service_supabase.table("users").select("onboarded").eq("id", current_user.id).execute()
-        logger.info(f"Query for onboarded status response: {user_data_response}")
+        # Get onboarded status and image_url from public.users table
+        user_data_response = service_supabase.table("users").select("onboarded, image_url").eq("id", current_user.id).execute()
+        logger.info(f"Query for user data response: {user_data_response}")
         onboarded_status = False
+        image_url = None
         if user_data_response.data:
             onboarded_status = user_data_response.data[0].get("onboarded", False)
-            logger.info(f"Retrieved onboarded status: {onboarded_status}")
+            image_url = user_data_response.data[0].get("image_url")
+            logger.info(f"Retrieved onboarded status: {onboarded_status}, image_url: {image_url}")
         
         return UserResponse(
             id=current_user.id,
@@ -407,6 +469,7 @@ async def update_current_user(
             username=updated_username,
             first_name=updated_first_name,
             last_name=updated_last_name,
+            image_url=image_url,
             role=updated_role,
             onboarded=onboarded_status,
             created_at=current_user.created_at,

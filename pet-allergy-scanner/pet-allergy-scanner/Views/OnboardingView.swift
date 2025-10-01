@@ -483,6 +483,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
@@ -500,6 +501,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
             vetPhone: vetPhone.isEmpty ? nil : vetPhone

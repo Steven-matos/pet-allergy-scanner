@@ -55,9 +55,12 @@ struct UserModelTests {
     @Test("UserUpdate model")
     func testUserUpdateModel() {
         let userUpdate = UserUpdate(
+            username: nil,
             firstName: "Jane",
             lastName: "Smith",
-            role: .premium
+            imageUrl: nil,
+            role: .premium,
+            onboarded: nil
         )
         
         #expect(userUpdate.firstName == "Jane")
@@ -154,9 +157,12 @@ struct UserModelTests {
     @Test("UserUpdate model JSON encoding")
     func testUserUpdateJSONEncoding() throws {
         let userUpdate = UserUpdate(
+            username: nil,
             firstName: "Jane",
             lastName: "Smith",
-            role: .premium
+            imageUrl: nil,
+            role: .premium,
+            onboarded: nil
         )
         
         let encoder = JSONEncoder()

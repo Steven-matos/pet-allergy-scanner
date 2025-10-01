@@ -486,6 +486,7 @@ struct EditPetView: View {
         breed: "Golden Retriever",
         birthday: Calendar.current.date(from: DateComponents(year: 2020, month: 3))!,
         weightKg: 25.5,
+        imageUrl: nil,
         knownSensitivities: ["Chicken", "Wheat"],
         vetName: "Dr. Smith",
         vetPhone: "555-1234",
@@ -493,7 +494,7 @@ struct EditPetView: View {
         updatedAt: Date()
     )
     
-    return EditPetView(pet: mockPet)
+    EditPetView(pet: mockPet)
         .environmentObject(PetService.shared)
 }
 

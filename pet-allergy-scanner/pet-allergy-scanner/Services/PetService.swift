@@ -126,6 +126,7 @@ class PetService: ObservableObject {
                     username: nil,
                     firstName: nil,
                     lastName: nil,
+                    imageUrl: nil,
                     role: nil,
                     onboarded: true
                 )
@@ -147,6 +148,7 @@ class PetService: ObservableObject {
                     username: nil,
                     firstName: nil,
                     lastName: nil,
+                    imageUrl: nil,
                     role: nil,
                     onboarded: false
                 )
