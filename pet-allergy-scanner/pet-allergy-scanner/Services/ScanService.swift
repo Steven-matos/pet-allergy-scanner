@@ -26,7 +26,16 @@ class ScanService: ObservableObject {
     private init() {}
     
     /// Load recent scans for the current user
+    /// - Note: Only loads scans if user is authenticated to avoid 403 errors during logout
     func loadRecentScans() {
+        // Don't attempt to load scans if not authenticated
+        guard apiService.hasAuthToken else {
+            self.recentScans = []
+            self.isLoading = false
+            self.errorMessage = nil
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
@@ -35,6 +44,15 @@ class ScanService: ObservableObject {
                 let scans = try await apiService.getScans()
                 recentScans = scans.sorted { $0.createdAt > $1.createdAt }
                 isLoading = false
+            } catch let apiError as APIError {
+                self.isLoading = false
+                // Silently ignore auth errors (user might be logging out)
+                if case .authenticationError = apiError {
+                    self.recentScans = []
+                    self.errorMessage = nil
+                } else {
+                    self.errorMessage = apiError.localizedDescription
+                }
             } catch {
                 isLoading = false
                 errorMessage = error.localizedDescription
@@ -109,5 +127,14 @@ class ScanService: ObservableObject {
     /// Clear error message
     func clearError() {
         errorMessage = nil
+    }
+    
+    /// Clear all scans (called during logout)
+    func clearScans() {
+        recentScans = []
+        errorMessage = nil
+        isLoading = false
+        isAnalyzing = false
+        currentAnalysisTask?.cancel()
     }
 }

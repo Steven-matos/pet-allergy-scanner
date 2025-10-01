@@ -46,6 +46,55 @@ class APIService: ObservableObject {
         authToken = nil
     }
     
+    /// Create JSON encoder with consistent date encoding strategy
+    private func createJSONEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+    
+    /// Create JSON decoder with flexible date decoding strategy
+    private func createJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            print("🔍 DEBUG: Attempting to decode date string: \(dateString)")
+            
+            // Try ISO8601 format first (with time)
+            let iso8601Formatter = ISO8601DateFormatter()
+            iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = iso8601Formatter.date(from: dateString) {
+                print("🔍 DEBUG: Successfully decoded date with ISO8601: \(date)")
+                return date
+            }
+            
+            // Try ISO8601 without fractional seconds
+            iso8601Formatter.formatOptions = [.withInternetDateTime]
+            if let date = iso8601Formatter.date(from: dateString) {
+                print("🔍 DEBUG: Successfully decoded date with ISO8601 (no fractional): \(date)")
+                return date
+            }
+            
+            // Try simple date format (YYYY-MM-DD)
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            dateFormatter.timeZone = TimeZone(identifier: "UTC")
+            if let date = dateFormatter.date(from: dateString) {
+                print("🔍 DEBUG: Successfully decoded date with simple format: \(date)")
+                return date
+            }
+            
+            print("🔍 DEBUG: Failed to decode date string: \(dateString)")
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot decode date string \(dateString)"
+            )
+        }
+        return decoder
+    }
+    
     /// Create URL request with authentication headers and security features
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) -> URLRequest {
         var request = URLRequest(url: url)
@@ -83,12 +132,20 @@ class APIService: ObservableObject {
                 case 200...299:
                     break // Success
                 case 401:
-                    // Clear invalid token
+                    // Try to decode error message from response
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        // Clear invalid token only if this is a session/token error
+                        if errorResponse.message.lowercased().contains("invalid authentication") {
+                            clearAuthToken()
+                        }
+                        throw APIError.serverMessage(errorResponse.message)
+                    }
+                    // Fallback to generic authentication error
                     clearAuthToken()
                     throw APIError.authenticationError
                 case 403:
                     // Check if this is an email verification error
-                    if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         if errorResponse.message.contains("verify your email") {
                             throw APIError.emailNotVerified(errorResponse.message)
                         }
@@ -99,12 +156,12 @@ class APIService: ObservableObject {
                     throw APIError.rateLimitExceeded
                 case 400...499:
                     // Try to decode error response
-                    if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         throw APIError.serverMessage(errorResponse.message)
                     }
-                    // Try to decode as generic error response
+                    // Try to decode as generic error response (also check for 'detail' key)
                     if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       let errorMessage = errorDict["error"] as? String {
+                       let errorMessage = (errorDict["error"] as? String) ?? (errorDict["detail"] as? String) {
                         throw APIError.serverMessage(errorMessage)
                     }
                     throw APIError.serverError(httpResponse.statusCode)
@@ -116,22 +173,46 @@ class APIService: ObservableObject {
             }
             
             // Decode successful response
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
+            let decoder = createJSONDecoder()
             
             do {
                 return try decoder.decode(T.self, from: data)
             } catch let decodingError as DecodingError {
                 // Log the raw response for debugging
                 if let responseString = String(data: data, encoding: .utf8) {
-                    print("Failed to decode response. Raw response: \(responseString)")
-                    print("Decoding error: \(decodingError)")
+                    print("🔍 DEBUG: Failed to decode response. Raw response: \(responseString)")
+                    print("🔍 DEBUG: Response data length: \(data.count) bytes")
+                    print("🔍 DEBUG: Decoding error: \(decodingError)")
+                    
+                    // Log detailed decoding error information
+                    switch decodingError {
+                    case .typeMismatch(let type, let context):
+                        print("🔍 DEBUG: Type mismatch - Expected: \(type), Context: \(context)")
+                    case .valueNotFound(let type, let context):
+                        print("🔍 DEBUG: Value not found - Type: \(type), Context: \(context)")
+                    case .keyNotFound(let key, let context):
+                        print("🔍 DEBUG: Key not found - Key: \(key), Context: \(context)")
+                    case .dataCorrupted(let context):
+                        print("🔍 DEBUG: Data corrupted - Context: \(context)")
+                    @unknown default:
+                        print("🔍 DEBUG: Unknown decoding error")
+                    }
+                    
+                    // Try to provide more helpful error messages
+                    if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        print("🔍 DEBUG: Parsed JSON object: \(jsonObject)")
+                        
+                        // Check if this is an error response with a different format
+                        if let errorMessage = jsonObject["error"] as? String {
+                            print("🔍 DEBUG: Found error message in response: \(errorMessage)")
+                        }
+                    }
                 }
                 throw APIError.networkError("Failed to decode response: \(decodingError.localizedDescription)")
             } catch {
                 // Log the raw response for debugging
                 if let responseString = String(data: data, encoding: .utf8) {
-                    print("Failed to decode response. Raw response: \(responseString)")
+                    print("🔍 DEBUG: Failed to decode response. Raw response: \(responseString)")
                 }
                 throw error
             }
@@ -162,7 +243,7 @@ extension APIService {
         var request = createRequest(url: url, method: "POST")
         
         do {
-            request.httpBody = try JSONEncoder().encode(user)
+            request.httpBody = try createJSONEncoder().encode(user)
         } catch {
             throw APIError.encodingError
         }
@@ -176,15 +257,20 @@ extension APIService {
             throw APIError.invalidURL
         }
         
+        print("🔍 DEBUG: Attempting login to URL: \(url)")
+        
         var request = createRequest(url: url, method: "POST")
         
         let loginData = ["email_or_username": email, "password": password]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
+            print("🔍 DEBUG: Login request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
         } catch {
+            print("🔍 DEBUG: Failed to encode login data: \(error)")
             throw APIError.encodingError
         }
         
+        print("🔍 DEBUG: Sending login request...")
         return try await performRequest(request, responseType: AuthResponse.self)
     }
     
@@ -225,7 +311,7 @@ extension APIService {
         var request = createRequest(url: url, method: "PUT")
         
         do {
-            request.httpBody = try JSONEncoder().encode(userUpdate)
+            request.httpBody = try createJSONEncoder().encode(userUpdate)
         } catch {
             throw APIError.encodingError
         }
@@ -246,7 +332,7 @@ extension APIService {
         var request = createRequest(url: url, method: "POST")
         
         do {
-            request.httpBody = try JSONEncoder().encode(pet)
+            request.httpBody = try createJSONEncoder().encode(pet)
         } catch {
             throw APIError.encodingError
         }
@@ -283,7 +369,7 @@ extension APIService {
         var request = createRequest(url: url, method: "PUT")
         
         do {
-            request.httpBody = try JSONEncoder().encode(petUpdate)
+            request.httpBody = try createJSONEncoder().encode(petUpdate)
         } catch {
             throw APIError.encodingError
         }
@@ -336,7 +422,7 @@ extension APIService {
         var request = createRequest(url: url, method: "POST")
         
         do {
-            request.httpBody = try JSONEncoder().encode(scan)
+            request.httpBody = try createJSONEncoder().encode(scan)
         } catch {
             throw APIError.encodingError
         }
@@ -353,7 +439,7 @@ extension APIService {
         var request = createRequest(url: url, method: "POST")
         
         do {
-            request.httpBody = try JSONEncoder().encode(analysisRequest)
+            request.httpBody = try createJSONEncoder().encode(analysisRequest)
         } catch {
             throw APIError.encodingError
         }

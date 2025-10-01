@@ -12,6 +12,9 @@ struct OnboardingView: View {
     @EnvironmentObject var petService: PetService
     @StateObject private var authService = AuthService.shared
     
+    /// Callback when user skips onboarding
+    let onSkip: () -> Void
+    
     @State private var currentStep = 0
     @State private var name = ""
     @State private var species = PetSpecies.dog
@@ -78,7 +81,9 @@ struct OnboardingView: View {
                     // Skip button (only show on first step)
                     if currentStep == 0 {
                         Button("Skip for now") {
-                            petService.completeOnboarding()
+                            // Skip onboarding for this session only
+                            // User will see onboarding again next time until they add a pet
+                            onSkip()
                         }
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .padding(.trailing, 16)
@@ -485,6 +490,7 @@ struct OnboardingView: View {
         validationErrors = petCreate.validationErrors
     }
     
+    /// Create pet and mark onboarding as complete
     private func createPet() {
         isCreatingPet = true
         
@@ -499,14 +505,18 @@ struct OnboardingView: View {
             vetPhone: vetPhone.isEmpty ? nil : vetPhone
         )
         
-        petService.createPet(petCreate)
-        
-        // Complete onboarding after successful creation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            if petService.errorMessage == nil {
-                petService.completeOnboarding()
-                isCreatingPet = false
-            } else {
+        // Create the pet first
+        Task {
+            petService.createPet(petCreate)
+            
+            // Wait for the pet creation to complete
+            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+            
+            await MainActor.run {
+                if petService.errorMessage == nil {
+                    // Pet created successfully - mark onboarding as complete
+                    petService.completeOnboarding()
+                }
                 isCreatingPet = false
             }
         }
@@ -701,6 +711,8 @@ struct MonthPickerView: View {
 
 
 #Preview {
-    OnboardingView()
-        .environmentObject(PetService.shared)
+    OnboardingView(onSkip: {
+        print("Skipped onboarding")
+    })
+    .environmentObject(PetService.shared)
 }

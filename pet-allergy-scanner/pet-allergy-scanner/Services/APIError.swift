@@ -37,11 +37,11 @@ enum APIError: Error, LocalizedError {
         case .encodingError:
             return "Failed to encode request"
         case .authenticationError:
-            return "Authentication failed"
+            return "Invalid email or password"
         case .serverError(let code):
             return "Server error: \(code)"
         case .serverMessage(let message):
-            return "Server error: \(message)"
+            return message
         case .rateLimitExceeded:
             return "Rate limit exceeded. Please try again later."
         case .requestTimeout:
@@ -65,8 +65,20 @@ enum APIError: Error, LocalizedError {
 }
 
 /// API error response model for decoding server error messages
+/// Matches FastAPI's HTTPException format
 struct APIErrorResponse: Codable {
-    let message: String
-    let code: String?
-    let details: [String: String]?
+    let detail: String
+    let timestamp: String?
+    let path: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case detail
+        case timestamp
+        case path
+    }
+    
+    /// Computed property to get the error message for compatibility
+    var message: String {
+        return detail
+    }
 }

@@ -78,6 +78,26 @@ struct AuthenticationView: View {
                     }
                 }
                 
+                // Show error message inline
+                if let errorMessage = authService.errorMessage, 
+                   !errorMessage.contains("verify your email") && 
+                   !errorMessage.contains("verification link") {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.unsafe)
+                        Text(errorMessage)
+                            .font(.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.unsafe)
+                            .multilineTextAlignment(.leading)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(ModernDesignSystem.Colors.unsafe.opacity(0.1))
+                    .cornerRadius(8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                
                 Spacer()
                 
                 // Authentication Form
@@ -121,17 +141,22 @@ struct AuthenticationView: View {
                             .onChange(of: email) { _, newEmail in
                                 isEmailValid = InputValidator.isValidEmail(newEmail)
                                 doEmailsMatch = newEmail == confirmEmail && !newEmail.isEmpty
+                                // Clear error when user starts typing
+                                if authService.errorMessage != nil {
+                                    authService.clearError()
+                                }
                             }
                         
                         // Email validation feedback
-                        if !email.isEmpty {
+                        // Show email validation feedback only during registration (not in login mode)
+                        if !isLoginMode && !email.isEmpty {
                             let isValidInput = isEmailValid || (!email.isEmpty && !email.contains("@"))
                             HStack(spacing: 6) {
                                 Image(systemName: isValidInput ? "checkmark.circle.fill" : "xmark.circle.fill")
                                     .foregroundColor(isValidInput ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
                                     .font(.caption)
                                 
-                                Text(isValidInput ? (isEmailValid ? "Valid email format" : "Valid username format") : "Enter email or username")
+                                Text(isValidInput ? (isEmailValid ? "Valid email format" : "Valid username format") : "Enter email")
                                     .font(.caption)
                                     .foregroundColor(isValidInput ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
                             }
@@ -183,6 +208,10 @@ struct AuthenticationView: View {
                         }
                         .onChange(of: password) { _, newPassword in
                             passwordValidation = InputValidator.validatePassword(newPassword)
+                            // Clear error when user starts typing
+                            if authService.errorMessage != nil {
+                                authService.clearError()
+                            }
                         }
                         
                         // Password validation feedback (only show during registration)
@@ -296,8 +325,10 @@ struct AuthenticationView: View {
                 
                 // Toggle between login and registration
                 Button(action: {
-                    isLoginMode.toggle()
-                    clearForm()
+                    withAnimation {
+                        isLoginMode.toggle()
+                        clearForm()
+                    }
                 }) {
                     Text(isLoginMode ? "Don't have an account? Sign up" : "Already have an account? Sign in")
                         .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)

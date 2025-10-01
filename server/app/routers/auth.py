@@ -289,6 +289,10 @@ async def update_current_user(
     Updates the authenticated user's profile information
     """
     try:
+        # Import at function level to ensure it's always available
+        from supabase import create_client
+        from app.utils.security import SecurityValidator
+        
         # Use the existing authenticated Supabase client
         supabase = get_supabase_client()
         
@@ -296,7 +300,6 @@ async def update_current_user(
         update_data = {}
         if user_update.username is not None:
             # Validate username if provided
-            from app.utils.security import SecurityValidator
             validated_username = SecurityValidator.validate_username(user_update.username)
             update_data["username"] = validated_username
         if user_update.first_name is not None:
@@ -309,8 +312,6 @@ async def update_current_user(
         # Update auth user metadata using the JWT token
         if update_data:
             # Create an authenticated Supabase client using the JWT token
-            from supabase import create_client
-            
             auth_supabase = create_client(
                 settings.supabase_url,
                 settings.supabase_key
@@ -332,7 +333,6 @@ async def update_current_user(
             logger.info(f"User {current_user.id} not found in public.users table, creating record")
             
             # Use the service role client to bypass RLS
-            from supabase import create_client
             service_supabase = create_client(
                 settings.supabase_url,
                 settings.supabase_service_role_key  # Use service key to bypass RLS
@@ -358,6 +358,13 @@ async def update_current_user(
                     logger.error(f"Failed to create user record: {insert_error}")
                     raise insert_error
         
+        # Create service role client for public.users table operations
+        # (Re-create to ensure it's always available, even if user existed)
+        service_supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key  # Use service key to bypass RLS
+        )
+        
         # Update public.users table for fields not in auth metadata
         public_update_data = {}
         if user_update.onboarded is not None:
@@ -366,7 +373,7 @@ async def update_current_user(
         if public_update_data:
             # Update the public.users table using the service role client
             logger.info(f"Updating public.users table with data: {public_update_data} for user: {current_user.id}")
-            response = supabase.table("users").update(public_update_data).eq("id", current_user.id).execute()
+            response = service_supabase.table("users").update(public_update_data).eq("id", current_user.id).execute()
             logger.info(f"Update response: {response}")
         
         # Get updated user data from the original current_user object
@@ -387,7 +394,7 @@ async def update_current_user(
             updated_role = user_update.role.value
         
         # Get onboarded status from public.users table
-        user_data_response = supabase.table("users").select("onboarded").eq("id", current_user.id).execute()
+        user_data_response = service_supabase.table("users").select("onboarded").eq("id", current_user.id).execute()
         logger.info(f"Query for onboarded status response: {user_data_response}")
         onboarded_status = False
         if user_data_response.data:
@@ -481,19 +488,13 @@ async def debug_user_exists(current_user: dict = Depends(get_current_user)):
         return {"error": str(e)}
 
 @router.post("/logout")
-async def logout_user(current_user: dict = Depends(get_current_user)):
+async def logout_user():
     """
     Logout current user
     
-    Invalidates the current user's session
+    Note: Logout is primarily handled client-side by clearing the JWT token.
+    This endpoint exists for compatibility but doesn't perform server-side session invalidation
+    since Supabase handles JWT validation statefully.
     """
-    try:
-        supabase = get_supabase_client()
-        supabase.auth.sign_out()
-        return {"message": "Successfully logged out"}
-    except Exception as e:
-        logger.error(f"Logout error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to logout"
-        )
+    logger.info("Logout endpoint called")
+    return {"message": "Successfully logged out"}

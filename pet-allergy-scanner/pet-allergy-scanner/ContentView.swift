@@ -10,56 +10,49 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var petService = PetService.shared
-    @State private var hasCompletedOnboarding = false
-    @State private var isLoading = true
+    @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     
     var body: some View {
         Group {
-            if authService.isAuthenticated {
-                if hasCompletedOnboarding {
-                    MainTabView()
-                } else {
-                    OnboardingView()
+            switch authService.authState {
+            case .initializing, .loading:
+                // Show loading state while initializing or loading user data
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    Text("Loading...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
                 }
-            } else {
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                
+            case .authenticated(let user):
+                // User is authenticated with complete data
+                if user.onboarded || hasSkippedOnboarding {
+                    MainTabView()
+                        .onAppear {
+                            // Load pets when entering main view
+                            petService.loadPets()
+                        }
+                } else {
+                    OnboardingView(onSkip: {
+                        // Allow user to skip onboarding temporarily for this session
+                        hasSkippedOnboarding = true
+                    })
+                }
+                
+            case .unauthenticated:
+                // User is not authenticated
                 AuthenticationView()
             }
         }
         .environmentObject(authService)
         .environmentObject(petService)
-        .onAppear {
-            checkOnboardingStatus()
-        }
-        .onChange(of: authService.isAuthenticated) { _, isAuthenticated in
-            if isAuthenticated {
-                checkOnboardingStatus()
-            } else {
-                hasCompletedOnboarding = false
+        .onChange(of: authService.authState) { _, newState in
+            // Reset skip state when user logs out
+            if case .unauthenticated = newState {
+                hasSkippedOnboarding = false
             }
-        }
-        .onChange(of: authService.currentUser?.onboarded) { _, onboarded in
-            if let onboarded = onboarded {
-                hasCompletedOnboarding = onboarded
-                isLoading = false
-            }
-        }
-    }
-    
-    /// Check if user has completed onboarding
-    private func checkOnboardingStatus() {
-        guard authService.isAuthenticated else {
-            hasCompletedOnboarding = false
-            isLoading = false
-            return
-        }
-        
-        // Check user's onboarded status from the server
-        if let user = authService.currentUser {
-            hasCompletedOnboarding = user.onboarded
-            isLoading = false
-        } else {
-            // If user data is not loaded yet, wait for it
-            isLoading = true
         }
     }
 }

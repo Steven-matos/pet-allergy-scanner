@@ -23,8 +23,8 @@ struct ScanView: View {
     @State private var showingAddPet = false
     
     var body: some View {
-                NavigationStack {
-                    VStack(spacing: 20) {
+        NavigationStack {
+            VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 8) {
                     Text(LocalizationKeys.scanPetFood.localized)
@@ -39,6 +39,51 @@ struct ScanView: View {
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 20)
+                
+                // Show empty state if no pets
+                if petService.pets.isEmpty && !petService.isLoading {
+                    VStack(spacing: 24) {
+                        Spacer()
+                        
+                        // Empty State Icon
+                        Image(systemName: "pawprint.circle")
+                            .font(.system(size: 80))
+                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen.opacity(0.4))
+                        
+                        // Empty State Text
+                        VStack(spacing: 12) {
+                            Text("Add Your Pet First")
+                                .font(.title2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("To start scanning ingredient labels, you'll need to add your pet's profile first. This helps us provide personalized safety recommendations.")
+                                .font(.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 32)
+                        }
+                        
+                        // Add Pet Button
+                        Button(action: {
+                            showingAddPet = true
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Add Your First Pet")
+                            }
+                            .font(.headline)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnAccent)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .background(ModernDesignSystem.Colors.goldenYellow)
+                            .cornerRadius(25)
+                        }
+                        
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 
                 Spacer()
                 
@@ -198,6 +243,7 @@ struct ScanView: View {
                         }
                     }
                 }
+                }
             }
             .navigationBarHidden(true)
             .sheet(isPresented: $showingCamera) {
@@ -283,7 +329,7 @@ struct ScanView: View {
     private func handleCameraButtonTap() {
         // Check if user has pets
         if petService.pets.isEmpty {
-            showingPetSelection = true
+            showingAddPet = true
             return
         }
         

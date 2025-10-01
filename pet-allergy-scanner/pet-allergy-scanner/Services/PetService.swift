@@ -21,7 +21,16 @@ class PetService: ObservableObject {
     private init() {}
     
     /// Load all pets for the current user
+    /// - Note: Only loads pets if user is authenticated to avoid 403 errors during logout
     func loadPets() {
+        // Don't attempt to load pets if not authenticated
+        guard apiService.hasAuthToken else {
+            self.pets = []
+            self.isLoading = false
+            self.errorMessage = nil
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
@@ -30,6 +39,15 @@ class PetService: ObservableObject {
                 let pets = try await apiService.getPets()
                 self.pets = pets
                 self.isLoading = false
+            } catch let apiError as APIError {
+                self.isLoading = false
+                // Silently ignore auth errors (user might be logging out)
+                if case .authenticationError = apiError {
+                    self.pets = []
+                    self.errorMessage = nil
+                } else {
+                    self.errorMessage = apiError.localizedDescription
+                }
             } catch {
                 self.isLoading = false
                 self.errorMessage = error.localizedDescription
@@ -145,5 +163,12 @@ class PetService: ObservableObject {
     /// Clear error message
     func clearError() {
         errorMessage = nil
+    }
+    
+    /// Clear all pets (called during logout)
+    func clearPets() {
+        pets = []
+        errorMessage = nil
+        isLoading = false
     }
 }

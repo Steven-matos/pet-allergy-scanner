@@ -30,6 +30,55 @@ struct User: Codable, Identifiable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+    
+    /// Memberwise initializer for direct instantiation (e.g., mock data)
+    /// - Parameters:
+    ///   - id: Unique user identifier
+    ///   - email: User's email address
+    ///   - username: Optional username
+    ///   - firstName: Optional first name
+    ///   - lastName: Optional last name
+    ///   - role: User role (free or premium)
+    ///   - onboarded: Whether user has completed onboarding
+    ///   - createdAt: Account creation timestamp
+    ///   - updatedAt: Last update timestamp
+    init(
+        id: String,
+        email: String,
+        username: String? = nil,
+        firstName: String? = nil,
+        lastName: String? = nil,
+        role: UserRole,
+        onboarded: Bool = false,
+        createdAt: Date,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.email = email
+        self.username = username
+        self.firstName = firstName
+        self.lastName = lastName
+        self.role = role
+        self.onboarded = onboarded
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+    
+    /// Custom decoder initializer to handle potential missing fields from server
+    /// - Parameter decoder: Decoder instance
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        email = try container.decode(String.self, forKey: .email)
+        username = try container.decodeIfPresent(String.self, forKey: .username)
+        firstName = try container.decodeIfPresent(String.self, forKey: .firstName)
+        lastName = try container.decodeIfPresent(String.self, forKey: .lastName)
+        role = try container.decode(UserRole.self, forKey: .role)
+        onboarded = try container.decodeIfPresent(Bool.self, forKey: .onboarded) ?? false
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
 }
 
 /// User role enumeration

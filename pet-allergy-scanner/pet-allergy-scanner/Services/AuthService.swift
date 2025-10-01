@@ -8,28 +8,83 @@
 import Foundation
 import Combine
 
+/// Authentication state enum to prevent intermediate states and UI flashing
+enum AuthState: Equatable {
+    /// Initial state when determining authentication status
+    case initializing
+    /// Loading user data or performing authentication
+    case loading
+    /// User is authenticated with valid user data
+    case authenticated(User)
+    /// User is not authenticated
+    case unauthenticated
+    
+    /// Convenience property to check if authenticated
+    var isAuthenticated: Bool {
+        if case .authenticated = self {
+            return true
+        }
+        return false
+    }
+    
+    /// Get the current user if authenticated
+    var user: User? {
+        if case .authenticated(let user) = self {
+            return user
+        }
+        return nil
+    }
+    
+    /// Check if currently loading
+    var isLoading: Bool {
+        switch self {
+        case .initializing, .loading:
+            return true
+        default:
+            return false
+        }
+    }
+    
+    /// Custom equality implementation
+    static func == (lhs: AuthState, rhs: AuthState) -> Bool {
+        switch (lhs, rhs) {
+        case (.initializing, .initializing),
+             (.loading, .loading),
+             (.unauthenticated, .unauthenticated):
+            return true
+        case (.authenticated(let lhsUser), .authenticated(let rhsUser)):
+            return lhsUser.id == rhsUser.id && lhsUser.onboarded == rhsUser.onboarded
+        default:
+            return false
+        }
+    }
+}
+
 /// Authentication service for managing user authentication state using Swift Concurrency
 @MainActor
 class AuthService: ObservableObject {
     static let shared = AuthService()
     
-    @Published var isAuthenticated = false
-    @Published var currentUser: User?
-    @Published var isLoading = false
+    @Published var authState: AuthState = .initializing
     @Published var errorMessage: String?
     
     private let apiService = APIService.shared
     
+    /// Convenience computed properties for backward compatibility
+    var isAuthenticated: Bool { authState.isAuthenticated }
+    var currentUser: User? { authState.user }
+    var isLoading: Bool { authState.isLoading }
+    
     private init() {
-        // Check for existing authentication on app launch
-        checkAuthenticationStatus()
-        
         // Attempt to restore existing auth token and user session
         // Token is persisted securely using Keychain inside APIService
         if apiService.hasAuthToken {
             Task {
                 await restoreUserSession()
             }
+        } else {
+            // No token found, user is unauthenticated
+            authState = .unauthenticated
         }
     }
 
@@ -41,25 +96,20 @@ class AuthService: ObservableObject {
     
     /// Restore user session from stored token
     private func restoreUserSession() async {
-        isAuthenticated = true
-        isLoading = true
+        authState = .loading
         
         do {
-            let user = try await apiService.getCurrentUser()
-            currentUser = user
-            isLoading = false
+            var user = try await apiService.getCurrentUser()
+            
+            // Auto-complete onboarding if user has pets but onboarded is false
+            user = await checkAndCompleteOnboardingIfNeeded(user: user)
+            
+            // Only transition to authenticated once we have complete user data
+            authState = .authenticated(user)
         } catch {
-            isLoading = false
+            // Failed to restore session, logout
             logout()
         }
-    }
-    
-    /// Check if user is currently authenticated
-    private func checkAuthenticationStatus() {
-        // In a real app, you would check for stored tokens here
-        // For now, we'll start with no authentication
-        isAuthenticated = false
-        currentUser = nil
     }
     
     /// Register a new user
@@ -70,7 +120,7 @@ class AuthService: ObservableObject {
         firstName: String? = nil,
         lastName: String? = nil
     ) async {
-        isLoading = true
+        authState = .loading
         errorMessage = nil
         
         let userCreate = UserCreate(
@@ -85,23 +135,23 @@ class AuthService: ObservableObject {
         
         do {
             let registrationResponse = try await apiService.register(user: userCreate)
-            handleRegistrationResponse(registrationResponse)
+            await handleRegistrationResponse(registrationResponse)
         } catch {
-            isLoading = false
+            authState = .unauthenticated
             errorMessage = error.localizedDescription
         }
     }
     
     /// Login user with email and password
     func login(email: String, password: String) async {
-        isLoading = true
+        authState = .loading
         errorMessage = nil
         
         do {
             let authResponse = try await apiService.login(email: email, password: password)
-            handleAuthResponse(authResponse)
+            await handleAuthResponse(authResponse)
         } catch let apiError as APIError {
-            isLoading = false
+            authState = .unauthenticated
             // Handle email verification errors as informational messages, not errors
             if case .emailNotVerified(let message) = apiError {
                 errorMessage = message
@@ -109,7 +159,7 @@ class AuthService: ObservableObject {
                 errorMessage = apiError.localizedDescription
             }
         } catch {
-            isLoading = false
+            authState = .unauthenticated
             errorMessage = error.localizedDescription
         }
     }
@@ -120,18 +170,22 @@ class AuthService: ObservableObject {
     }
     
     /// Logout current user
+    /// Clears authentication state and all user-related data
     func logout() {
         apiService.clearAuthToken()
-        isAuthenticated = false
-        currentUser = nil
+        authState = .unauthenticated
         errorMessage = nil
+        
+        // Clear all user data to prevent 403 errors on logout
+        PetService.shared.clearPets()
+        ScanService.shared.clearScans()
     }
     
     /// Update current user profile
     func updateProfile(username: String?, firstName: String?, lastName: String?) async {
-        guard isAuthenticated else { return }
+        guard case .authenticated(let currentUser) = authState else { return }
         
-        isLoading = true
+        authState = .loading
         errorMessage = nil
         
         let userUpdate = UserUpdate(
@@ -144,45 +198,74 @@ class AuthService: ObservableObject {
         
         do {
             let user = try await apiService.updateUser(userUpdate)
-            currentUser = user
-            isLoading = false
+            authState = .authenticated(user)
         } catch {
-            isLoading = false
+            // Restore previous state on error
+            authState = .authenticated(currentUser)
             errorMessage = error.localizedDescription
         }
     }
     
     /// Handle registration response
-    private func handleRegistrationResponse(_ registrationResponse: RegistrationResponse) {
-        isLoading = false
-        
+    private func handleRegistrationResponse(_ registrationResponse: RegistrationResponse) async {
         if let emailVerificationRequired = registrationResponse.emailVerificationRequired, emailVerificationRequired {
             // Email verification required - show message instead of error
+            authState = .unauthenticated
             errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
-            isAuthenticated = false
-            currentUser = nil
-        } else if let accessToken = registrationResponse.accessToken, let user = registrationResponse.user {
-            // Email already verified - proceed with login
+        } else if let accessToken = registrationResponse.accessToken {
+            // Email already verified - proceed with login flow
             apiService.setAuthToken(accessToken)
-            isAuthenticated = true
-            currentUser = user
             errorMessage = nil
+            
+            // Fetch fresh user data from /me endpoint to get accurate onboarded status
+            do {
+                var freshUser = try await apiService.getCurrentUser()
+                
+                // Only run auto-onboarding check if user is not already onboarded
+                if !freshUser.onboarded {
+                    freshUser = await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+                }
+                
+                // Only transition to authenticated once we have complete user data
+                authState = .authenticated(freshUser)
+            } catch {
+                // Fallback to registration response user if getCurrentUser fails
+                if let user = registrationResponse.user {
+                    authState = .authenticated(user)
+                } else {
+                    authState = .unauthenticated
+                    errorMessage = "Registration failed. Please try again."
+                }
+            }
         } else {
             // Fallback error
+            authState = .unauthenticated
             errorMessage = "Registration failed. Please try again."
-            isAuthenticated = false
-            currentUser = nil
         }
     }
     
     /// Handle authentication response
-    private func handleAuthResponse(_ authResponse: AuthResponse) {
+    private func handleAuthResponse(_ authResponse: AuthResponse) async {
         // Store the access token in the API service for future requests
         apiService.setAuthToken(authResponse.accessToken)
-        isAuthenticated = true
-        currentUser = authResponse.user
-        isLoading = false
         errorMessage = nil
+        
+        // Fetch fresh user data from /me endpoint to get accurate onboarded status
+        // This prevents the flicker of showing onboarding screen for users who already completed it
+        do {
+            var freshUser = try await apiService.getCurrentUser()
+            
+            // Only run auto-onboarding check if user is not already onboarded
+            if !freshUser.onboarded {
+                freshUser = await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+            }
+            
+            // Only transition to authenticated once we have complete user data
+            authState = .authenticated(freshUser)
+        } catch {
+            // Fallback to auth response user if getCurrentUser fails
+            authState = .authenticated(authResponse.user)
+        }
     }
     
     /// Handle email confirmation from URL redirect
@@ -191,22 +274,23 @@ class AuthService: ObservableObject {
         
         // Store the tokens
         apiService.setAuthToken(accessToken)
-        
-        // Update authentication state
-        isAuthenticated = true
-        isLoading = true
+        authState = .loading
         errorMessage = nil
         
         // Fetch user information
         Task {
             do {
-                let user = try await apiService.getCurrentUser()
-                currentUser = user
-                isLoading = false
+                var user = try await apiService.getCurrentUser()
+                
+                // Only run auto-onboarding check if user is not already onboarded
+                if !user.onboarded {
+                    user = await checkAndCompleteOnboardingIfNeeded(user: user)
+                }
+                
+                authState = .authenticated(user)
                 print("AuthService: Email confirmation successful")
             } catch {
                 print("AuthService: Email confirmation failed - \(error)")
-                isLoading = false
                 logout()
             }
         }
@@ -218,21 +302,15 @@ class AuthService: ObservableObject {
         
         // Store the token for password reset flow
         apiService.setAuthToken(accessToken)
-        
-        // You might want to show a password reset form or navigate to a specific screen
-        // For now, we'll just set the user as authenticated
-        isAuthenticated = true
-        isLoading = true
+        authState = .loading
         
         Task {
             do {
                 let user = try await apiService.getCurrentUser()
-                currentUser = user
-                isLoading = false
+                authState = .authenticated(user)
                 print("AuthService: Password reset token validated")
             } catch {
                 print("AuthService: Password reset validation failed - \(error)")
-                isLoading = false
                 logout()
             }
         }
@@ -243,20 +321,23 @@ class AuthService: ObservableObject {
         print("AuthService: Handling auth callback")
         
         apiService.setAuthToken(accessToken)
-        isAuthenticated = true
-        isLoading = true
+        authState = .loading
         errorMessage = nil
         
         // Fetch user information
         Task {
             do {
-                let user = try await apiService.getCurrentUser()
-                currentUser = user
-                isLoading = false
+                var user = try await apiService.getCurrentUser()
+                
+                // Only run auto-onboarding check if user is not already onboarded
+                if !user.onboarded {
+                    user = await checkAndCompleteOnboardingIfNeeded(user: user)
+                }
+                
+                authState = .authenticated(user)
                 print("AuthService: Auth callback successful")
             } catch {
                 print("AuthService: Auth callback failed - \(error)")
-                isLoading = false
                 logout()
             }
         }
@@ -264,14 +345,51 @@ class AuthService: ObservableObject {
     
     /// Refresh current user data from server
     func refreshCurrentUser() async {
-        guard isAuthenticated else { return }
+        guard case .authenticated = authState else { return }
         
         do {
             let user = try await apiService.getCurrentUser()
-            currentUser = user
+            authState = .authenticated(user)
         } catch {
             print("Failed to refresh user data: \(error)")
         }
+    }
+    
+    /// Check if user has pets and auto-complete onboarding if needed
+    /// Returns updated user with onboarded=true if pets exist, or original user otherwise
+    /// This ensures users who already have pets don't see onboarding again
+    private func checkAndCompleteOnboardingIfNeeded(user: User) async -> User {
+        guard !user.onboarded else {
+            return user // User already completed onboarding
+        }
+        
+        do {
+            // Check if user has any pets
+            let pets = try await apiService.getPets()
+            
+            if !pets.isEmpty {
+                // User has pets but onboarded is false - auto-complete onboarding
+                print("AuthService: User has \(pets.count) pet(s) but onboarded=false. Auto-completing onboarding.")
+                
+                let userUpdate = UserUpdate(
+                    username: nil,
+                    firstName: nil,
+                    lastName: nil,
+                    role: nil,
+                    onboarded: true
+                )
+                
+                // Update user to mark onboarding as complete
+                let updatedUser = try await apiService.updateUser(userUpdate)
+                print("AuthService: Onboarding auto-completed successfully")
+                return updatedUser
+            }
+        } catch {
+            // Silently fail - don't block login if this check fails
+            print("AuthService: Failed to check pets for auto-onboarding: \(error)")
+        }
+        
+        return user
     }
     
     /// Clear error message
