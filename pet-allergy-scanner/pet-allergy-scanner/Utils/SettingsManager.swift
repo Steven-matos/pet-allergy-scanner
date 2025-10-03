@@ -46,10 +46,14 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    /// Controls push notifications
-    @Published var enableNotifications: Bool {
-        didSet {
-            UserDefaults.standard.set(enableNotifications, forKey: "enableNotifications")
+    /// Controls push notifications (delegated to NotificationSettingsManager)
+    /// This property is kept for backward compatibility but delegates to NotificationSettingsManager
+    var enableNotifications: Bool {
+        get {
+            return NotificationSettingsManager.shared.enableNotifications
+        }
+        set {
+            NotificationSettingsManager.shared.enableNotifications = newValue
         }
     }
     
@@ -89,7 +93,7 @@ class SettingsManager: ObservableObject {
         self.enableAutoAnalysis = UserDefaults.standard.object(forKey: "enableAutoAnalysis") as? Bool ?? true
         self.enableDetailedReports = UserDefaults.standard.object(forKey: "enableDetailedReports") as? Bool ?? true
         self.cameraResolution = UserDefaults.standard.string(forKey: "cameraResolution") ?? "high"
-        self.enableNotifications = UserDefaults.standard.object(forKey: "enableNotifications") as? Bool ?? true
+        // enableNotifications is now handled by NotificationSettingsManager
         self.enableHapticFeedback = UserDefaults.standard.object(forKey: "enableHapticFeedback") as? Bool ?? true
         self.enableAnalytics = UserDefaults.standard.object(forKey: "enableAnalytics") as? Bool ?? true
         self.preferredLanguage = UserDefaults.standard.string(forKey: "preferredLanguage") ?? "en"
@@ -105,11 +109,14 @@ class SettingsManager: ObservableObject {
         enableAutoAnalysis = true
         enableDetailedReports = true
         cameraResolution = "high"
-        enableNotifications = true
+        // enableNotifications is now handled by NotificationSettingsManager
         enableHapticFeedback = true
         enableAnalytics = true
         preferredLanguage = "en"
         defaultPetId = nil
+        
+        // Reset notification settings through NotificationSettingsManager
+        NotificationSettingsManager.shared.resetToDefaults()
         
         // Force synchronization to ensure all changes are persisted
         UserDefaults.standard.synchronize()
@@ -149,8 +156,14 @@ class SettingsManager: ObservableObject {
             "enableHapticFeedback": enableHapticFeedback,
             "enableAnalytics": enableAnalytics,
             "preferredLanguage": preferredLanguage,
-            "defaultPetId": defaultPetId ?? "nil"
+            "defaultPetId": defaultPetId ?? "nil",
+            "notificationSettings": NotificationSettingsManager.shared.getSettingsSummary()
         ]
+    }
+    
+    /// Get notification settings summary for debugging
+    func getNotificationSettingsSummary() -> [String: Any] {
+        return NotificationSettingsManager.shared.getSettingsSummary()
     }
     
     /// Get camera resolution as AVFoundation preset

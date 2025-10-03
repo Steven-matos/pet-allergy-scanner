@@ -4,5 +4,6 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Change to "production" when deploying to App Store -->
 </dict>
 </plist>

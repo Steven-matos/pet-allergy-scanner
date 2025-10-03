@@ -9,10 +9,12 @@ import SwiftUI
 
 struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var notificationManager: NotificationManager
     @StateObject private var petService = PetService.shared
+    @State private var selectedTab = 0
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             // Home/Scan Tab
             ScanView()
                 .environmentObject(authService)
@@ -56,6 +58,11 @@ struct MainTabView: View {
         .environmentObject(petService)
         .onAppear {
             petService.loadPets()
+        }
+        .onChange(of: notificationManager.navigateToScan) { _, shouldNavigate in
+            if shouldNavigate {
+                selectedTab = 0 // Navigate to scan tab
+            }
         }
         .accentColor(ModernDesignSystem.Colors.tabBarActive)
         .background(ModernDesignSystem.Colors.tabBarBackground)

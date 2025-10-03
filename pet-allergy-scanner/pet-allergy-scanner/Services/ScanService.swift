@@ -103,6 +103,9 @@ class ScanService: ObservableObject {
                 let scan = try await apiService.createScan(scanCreate)
                 recentScans.insert(scan, at: 0)
                 isLoading = false
+                
+                // Notify notification manager of scan completion
+                NotificationManager.shared.handleScanCompleted()
             } catch {
                 isLoading = false
                 errorMessage = error.localizedDescription
@@ -131,6 +134,10 @@ class ScanService: ObservableObject {
                 }
                 
                 isAnalyzing = false
+                
+                // Notify notification manager of scan completion
+                NotificationManager.shared.handleScanCompleted()
+                
                 completion(analyzedScan)
             } catch {
                 isAnalyzing = false

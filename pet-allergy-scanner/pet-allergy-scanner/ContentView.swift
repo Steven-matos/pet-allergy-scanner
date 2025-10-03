@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var authService = AuthService.shared
     @StateObject private var petService = PetService.shared
+    @StateObject private var notificationManager = NotificationManager.shared
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     
     var body: some View {
@@ -33,6 +34,12 @@ struct ContentView: View {
                         .onAppear {
                             // Load pets when entering main view
                             petService.loadPets()
+                            // Initialize notifications
+                            notificationManager.initializeNotifications()
+                        }
+                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                            // Handle app becoming active
+                            notificationManager.handleAppBecameActive()
                         }
                 } else {
                     OnboardingView(onSkip: {
@@ -48,10 +55,22 @@ struct ContentView: View {
         }
         .environmentObject(authService)
         .environmentObject(petService)
+        .environmentObject(notificationManager)
         .onChange(of: authService.authState) { _, newState in
             // Reset skip state when user logs out
             if case .unauthenticated = newState {
                 hasSkippedOnboarding = false
+            }
+        }
+        .sheet(isPresented: $notificationManager.showBirthdayCelebration) {
+            if let pet = notificationManager.birthdayPet {
+                BirthdayCelebrationView(pet: pet, isPresented: $notificationManager.showBirthdayCelebration)
+            }
+        }
+        .onChange(of: notificationManager.navigateToScan) { _, shouldNavigate in
+            if shouldNavigate {
+                // Navigate to scan view - this would be handled by the tab view
+                // The actual navigation logic would be in MainTabView
             }
         }
     }

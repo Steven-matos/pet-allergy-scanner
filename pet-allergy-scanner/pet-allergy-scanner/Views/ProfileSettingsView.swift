@@ -31,6 +31,7 @@ struct ProfileSettingsView: View {
     @StateObject private var mfaService = MFAService.shared
     @StateObject private var gdprService = GDPRService.shared
     @StateObject private var analyticsManager = AnalyticsManager.shared
+    @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
     
     var body: some View {
         NavigationStack {
@@ -48,6 +49,9 @@ struct ProfileSettingsView: View {
                     
                     // MARK: - Scan Preferences Section
                     scanPreferencesSection
+                    
+                    // MARK: - Notifications Section
+                    notificationsSection
                     
                     // MARK: - Privacy & Security Section
                     privacySecuritySection
@@ -133,6 +137,42 @@ struct ProfileSettingsView: View {
         }
         .trackScreen("ProfileSettings")
     }
+    
+    // MARK: - Debug Section (only in debug builds)
+    #if DEBUG
+    private var debugSection: some View {
+        Section(header: Text("Debug")) {
+            Button("Test Birthday Celebration") {
+                // Test birthday celebration
+                if let pet = petService.pets.first {
+                    NotificationCenter.default.post(
+                        name: .showBirthdayCelebration,
+                        object: nil,
+                        userInfo: ["pet_id": pet.id]
+                    )
+                }
+            }
+            
+            Button("Test Engagement Reminder") {
+                NotificationCenter.default.post(
+                    name: .navigateToScan,
+                    object: nil
+                )
+            }
+            
+            Button("Clear All Notifications") {
+                notificationSettingsManager.cancelAllNotifications()
+            }
+            
+            HStack {
+                Text("Notification Status")
+                Spacer()
+                Text(notificationSettingsManager.isAuthorized ? "Authorized" : "Not Authorized")
+                    .foregroundColor(notificationSettingsManager.isAuthorized ? .green : .orange)
+            }
+        }
+    }
+    #endif
     
     // MARK: - Profile Header Section
     private var profileHeaderSection: some View {
@@ -305,6 +345,28 @@ struct ProfileSettingsView: View {
         }
     }
     
+    // MARK: - Notifications Section
+    private var notificationsSection: some View {
+        Section(header: Text("Notifications")) {
+            // Master Notification Toggle
+            Toggle("Push Notifications", isOn: $notificationSettingsManager.enableNotifications)
+                .tint(ModernDesignSystem.Colors.primary)
+                .onChange(of: notificationSettingsManager.enableNotifications) { _, newValue in
+                    if newValue {
+                        Task {
+                            await notificationSettingsManager.requestPermission()
+                        }
+                    }
+                }
+            
+            // Engagement Notifications - only show when notifications are enabled
+            if notificationSettingsManager.enableNotifications {
+                Toggle("Engagement Reminders", isOn: $notificationSettingsManager.engagementNotificationsEnabled)
+                    .tint(ModernDesignSystem.Colors.primary)
+            }
+        }
+    }
+    
     // MARK: - Privacy & Security Section
     private var privacySecuritySection: some View {
         Section(header: Text("Privacy & Security")) {
@@ -338,24 +400,12 @@ struct ProfileSettingsView: View {
                 }
             }
             
-            // Notification Settings
-            NavigationLink(destination: NotificationSettingsView()) {
-                HStack {
-                    Image(systemName: "bell.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Notification Settings")
-                }
-            }
         }
     }
     
     // MARK: - App Settings Section
     private var appSettingsSection: some View {
         Section(header: Text("App Settings")) {
-            // Notifications
-            Toggle("Push Notifications", isOn: $settingsManager.enableNotifications)
-                .tint(ModernDesignSystem.Colors.primary)
-            
             // Haptic Feedback
             Toggle("Haptic Feedback", isOn: $settingsManager.enableHapticFeedback)
                 .tint(ModernDesignSystem.Colors.primary)
@@ -607,36 +657,6 @@ struct CameraPermissionsView: View {
     }
 }
 
-/// View for notification settings management
-struct NotificationSettingsView: View {
-    var body: some View {
-        VStack(spacing: ModernDesignSystem.Spacing.lg) {
-            Image(systemName: "bell.fill")
-                .font(.system(size: 60))
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-            
-            Text("Notification Settings")
-                .font(ModernDesignSystem.Typography.title2)
-            
-            Text("Manage your notification preferences to stay updated about scan results and app updates.")
-                .font(ModernDesignSystem.Typography.body)
-                .multilineTextAlignment(.center)
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            
-            Button("Open Settings") {
-                if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(settingsURL)
-                }
-            }
-            .modernButton(style: .primary)
-            
-            Spacer()
-        }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .navigationTitle("Notifications")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
 
 /// View for help center
 struct HelpCenterView: View {
