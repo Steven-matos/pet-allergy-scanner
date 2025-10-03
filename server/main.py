@@ -26,12 +26,10 @@ from app.middleware.request_limits import RequestSizeMiddleware, APIVersionMiddl
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO if settings.environment == "production" else logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+# Configure centralized logging
+from app.utils.logging_config import setup_logging, get_logger
+setup_logging()
+logger = get_logger(__name__)
 
 # Security scheme
 security = HTTPBearer()

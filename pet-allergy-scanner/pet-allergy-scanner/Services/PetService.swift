@@ -98,6 +98,21 @@ class PetService: ObservableObject {
         
         Task {
             do {
+                // Find the pet to get its image URL
+                if let pet = pets.first(where: { $0.id == id }),
+                   let imageUrl = pet.imageUrl,
+                   imageUrl.contains(Configuration.supabaseURL) {
+                    // Delete the pet's image from Supabase Storage
+                    do {
+                        try await StorageService.shared.deletePetImage(path: imageUrl)
+                        print("🗑️ Pet image deleted from Supabase: \(imageUrl)")
+                    } catch {
+                        print("⚠️ Failed to delete pet image: \(error)")
+                        // Continue with pet deletion even if image deletion fails
+                    }
+                }
+                
+                // Delete the pet from the database
                 try await apiService.deletePet(id: id)
                 self.pets.removeAll { $0.id == id }
                 self.isLoading = false

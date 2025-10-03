@@ -106,6 +106,10 @@ class GDPRService:
             # Log deletion request
             self._log_deletion_request(user_id)
             
+            # Get user and pet data before deletion for image cleanup
+            user_data = self.supabase.table("users").select("image_url").eq("id", user_id).execute()
+            pets_data = self.supabase.table("pets").select("image_url").eq("user_id", user_id).execute()
+            
             # Delete user data in order (respecting foreign key constraints)
             # 1. Delete scans
             self.supabase.table("scans").delete().eq("user_id", user_id).execute()
@@ -127,6 +131,9 @@ class GDPRService:
             
             # 7. Delete from Supabase Auth
             self.supabase.auth.admin.delete_user(user_id)
+            
+            # 8. Delete user and pet images from storage
+            self._delete_user_images_from_storage(user_data.data, pets_data.data)
             
             logger.info(f"User data deleted for user: {user_id}")
             return True
@@ -312,6 +319,44 @@ class GDPRService:
             
         except Exception as e:
             logger.error(f"Failed to log deletion request for {user_id}: {e}")
+    
+    def _delete_user_images_from_storage(self, user_data: list, pets_data: list):
+        """
+        Delete user and pet images from Supabase Storage
+        
+        Args:
+            user_data: List of user data with image URLs
+            pets_data: List of pet data with image URLs
+        """
+        try:
+            # Delete user profile images
+            for user in user_data:
+                if user.get("image_url"):
+                    image_url = user["image_url"]
+                    if "storage/v1/object/public/user-images/" in image_url:
+                        # Extract the storage path from the full URL
+                        storage_path = image_url.split("/storage/v1/object/public/user-images/")[-1]
+                        try:
+                            self.supabase.storage.from_("user-images").remove([storage_path])
+                            logger.info(f"Deleted user image: {storage_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete user image {storage_path}: {e}")
+            
+            # Delete pet images
+            for pet in pets_data:
+                if pet.get("image_url"):
+                    image_url = pet["image_url"]
+                    if "storage/v1/object/public/pet-images/" in image_url:
+                        # Extract the storage path from the full URL
+                        storage_path = image_url.split("/storage/v1/object/public/pet-images/")[-1]
+                        try:
+                            self.supabase.storage.from_("pet-images").remove([storage_path])
+                            logger.info(f"Deleted pet image: {storage_path}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete pet image {storage_path}: {e}")
+                            
+        except Exception as e:
+            logger.error(f"Failed to delete images from storage: {e}")
     
     def cleanup_expired_data(self):
         """

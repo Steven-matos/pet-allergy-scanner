@@ -170,24 +170,47 @@ struct EditProfileView: View {
     private func saveProfile() {
         isSaving = true
         
-        // Save new image if changed
-        let newImageUrl: String?
-        if let selectedImage = selectedImage {
-            // Check if image changed by comparing with existing
-            let existingImage = authService.currentUser?.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
-            if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
-                newImageUrl = saveImageLocally(selectedImage)
+        Task {
+            var newImageUrl: String? = nil
+            
+            // Handle image upload if changed
+            if let selectedImage = selectedImage {
+                // Check if image changed by comparing with existing
+                let existingImage = authService.currentUser?.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
+                if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
+                    do {
+                        // Replace old image with new one (deletes old, uploads new)
+                        let storageService = StorageService.shared
+                        newImageUrl = try await storageService.replaceUserImage(
+                            oldImageUrl: authService.currentUser?.imageUrl,
+                            newImage: selectedImage,
+                            userId: authService.currentUser?.id ?? ""
+                        )
+                        print("📸 User image replaced in Supabase: \(newImageUrl ?? "nil")")
+                    } catch {
+                        print("Failed to replace user image: \(error)")
+                        // Don't fall back to local storage - fail properly
+                        authService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                        return
+                    }
+                } else {
+                    newImageUrl = nil // No change
+                }
+            } else if authService.currentUser?.imageUrl != nil {
+                // Image was removed - delete old image if it's in Supabase
+                if let oldUrl = authService.currentUser?.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
+                    do {
+                        try await StorageService.shared.deleteUserImage(path: oldUrl)
+                        print("🗑️ User image removed from Supabase: \(oldUrl)")
+                    } catch {
+                        print("⚠️ Failed to delete old user image: \(error)")
+                    }
+                }
+                newImageUrl = ""
             } else {
                 newImageUrl = nil // No change
             }
-        } else if authService.currentUser?.imageUrl != nil {
-            // Image was removed
-            newImageUrl = ""
-        } else {
-            newImageUrl = nil // No change
-        }
-        
-        Task {
+            
             await authService.updateProfile(
                 username: username.isEmpty ? nil : username,
                 firstName: firstName.isEmpty ? nil : firstName,
@@ -206,56 +229,6 @@ struct EditProfileView: View {
         }
     }
     
-    /// Save image locally with optimization and return file URL
-    /// - Parameter image: The UIImage to save
-    /// - Returns: Local file URL string or nil
-    private func saveImageLocally(_ image: UIImage?) -> String? {
-        guard let image = image else { return nil }
-        
-        // Optimize image before saving
-        let optimizedResult: OptimizedImageResult
-        do {
-            optimizedResult = try ImageOptimizer.optimizeForUpload(image: image)
-            print("📸 Profile image optimized: \(optimizedResult.summary)")
-        } catch {
-            print("⚠️ Image optimization failed: \(error), using default compression")
-            // Fallback to simple compression if optimization fails
-            guard let imageData = image.jpegData(compressionQuality: 0.7) else {
-                return nil
-            }
-            return saveImageData(imageData)
-        }
-        
-        return saveImageData(optimizedResult.data)
-    }
-    
-    /// Save image data to local file system
-    /// - Parameter data: The image data to save
-    /// - Returns: Local file path string or nil
-    private func saveImageData(_ data: Data) -> String? {
-        // Create a unique filename
-        let filename = "\(UUID().uuidString).jpg"
-        
-        // Get documents directory
-        guard let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        
-        // Create profile images directory if needed
-        let profileImagesDirectory = documentsDirectory.appendingPathComponent("ProfileImages", isDirectory: true)
-        try? FileManager.default.createDirectory(at: profileImagesDirectory, withIntermediateDirectories: true)
-        
-        // Create full file URL
-        let fileURL = profileImagesDirectory.appendingPathComponent(filename)
-        
-        do {
-            try data.write(to: fileURL)
-            return fileURL.path
-        } catch {
-            print("Failed to save image: \(error)")
-            return nil
-        }
-    }
     
     /// Compare two images for equality
     /// - Parameters:

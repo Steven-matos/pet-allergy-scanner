@@ -102,21 +102,10 @@ struct PetCardView: View {
             // Header with Pet Name and Actions
             HStack(spacing: 12) {
                 // Pet Photo or Icon
-                if let imageUrl = pet.imageUrl, let image = loadLocalImage(from: imageUrl) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 56, height: 56)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 2))
-                } else {
-                    Image(systemName: pet.species.icon)
-                        .font(.system(size: 28))
-                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                        .frame(width: 56, height: 56)
-                        .background(ModernDesignSystem.Colors.deepForestGreen.opacity(0.1))
-                        .cornerRadius(28)
-                }
+                RemoteImageView(petImageUrl: pet.imageUrl, species: pet.species)
+                    .frame(width: 56, height: 56)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 2))
                 
                 // Pet Name and Species
                 VStack(alignment: .leading, spacing: 4) {
@@ -288,19 +277,6 @@ struct PetCardView: View {
         .accessibilityLabel("Pet card for \(pet.name)")
     }
     
-    /// Load image from local file path
-    /// - Parameter path: The local file path
-    /// - Returns: UIImage if successfully loaded
-    private func loadLocalImage(from path: String) -> UIImage? {
-        // Check if path is a URL string or file path
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            // Remote URL - would need async loading (not implemented here)
-            return nil
-        } else {
-            // Local file path
-            return UIImage(contentsOfFile: path)
-        }
-    }
 }
 
 /// Reusable info pill component for displaying pet details

@@ -21,5 +21,18 @@
 	<string>eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94anl3cGVhcnJ1eHRueXNveXVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg5MzYzMDIsImV4cCI6MjA3NDUxMjMwMn0.d_DGWAgVyel0snbJ1QgHgcJSuZF2WXCSE9CqbqQoHkg</string>
 	<key>SUPABASE_URL</key>
 	<string>https://oxjywpearruxtnysoyuf.supabase.co</string>
+	<key>SUPABASE_PET_BUCKET</key>
+	<string>pet-images</string>
+	<key>SUPABASE_USER_BUCKET</key>
+	<string>user-images</string>
+	<key>MAX_UPLOAD_SIZE</key>
+	<integer>5242880</integer>
+	<key>ALLOWED_IMAGE_TYPES</key>
+	<array>
+		<string>image/jpeg</string>
+		<string>image/jpg</string>
+		<string>image/png</string>
+		<string>image/webp</string>
+	</array>
 </dict>
 </plist>

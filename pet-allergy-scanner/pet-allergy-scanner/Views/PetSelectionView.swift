@@ -55,21 +55,10 @@ struct PetSelectionRowView: View {
         Button(action: onTap) {
             HStack(spacing: 16) {
                 // Pet Photo or Species Icon
-                if let imageUrl = pet.imageUrl, let image = loadLocalImage(from: imageUrl) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 40, height: 40)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 1.5))
-                } else {
-                    Image(systemName: pet.species.icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                        .frame(width: 40, height: 40)
-                        .background(ModernDesignSystem.Colors.deepForestGreen.opacity(0.1))
-                        .cornerRadius(20)
-                }
+                RemoteImageView(petImageUrl: pet.imageUrl, species: pet.species)
+                    .frame(width: 40, height: 40)
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 1.5))
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(pet.name)
@@ -98,19 +87,6 @@ struct PetSelectionRowView: View {
         .buttonStyle(PlainButtonStyle())
     }
     
-    /// Load image from local file path
-    /// - Parameter path: The local file path
-    /// - Returns: UIImage if successfully loaded
-    private func loadLocalImage(from path: String) -> UIImage? {
-        // Check if path is a URL string or file path
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            // Remote URL - would need async loading (not implemented here)
-            return nil
-        } else {
-            // Local file path
-            return UIImage(contentsOfFile: path)
-        }
-    }
 }
 
 #Preview {

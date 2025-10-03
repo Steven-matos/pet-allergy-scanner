@@ -293,27 +293,53 @@ struct AddPetView: View {
     }
     
     private func savePet() {
-        // Save image locally and get URL
-        let imageUrl = saveImageLocally(selectedImage)
-        
-        let petCreate = PetCreate(
-            name: name,
-            species: species,
-            breed: breed.isEmpty ? nil : breed,
-            birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightKg,
-            imageUrl: imageUrl,
-            knownSensitivities: knownSensitivities,
-            vetName: vetName.isEmpty ? nil : vetName,
-            vetPhone: vetPhone.isEmpty ? nil : vetPhone
-        )
-        
-        petService.createPet(petCreate)
-        
-        // Dismiss after successful creation
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            if petService.errorMessage == nil {
-                dismiss()
+        Task {
+            do {
+                var imageUrl: String? = nil
+                
+                // Upload image to Supabase Storage if selected
+                if let selectedImage = selectedImage {
+                    // Get current user ID for folder organization
+                    guard let userId = AuthService.shared.currentUser?.id else {
+                        petService.errorMessage = "User not authenticated"
+                        return
+                    }
+                    
+                    // Generate a temporary pet ID for folder organization
+                    let tempPetId = UUID().uuidString
+                    
+                    // Upload image to Supabase Storage
+                    imageUrl = try await StorageService.shared.uploadPetImage(
+                        image: selectedImage,
+                        userId: userId,
+                        petId: tempPetId
+                    )
+                    
+                    print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
+                }
+                
+                let petCreate = PetCreate(
+                    name: name,
+                    species: species,
+                    breed: breed.isEmpty ? nil : breed,
+                    birthday: createBirthday(year: birthYear, month: birthMonth),
+                    weightKg: weightKg,
+                    imageUrl: imageUrl,
+                    knownSensitivities: knownSensitivities,
+                    vetName: vetName.isEmpty ? nil : vetName,
+                    vetPhone: vetPhone.isEmpty ? nil : vetPhone
+                )
+                
+                petService.createPet(petCreate)
+                
+                // Dismiss after successful creation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    if petService.errorMessage == nil {
+                        dismiss()
+                    }
+                }
+            } catch {
+                petService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
             }
         }
     }

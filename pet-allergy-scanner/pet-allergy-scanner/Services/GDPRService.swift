@@ -83,7 +83,7 @@ class GDPRService: ObservableObject {
         }
     }
     
-    /// Delete user data
+    /// Delete user data including all images from storage
     func deleteUserData() async -> Bool {
         guard apiService.hasAuthToken else {
             errorMessage = "Authentication required"
@@ -94,7 +94,41 @@ class GDPRService: ObservableObject {
         errorMessage = nil
         
         do {
+            // Get current user data to access image URLs before deletion
+            if let currentUser = AuthService.shared.currentUser {
+                // Delete user profile image if it exists
+                if let imageUrl = currentUser.imageUrl, 
+                   imageUrl.contains(Configuration.supabaseURL) {
+                    do {
+                        try await StorageService.shared.deleteUserImage(path: imageUrl)
+                        print("🗑️ User profile image deleted from Supabase: \(imageUrl)")
+                    } catch {
+                        print("⚠️ Failed to delete user profile image: \(error)")
+                        // Continue with account deletion even if image deletion fails
+                    }
+                }
+                
+                // Delete all pet images for this user
+                for pet in PetService.shared.pets {
+                    if let imageUrl = pet.imageUrl,
+                       imageUrl.contains(Configuration.supabaseURL) {
+                        do {
+                            try await StorageService.shared.deletePetImage(path: imageUrl)
+                            print("🗑️ Pet image deleted from Supabase: \(imageUrl)")
+                        } catch {
+                            print("⚠️ Failed to delete pet image: \(error)")
+                            // Continue with account deletion even if image deletion fails
+                        }
+                    }
+                }
+            }
+            
+            // Delete user data from backend (this will also delete images from backend)
             try await apiService.deleteUserData()
+            
+            // Clear local auth state
+            AuthService.shared.logout()
+            
             isLoading = false
             return true
         } catch {

@@ -25,19 +25,10 @@ struct ProfileView: View {
                     // User Profile Header
                     VStack(spacing: 16) {
                         // Profile Picture or Default Icon
-                        if let imageUrl = authService.currentUser?.imageUrl,
-                           let image = loadLocalImage(from: imageUrl) {
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 80, height: 80)
-                                .clipShape(Circle())
-                                .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 3))
-                        } else {
-                            Image(systemName: "person.circle.fill")
-                                .font(.system(size: 80))
-                                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                        }
+                        RemoteImageView(userImageUrl: authService.currentUser?.imageUrl)
+                            .frame(width: 80, height: 80)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 3))
                         
                         if let user = authService.currentUser {
                             Text("\(user.firstName ?? "") \(user.lastName ?? "")")
@@ -205,19 +196,6 @@ struct ProfileView: View {
         }
     }
     
-    /// Load image from local file path
-    /// - Parameter path: The local file path
-    /// - Returns: UIImage if successfully loaded
-    private func loadLocalImage(from path: String) -> UIImage? {
-        // Check if path is a URL string or file path
-        if path.hasPrefix("http://") || path.hasPrefix("https://") {
-            // Remote URL - would need async loading (not implemented here)
-            return nil
-        } else {
-            // Local file path
-            return UIImage(contentsOfFile: path)
-        }
-    }
 }
 
 struct ProfileOptionRow: View {

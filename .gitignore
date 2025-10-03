@@ -106,5 +106,6 @@ staticfiles/
 mediafiles/
 
 local_settings.py
+Info.plist
 
 # Reference: https://fastapi.tiangolo.com/deployment/ — cross-check with @Web for latest best practices

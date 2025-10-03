@@ -16,7 +16,7 @@ struct EmptyResponse: Codable {}
 class APIService: ObservableObject {
     static let shared = APIService()
     
-    private let baseURL = Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "http://localhost:8000/api/v1"
+    private let baseURL = Configuration.apiBaseURL
     private let authTokenKey = "authToken"
     private var authToken: String? {
         get { KeychainHelper.read(forKey: authTokenKey) }

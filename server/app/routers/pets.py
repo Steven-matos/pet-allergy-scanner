@@ -9,10 +9,10 @@ from app.models.pet import PetCreate, PetResponse, PetUpdate
 from app.routers.auth import get_current_user, security
 from app.database import get_supabase_client
 from supabase import Client
-import logging
+from app.utils.logging_config import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @router.post("/", response_model=PetResponse)
 async def create_pet(
@@ -210,6 +210,10 @@ async def update_pet(
                 detail="Pet profile not found"
             )
         
+        # Get current pet data to check for existing image
+        current_pet_data = existing_pet.data[0]
+        current_image_url = current_pet_data.get("image_url")
+        
         # Build update data
         update_data = {}
         if pet_update.name is not None:
@@ -221,6 +225,17 @@ async def update_pet(
         if pet_update.weight_kg is not None:
             update_data["weight_kg"] = pet_update.weight_kg
         if pet_update.image_url is not None:
+            # Delete old image from storage if it exists and is different from new one
+            if current_image_url and current_image_url != pet_update.image_url:
+                if "storage/v1/object/public/pet-images/" in current_image_url:
+                    try:
+                        # Extract the storage path from the full URL
+                        storage_path = current_image_url.split("/storage/v1/object/public/pet-images/")[-1]
+                        supabase.storage.from_("pet-images").remove([storage_path])
+                        logger.debug(f"Deleted old pet image: {storage_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to delete old pet image: {e}")
+            
             update_data["image_url"] = pet_update.image_url
         if pet_update.known_sensitivities is not None:
             update_data["known_sensitivities"] = pet_update.known_sensitivities
@@ -276,14 +291,28 @@ async def delete_pet(
     try:
         supabase = get_supabase_client()
         
-        # Verify pet belongs to user
-        existing_pet = supabase.table("pets").select("*").eq("id", pet_id).eq("user_id", current_user.id).execute()
+        # Verify pet belongs to user and get image URL for cleanup
+        existing_pet = supabase.table("pets").select("*, image_url").eq("id", pet_id).eq("user_id", current_user.id).execute()
         
         if not existing_pet.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pet profile not found"
             )
+        
+        pet_data = existing_pet.data[0]
+        
+        # Delete pet image from storage if it exists
+        if pet_data.get("image_url"):
+            image_url = pet_data["image_url"]
+            if "storage/v1/object/public/pet-images/" in image_url:
+                try:
+                    # Extract the storage path from the full URL
+                    storage_path = image_url.split("/storage/v1/object/public/pet-images/")[-1]
+                    supabase.storage.from_("pet-images").remove([storage_path])
+                    logger.info(f"Deleted pet image: {storage_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete pet image {storage_path}: {e}")
         
         # Delete pet and associated scans
         supabase.table("scans").delete().eq("pet_id", pet_id).execute()

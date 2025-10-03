@@ -319,40 +319,69 @@ struct EditPetView: View {
     
     /// Update the pet with the new data
     private func updatePet() {
-        // Save new image if changed
-        let newImageUrl: String?
-        if let selectedImage = selectedImage {
-            // Check if image changed by comparing with existing
-            let existingImage = pet.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
-            if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
-                newImageUrl = saveImageLocally(selectedImage)
-            } else {
-                newImageUrl = nil // No change
-            }
-        } else if pet.imageUrl != nil {
-            // Image was removed
-            newImageUrl = ""
-        } else {
-            newImageUrl = nil // No change
-        }
-        
-        let petUpdate = PetUpdate(
-            name: name != pet.name ? name : nil,
-            breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
-            birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightKg != pet.weightKg ? weightKg : nil,
-            imageUrl: newImageUrl,
-            knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
-            vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
-            vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
-        )
-        
-        petService.updatePet(id: pet.id, petUpdate: petUpdate)
-        
-        // Dismiss after successful update
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            if petService.errorMessage == nil {
-                dismiss()
+        Task {
+            do {
+                var newImageUrl: String? = nil
+                
+                // Handle image changes
+                if let selectedImage = selectedImage {
+                    // Check if image changed by comparing with existing
+                    let existingImage = pet.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
+                    if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
+                        // Get current user ID for folder organization
+                        guard let userId = AuthService.shared.currentUser?.id else {
+                            petService.errorMessage = "User not authenticated"
+                            return
+                        }
+                        
+                        // Replace old image with new one (deletes old, uploads new)
+                        newImageUrl = try await StorageService.shared.replacePetImage(
+                            oldImageUrl: pet.imageUrl,
+                            newImage: selectedImage,
+                            userId: userId,
+                            petId: pet.id
+                        )
+                        
+                        print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
+                    } else {
+                        newImageUrl = nil // No change
+                    }
+                } else if pet.imageUrl != nil {
+                    // Image was removed - delete old image if it's in Supabase
+                    if let oldUrl = pet.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
+                        do {
+                            try await StorageService.shared.deletePetImage(path: oldUrl)
+                            print("🗑️ Pet image removed from Supabase: \(oldUrl)")
+                        } catch {
+                            print("⚠️ Failed to delete old image: \(error)")
+                        }
+                    }
+                    newImageUrl = ""
+                } else {
+                    newImageUrl = nil // No change
+                }
+                
+                let petUpdate = PetUpdate(
+                    name: name != pet.name ? name : nil,
+                    breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
+                    birthday: createBirthday(year: birthYear, month: birthMonth),
+                    weightKg: weightKg != pet.weightKg ? weightKg : nil,
+                    imageUrl: newImageUrl,
+                    knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
+                    vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
+                    vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
+                )
+                
+                petService.updatePet(id: pet.id, petUpdate: petUpdate)
+                
+                // Dismiss after successful update
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                    if petService.errorMessage == nil {
+                        dismiss()
+                    }
+                }
+            } catch {
+                petService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
             }
         }
     }

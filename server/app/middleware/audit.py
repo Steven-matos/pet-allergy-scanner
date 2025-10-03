@@ -10,8 +10,9 @@ import logging
 import json
 from typing import Dict, Any, Optional
 from app.core.config import settings
+from app.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class AuditLogMiddleware(BaseHTTPMiddleware):
     """
@@ -58,6 +59,29 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         ]
         return any(path.startswith(sensitive_path) for sensitive_path in sensitive_paths)
     
+    def _should_log_request(self, path: str, method: str, status_code: int) -> bool:
+        """Determine if request should be logged based on path and status"""
+        # Always log errors
+        if status_code >= 400:
+            return True
+        
+        # Always log data modification operations
+        if method in ["POST", "PUT", "DELETE"]:
+            return True
+        
+        # Log sensitive endpoints less frequently for successful GET requests
+        if method == "GET" and status_code == 200:
+            # Skip frequent health checks and monitoring endpoints
+            skip_paths = ["/health", "/metrics", "/status"]
+            if any(path.endswith(skip_path) for skip_path in skip_paths):
+                return False
+            
+            # Log only every 10th successful GET request for sensitive endpoints
+            # This reduces noise while maintaining audit trail
+            return hash(path) % 10 == 0
+        
+        return True
+    
     def _log_audit_event(self, event_type: str, request: Request, response: Response, 
                         user_id: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
         """Log audit event"""
@@ -96,6 +120,10 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         
         # Log different types of events
         if self._is_sensitive_endpoint(request.url.path):
+            # Check if we should log this request
+            if not self._should_log_request(request.url.path, request.method, response.status_code):
+                return response
+                
             if response.status_code >= 400:
                 # Log security events (errors, failures)
                 self._log_audit_event(
