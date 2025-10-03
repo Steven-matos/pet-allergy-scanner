@@ -107,5 +107,5 @@ mediafiles/
 
 local_settings.py
 Info.plist
-AuthKey_KJ9V6V9G59.p8
+*.p8
 # Reference: https://fastapi.tiangolo.com/deployment/ — cross-check with @Web for latest best practices
