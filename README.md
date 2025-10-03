@@ -19,7 +19,6 @@ A comprehensive iOS application with FastAPI backend for scanning and analyzing 
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Contributing](#contributing)
-- [License](#license)
 
 ## Overview
 
