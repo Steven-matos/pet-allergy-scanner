@@ -10,6 +10,21 @@ import Vision
 import UIKit
 import Combine
 import Observation
+import RegexBuilder
+
+/// Nutritional analysis data structure
+struct NutritionalAnalysis {
+    var servingSizeG: Double?
+    var caloriesPerServing: Double?
+    var caloriesPer100G: Double?
+    var proteinPercent: Double?
+    var fatPercent: Double?
+    var fiberPercent: Double?
+    var moisturePercent: Double?
+    var ashPercent: Double?
+    var calciumPercent: Double?
+    var phosphorusPercent: Double?
+}
 
 /// OCR service for extracting text from images using Apple's Vision framework
 @Observable
@@ -19,6 +34,7 @@ class OCRService {
     var isProcessing = false
     var extractedText = ""
     var errorMessage: String?
+    var nutritionalAnalysis: NutritionalAnalysis?
     
     private init() {}
     
@@ -65,6 +81,8 @@ class OCRService {
                 } else {
                     self?.extractedText = extractedText
                     self?.errorMessage = nil
+                    // Extract nutritional information from the text
+                    self?.nutritionalAnalysis = self?.extractNutritionalInfo(from: extractedText)
                 }
             }
         }
@@ -163,9 +181,142 @@ class OCRService {
         return uniqueIngredients
     }
     
+    /// Extract nutritional information from OCR text using regex patterns
+    func extractNutritionalInfo(from text: String) -> NutritionalAnalysis {
+        var analysis = NutritionalAnalysis()
+        let lines = text.components(separatedBy: .newlines)
+        
+        for line in lines {
+            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowercasedLine = trimmedLine.lowercased()
+            
+            // Extract serving size (in grams)
+            if let servingSize = extractServingSize(from: trimmedLine) {
+                analysis.servingSizeG = servingSize
+            }
+            
+            // Extract calories
+            if let calories = extractCalories(from: trimmedLine) {
+                if lowercasedLine.contains("per serving") || lowercasedLine.contains("per cup") {
+                    analysis.caloriesPerServing = calories
+                } else if lowercasedLine.contains("per 100g") || lowercasedLine.contains("per 100 g") {
+                    analysis.caloriesPer100G = calories
+                }
+            }
+            
+            // Extract protein percentage
+            if let protein = extractNutrientValue(from: trimmedLine, patterns: ["protein", "crude protein"]) {
+                analysis.proteinPercent = protein
+            }
+            
+            // Extract fat percentage
+            if let fat = extractNutrientValue(from: trimmedLine, patterns: ["fat", "crude fat", "lipid"]) {
+                analysis.fatPercent = fat
+            }
+            
+            // Extract fiber percentage
+            if let fiber = extractNutrientValue(from: trimmedLine, patterns: ["fiber", "crude fiber", "dietary fiber"]) {
+                analysis.fiberPercent = fiber
+            }
+            
+            // Extract moisture percentage
+            if let moisture = extractNutrientValue(from: trimmedLine, patterns: ["moisture", "water"]) {
+                analysis.moisturePercent = moisture
+            }
+            
+            // Extract ash percentage
+            if let ash = extractNutrientValue(from: trimmedLine, patterns: ["ash", "crude ash"]) {
+                analysis.ashPercent = ash
+            }
+            
+            // Extract calcium percentage
+            if let calcium = extractNutrientValue(from: trimmedLine, patterns: ["calcium", "ca"]) {
+                analysis.calciumPercent = calcium
+            }
+            
+            // Extract phosphorus percentage
+            if let phosphorus = extractNutrientValue(from: trimmedLine, patterns: ["phosphorus", "phosphorous", "p"]) {
+                analysis.phosphorusPercent = phosphorus
+            }
+        }
+        
+        // Calculate calories per 100g if we have serving size and calories per serving
+        if let servingSize = analysis.servingSizeG,
+           let caloriesPerServing = analysis.caloriesPerServing,
+           analysis.caloriesPer100G == nil {
+            analysis.caloriesPer100G = (caloriesPerServing / servingSize) * 100
+        }
+        
+        return analysis
+    }
+    
+    /// Extract serving size from text
+    private func extractServingSize(from text: String) -> Double? {
+        let patterns = [
+            #"(\d+(?:\.\d+)?)\s*(?:g|grams?|g\.)"#,
+            #"serving size[:\s]*(\d+(?:\.\d+)?)\s*(?:g|grams?|g\.)"#,
+            #"(\d+(?:\.\d+)?)\s*(?:oz|ounces?)"# // Convert ounces to grams (1 oz = 28.35g)
+        ]
+        
+        for pattern in patterns {
+            if let match = text.range(of: pattern, options: .regularExpression) {
+                let matchedText = String(text[match])
+                let numberPattern = #"(\d+(?:\.\d+)?)"#
+                if let numberMatch = matchedText.range(of: numberPattern, options: .regularExpression) {
+                    let numberString = String(matchedText[numberMatch])
+                    if let value = Double(numberString) {
+                        // Convert ounces to grams if needed
+                        if pattern.contains("oz") {
+                            return value * 28.35
+                        }
+                        return value
+                    }
+                }
+            }
+        }
+        return nil
+    }
+    
+    /// Extract calories from text
+    private func extractCalories(from text: String) -> Double? {
+        let patterns = [
+            #"(\d+(?:\.\d+)?)\s*(?:kcal|calories?|cal)"#,
+            #"(\d+(?:\.\d+)?)\s*(?:kcal|calories?|cal)\s*per"#
+        ]
+        
+        for pattern in patterns {
+            if let match = text.range(of: pattern, options: .regularExpression) {
+                let matchedText = String(text[match])
+                let numberPattern = #"(\d+(?:\.\d+)?)"#
+                if let numberMatch = matchedText.range(of: numberPattern, options: .regularExpression) {
+                    let numberString = String(matchedText[numberMatch])
+                    return Double(numberString)
+                }
+            }
+        }
+        return nil
+    }
+    
+    /// Extract nutrient value from text using multiple patterns
+    private func extractNutrientValue(from text: String, patterns: [String]) -> Double? {
+        for pattern in patterns {
+            let regexPattern = #"(\d+(?:\.\d+)?)\s*(?:%|percent|percentages?)\s*(?:"# + pattern + #")"#
+            if let match = text.range(of: regexPattern, options: .regularExpression) {
+                let matchedText = String(text[match])
+                let numberPattern = #"(\d+(?:\.\d+)?)"#
+                if let numberMatch = matchedText.range(of: numberPattern, options: .regularExpression) {
+                    let numberString = String(matchedText[numberMatch])
+                    return Double(numberString)
+                }
+            }
+        }
+        return nil
+    }
+    
     /// Clear extracted text and error
     func clearResults() {
         extractedText = ""
         errorMessage = nil
+        nutritionalAnalysis = nil
     }
 }

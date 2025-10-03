@@ -17,7 +17,7 @@ import logging
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications
+from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
@@ -106,6 +106,7 @@ app.include_router(scans.router, prefix="/api/v1/scans", tags=["scans"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["gdpr"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutritional-analysis"])
 
 @app.get("/")
 async def root():

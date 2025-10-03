@@ -25,6 +25,11 @@ struct ScanResultView: View {
                             IngredientsAnalysisSection(result: result)
                         }
                         
+                        // Nutritional Analysis (if available)
+                        if let nutritionalAnalysis = scan.nutritionalAnalysis {
+                            NutritionalAnalysisSection(nutritionalAnalysis: nutritionalAnalysis)
+                        }
+                        
                         // Analysis Details (only show if detailed reports are enabled)
                         if settingsManager.shouldShowDetailedAnalysis && !result.analysisDetails.isEmpty {
                             AnalysisDetailsSection(details: result.analysisDetails)
@@ -221,6 +226,190 @@ struct SafeIngredientsList: View {
     }
 }
 
+struct NutritionalAnalysisSection: View {
+    let nutritionalAnalysis: NutritionalAnalysis
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .accessibilityLabel("Nutritional analysis icon")
+                Text("Nutritional Analysis")
+                    .font(.headline)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            
+            // Calorie Information
+            if let caloriesPerServing = nutritionalAnalysis.caloriesPerServing,
+               let servingSize = nutritionalAnalysis.servingSizeG {
+                CalorieInfoCard(
+                    caloriesPerServing: caloriesPerServing,
+                    servingSize: servingSize,
+                    caloriesPer100G: nutritionalAnalysis.caloriesPer100G
+                )
+            }
+            
+            // Macronutrients
+            if hasMacronutrientData() {
+                MacronutrientsCard(nutritionalAnalysis: nutritionalAnalysis)
+            }
+            
+            // Minerals
+            if hasMineralData() {
+                MineralsCard(nutritionalAnalysis: nutritionalAnalysis)
+            }
+        }
+    }
+    
+    private func hasMacronutrientData() -> Bool {
+        return nutritionalAnalysis.proteinPercent != nil ||
+               nutritionalAnalysis.fatPercent != nil ||
+               nutritionalAnalysis.fiberPercent != nil ||
+               nutritionalAnalysis.moisturePercent != nil ||
+               nutritionalAnalysis.ashPercent != nil
+    }
+    
+    private func hasMineralData() -> Bool {
+        return nutritionalAnalysis.calciumPercent != nil ||
+               nutritionalAnalysis.phosphorusPercent != nil
+    }
+}
+
+struct CalorieInfoCard: View {
+    let caloriesPerServing: Double
+    let servingSize: Double
+    let caloriesPer100G: Double?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Calorie Information")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Per Serving")
+                        .font(.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    Spacer()
+                    Text("\(Int(caloriesPerServing)) kcal")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                }
+                
+                HStack {
+                    Text("Serving Size")
+                        .font(.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    Spacer()
+                    Text("\(Int(servingSize))g")
+                        .font(.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                }
+                
+                if let caloriesPer100G = caloriesPer100G {
+                    HStack {
+                        Text("Per 100g")
+                            .font(.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Spacer()
+                        Text("\(Int(caloriesPer100G)) kcal")
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
+struct MacronutrientsCard: View {
+    let nutritionalAnalysis: NutritionalAnalysis
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Macronutrients")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            VStack(spacing: 8) {
+                if let protein = nutritionalAnalysis.proteinPercent {
+                    NutrientRow(name: "Protein", value: protein, unit: "%")
+                }
+                if let fat = nutritionalAnalysis.fatPercent {
+                    NutrientRow(name: "Fat", value: fat, unit: "%")
+                }
+                if let fiber = nutritionalAnalysis.fiberPercent {
+                    NutrientRow(name: "Fiber", value: fiber, unit: "%")
+                }
+                if let moisture = nutritionalAnalysis.moisturePercent {
+                    NutrientRow(name: "Moisture", value: moisture, unit: "%")
+                }
+                if let ash = nutritionalAnalysis.ashPercent {
+                    NutrientRow(name: "Ash", value: ash, unit: "%")
+                }
+            }
+        }
+        .padding()
+        .background(ModernDesignSystem.Colors.surfaceVariant)
+        .cornerRadius(8)
+    }
+}
+
+struct MineralsCard: View {
+    let nutritionalAnalysis: NutritionalAnalysis
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Minerals")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            VStack(spacing: 8) {
+                if let calcium = nutritionalAnalysis.calciumPercent {
+                    NutrientRow(name: "Calcium", value: calcium, unit: "%")
+                }
+                if let phosphorus = nutritionalAnalysis.phosphorusPercent {
+                    NutrientRow(name: "Phosphorus", value: phosphorus, unit: "%")
+                }
+            }
+        }
+        .padding()
+        .background(ModernDesignSystem.Colors.surfaceVariant)
+        .cornerRadius(8)
+    }
+}
+
+struct NutrientRow: View {
+    let name: String
+    let value: Double
+    let unit: String
+    
+    var body: some View {
+        HStack {
+            Text(name)
+                .font(.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            Spacer()
+            Text("\(String(format: "%.1f", value))\(unit)")
+                .font(.body)
+                .fontWeight(.medium)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+        }
+    }
+}
+
 struct AnalysisDetailsSection: View {
     let details: [String: String]
     
@@ -265,6 +454,19 @@ struct AnalysisDetailsSection: View {
         ]
     )
     
+    let sampleNutritionalAnalysis = NutritionalAnalysis(
+        servingSizeG: 100.0,
+        caloriesPerServing: 350.0,
+        caloriesPer100G: 350.0,
+        proteinPercent: 25.0,
+        fatPercent: 12.0,
+        fiberPercent: 3.0,
+        moisturePercent: 10.0,
+        ashPercent: 6.0,
+        calciumPercent: 1.2,
+        phosphorusPercent: 0.8
+    )
+    
     let sampleScan = Scan(
         id: "1",
         userId: "user1",
@@ -273,6 +475,7 @@ struct AnalysisDetailsSection: View {
         rawText: "chicken, rice, corn",
         status: .completed,
         result: sampleResult,
+        nutritionalAnalysis: sampleNutritionalAnalysis,
         createdAt: Date(),
         updatedAt: Date()
     )

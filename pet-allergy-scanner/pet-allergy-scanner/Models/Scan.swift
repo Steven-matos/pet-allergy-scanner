@@ -16,6 +16,7 @@ struct Scan: Codable, Identifiable, Equatable, Hashable {
     let rawText: String?
     let status: ScanStatus
     let result: ScanResult?
+    let nutritionalAnalysis: NutritionalAnalysis?
     let createdAt: Date
     let updatedAt: Date
     
@@ -47,6 +48,7 @@ struct Scan: Codable, Identifiable, Equatable, Hashable {
         case rawText = "raw_text"
         case status
         case result
+        case nutritionalAnalysis = "nutritional_analysis"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
