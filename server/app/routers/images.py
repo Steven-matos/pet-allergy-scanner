@@ -5,12 +5,12 @@ Image optimization and upload endpoints
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import Response
 from typing import Optional
-import logging
+from app.utils.logging_config import get_logger
 
 from ..services.image_optimizer import ImageOptimizerService
 from ..middleware.security import get_current_user
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/images", tags=["images"])
 

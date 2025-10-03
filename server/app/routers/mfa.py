@@ -7,10 +7,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.routers.auth import get_current_user
 from app.services.mfa_service import MFAService
-import logging
+from app.utils.logging_config import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MFASetupResponse(BaseModel):
     """MFA setup response model"""

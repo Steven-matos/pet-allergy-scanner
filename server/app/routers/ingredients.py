@@ -9,11 +9,11 @@ from app.models.pet import PetSpecies
 from app.routers.auth import get_current_user
 from app.database import get_supabase_client
 from supabase import Client
-import logging
+from app.utils.logging_config import get_logger
 import re
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Common allergen ingredients database
 COMMON_ALLERGENS = {

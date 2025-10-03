@@ -5,10 +5,11 @@ GDPR compliance router
 from fastapi import APIRouter, HTTPException, Depends, status, Response
 from app.routers.auth import get_current_user
 from app.services.gdpr_service import GDPRService
-import logging
+from app.core.config import settings
+from app.utils.logging_config import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @router.get("/export")
 async def export_user_data(

@@ -6,13 +6,13 @@ import pyotp
 import qrcode
 import io
 import base64
-import logging
+from app.utils.logging_config import get_logger
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from app.core.config import settings
 from app.database import get_supabase_client
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MFAService:
     """Multi-Factor Authentication service using TOTP"""

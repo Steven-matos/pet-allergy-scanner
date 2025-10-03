@@ -5,10 +5,10 @@ Monitoring and health check router
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import Dict, Any
 from app.services.monitoring import MonitoringService
-import logging
+from app.utils.logging_config import get_logger
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @router.get("/health")
 async def health_check():

@@ -2,7 +2,7 @@
 GDPR compliance service for data export and deletion
 """
 
-import logging
+from app.utils.logging_config import get_logger
 import json
 import zipfile
 import io
@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from app.core.config import settings
 from app.database import get_supabase_client
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class GDPRService:
     """Service for GDPR compliance operations"""

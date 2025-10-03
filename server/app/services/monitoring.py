@@ -2,7 +2,7 @@
 Monitoring and alerting service
 """
 
-import logging
+from app.utils.logging_config import get_logger
 import time
 import json
 from typing import Dict, Any, Optional, List
@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from app.core.config import settings
 from app.database import get_supabase_client
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class MonitoringService:
     """Service for monitoring and alerting"""

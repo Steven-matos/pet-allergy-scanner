@@ -6,9 +6,9 @@ Handles image compression, resizing, and format conversion
 from PIL import Image
 from io import BytesIO
 from typing import Tuple, Optional
-import logging
+from app.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class ImageOptimizerService:
     """Service for optimizing images on the server side"""
