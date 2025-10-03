@@ -67,11 +67,6 @@ struct ProfileSettingsView: View {
                     
                     // MARK: - About Section
                     aboutSection
-                    
-                    // MARK: - Debug Section (only in debug builds)
-                    #if DEBUG
-                    debugSection
-                    #endif
                 }
                 .scrollContentBackground(.hidden)
                 .background(Color.clear)
@@ -137,42 +132,6 @@ struct ProfileSettingsView: View {
         }
         .trackScreen("ProfileSettings")
     }
-    
-    // MARK: - Debug Section (only in debug builds)
-    #if DEBUG
-    private var debugSection: some View {
-        Section(header: Text("Debug")) {
-            Button("Test Birthday Celebration") {
-                // Test birthday celebration
-                if let pet = petService.pets.first {
-                    NotificationCenter.default.post(
-                        name: .showBirthdayCelebration,
-                        object: nil,
-                        userInfo: ["pet_id": pet.id]
-                    )
-                }
-            }
-            
-            Button("Test Engagement Reminder") {
-                NotificationCenter.default.post(
-                    name: .navigateToScan,
-                    object: nil
-                )
-            }
-            
-            Button("Clear All Notifications") {
-                notificationSettingsManager.cancelAllNotifications()
-            }
-            
-            HStack {
-                Text("Notification Status")
-                Spacer()
-                Text(notificationSettingsManager.isAuthorized ? "Authorized" : "Not Authorized")
-                    .foregroundColor(notificationSettingsManager.isAuthorized ? .green : .orange)
-            }
-        }
-    }
-    #endif
     
     // MARK: - Profile Header Section
     private var profileHeaderSection: some View {
@@ -534,9 +493,9 @@ struct ProfileSettingsView: View {
     
     // MARK: - Helper Methods
     
-    /// Calculate total cache size
+    /// Calculate total cache size asynchronously to avoid blocking main thread
     private func calculateCacheSize() {
-        DispatchQueue.global(qos: .utility).async {
+        Task.detached(priority: .utility) {
             let fileManager = FileManager.default
             
             guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
@@ -545,43 +504,65 @@ struct ProfileSettingsView: View {
             
             var totalSize: Int64 = 0
             
-            if let enumerator = fileManager.enumerator(at: cachesURL, includingPropertiesForKeys: [.fileSizeKey]) {
-                for case let fileURL as URL in enumerator {
-                    if let fileAttributes = try? fileManager.attributesOfItem(atPath: fileURL.path),
-                       let fileSize = fileAttributes[.size] as? Int64 {
-                        totalSize += fileSize
+            // Recursively calculate directory size to include subdirectories
+            func calculateDirectorySize(at url: URL) -> Int64 {
+                var size: Int64 = 0
+                
+                do {
+                    let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: [.skipsHiddenFiles])
+                    
+                    for fileURL in contents {
+                        let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
+                        
+                        if let isDirectory = resourceValues?.isDirectory, isDirectory {
+                            // Recursively calculate subdirectory size
+                            size += calculateDirectorySize(at: fileURL)
+                        } else if let fileSize = resourceValues?.fileSize {
+                            size += Int64(fileSize)
+                        }
                     }
+                } catch {
+                    print("Failed to read directory \(url.path): \(error)")
                 }
+                
+                return size
             }
             
+            totalSize = calculateDirectorySize(at: cachesURL)
             let sizeInMB = Double(totalSize) / 1024.0 / 1024.0
             
-            DispatchQueue.main.async {
+            await MainActor.run {
                 cacheSize = String(format: "%.2f MB", sizeInMB)
             }
         }
     }
     
-    /// Clear all cached data
+    /// Clear all cached data asynchronously to avoid blocking main thread
     private func clearCache() {
-        let fileManager = FileManager.default
-        
-        guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
-            return
-        }
-        
-        do {
-            let cacheFiles = try fileManager.contentsOfDirectory(at: cachesURL, includingPropertiesForKeys: nil)
+        Task.detached(priority: .userInitiated) {
+            let fileManager = FileManager.default
             
-            for file in cacheFiles {
-                try fileManager.removeItem(at: file)
+            guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+                return
             }
             
-            HapticFeedback.success()
-            calculateCacheSize()
-        } catch {
-            print("Failed to clear cache: \(error)")
-            HapticFeedback.error()
+            do {
+                let cacheFiles = try fileManager.contentsOfDirectory(at: cachesURL, includingPropertiesForKeys: nil)
+                
+                for file in cacheFiles {
+                    try fileManager.removeItem(at: file)
+                }
+                
+                await MainActor.run {
+                    HapticFeedback.success()
+                    calculateCacheSize()
+                }
+            } catch {
+                print("Failed to clear cache: \(error)")
+                await MainActor.run {
+                    HapticFeedback.error()
+                }
+            }
         }
     }
     

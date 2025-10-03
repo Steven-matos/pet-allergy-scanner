@@ -326,10 +326,8 @@ struct ScanView: View {
         )
         
         scanService.analyzeScan(analysisRequest) { result in
-            DispatchQueue.main.async {
-                scanResult = result
-                showingResults = true
-            }
+            scanResult = result
+            showingResults = true
         }
     }
     

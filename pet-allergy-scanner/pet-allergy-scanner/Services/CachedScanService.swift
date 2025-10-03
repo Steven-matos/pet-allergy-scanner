@@ -90,7 +90,7 @@ class CachedScanService: ObservableObject {
             status: .pending
         )
         
-        Task {
+        Task { @MainActor in
             do {
                 let scan = try await apiService.createScan(scanCreate)
                 
@@ -122,7 +122,7 @@ class CachedScanService: ObservableObject {
         isAnalyzing = true
         errorMessage = nil
         
-        currentAnalysisTask = Task {
+        currentAnalysisTask = Task { @MainActor in
             do {
                 let analyzedScan = try await apiService.analyzeScan(analysisRequest)
                 
@@ -280,7 +280,7 @@ class CachedScanService: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        Task {
+        Task { @MainActor in
             do {
                 let scans = try await apiService.getScans()
                 
@@ -329,7 +329,7 @@ class CachedScanService: ObservableObject {
         if !cacheService.exists(forKey: cacheKey) {
             isRefreshing = true
             
-            Task {
+            Task { @MainActor in
                 do {
                     let scans = try await apiService.getScans()
                     let sortedScans = scans.sorted { $0.createdAt > $1.createdAt }
