@@ -368,6 +368,8 @@ Create a `.env` file in the `server/` directory:
 SUPABASE_URL=your_supabase_url_here
 SUPABASE_KEY=your_supabase_anon_key_here
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+# Get this from your Supabase project dashboard > Settings > API > JWT Secret
+SUPABASE_JWT_SECRET=your_supabase_jwt_secret_here
 
 # FastAPI Configuration
 SECRET_KEY=your_strong_secret_key_here_minimum_32_characters
@@ -375,8 +377,9 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # CORS Configuration (comma-separated)
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080,capacitor://localhost,ionic://localhost,http://localhost,https://localhost
-ALLOWED_HOSTS=localhost,127.0.0.1
+# Development origins
+ALLOWED_ORIGINS_STR=http://localhost:3000,http://localhost:8080,http://localhost,https://localhost,capacitor://localhost,ionic://localhost,sniffsafe://,sniffsafe://localhost,https://api.petallergyscanner.com,https://petallergyscanner.com
+ALLOWED_HOSTS_STR=localhost,127.0.0.1
 
 # Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/pet_allergy_scanner
@@ -403,6 +406,17 @@ ENABLE_DATA_DELETION=true
 
 # Environment
 ENVIRONMENT=development
+DEBUG=true
+
+# Push Notification Configuration (APNs)
+# For development, use sandbox URL. For production, use production URL
+APNS_URL=https://api.sandbox.push.apple.com
+# Get these from your Apple Developer account
+APNS_KEY_ID=your_apns_key_id_here
+APNS_TEAM_ID=your_apns_team_id_here
+APNS_BUNDLE_ID=com.yourcompany.pet-allergy-scanner
+# APNs private key content (P8 format) - single line
+APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour_apns_private_key_content_here\n-----END PRIVATE KEY-----"
 ```
 
 ### 2. Supabase Setup
