@@ -1,1 +1,1 @@
-# Pet Allergy Scanner Backend Application
+# SniffTest Backend Application

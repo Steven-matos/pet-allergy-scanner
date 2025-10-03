@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-APN Testing Script for Pet Allergy Scanner
+APN Testing Script for SniffTest
 Tests push notification functionality end-to-end
 """
 
@@ -128,7 +128,7 @@ class APNTester:
                 "aps": {
                     "alert": {
                         "title": "🧪 APN Test",
-                        "body": "This is a test notification from Pet Allergy Scanner"
+                        "body": "This is a test notification from SniffTest"
                     },
                     "sound": "default",
                     "badge": 1
@@ -241,7 +241,7 @@ class APNTester:
 
 async def main():
     """Main test function"""
-    print("🚀 Starting APN Testing for Pet Allergy Scanner")
+    print("🚀 Starting APN Testing for SniffTest")
     print("="*60)
     
     tester = APNTester()

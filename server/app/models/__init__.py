@@ -1,1 +1,1 @@
-# Data models for Pet Allergy Scanner
+# Data models for SniffTest

@@ -11,16 +11,22 @@
 	</array>
 	<key>API_BASE_URL</key>
 	<string>http://localhost:8000/api/v1</string>
+	<key>CFBundleDisplayName</key>
+	<string>SniffTest</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.snifftest.app</string>
+	<key>CFBundleName</key>
+	<string>SniffTest</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.sniffsafe.auth</string>
+			<string>com.snifftest.auth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>sniffsafe</string>
+				<string>snifftest</string>
 			</array>
 		</dict>
 	</array>

@@ -1,5 +1,5 @@
 """
-Security audit script for the Pet Allergy Scanner API
+Security audit script for the SniffTest API
 """
 
 import asyncio
@@ -22,7 +22,7 @@ from app.utils.security import SecurityValidator
 logger = logging.getLogger(__name__)
 
 class SecurityAuditor:
-    """Security audit tool for the Pet Allergy Scanner API"""
+    """Security audit tool for the SniffTest API"""
     
     def __init__(self):
         self.audit_results = {

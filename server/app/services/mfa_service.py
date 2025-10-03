@@ -68,7 +68,7 @@ class MFAService:
             # Create TOTP URI
             totp_uri = pyotp.totp.TOTP(secret).provisioning_uri(
                 name=user_email,
-                issuer_name="Pet Allergy Scanner"
+                issuer_name="SniffTest"
             )
             
             # Generate QR code

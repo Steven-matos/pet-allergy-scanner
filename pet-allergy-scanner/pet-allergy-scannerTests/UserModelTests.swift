@@ -1,6 +1,6 @@
 //
 //  UserModelTests.swift
-//  pet-allergy-scannerTests
+//  SniffTestTests
 //
 //  Created by Steven Matos on 9/26/25.
 //

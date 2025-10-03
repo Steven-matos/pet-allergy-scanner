@@ -1,6 +1,6 @@
 //
-//  pet_allergy_scannerApp.swift
-//  pet-allergy-scanner
+//  SniffTestApp.swift
+//  SniffTest
 //
 //  Created by Steven Matos on 9/26/25.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import UserNotifications
 
 @main
-struct pet_allergy_scannerApp: App {
+struct SniffTestApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
     var body: some Scene {

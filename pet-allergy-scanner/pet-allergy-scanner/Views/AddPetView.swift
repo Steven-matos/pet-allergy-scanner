@@ -1,6 +1,6 @@
 //
 //  AddPetView.swift
-//  pet-allergy-scanner
+//  SniffTest
 //
 //  Created by Steven Matos on 9/26/25.
 //

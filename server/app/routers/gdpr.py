@@ -190,7 +190,7 @@ async def get_data_subject_rights():
                 }
             },
             "data_controller": {
-                "name": "Pet Allergy Scanner",
+                "name": "SniffTest",
                 "contact": "privacy@petallergyscanner.com",
                 "legal_basis": "Consent (GDPR Article 6(1)(a))",
                 "purpose": "Pet food ingredient analysis and allergy management"

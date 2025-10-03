@@ -1,4 +1,4 @@
--- Pet Allergy Scanner Database Schema
+-- SniffTest Database Schema
 -- This schema should be run in your Supabase SQL editor
 
 -- Enable necessary extensions

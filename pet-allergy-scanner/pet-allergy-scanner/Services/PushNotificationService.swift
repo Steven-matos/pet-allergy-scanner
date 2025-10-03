@@ -1,6 +1,6 @@
 //
 //  PushNotificationService.swift
-//  pet-allergy-scanner
+//  SniffTest
 //
 //  Created by Steven Matos on 1/10/25.
 //

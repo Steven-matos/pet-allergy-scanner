@@ -1,5 +1,5 @@
 """
-Pet Allergy Scanner Backend API
+SniffTest Backend API
 Main FastAPI application with Supabase integration and enhanced security
 """
 
@@ -38,7 +38,7 @@ security = HTTPBearer()
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
     # Startup
-    logger.info("Starting Pet Allergy Scanner API...")
+    logger.info("Starting SniffTest API...")
     db_initialized = await init_db()
     if db_initialized:
         logger.info("Database initialized successfully")
@@ -46,11 +46,11 @@ async def lifespan(app: FastAPI):
         logger.warning("Database initialization failed, but application will continue")
     yield
     # Shutdown
-    logger.info("Shutting down Pet Allergy Scanner API...")
+    logger.info("Shutting down SniffTest API...")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Pet Allergy Scanner API",
+    title="SniffTest API",
     description="Backend API for pet food ingredient scanning and analysis with enhanced security",
     version=settings.api_version,
     lifespan=lifespan,
@@ -111,7 +111,7 @@ app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutriti
 @app.get("/")
 async def root():
     """Health check endpoint"""
-    return {"message": "Pet Allergy Scanner API is running", "version": "1.0.0"}
+    return {"message": "SniffTest API is running", "version": "1.0.0"}
 
 @app.get("/health")
 async def health_check():

@@ -1,5 +1,5 @@
 """
-Startup script for Pet Allergy Scanner Backend
+Startup script for SniffTest Backend
 """
 
 import uvicorn

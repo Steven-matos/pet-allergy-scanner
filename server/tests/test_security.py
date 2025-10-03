@@ -1,5 +1,5 @@
 """
-Security tests for the Pet Allergy Scanner API
+Security tests for the SniffTest API
 """
 
 import pytest

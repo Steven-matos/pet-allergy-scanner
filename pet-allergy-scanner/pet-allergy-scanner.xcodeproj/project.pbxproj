@@ -7,26 +7,26 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		293A6DBB2E873DAC00B33495 /* pet-allergy-scanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "pet-allergy-scanner.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		293A6DBB2E873DAC00B33495 /* SniffTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "SniffTest.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2920B9BE2E89B7B600773244 /* Exceptions for "pet-allergy-scanner" folder in "pet-allergy-scanner" target */ = {
+		2920B9BE2E89B7B600773244 /* Exceptions for "SniffTest" folder in "SniffTest" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 293A6DBA2E873DAC00B33495 /* pet-allergy-scanner */;
+			target = 293A6DBA2E873DAC00B33495 /* SniffTest */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		293A6DBD2E873DAC00B33495 /* pet-allergy-scanner */ = {
+		293A6DBD2E873DAC00B33495 /* SniffTest */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				2920B9BE2E89B7B600773244 /* Exceptions for "pet-allergy-scanner" folder in "pet-allergy-scanner" target */,
+				2920B9BE2E89B7B600773244 /* Exceptions for "SniffTest" folder in "SniffTest" target */,
 			);
-			path = "pet-allergy-scanner";
+			path = "SniffTest";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -53,7 +53,7 @@
 		293A6DBC2E873DAC00B33495 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				293A6DBB2E873DAC00B33495 /* pet-allergy-scanner.app */,
+				293A6DBB2E873DAC00B33495 /* SniffTest.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -61,9 +61,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		293A6DBA2E873DAC00B33495 /* pet-allergy-scanner */ = {
+		293A6DBA2E873DAC00B33495 /* SniffTest */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 293A6DC62E873DAE00B33495 /* Build configuration list for PBXNativeTarget "pet-allergy-scanner" */;
+			buildConfigurationList = 293A6DC62E873DAE00B33495 /* Build configuration list for PBXNativeTarget "SniffTest" */;
 			buildPhases = (
 				293A6DB72E873DAC00B33495 /* Sources */,
 				293A6DB82E873DAC00B33495 /* Frameworks */,

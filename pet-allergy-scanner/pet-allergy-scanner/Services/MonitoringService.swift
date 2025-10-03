@@ -1,6 +1,6 @@
 //
 //  MonitoringService.swift
-//  pet-allergy-scanner
+//  SniffTest
 //
 //  Created by Code Assistant, 2025.
 //

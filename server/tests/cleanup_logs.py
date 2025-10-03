@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Log cleanup utility for Pet Allergy Scanner API
+Log cleanup utility for SniffTest API
 Cleans up old logs and implements log rotation
 """
 
@@ -186,7 +186,7 @@ def optimize_log_entries(log_file: str = "audit.log"):
 
 
 if __name__ == "__main__":
-    print("Pet Allergy Scanner - Log Cleanup Utility")
+    print("SniffTest - Log Cleanup Utility")
     print("=" * 50)
     
     # Analyze current logs

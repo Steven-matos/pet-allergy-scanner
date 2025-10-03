@@ -83,7 +83,7 @@ class GDPRService:
                     ],
                     "gdpr_compliance": {
                         "data_subject": user_id,
-                        "data_controller": "Pet Allergy Scanner",
+                        "data_controller": "SniffTest",
                         "legal_basis": "Consent",
                         "purpose": "Pet food ingredient analysis and allergy management"
                     }

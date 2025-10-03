@@ -1,5 +1,5 @@
 """
-Centralized logging configuration for the Pet Allergy Scanner API
+Centralized logging configuration for the SniffTest API
 Provides consistent logging setup across all modules
 """
 

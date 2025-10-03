@@ -1,4 +1,4 @@
-# Pet Allergy Scanner
+# SniffTest
 
 A comprehensive iOS application with FastAPI backend for scanning and analyzing pet food ingredients to identify potential allergens and safety concerns for dogs and cats.
 
@@ -22,7 +22,7 @@ A comprehensive iOS application with FastAPI backend for scanning and analyzing 
 
 ## Overview
 
-Pet Allergy Scanner helps pet owners make informed decisions about their pets' food by:
+SniffTest helps pet owners make informed decisions about their pets' food by:
 
 - **Scanning pet food labels** using OCR technology
 - **Analyzing ingredients** for species-specific safety and allergen information
@@ -230,7 +230,7 @@ app/
 
 ## Trust & Nature Color Scheme
 
-The Pet Allergy Scanner app uses a carefully crafted "Trust & Nature" color palette designed to convey safety, reliability, and warmth while maintaining excellent accessibility standards.
+The SniffTest app uses a carefully crafted "Trust & Nature" color palette designed to convey safety, reliability, and warmth while maintaining excellent accessibility standards.
 
 ### Color Palette
 
@@ -334,8 +334,8 @@ static let lightGray = Color(red: 0.878, green: 0.878, blue: 0.878)
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/pet-allergy-scanner.git
-cd pet-allergy-scanner
+git clone https://github.com/yourusername/SniffTest.git
+cd SniffTest
 ```
 
 ### 2. Server Setup (5 minutes)
@@ -351,8 +351,8 @@ python start.py
 
 ### 3. iOS App Setup (5 minutes)
 ```bash
-cd pet-allergy-scanner
-open pet-allergy-scanner.xcodeproj
+cd SniffTest
+open SniffTest.xcodeproj
 # Update API_BASE_URL in Info.plist
 # Build and run in Xcode
 ```
@@ -633,12 +633,12 @@ See `database_schemas/database_schema.sql` for complete schema.
 
 ### Project Structure
 ```
-pet-allergy-scanner/
+SniffTest/
 ├── server/                 # FastAPI backend
 │   ├── app/               # Application code
 │   ├── tests/             # Backend tests
 │   └── requirements.txt   # Python dependencies
-├── pet-allergy-scanner/   # iOS app
+├── SniffTest/             # iOS app
 │   ├── Views/             # SwiftUI views
 │   ├── Models/            # Data models
 │   ├── Services/          # API & business logic
