@@ -88,6 +88,7 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let petService = PetService.shared
     private let scanService = ScanService.shared
+    private let pushNotificationService = PushNotificationService.shared
     
     // MARK: - Constants
     
@@ -140,6 +141,14 @@ class NotificationSettingsManager: NSObject, ObservableObject {
             )
             isAuthorized = granted
             
+            // Also request push notification permissions
+            if granted {
+                let pushGranted = await pushNotificationService.requestPushNotificationPermission()
+                if pushGranted {
+                    print("✅ Push notifications authorized")
+                }
+            }
+            
             // If permission granted and notifications enabled, schedule all notifications
             if granted && enableNotifications {
                 scheduleAllNotifications()
@@ -186,6 +195,14 @@ class NotificationSettingsManager: NSObject, ObservableObject {
             let celebrationKey = "\(pet.id)_\(currentYear)"
             if petBirthMonth == currentMonth && !birthdayCelebrationsShownThisYear.contains(celebrationKey) {
                 scheduleBirthdayEasterEgg(for: pet, birthday: birthday)
+                
+                // Also send push notification for birthday celebration
+                Task {
+                    await pushNotificationService.sendBirthdayNotification(
+                        petName: pet.name,
+                        petId: pet.id
+                    )
+                }
             }
         }
     }
@@ -197,11 +214,14 @@ class NotificationSettingsManager: NSObject, ObservableObject {
         // Cancel existing engagement notifications
         cancelEngagementNotifications()
         
-        // Schedule weekly reminder (7 days)
+        // Schedule local notifications
         scheduleWeeklyReminder()
-        
-        // Schedule monthly reminder (30 days)
         scheduleMonthlyReminder()
+        
+        // Schedule push notifications for better reliability
+        Task {
+            await pushNotificationService.scheduleEngagementNotifications()
+        }
     }
     
     /// Update last scan date and check for engagement notifications
@@ -210,6 +230,11 @@ class NotificationSettingsManager: NSObject, ObservableObject {
         
         // Cancel any pending engagement notifications since user is active
         cancelEngagementNotifications()
+        
+        // Reschedule engagement notifications for future
+        Task {
+            await pushNotificationService.scheduleEngagementNotifications()
+        }
     }
     
     /// Check if it's any pet's birthday today
@@ -254,6 +279,11 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     /// Cancel all notifications
     func cancelAllNotifications() {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        
+        // Also cancel push notifications
+        Task {
+            await pushNotificationService.cancelAllPushNotifications()
+        }
     }
     
     /// Reset all notification settings to defaults

@@ -34,6 +34,7 @@ class UserUpdate(BaseModel):
     image_url: Optional[str] = None
     role: Optional[UserRole] = None
     onboarded: Optional[bool] = None
+    device_token: Optional[str] = None
 
 class UserResponse(UserBase):
     """User response model"""
@@ -47,6 +48,10 @@ class UserResponse(UserBase):
 class UserInDB(UserResponse):
     """User model with internal fields"""
     hashed_password: str
+
+class User(UserResponse):
+    """Main User model for database operations"""
+    device_token: Optional[str] = None
 
 class UserLogin(BaseModel):
     """User login model - accepts either email or username"""

@@ -46,6 +46,87 @@ class APIService: ObservableObject {
         authToken = nil
     }
     
+    // MARK: - Push Notification Methods
+    
+    /// Register device token with the server for push notifications
+    /// - Parameter deviceToken: The device token to register
+    func registerDeviceToken(_ deviceToken: String) async throws {
+        let url = URL(string: "\(baseURL)/notifications/register-device")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let payload = ["device_token": deviceToken]
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+    
+    /// Send push notification via server
+    /// - Parameters:
+    ///   - payload: Notification payload
+    ///   - deviceToken: Target device token
+    func sendPushNotification(payload: [String: Any], deviceToken: String) async throws {
+        let url = URL(string: "\(baseURL)/notifications/send")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let requestPayload: [String: Any] = [
+            "device_token": deviceToken,
+            "payload": payload
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestPayload)
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+    
+    /// Cancel all push notifications for the current user
+    func cancelAllPushNotifications() async throws {
+        let url = URL(string: "\(baseURL)/notifications/cancel-all")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let (_, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+    
     /// Get current authentication token
     /// - Returns: The current auth token or nil if not set
     func getAuthToken() -> String? {

@@ -36,6 +36,10 @@ struct ContentView: View {
                             petService.loadPets()
                             // Initialize notifications
                             notificationManager.initializeNotifications()
+                            // Initialize push notifications
+                            Task {
+                                await PushNotificationService.shared.requestPushNotificationPermission()
+                            }
                         }
                         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                             // Handle app becoming active

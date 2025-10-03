@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     supabase_url: str = Field(..., description="Supabase project URL")
     supabase_key: str = Field(..., description="Supabase anon key")
     supabase_service_role_key: str = Field(..., description="Supabase service role key")
+    supabase_jwt_secret: str = Field(..., description="Supabase JWT secret for token validation")
     
     # Security Configuration
     secret_key: str = Field(..., min_length=32, description="Strong secret key for JWT signing")
@@ -89,6 +90,16 @@ class Settings(BaseSettings):
     data_retention_days: int = Field(default=365, ge=30, le=2555, description="Data retention period in days")
     enable_data_export: bool = Field(default=True, description="Enable data export for GDPR")
     enable_data_deletion: bool = Field(default=True, description="Enable data deletion for GDPR")
+    
+    # Push Notification Configuration (APNs)
+    APNS_URL: str = Field(
+        default="https://api.sandbox.push.apple.com",
+        description="APNs server URL (sandbox for development, production for release)"
+    )
+    APNS_KEY_ID: str = Field(..., description="APNs key ID")
+    APNS_TEAM_ID: str = Field(..., description="APNs team ID")
+    APNS_BUNDLE_ID: str = Field(..., description="App bundle identifier")
+    APNS_PRIVATE_KEY: str = Field(..., description="APNs private key (P8 format)")
     
     @field_validator('secret_key')
     @classmethod

@@ -166,3 +166,9 @@ def get_connection_stats() -> dict:
             "status": "error",
             "error": str(e)
         }
+
+def get_db():
+    """
+    Dependency to get database client for FastAPI routes
+    """
+    return get_supabase_client()

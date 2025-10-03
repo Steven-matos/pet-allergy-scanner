@@ -11,44 +11,56 @@ import SwiftUI
 /// Haptic feedback utility for providing tactile feedback to users
 struct HapticFeedback {
     
+    /// Check if haptic feedback is enabled in settings
+    private static var isEnabled: Bool {
+        return UserDefaults.standard.bool(forKey: "enableHapticFeedback")
+    }
+    
     /// Success haptic feedback
     static func success() {
+        guard isEnabled else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
     }
     
     /// Error haptic feedback
     static func error() {
+        guard isEnabled else { return }
         let notificationFeedback = UINotificationFeedbackGenerator()
         notificationFeedback.notificationOccurred(.error)
     }
     
     /// Warning haptic feedback
     static func warning() {
+        guard isEnabled else { return }
         let notificationFeedback = UINotificationFeedbackGenerator()
         notificationFeedback.notificationOccurred(.warning)
     }
     
     /// Light impact feedback
     static func light() {
+        guard isEnabled else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
     }
     
     /// Medium impact feedback
     static func medium() {
+        guard isEnabled else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
     }
     
     /// Heavy impact feedback
     static func heavy() {
+        guard isEnabled else { return }
         let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
         impactFeedback.impactOccurred()
     }
     
     /// Selection haptic feedback
     static func selection() {
+        guard isEnabled else { return }
         let selectionFeedback = UISelectionFeedbackGenerator()
         selectionFeedback.selectionChanged()
     }

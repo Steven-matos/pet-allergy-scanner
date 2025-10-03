@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     last_name TEXT,
     role TEXT DEFAULT 'free' CHECK (role IN ('free', 'premium')),
     onboarded BOOLEAN DEFAULT FALSE,
+    device_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
