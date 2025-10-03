@@ -10,8 +10,15 @@ import AVFoundation
 import UIKit
 
 struct CameraView: UIViewControllerRepresentable {
+    let cameraResolution: AVCaptureSession.Preset
     let onImageCaptured: (UIImage) -> Void
     let onError: (String) -> Void
+    
+    init(cameraResolution: AVCaptureSession.Preset = .high, onImageCaptured: @escaping (UIImage) -> Void, onError: @escaping (String) -> Void) {
+        self.cameraResolution = cameraResolution
+        self.onImageCaptured = onImageCaptured
+        self.onError = onError
+    }
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()

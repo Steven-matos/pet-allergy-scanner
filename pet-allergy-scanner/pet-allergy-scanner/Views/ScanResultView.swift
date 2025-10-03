@@ -10,6 +10,7 @@ import SwiftUI
 struct ScanResultView: View {
     let scan: Scan
     @Environment(\.dismiss) private var dismiss
+    @State private var settingsManager = SettingsManager.shared
     
     var body: some View {
         NavigationStack {
@@ -17,15 +18,15 @@ struct ScanResultView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     // Overall Safety Result
                     if let result = scan.result {
-                        SafetyResultCard(result: result)
+                        SafetyResultCard(result: result, settingsManager: settingsManager)
                         
                         // Ingredients Analysis
                         if !result.ingredientsFound.isEmpty {
                             IngredientsAnalysisSection(result: result)
                         }
                         
-                        // Analysis Details
-                        if !result.analysisDetails.isEmpty {
+                        // Analysis Details (only show if detailed reports are enabled)
+                        if settingsManager.shouldShowDetailedAnalysis && !result.analysisDetails.isEmpty {
                             AnalysisDetailsSection(details: result.analysisDetails)
                         }
                     } else {
@@ -53,6 +54,7 @@ struct ScanResultView: View {
 
 struct SafetyResultCard: View {
     let result: ScanResult
+    let settingsManager: SettingsManager
     
     var body: some View {
         VStack(spacing: 16) {
@@ -77,7 +79,8 @@ struct SafetyResultCard: View {
                 Spacer()
             }
             
-            if result.confidenceScore > 0 {
+            // Show confidence score only if detailed reports are enabled
+            if settingsManager.shouldShowDetailedAnalysis && result.confidenceScore > 0 {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Confidence Score")

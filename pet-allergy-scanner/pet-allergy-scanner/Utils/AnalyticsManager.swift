@@ -10,11 +10,12 @@ import SwiftUI
 import os.log
 
 /// Analytics manager for tracking app usage and errors
-class AnalyticsManager {
+@MainActor
+class AnalyticsManager: ObservableObject {
     static let shared = AnalyticsManager()
     
     private let logger = Logger(subsystem: "com.petallergyscanner.app", category: "analytics")
-    private var isEnabled: Bool = true
+    @Published private var isEnabled: Bool = true
     
     private init() {
         // Check user consent for analytics

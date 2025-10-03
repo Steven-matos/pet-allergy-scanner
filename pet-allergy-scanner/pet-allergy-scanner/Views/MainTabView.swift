@@ -15,6 +15,7 @@ struct MainTabView: View {
         TabView {
             // Home/Scan Tab
             ScanView()
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "camera.viewfinder")
                     Text("Scan")
@@ -22,6 +23,7 @@ struct MainTabView: View {
             
             // Pets Tab
             PetsView()
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "pawprint")
                     Text("Pets")
@@ -29,6 +31,7 @@ struct MainTabView: View {
             
             // History Tab
             HistoryView()
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "clock.arrow.circlepath")
                     Text("History")
@@ -36,13 +39,15 @@ struct MainTabView: View {
             
             // Favorites Tab
             FavoritesView()
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "heart.fill")
                     Text("Favorites")
                 }
             
-            // Profile Tab
-            ProfileView()
+            // Profile & Settings Tab
+            ProfileSettingsView()
+                .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "person.circle")
                     Text("Profile")

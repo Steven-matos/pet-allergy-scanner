@@ -10,6 +10,7 @@ import UIKit
 import Combine
 
 /// Scan service for managing scan operations and history
+/// Respects user settings for auto-save and analysis behavior
 @MainActor
 class ScanService: ObservableObject {
     static let shared = ScanService()
@@ -20,6 +21,7 @@ class ScanService: ObservableObject {
     @Published var isAnalyzing = false
     
     private let apiService = APIService.shared
+    private let settingsManager = SettingsManager.shared
     private var cancellables = Set<AnyCancellable>()
     private var currentAnalysisTask: Task<Void, Never>?
     
@@ -61,9 +63,33 @@ class ScanService: ObservableObject {
     }
     
     /// Create a new scan
+    /// Respects the auto-save setting to determine if scan should be saved to server
+    /// - Parameters:
+    ///   - petId: Pet ID for the scan
+    ///   - image: Captured image (optional)
+    ///   - extractedText: Text extracted from image (optional)
     func createScan(petId: String, image: UIImage?, extractedText: String?) {
         isLoading = true
         errorMessage = nil
+        
+        // Check if auto-save is enabled
+        guard settingsManager.shouldAutoSaveScans else {
+            // If auto-save is disabled, just create a local scan without saving to server
+            let localScan = Scan(
+                id: UUID().uuidString,
+                userId: "local",
+                petId: petId,
+                imageUrl: nil,
+                rawText: extractedText,
+                status: .pending,
+                result: nil,
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+            recentScans.insert(localScan, at: 0)
+            isLoading = false
+            return
+        }
         
         let scanCreate = ScanCreate(
             petId: petId,
@@ -136,5 +162,31 @@ class ScanService: ObservableObject {
         isLoading = false
         isAnalyzing = false
         currentAnalysisTask?.cancel()
+    }
+    
+    /// Manually save a scan to the server
+    /// Used when auto-save is disabled but user wants to save a specific scan
+    /// - Parameter scan: The scan to save
+    func saveScanToServer(_ scan: Scan) {
+        guard settingsManager.shouldAutoSaveScans == false else { return }
+        
+        let scanCreate = ScanCreate(
+            petId: scan.petId,
+            imageUrl: scan.imageUrl,
+            rawText: scan.rawText,
+            status: scan.status
+        )
+        
+        Task { @MainActor in
+            do {
+                let savedScan = try await apiService.createScan(scanCreate)
+                // Update the local scan with server data
+                if let index = recentScans.firstIndex(where: { $0.id == scan.id }) {
+                    recentScans[index] = savedScan
+                }
+            } catch {
+                errorMessage = "Failed to save scan: \(error.localizedDescription)"
+            }
+        }
     }
 }

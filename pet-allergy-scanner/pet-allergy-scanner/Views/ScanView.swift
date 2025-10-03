@@ -13,6 +13,7 @@ struct ScanView: View {
     @State private var ocrService = OCRService.shared
     @State private var scanService = ScanService.shared
     @State private var cameraPermissionService = CameraPermissionService.shared
+    @State private var settingsManager = SettingsManager.shared
     @State private var showingCamera = false
     @State private var showingPetSelection = false
     @State private var selectedPet: Pet?
@@ -217,6 +218,12 @@ struct ScanView: View {
                     .padding(.top, 20)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                     .animation(.easeInOut(duration: 0.4), value: !ocrService.extractedText.isEmpty)
+                    .onAppear {
+                        // Auto-analyze if setting is enabled
+                        if settingsManager.shouldAutoAnalyze && !scanService.isAnalyzing {
+                            analyzeIngredients()
+                        }
+                    }
                 }
                 
                 Spacer()
@@ -248,6 +255,7 @@ struct ScanView: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showingCamera) {
                 CameraView(
+                    cameraResolution: settingsManager.cameraResolutionPreset,
                     onImageCaptured: { image in
                         ocrService.extractText(from: image)
                     },
