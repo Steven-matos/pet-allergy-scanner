@@ -614,6 +614,16 @@ extension APIService {
         let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
     }
     
+    /// Anonymize user data
+    func anonymizeUserData() async throws {
+        guard let url = URL(string: "\(baseURL)/gdpr/anonymize") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = createRequest(url: url, method: "POST")
+        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
+    }
+    
     /// Get data retention information
     func getDataRetentionInfo() async throws -> DataRetentionInfo {
         guard let url = URL(string: "\(baseURL)/gdpr/retention") else {

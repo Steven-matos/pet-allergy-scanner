@@ -36,8 +36,9 @@ struct EditPetView: View {
                 Section {
                     HStack {
                         Spacer()
-                        PetImagePickerView(
+                        PetProfileImagePickerView(
                             selectedImage: $selectedImage,
+                            currentImageUrl: pet.imageUrl,
                             species: pet.species
                         )
                         Spacer()
@@ -265,6 +266,7 @@ struct EditPetView: View {
     
     /// Load pet data into form fields
     private func loadPetData() {
+        print("🔍 EditPetView: Loading pet data - imageUrl: \(pet.imageUrl ?? "nil")")
         name = pet.name
         breed = pet.breed ?? ""
         weightKg = pet.weightKg
@@ -272,10 +274,8 @@ struct EditPetView: View {
         vetName = pet.vetName ?? ""
         vetPhone = pet.vetPhone ?? ""
         
-        // Load pet image if available
-        if let imageUrl = pet.imageUrl {
-            selectedImage = UIImage(contentsOfFile: imageUrl)
-        }
+        // Note: Pet image loading is now handled by PetProfileImagePickerView
+        // No need to load image here as it's managed by the picker component
         
         // Extract year and month from birthday
         if let birthday = pet.birthday {

@@ -29,6 +29,10 @@ struct ProfileView: View {
                             .frame(width: 80, height: 80)
                             .clipShape(Circle())
                             .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 3))
+                            .onAppear {
+                                print("🔍 ProfileView: User data - imageUrl: \(authService.currentUser?.imageUrl ?? "nil")")
+                                print("🔍 ProfileView: Full user data: \(authService.currentUser?.description ?? "nil")")
+                            }
                         
                         if let user = authService.currentUser {
                             Text("\(user.firstName ?? "") \(user.lastName ?? "")")

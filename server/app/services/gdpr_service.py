@@ -8,8 +8,10 @@ import zipfile
 import io
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from fastapi import HTTPException, status
 from app.core.config import settings
 from app.database import get_supabase_client
+from supabase import create_client
 
 logger = get_logger(__name__)
 
@@ -18,6 +20,16 @@ class GDPRService:
     
     def __init__(self):
         self.supabase = get_supabase_client()
+        # Create service role client for admin operations
+        try:
+            self.service_supabase = create_client(
+                settings.supabase_url,
+                settings.supabase_service_role_key
+            )
+        except Exception as e:
+            logger.error(f"Failed to create service role client: {e}")
+            # Fallback to regular client if service role fails
+            self.service_supabase = self.supabase
     
     def export_user_data(self, user_id: str) -> bytes:
         """
@@ -130,7 +142,7 @@ class GDPRService:
             self.supabase.table("security_events").delete().eq("user_id", user_id).execute()
             
             # 7. Delete from Supabase Auth
-            self.supabase.auth.admin.delete_user(user_id)
+            self.service_supabase.auth.admin.delete_user(user_id)
             
             # 8. Delete user and pet images from storage
             self._delete_user_images_from_storage(user_data.data, pets_data.data)
@@ -216,20 +228,108 @@ class GDPRService:
             HTTPException: If retrieval fails
         """
         try:
-            # Get user creation date
+            # First try to get user from public.users table
             user_response = self.supabase.table("users").select("created_at").eq("id", user_id).execute()
             
             if not user_response.data:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
+                # If user doesn't exist in public.users, try to get from auth.users
+                try:
+                    # Add timeout and retry logic for auth operations
+                    import time
+                    max_auth_retries = 3
+                    auth_user = None
+                    
+                    for attempt in range(max_auth_retries):
+                        try:
+                            auth_user = self.service_supabase.auth.admin.get_user_by_id(user_id)
+                            break
+                        except Exception as auth_retry_error:
+                            if "handshake operation timed out" in str(auth_retry_error).lower():
+                                logger.warning(f"Auth handshake timeout on attempt {attempt + 1}, retrying...")
+                                if attempt < max_auth_retries - 1:
+                                    time.sleep(2 ** attempt)  # Exponential backoff
+                                    continue
+                            raise auth_retry_error
+                    
+                    if auth_user and auth_user.user:
+                        # Convert datetime to ISO string for database insertion
+                        created_at_str = auth_user.user.created_at.isoformat() if hasattr(auth_user.user.created_at, 'isoformat') else str(auth_user.user.created_at)
+                        
+                        # Upsert user record in public.users (insert or update if exists)
+                        self.service_supabase.table("users").upsert({
+                            "id": user_id,
+                            "email": auth_user.user.email,
+                            "first_name": auth_user.user.user_metadata.get("first_name"),
+                            "last_name": auth_user.user.user_metadata.get("last_name"),
+                            "username": auth_user.user.user_metadata.get("username"),
+                            "role": auth_user.user.user_metadata.get("role", "free"),
+                            "created_at": created_at_str,
+                            "onboarded": False,
+                            "image_url": None
+                        }).execute()
+                        created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found"
+                        )
+                except Exception as auth_error:
+                    logger.error(f"Failed to get user from auth: {auth_error}")
+                    # If it's a duplicate key error, try to fetch the existing user
+                    if "duplicate key" in str(auth_error).lower():
+                        try:
+                            existing_user = self.supabase.table("users").select("created_at").eq("id", user_id).execute()
+                            if existing_user.data:
+                                created_at = datetime.fromisoformat(existing_user.data[0]["created_at"])
+                            else:
+                                raise HTTPException(
+                                    status_code=status.HTTP_404_NOT_FOUND,
+                                    detail="User not found"
+                                )
+                        except Exception as fetch_error:
+                            logger.error(f"Failed to fetch existing user: {fetch_error}")
+                            raise HTTPException(
+                                status_code=status.HTTP_404_NOT_FOUND,
+                                detail="User not found"
+                            )
+                    # If it's a timeout or SSL error, try to create a minimal user record
+                    elif any(error_type in str(auth_error).lower() for error_type in ["timeout", "handshake", "ssl", "connection"]):
+                        logger.warning("Auth service unavailable, creating minimal user record with current timestamp")
+                        try:
+                            # Create a minimal user record with current timestamp
+                            current_time = datetime.utcnow().isoformat()
+                            self.service_supabase.table("users").upsert({
+                                "id": user_id,
+                                "email": f"user_{user_id[:8]}@temp.local",
+                                "first_name": "Unknown",
+                                "last_name": "User",
+                                "username": f"user_{user_id[:8]}",
+                                "role": "free",
+                                "created_at": current_time,
+                                "onboarded": False,
+                                "image_url": None
+                            }).execute()
+                            created_at = datetime.utcnow()
+                        except Exception as create_error:
+                            logger.error(f"Failed to create minimal user record: {create_error}")
+                            raise HTTPException(
+                                status_code=status.HTTP_404_NOT_FOUND,
+                                detail="User not found and unable to create user record"
+                            )
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail="User not found"
+                        )
+            else:
+                created_at = datetime.fromisoformat(user_response.data[0]["created_at"])
             
-            created_at = datetime.fromisoformat(user_response.data[0]["created_at"])
             retention_date = created_at + timedelta(days=settings.data_retention_days)
             
-            # Check if data should be deleted
-            should_delete = datetime.utcnow() > retention_date
+            # Check if data should be deleted (ensure both datetimes are timezone-aware)
+            current_time = datetime.utcnow().replace(tzinfo=None)  # Make timezone-naive
+            retention_date_naive = retention_date.replace(tzinfo=None) if retention_date.tzinfo else retention_date
+            should_delete = current_time > retention_date_naive
             
             retention_info = {
                 "user_id": user_id,
@@ -237,7 +337,7 @@ class GDPRService:
                 "retention_days": settings.data_retention_days,
                 "retention_date": retention_date.isoformat(),
                 "should_delete": should_delete,
-                "days_until_deletion": max(0, (retention_date - datetime.utcnow()).days),
+                "days_until_deletion": max(0, (retention_date_naive - current_time).days),
                 "legal_basis": "Consent",
                 "purpose": "Pet food ingredient analysis and allergy management",
                 "data_categories": [
@@ -245,7 +345,16 @@ class GDPRService:
                     "Pet profiles and medical information",
                     "Scan results and analysis",
                     "Usage patterns and preferences"
-                ]
+                ],
+                # iOS-compatible fields
+                "data_types": [
+                    "Personal information (name, email)",
+                    "Pet profiles and medical information", 
+                    "Scan results and analysis",
+                    "Usage patterns and preferences"
+                ],
+                "last_updated": current_time.isoformat(),
+                "policy_version": "1.0"
             }
             
             return retention_info

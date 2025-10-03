@@ -27,7 +27,7 @@ struct EditProfileView: View {
                 Section {
                     HStack {
                         Spacer()
-                        ImagePickerView(selectedImage: $selectedImage)
+                        ProfileImagePickerView(selectedImage: $selectedImage, currentImageUrl: authService.currentUser?.imageUrl)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
@@ -133,15 +133,18 @@ struct EditProfileView: View {
     
     /// Load current user data into form fields
     private func loadUserData() {
-        guard let user = authService.currentUser else { return }
+        guard let user = authService.currentUser else { 
+            print("🔍 EditProfileView: No current user found")
+            return 
+        }
+        
+        print("🔍 EditProfileView: Loading user data - imageUrl: \(user.imageUrl ?? "nil")")
         username = user.username ?? ""
         firstName = user.firstName ?? ""
         lastName = user.lastName ?? ""
         
-        // Load profile image if available
-        if let imageUrl = user.imageUrl {
-            selectedImage = UIImage(contentsOfFile: imageUrl)
-        }
+        // Note: Profile image loading is now handled by ProfileImagePickerView
+        // No need to load image here as it's managed by the picker component
     }
     
     /// Check if any fields have been modified
@@ -149,16 +152,8 @@ struct EditProfileView: View {
     private func hasChanges() -> Bool {
         guard let user = authService.currentUser else { return false }
         
-        // Check if image changed
-        let imageChanged: Bool
-        if let selectedImage = selectedImage {
-            let existingImage = user.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
-            imageChanged = existingImage == nil || !imagesAreEqual(selectedImage, existingImage)
-        } else if user.imageUrl != nil {
-            imageChanged = true // Image was removed
-        } else {
-            imageChanged = false
-        }
+        // Check if image changed - if selectedImage is not nil, it means user selected a new image
+        let imageChanged = selectedImage != nil
         
         return username != (user.username ?? "") ||
                firstName != (user.firstName ?? "") ||
@@ -168,6 +163,7 @@ struct EditProfileView: View {
     
     /// Save profile changes to server
     private func saveProfile() {
+        print("🔍 EditProfileView: Starting profile save")
         isSaving = true
         
         Task {
@@ -175,42 +171,26 @@ struct EditProfileView: View {
             
             // Handle image upload if changed
             if let selectedImage = selectedImage {
-                // Check if image changed by comparing with existing
-                let existingImage = authService.currentUser?.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
-                if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
-                    do {
-                        // Replace old image with new one (deletes old, uploads new)
-                        let storageService = StorageService.shared
-                        newImageUrl = try await storageService.replaceUserImage(
-                            oldImageUrl: authService.currentUser?.imageUrl,
-                            newImage: selectedImage,
-                            userId: authService.currentUser?.id ?? ""
-                        )
-                        print("📸 User image replaced in Supabase: \(newImageUrl ?? "nil")")
-                    } catch {
-                        print("Failed to replace user image: \(error)")
-                        // Don't fall back to local storage - fail properly
-                        authService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
-                        return
-                    }
-                } else {
-                    newImageUrl = nil // No change
+                print("🔍 EditProfileView: Image selected for upload")
+                do {
+                    // Replace old image with new one (deletes old, uploads new)
+                    let storageService = StorageService.shared
+                    newImageUrl = try await storageService.replaceUserImage(
+                        oldImageUrl: authService.currentUser?.imageUrl,
+                        newImage: selectedImage,
+                        userId: authService.currentUser?.id ?? ""
+                    )
+                    print("📸 User image replaced in Supabase: \(newImageUrl ?? "nil")")
+                } catch {
+                    print("Failed to replace user image: \(error)")
+                    authService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                    return
                 }
-            } else if authService.currentUser?.imageUrl != nil {
-                // Image was removed - delete old image if it's in Supabase
-                if let oldUrl = authService.currentUser?.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
-                    do {
-                        try await StorageService.shared.deleteUserImage(path: oldUrl)
-                        print("🗑️ User image removed from Supabase: \(oldUrl)")
-                    } catch {
-                        print("⚠️ Failed to delete old user image: \(error)")
-                    }
-                }
-                newImageUrl = ""
             } else {
                 newImageUrl = nil // No change
             }
             
+            print("🔍 EditProfileView: Updating profile with imageUrl: \(newImageUrl ?? "nil")")
             await authService.updateProfile(
                 username: username.isEmpty ? nil : username,
                 firstName: firstName.isEmpty ? nil : firstName,
@@ -221,25 +201,16 @@ struct EditProfileView: View {
             isSaving = false
             
             if authService.errorMessage != nil {
+                print("🔍 EditProfileView: Profile update failed: \(authService.errorMessage ?? "Unknown error")")
                 showingErrorAlert = true
             } else {
+                print("🔍 EditProfileView: Profile update successful")
                 showingSuccessAlert = true
                 HapticFeedback.success()
             }
         }
     }
     
-    
-    /// Compare two images for equality
-    /// - Parameters:
-    ///   - image1: First image
-    ///   - image2: Second image
-    /// - Returns: True if images are equal
-    private func imagesAreEqual(_ image1: UIImage, _ image2: UIImage?) -> Bool {
-        guard let image2 = image2 else { return false }
-        guard let data1 = image1.pngData(), let data2 = image2.pngData() else { return false }
-        return data1 == data2
-    }
 }
 
 #Preview {

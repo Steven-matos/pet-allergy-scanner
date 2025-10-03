@@ -39,8 +39,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
     # Startup
     logger.info("Starting Pet Allergy Scanner API...")
-    await init_db()
-    logger.info("Database initialized successfully")
+    db_initialized = await init_db()
+    if db_initialized:
+        logger.info("Database initialized successfully")
+    else:
+        logger.warning("Database initialization failed, but application will continue")
     yield
     # Shutdown
     logger.info("Shutting down Pet Allergy Scanner API...")
@@ -111,9 +114,13 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Detailed health check endpoint"""
+    from app.database import get_connection_stats
+    
+    db_stats = get_connection_stats()
+    
     return {
-        "status": "healthy",
-        "database": "connected",
+        "status": "healthy" if db_stats.get("status") == "connected" else "degraded",
+        "database": db_stats,
         "version": "1.0.0"
     }
 

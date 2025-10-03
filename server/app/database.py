@@ -28,7 +28,7 @@ async def init_db():
             settings.supabase_key
         )
         
-        # Test connection with retry logic
+        # Test connection with retry logic and better error handling
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -36,10 +36,17 @@ async def init_db():
                 logger.info("Database connection established successfully")
                 break
             except Exception as e:
-                if attempt == max_retries - 1:
+                error_msg = str(e)
+                if "nodename nor servname provided" in error_msg:
+                    logger.error(f"DNS resolution failed for Supabase URL: {settings.supabase_url}")
+                    logger.error("This might be due to network connectivity issues or the Supabase project being paused")
+                    # Don't retry on DNS errors, they won't resolve
                     raise e
-                logger.warning(f"Database connection attempt {attempt + 1} failed, retrying...")
-                await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                elif attempt == max_retries - 1:
+                    raise e
+                else:
+                    logger.warning(f"Database connection attempt {attempt + 1} failed: {error_msg}, retrying...")
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
         
         # Initialize connection pool monitoring
         await _start_connection_monitoring()
@@ -48,19 +55,27 @@ async def init_db():
         
     except Exception as e:
         logger.error(f"Database connection failed: {e}")
-        raise e
+        # Don't raise the error immediately, let the app start but log the issue
+        logger.warning("Application will start without database monitoring due to connection issues")
+        return False
 
 async def _start_connection_monitoring():
     """
     Start monitoring database connection health
     """
     async def monitor_connections():
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        
         while True:
             try:
                 # Test connection health
                 start_time = time.time()
                 supabase.table("users").select("id").limit(1).execute()
                 response_time = time.time() - start_time
+                
+                # Reset failure counter on success
+                consecutive_failures = 0
                 
                 # Log performance metrics
                 if response_time > 1.0:  # Log slow queries
@@ -70,7 +85,23 @@ async def _start_connection_monitoring():
                 await asyncio.sleep(30)
                 
             except Exception as e:
-                logger.error(f"Database health check failed: {e}")
+                consecutive_failures += 1
+                error_msg = str(e)
+                
+                if "nodename nor servname provided" in error_msg:
+                    logger.error(f"DNS resolution failed during health check: {error_msg}")
+                    # Stop monitoring if DNS issues persist
+                    if consecutive_failures >= max_consecutive_failures:
+                        logger.error("Stopping database monitoring due to persistent DNS issues")
+                        break
+                else:
+                    logger.error(f"Database health check failed: {error_msg}")
+                
+                # Check more frequently on failure, but stop if too many consecutive failures
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.error("Stopping database monitoring due to persistent connection issues")
+                    break
+                
                 await asyncio.sleep(10)  # Check more frequently on failure
     
     # Start monitoring task

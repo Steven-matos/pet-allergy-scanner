@@ -85,6 +85,11 @@ struct User: Codable, Identifiable {
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
+    
+    /// Debug description for logging
+    var description: String {
+        return "User(id: \(id), email: \(email), username: \(username ?? "nil"), firstName: \(firstName ?? "nil"), lastName: \(lastName ?? "nil"), imageUrl: \(imageUrl ?? "nil"), role: \(role), onboarded: \(onboarded))"
+    }
 }
 
 /// User role enumeration

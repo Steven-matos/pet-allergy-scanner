@@ -83,6 +83,27 @@ class GDPRService: ObservableObject {
         }
     }
     
+    /// Anonymize user data
+    func anonymizeUserData() async -> Bool {
+        guard apiService.hasAuthToken else {
+            errorMessage = "Authentication required"
+            return false
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            try await apiService.anonymizeUserData()
+            isLoading = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return false
+        }
+    }
+    
     /// Delete user data including all images from storage
     func deleteUserData() async -> Bool {
         guard apiService.hasAuthToken else {
