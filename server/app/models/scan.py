@@ -3,7 +3,7 @@ Scan data models and schemas
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -13,6 +13,15 @@ class ScanStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+class NutritionalAnalysis(BaseModel):
+    """Nutritional analysis model for pet food"""
+    serving_size_g: Optional[float] = Field(None, gt=0, description="Serving size in grams")
+    calories_per_serving: Optional[float] = Field(None, gt=0, description="Calories per serving")
+    calories_per_100g: Optional[float] = Field(None, gt=0, description="Calories per 100g")
+    macronutrients: Optional[Dict[str, float]] = Field(default_factory=dict, description="Protein, fat, fiber, moisture, ash percentages")
+    minerals: Optional[Dict[str, float]] = Field(default_factory=dict, description="Calcium, phosphorus percentages")
+    recommendations: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Pet-specific nutritional recommendations")
 
 class ScanResult(BaseModel):
     """Scan result model"""
@@ -24,6 +33,7 @@ class ScanResult(BaseModel):
     overall_safety: str = "unknown"  # "safe", "caution", "unsafe"
     confidence_score: float = Field(0.0, ge=0.0, le=1.0)
     analysis_details: Dict[str, str] = Field(default_factory=dict)
+    nutritional_analysis: Optional[NutritionalAnalysis] = None
 
 class ScanBase(BaseModel):
     """Base scan model"""
@@ -32,6 +42,7 @@ class ScanBase(BaseModel):
     raw_text: Optional[str] = None
     status: ScanStatus = ScanStatus.PENDING
     result: Optional[ScanResult] = None
+    nutritional_analysis: Optional[NutritionalAnalysis] = None
 
 class ScanCreate(ScanBase):
     """Scan creation model"""

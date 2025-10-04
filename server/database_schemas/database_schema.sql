@@ -1,4 +1,4 @@
--- Pet Allergy Scanner Database Schema
+-- SniffTest Database Schema
 -- This schema should be run in your Supabase SQL editor
 
 -- Enable necessary extensions
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS public.pets (
     breed TEXT,
     birthday DATE,
     weight_kg DECIMAL(5,2) CHECK (weight_kg >= 0.1 AND weight_kg <= 200.0),
+    activity_level TEXT CHECK (activity_level IN ('low', 'moderate', 'high')),
     known_sensitivities TEXT[] DEFAULT '{}',
     vet_name TEXT,
     vet_phone TEXT,

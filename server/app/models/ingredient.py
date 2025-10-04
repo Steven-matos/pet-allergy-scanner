@@ -21,6 +21,17 @@ class SpeciesCompatibility(str, Enum):
     BOTH = "both"
     NEITHER = "neither"
 
+class IngredientNutritionalValue(BaseModel):
+    """Structured nutritional value for ingredients"""
+    calories_per_100g: Optional[float] = Field(None, gt=0, description="Calories per 100g")
+    protein_percent: Optional[float] = Field(None, ge=0, le=100, description="Protein percentage")
+    fat_percent: Optional[float] = Field(None, ge=0, le=100, description="Fat percentage")
+    fiber_percent: Optional[float] = Field(None, ge=0, le=100, description="Fiber percentage")
+    moisture_percent: Optional[float] = Field(None, ge=0, le=100, description="Moisture percentage")
+    ash_percent: Optional[float] = Field(None, ge=0, le=100, description="Ash percentage")
+    calcium_percent: Optional[float] = Field(None, ge=0, le=100, description="Calcium percentage")
+    phosphorus_percent: Optional[float] = Field(None, ge=0, le=100, description="Phosphorus percentage")
+
 class IngredientBase(BaseModel):
     """Base ingredient model"""
     name: str = Field(..., min_length=1, max_length=200)
@@ -29,7 +40,7 @@ class IngredientBase(BaseModel):
     species_compatibility: SpeciesCompatibility = SpeciesCompatibility.BOTH
     description: Optional[str] = None
     common_allergen: bool = False
-    nutritional_value: Optional[Dict[str, str]] = None
+    nutritional_value: Optional[IngredientNutritionalValue] = None
 
 class IngredientCreate(IngredientBase):
     """Ingredient creation model"""
@@ -43,7 +54,7 @@ class IngredientUpdate(BaseModel):
     species_compatibility: Optional[SpeciesCompatibility] = None
     description: Optional[str] = None
     common_allergen: Optional[bool] = None
-    nutritional_value: Optional[Dict[str, str]] = None
+    nutritional_value: Optional[IngredientNutritionalValue] = None
 
 class IngredientResponse(IngredientBase):
     """Ingredient response model"""

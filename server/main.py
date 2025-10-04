@@ -1,5 +1,5 @@
 """
-Pet Allergy Scanner Backend API
+SniffTest Backend API
 Main FastAPI application with Supabase integration and enhanced security
 """
 
@@ -17,7 +17,7 @@ import logging
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications
+from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, nutrition
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
@@ -38,7 +38,7 @@ security = HTTPBearer()
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
     # Startup
-    logger.info("Starting Pet Allergy Scanner API...")
+    logger.info("Starting SniffTest API...")
     db_initialized = await init_db()
     if db_initialized:
         logger.info("Database initialized successfully")
@@ -46,11 +46,11 @@ async def lifespan(app: FastAPI):
         logger.warning("Database initialization failed, but application will continue")
     yield
     # Shutdown
-    logger.info("Shutting down Pet Allergy Scanner API...")
+    logger.info("Shutting down SniffTest API...")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Pet Allergy Scanner API",
+    title="SniffTest API",
     description="Backend API for pet food ingredient scanning and analysis with enhanced security",
     version=settings.api_version,
     lifespan=lifespan,
@@ -106,11 +106,13 @@ app.include_router(scans.router, prefix="/api/v1/scans", tags=["scans"])
 app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
 app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["gdpr"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
+app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutritional-analysis"])
+app.include_router(nutrition.router, prefix="/api/v1", tags=["nutrition"])
 
 @app.get("/")
 async def root():
     """Health check endpoint"""
-    return {"message": "Pet Allergy Scanner API is running", "version": "1.0.0"}
+    return {"message": "SniffTest API is running", "version": "1.0.0"}
 
 @app.get("/health")
 async def health_check():

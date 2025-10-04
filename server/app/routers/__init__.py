@@ -1,1 +1,1 @@
-# API routers for Pet Allergy Scanner
+# API routers for SniffTest

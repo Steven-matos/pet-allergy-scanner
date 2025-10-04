@@ -46,8 +46,8 @@ class Settings(BaseSettings):
             "capacitor://localhost",
             "ionic://localhost",
             # iOS app URL schemes
-            "sniffsafe://",
-            "sniffsafe://localhost",
+            "SniffTest://",
+            "SniffTest://localhost",
             # Production origins (update these with your actual domains)
             "https://api.petallergyscanner.com",
             "https://petallergyscanner.com"
