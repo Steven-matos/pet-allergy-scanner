@@ -47,7 +47,7 @@ struct MainTabView: View {
                 }
             
             // Nutrition Tab
-            NutritionDashboardView()
+            Phase3NutritionView()
                 .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "leaf.fill")
