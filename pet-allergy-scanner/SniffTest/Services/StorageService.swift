@@ -139,7 +139,7 @@ class StorageService: ObservableObject {
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(await apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
         request.httpBody = data
         
         let (responseData, response) = try await URLSession.shared.data(for: request)
@@ -188,7 +188,7 @@ class StorageService: ObservableObject {
         
         var request = URLRequest(url: deleteURL)
         request.httpMethod = "DELETE"
-        request.setValue("Bearer \(apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(await apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
         
         let (_, response) = try await URLSession.shared.data(for: request)
         

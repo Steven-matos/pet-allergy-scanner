@@ -71,12 +71,6 @@ struct ContentView: View {
                 BirthdayCelebrationView(pet: pet, isPresented: $notificationManager.showBirthdayCelebration)
             }
         }
-        .onChange(of: notificationManager.navigateToScan) { _, shouldNavigate in
-            if shouldNavigate {
-                // Navigate to scan view - this would be handled by the tab view
-                // The actual navigation logic would be in MainTabView
-            }
-        }
     }
 }
 

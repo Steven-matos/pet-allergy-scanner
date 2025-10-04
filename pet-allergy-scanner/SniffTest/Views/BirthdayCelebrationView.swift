@@ -294,6 +294,7 @@ struct BirthdayCelebrationView_Previews: PreviewProvider {
                 breed: "Golden Retriever",
                 birthday: Calendar.current.date(byAdding: .year, value: -2, to: Date()),
                 weightKg: 25.0,
+                activityLevel: .moderate,
                 imageUrl: nil,
                 knownSensitivities: [],
                 vetName: "Dr. Smith",

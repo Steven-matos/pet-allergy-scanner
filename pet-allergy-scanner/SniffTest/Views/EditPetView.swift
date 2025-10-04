@@ -19,6 +19,7 @@ struct EditPetView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
+    @State private var activityLevel: PetActivityLevel = .moderate
     @State private var selectedImage: UIImage?
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
@@ -179,6 +180,26 @@ struct EditPetView: View {
                                 .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                         }
                     }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Activity Level")
+                            .font(.headline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Picker("Activity Level", selection: $activityLevel) {
+                            ForEach(PetActivityLevel.allCases, id: \.self) { level in
+                                VStack(alignment: .leading) {
+                                    Text(level.displayName)
+                                        .font(.body)
+                                    Text(level.description)
+                                        .font(.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                                .tag(level)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
                 }
                 
                 // Sensitivities Section
@@ -270,6 +291,7 @@ struct EditPetView: View {
         name = pet.name
         breed = pet.breed ?? ""
         weightKg = pet.weightKg
+        activityLevel = pet.effectiveActivityLevel
         knownSensitivities = pet.knownSensitivities
         vetName = pet.vetName ?? ""
         vetPhone = pet.vetPhone ?? ""
@@ -293,6 +315,7 @@ struct EditPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil, // Not validating image URL
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -309,6 +332,7 @@ struct EditPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil, // Not validating image URL
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -366,6 +390,7 @@ struct EditPetView: View {
                     breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
                     birthday: createBirthday(year: birthYear, month: birthMonth),
                     weightKg: weightKg != pet.weightKg ? weightKg : nil,
+                    activityLevel: activityLevel != pet.effectiveActivityLevel ? activityLevel : nil,
                     imageUrl: newImageUrl,
                     knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
                     vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
@@ -515,6 +540,7 @@ struct EditPetView: View {
         breed: "Golden Retriever",
         birthday: Calendar.current.date(from: DateComponents(year: 2020, month: 3))!,
         weightKg: 25.5,
+        activityLevel: .high,
         imageUrl: nil,
         knownSensitivities: ["Chicken", "Wheat"],
         vetName: "Dr. Smith",

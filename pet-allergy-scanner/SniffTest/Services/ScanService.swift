@@ -11,7 +11,6 @@ import Combine
 
 /// Scan service for managing scan operations and history
 /// Respects user settings for auto-save and analysis behavior
-@MainActor
 class ScanService: ObservableObject {
     static let shared = ScanService()
     
@@ -21,43 +20,58 @@ class ScanService: ObservableObject {
     @Published var isAnalyzing = false
     
     private let apiService = APIService.shared
-    private let settingsManager = SettingsManager.shared
+    private let settingsManager: SettingsManager
     private var cancellables = Set<AnyCancellable>()
     private var currentAnalysisTask: Task<Void, Never>?
     
-    private init() {}
+    private init() {
+        // Access SettingsManager.shared on the main actor
+        self.settingsManager = MainActor.assumeIsolated {
+            SettingsManager.shared
+        }
+    }
     
     /// Load recent scans for the current user
     /// - Note: Only loads scans if user is authenticated to avoid 403 errors during logout
     func loadRecentScans() {
-        // Don't attempt to load scans if not authenticated
-        guard apiService.hasAuthToken else {
-            self.recentScans = []
-            self.isLoading = false
-            self.errorMessage = nil
-            return
-        }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        Task { @MainActor in
+        Task {
+            // Don't attempt to load scans if not authenticated
+            guard await apiService.hasAuthToken else {
+                await MainActor.run {
+                    self.recentScans = []
+                    self.isLoading = false
+                    self.errorMessage = nil
+                }
+                return
+            }
+            
+            await MainActor.run {
+                isLoading = true
+                errorMessage = nil
+            }
+            
             do {
                 let scans = try await apiService.getScans()
-                recentScans = scans.sorted { $0.createdAt > $1.createdAt }
-                isLoading = false
+                await MainActor.run {
+                    recentScans = scans.sorted { $0.createdAt > $1.createdAt }
+                    isLoading = false
+                }
             } catch let apiError as APIError {
-                self.isLoading = false
-                // Silently ignore auth errors (user might be logging out)
-                if case .authenticationError = apiError {
-                    self.recentScans = []
-                    self.errorMessage = nil
-                } else {
-                    self.errorMessage = apiError.localizedDescription
+                await MainActor.run {
+                    self.isLoading = false
+                    // Silently ignore auth errors (user might be logging out)
+                    if case .authenticationError = apiError {
+                        self.recentScans = []
+                        self.errorMessage = nil
+                    } else {
+                        self.errorMessage = apiError.localizedDescription
+                    }
                 }
             } catch {
-                isLoading = false
-                errorMessage = error.localizedDescription
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
@@ -68,7 +82,7 @@ class ScanService: ObservableObject {
     ///   - petId: Pet ID for the scan
     ///   - image: Captured image (optional)
     ///   - extractedText: Text extracted from image (optional)
-    func createScan(petId: String, image: UIImage?, extractedText: String?) {
+    @MainActor func createScan(petId: String, image: UIImage?, extractedText: String?) {
         isLoading = true
         errorMessage = nil
         
@@ -160,22 +174,26 @@ class ScanService: ObservableObject {
     
     /// Clear error message
     func clearError() {
-        errorMessage = nil
+        Task { @MainActor in
+            errorMessage = nil
+        }
     }
     
     /// Clear all scans (called during logout)
     func clearScans() {
-        recentScans = []
-        errorMessage = nil
-        isLoading = false
-        isAnalyzing = false
-        currentAnalysisTask?.cancel()
+        Task { @MainActor in
+            recentScans = []
+            errorMessage = nil
+            isLoading = false
+            isAnalyzing = false
+            currentAnalysisTask?.cancel()
+        }
     }
     
     /// Manually save a scan to the server
     /// Used when auto-save is disabled but user wants to save a specific scan
     /// - Parameter scan: The scan to save
-    func saveScanToServer(_ scan: Scan) {
+    @MainActor func saveScanToServer(_ scan: Scan) {
         guard settingsManager.shouldAutoSaveScans == false else { return }
         
         let scanCreate = ScanCreate(

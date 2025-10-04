@@ -12,38 +12,52 @@ import Security
 struct EmptyResponse: Codable {}
 
 /// Main API service for communicating with the backend using Swift Concurrency
-@MainActor
 class APIService: ObservableObject {
     static let shared = APIService()
     
     private let baseURL = Configuration.apiBaseURL
     private let authTokenKey = "authToken"
+    private var _authToken: String?
+    private let authTokenQueue = DispatchQueue(label: "authToken", qos: .userInitiated)
+    
+    /// Get authentication token asynchronously
     private var authToken: String? {
-        get { KeychainHelper.read(forKey: authTokenKey) }
-        set {
-            if let token = newValue {
-                KeychainHelper.save(token, forKey: authTokenKey)
-            } else {
-                KeychainHelper.delete(forKey: authTokenKey)
+        get async {
+            if let token = _authToken {
+                return token
             }
+            return await KeychainHelper.read(forKey: authTokenKey)
+        }
+    }
+    
+    /// Set authentication token asynchronously
+    private func setAuthTokenInternal(_ token: String?) async {
+        _authToken = token
+        if let token = token {
+            await KeychainHelper.save(token, forKey: authTokenKey)
+        } else {
+            await KeychainHelper.delete(forKey: authTokenKey)
         }
     }
     
     /// Check if user has authentication token
     var hasAuthToken: Bool {
-        return authToken != nil
+        get async {
+            let token = await authToken
+            return token != nil
+        }
     }
     
     private init() {}
     
     /// Set authentication token for API requests
-    func setAuthToken(_ token: String) {
-        authToken = token
+    func setAuthToken(_ token: String) async {
+        await setAuthTokenInternal(token)
     }
     
     /// Clear authentication token
-    func clearAuthToken() {
-        authToken = nil
+    func clearAuthToken() async {
+        await setAuthTokenInternal(nil)
     }
     
     // MARK: - Push Notification Methods
@@ -56,7 +70,7 @@ class APIService: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if let token = authToken {
+        if let token = await authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -84,7 +98,7 @@ class APIService: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if let token = authToken {
+        if let token = await authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -112,7 +126,7 @@ class APIService: ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if let token = authToken {
+        if let token = await authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -129,8 +143,60 @@ class APIService: ObservableObject {
     
     /// Get current authentication token
     /// - Returns: The current auth token or nil if not set
-    func getAuthToken() -> String? {
-        return authToken
+    func getAuthToken() async -> String? {
+        return await authToken
+    }
+    
+    // MARK: - Generic HTTP Methods
+    
+    /**
+     * Generic GET request method
+     * - Parameter endpoint: The API endpoint to call
+     * - Returns: Decoded response of type T
+     */
+    func get<T: Codable>(endpoint: String, responseType: T.Type) async throws -> T {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = await createRequest(url: url)
+        return try await performRequest(request, responseType: T.self)
+    }
+    
+    /**
+     * Generic POST request method
+     * - Parameter endpoint: The API endpoint to call
+     * - Parameter body: The request body to send
+     * - Returns: Decoded response of type T
+     */
+    func post<T: Codable, U: Codable>(endpoint: String, body: T, responseType: U.Type) async throws -> U {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = await createRequest(url: url, method: "POST")
+        
+        do {
+            request.httpBody = try createJSONEncoder().encode(body)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        return try await performRequest(request, responseType: U.self)
+    }
+    
+    /**
+     * Generic POST request method with no body
+     * - Parameter endpoint: The API endpoint to call
+     * - Returns: Decoded response of type T
+     */
+    func post<T: Codable>(endpoint: String, responseType: T.Type) async throws -> T {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = await createRequest(url: url, method: "POST")
+        return try await performRequest(request, responseType: T.self)
     }
     
     /// Create JSON encoder with consistent date encoding strategy
@@ -183,7 +249,7 @@ class APIService: ObservableObject {
     }
     
     /// Create URL request with authentication headers and security features
-    private func createRequest(url: URL, method: String = "GET", body: Data? = nil) -> URLRequest {
+    private func createRequest(url: URL, method: String = "GET", body: Data? = nil) async -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -194,7 +260,7 @@ class APIService: ObservableObject {
         request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
-        if let token = authToken {
+        if let token = await authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -223,12 +289,12 @@ class APIService: ObservableObject {
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         // Clear invalid token only if this is a session/token error
                         if errorResponse.message.lowercased().contains("invalid authentication") {
-                            clearAuthToken()
+                            await clearAuthToken()
                         }
                         throw APIError.serverMessage(errorResponse.message)
                     }
                     // Fallback to generic authentication error
-                    clearAuthToken()
+                    await clearAuthToken()
                     throw APIError.authenticationError
                 case 403:
                     // Check if this is an email verification error
@@ -327,7 +393,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         do {
             request.httpBody = try createJSONEncoder().encode(user)
@@ -346,7 +412,7 @@ extension APIService {
         
         print("🔍 DEBUG: Attempting login to URL: \(url)")
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         let loginData = ["email_or_username": email, "password": password]
         do {
@@ -367,7 +433,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         let resetData = ["email": email]
         do {
@@ -385,7 +451,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: User.self)
     }
     
@@ -395,7 +461,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "PUT")
+        var request = await createRequest(url: url, method: "PUT")
         
         do {
             request.httpBody = try createJSONEncoder().encode(userUpdate)
@@ -416,7 +482,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         do {
             request.httpBody = try createJSONEncoder().encode(pet)
@@ -433,7 +499,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: [Pet].self)
     }
     
@@ -443,7 +509,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: Pet.self)
     }
     
@@ -453,7 +519,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "PUT")
+        var request = await createRequest(url: url, method: "PUT")
         
         do {
             request.httpBody = try createJSONEncoder().encode(petUpdate)
@@ -470,7 +536,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url, method: "DELETE")
+        let request = await createRequest(url: url, method: "DELETE")
         
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
@@ -506,7 +572,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         do {
             request.httpBody = try createJSONEncoder().encode(scan)
@@ -523,7 +589,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         do {
             request.httpBody = try createJSONEncoder().encode(analysisRequest)
@@ -545,7 +611,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: [Scan].self)
     }
     
@@ -555,7 +621,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: Scan.self)
     }
 }
@@ -573,7 +639,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         let analysisData: [String: Any] = [
             "ingredients": ingredients,
@@ -596,7 +662,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: [String].self)
     }
     
@@ -606,7 +672,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: [String].self)
     }
 }
@@ -620,7 +686,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url, method: "POST")
+        let request = await createRequest(url: url, method: "POST")
         return try await performRequest(request, responseType: MFASetupResponse.self)
     }
     
@@ -630,7 +696,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         let mfaData = ["token": token]
         do {
@@ -648,7 +714,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        var request = createRequest(url: url, method: "POST")
+        var request = await createRequest(url: url, method: "POST")
         
         let mfaData = ["token": token]
         do {
@@ -666,7 +732,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: MFAStatus.self)
     }
 }
@@ -680,7 +746,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         let (data, _) = try await URLSession.shared.data(for: request)
         return data
     }
@@ -691,7 +757,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url, method: "DELETE")
+        let request = await createRequest(url: url, method: "DELETE")
         let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
     }
     
@@ -701,7 +767,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url, method: "POST")
+        let request = await createRequest(url: url, method: "POST")
         let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
     }
     
@@ -711,7 +777,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: DataRetentionInfo.self)
     }
     
@@ -721,7 +787,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: DataSubjectRights.self)
     }
 }
@@ -735,7 +801,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: HealthStatus.self)
     }
     
@@ -745,7 +811,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: SystemMetrics.self)
     }
     
@@ -755,7 +821,7 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        let request = createRequest(url: url)
+        let request = await createRequest(url: url)
         return try await performRequest(request, responseType: SystemStatus.self)
     }
 }

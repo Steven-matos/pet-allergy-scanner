@@ -378,7 +378,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # CORS Configuration (comma-separated)
 # Development origins
-ALLOWED_ORIGINS_STR=http://localhost:3000,http://localhost:8080,http://localhost,https://localhost,capacitor://localhost,ionic://localhost,sniffsafe://,sniffsafe://localhost,https://api.petallergyscanner.com,https://petallergyscanner.com
+ALLOWED_ORIGINS_STR=http://localhost:3000,http://localhost:8080,http://localhost,https://localhost,capacitor://localhost,ionic://localhost,SniffTest://,SniffTest://localhost,https://api.petallergyscanner.com,https://petallergyscanner.com
 ALLOWED_HOSTS_STR=localhost,127.0.0.1
 
 # Database Configuration

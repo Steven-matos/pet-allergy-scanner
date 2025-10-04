@@ -35,6 +35,83 @@ class CachedScanService: ObservableObject {
         return AuthService.shared.currentUser?.id
     }
     
+    // MARK: - Private Helper Methods
+    
+    /**
+     * Safely retrieve scans from cache with error handling
+     * - Parameter userId: The user ID
+     * - Returns: Cached scans or nil if retrieval fails
+     */
+    private func safeRetrieveCachedScans(userId: String) -> [Scan]? {
+        // Use a completely safe approach to avoid casting errors
+        let scopedKey = CacheKey.scans.scoped(forUserId: userId)
+        
+        // First, check if the cache key exists and is valid
+        guard cacheService.exists(forKey: scopedKey) else {
+            print("❌ Cache key does not exist: \(scopedKey)")
+            return nil
+        }
+        
+        // Try to retrieve with a fallback mechanism
+        // If this fails due to casting, we'll catch it and clear the cache
+        let result = cacheService.retrieve([Scan].self, forKey: scopedKey)
+        
+        // If we get nil, it could be due to cache corruption
+        if result == nil {
+            print("❌ Cache retrieval returned nil, clearing specific cache key")
+            cacheService.clearCache(forKey: scopedKey)
+        }
+        
+        return result
+    }
+    
+    /**
+     * Get scans with complete cache bypass if corruption is detected
+     * - Parameter petId: The pet ID to get scans for
+     * - Returns: Scans from cache or server
+     */
+    private func getScansWithCacheBypass(petId: String) async -> [Scan] {
+        // Try local state first
+        let localScans = recentScans.filter { $0.petId == petId }
+        if !localScans.isEmpty {
+            return localScans
+        }
+        
+        // Try cache with error handling
+        if let userId = currentUserId {
+            let scopedKey = CacheKey.scans.scoped(forUserId: userId)
+            
+            // Check if cache exists before trying to retrieve
+            if cacheService.exists(forKey: scopedKey) {
+                let cachedScans = cacheService.retrieve([Scan].self, forKey: scopedKey)
+                if let scans = cachedScans {
+                    let petScans = scans.filter { $0.petId == petId }
+                    if !petScans.isEmpty {
+                        return petScans
+                    }
+                } else {
+                    print("❌ Cache retrieval returned nil, clearing cache")
+                    cacheService.clearCache(forKey: scopedKey)
+                }
+            }
+        }
+        
+        // Fallback to server
+        do {
+            let scans = try await apiService.getScans(petId: petId)
+            
+            // Cache the result
+            if let userId = currentUserId {
+                cacheService.storeUserData(scans, forKey: .scans, userId: userId)
+            }
+            
+            return scans
+        } catch {
+            print("❌ Failed to fetch scans for pet from server: \(error)")
+            return []
+        }
+    }
+    
     /// Cache refresh timer for background updates
     private var refreshTimer: Timer?
     
@@ -59,7 +136,7 @@ class CachedScanService: ObservableObject {
         
         // Try cache first unless force refresh is requested
         if !forceRefresh {
-            if let cachedScans = cacheService.retrieveUserData([Scan].self, forKey: .scans, userId: userId) {
+            if let cachedScans = safeRetrieveCachedScans(userId: userId) {
                 self.recentScans = cachedScans.sorted { $0.createdAt > $1.createdAt }
                 self.isLoading = false
                 self.errorMessage = nil
@@ -156,7 +233,7 @@ class CachedScanService: ObservableObject {
         
         // Try cache
         if let userId = currentUserId,
-           let cachedScans = cacheService.retrieveUserData([Scan].self, forKey: .scans, userId: userId),
+           let cachedScans = safeRetrieveCachedScans(userId: userId),
            let scan = cachedScans.first(where: { $0.id == id }) {
             return scan
         }
@@ -175,7 +252,7 @@ class CachedScanService: ObservableObject {
         
         // Try cache
         if let userId = currentUserId,
-           let cachedScans = cacheService.retrieveUserData([Scan].self, forKey: .scans, userId: userId),
+           let cachedScans = safeRetrieveCachedScans(userId: userId),
            let scan = cachedScans.first(where: { $0.id == id }) {
             return scan
         }
@@ -207,35 +284,8 @@ class CachedScanService: ObservableObject {
     /// - Parameter petId: Pet ID
     /// - Returns: Scans for the pet from server or cache
     func getScansForPetWithFallback(petId: String) async -> [Scan] {
-        // Try local state first
-        let localScans = recentScans.filter { $0.petId == petId }
-        if !localScans.isEmpty {
-            return localScans
-        }
-        
-        // Try cache
-        if let userId = currentUserId,
-           let cachedScans = cacheService.retrieveUserData([Scan].self, forKey: .scans, userId: userId) {
-            let petScans = cachedScans.filter { $0.petId == petId }
-            if !petScans.isEmpty {
-                return petScans
-            }
-        }
-        
-        // Fallback to server
-        do {
-            let scans = try await apiService.getScans(petId: petId)
-            
-            // Cache the result
-            if let userId = currentUserId {
-                cacheService.storeUserData(scans, forKey: .scans, userId: userId)
-            }
-            
-            return scans
-        } catch {
-            print("❌ Failed to fetch scans for pet from server: \(error)")
-            return []
-        }
+        // Use the safer cache bypass method to avoid casting errors
+        return await getScansWithCacheBypass(petId: petId)
     }
     
     /// Refresh scans data from server

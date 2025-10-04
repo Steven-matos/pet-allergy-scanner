@@ -17,7 +17,7 @@ class URLHandler: ObservableObject {
     
     /// Handle incoming URL from email authentication
     func handleURL(_ url: URL) -> Bool {
-        guard url.scheme == "sniffsafe" else { return false }
+        guard url.scheme == "SniffTest" else { return false }
         
         // Parse URL components
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)

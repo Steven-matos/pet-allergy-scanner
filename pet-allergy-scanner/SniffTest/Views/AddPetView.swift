@@ -17,6 +17,7 @@ struct AddPetView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
+    @State private var activityLevel: PetActivityLevel = .moderate
     @State private var selectedImage: UIImage?
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
@@ -178,6 +179,26 @@ struct AddPetView: View {
                                 .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                         }
                     }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Activity Level")
+                            .font(.headline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Picker("Activity Level", selection: $activityLevel) {
+                            ForEach(PetActivityLevel.allCases, id: \.self) { level in
+                                VStack(alignment: .leading) {
+                                    Text(level.displayName)
+                                        .font(.body)
+                                    Text(level.description)
+                                        .font(.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                                .tag(level)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
                 }
                 
                 // Sensitivities Section
@@ -268,6 +289,7 @@ struct AddPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -284,6 +306,7 @@ struct AddPetView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -324,6 +347,7 @@ struct AddPetView: View {
                     breed: breed.isEmpty ? nil : breed,
                     birthday: createBirthday(year: birthYear, month: birthMonth),
                     weightKg: weightKg,
+                    activityLevel: activityLevel,
                     imageUrl: imageUrl,
                     knownSensitivities: knownSensitivities,
                     vetName: vetName.isEmpty ? nil : vetName,

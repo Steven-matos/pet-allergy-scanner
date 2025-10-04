@@ -40,7 +40,7 @@ class MonitoringService {
     
     /// Get system metrics
     func getSystemMetrics(hours: Int = 24) async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }
@@ -59,7 +59,7 @@ class MonitoringService {
     
     /// Get system status
     func getSystemStatus() async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }

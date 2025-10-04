@@ -25,7 +25,7 @@ class GDPRService: ObservableObject {
     
     /// Get data retention information
     func getDataRetentionInfo() async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }
@@ -44,7 +44,7 @@ class GDPRService: ObservableObject {
     
     /// Get data subject rights information
     func getDataSubjectRights() async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }
@@ -63,7 +63,7 @@ class GDPRService: ObservableObject {
     
     /// Export user data
     func exportUserData() async -> Data? {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return nil
         }
@@ -85,7 +85,7 @@ class GDPRService: ObservableObject {
     
     /// Anonymize user data
     func anonymizeUserData() async -> Bool {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return false
         }
@@ -106,7 +106,7 @@ class GDPRService: ObservableObject {
     
     /// Delete user data including all images from storage
     func deleteUserData() async -> Bool {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return false
         }
@@ -148,7 +148,7 @@ class GDPRService: ObservableObject {
             try await apiService.deleteUserData()
             
             // Clear local auth state
-            AuthService.shared.logout()
+            await AuthService.shared.logout()
             
             isLoading = false
             return true

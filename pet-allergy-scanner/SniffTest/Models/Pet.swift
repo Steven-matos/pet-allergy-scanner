@@ -16,6 +16,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
+    let activityLevel: PetActivityLevel?
     let imageUrl: String?
     let knownSensitivities: [String]
     let vetName: String?
@@ -77,6 +78,35 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
         }
     }
     
+    /// Calculate life stage based on age and species
+    var lifeStage: PetLifeStage {
+        guard let ageMonths = ageMonths else { return .adult }
+        
+        switch species {
+        case .dog:
+            if ageMonths < 12 {
+                return .puppy
+            } else if ageMonths >= 84 { // 7 years for dogs
+                return .senior
+            } else {
+                return .adult
+            }
+        case .cat:
+            if ageMonths < 12 {
+                return .puppy
+            } else if ageMonths >= 84 { // 7 years for cats
+                return .senior
+            } else {
+                return .adult
+            }
+        }
+    }
+    
+    /// Get default activity level if not set
+    var effectiveActivityLevel: PetActivityLevel {
+        return activityLevel ?? .moderate
+    }
+    
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "user_id"
@@ -85,6 +115,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
         case breed
         case birthday
         case weightKg = "weight_kg"
+        case activityLevel = "activity_level"
         case imageUrl = "image_url"
         case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"
@@ -118,6 +149,59 @@ enum PetSpecies: String, Codable, CaseIterable {
     }
 }
 
+/// Pet activity level enumeration
+enum PetActivityLevel: String, Codable, CaseIterable {
+    case low = "low"
+    case moderate = "moderate"
+    case high = "high"
+    
+    var displayName: String {
+        switch self {
+        case .low:
+            return "Low Activity"
+        case .moderate:
+            return "Moderate Activity"
+        case .high:
+            return "High Activity"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .low:
+            return "Indoor, minimal exercise"
+        case .moderate:
+            return "Regular walks, some play"
+        case .high:
+            return "Very active, lots of exercise"
+        }
+    }
+}
+
+/// Pet life stage enumeration
+enum PetLifeStage: String, Codable, CaseIterable {
+    case puppy = "puppy"
+    case adult = "adult"
+    case senior = "senior"
+    case pregnant = "pregnant"
+    case lactating = "lactating"
+    
+    var displayName: String {
+        switch self {
+        case .puppy:
+            return "Puppy/Kitten"
+        case .adult:
+            return "Adult"
+        case .senior:
+            return "Senior"
+        case .pregnant:
+            return "Pregnant"
+        case .lactating:
+            return "Lactating"
+        }
+    }
+}
+
 /// Pet creation model for new pet profiles
 struct PetCreate: Codable {
     let name: String
@@ -125,6 +209,7 @@ struct PetCreate: Codable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
+    let activityLevel: PetActivityLevel?
     let imageUrl: String?
     let knownSensitivities: [String]
     let vetName: String?
@@ -164,6 +249,7 @@ struct PetCreate: Codable {
         case breed
         case birthday
         case weightKg = "weight_kg"
+        case activityLevel = "activity_level"
         case imageUrl = "image_url"
         case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"
@@ -177,6 +263,7 @@ struct PetUpdate: Codable {
     let breed: String?
     let birthday: Date?
     let weightKg: Double?
+    let activityLevel: PetActivityLevel?
     let imageUrl: String?
     let knownSensitivities: [String]?
     let vetName: String?
@@ -187,6 +274,7 @@ struct PetUpdate: Codable {
         case breed
         case birthday
         case weightKg = "weight_kg"
+        case activityLevel = "activity_level"
         case imageUrl = "image_url"
         case knownSensitivities = "known_sensitivities"
         case vetName = "vet_name"

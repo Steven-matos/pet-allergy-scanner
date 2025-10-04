@@ -90,8 +90,10 @@ class NotificationManager: ObservableObject {
     
     /// Handle navigation to scan view
     func handleNavigateToScan() {
+        print("🔍 NotificationManager: handleNavigateToScan() called - setting navigateToScan = true")
         navigateToScan = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            print("🔍 NotificationManager: Resetting navigateToScan = false")
             self.navigateToScan = false
         }
     }
@@ -112,7 +114,8 @@ class NotificationManager: ObservableObject {
         
         // Listen for scan navigation requests
         NotificationCenter.default.publisher(for: .navigateToScan)
-            .sink { [weak self] _ in
+            .sink { [weak self] notification in
+                print("🔍 NotificationManager: Received .navigateToScan notification")
                 self?.handleNavigateToScan()
             }
             .store(in: &cancellables)

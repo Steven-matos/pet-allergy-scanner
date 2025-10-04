@@ -99,14 +99,14 @@ class CachedAuthService: ObservableObject {
     }
     
     /// Logout current user with cache cleanup
-    func logout() {
+    func logout() async {
         // Clear all caches
         if let userId = currentUser?.id {
             cacheService.clearUserCache(userId: userId)
         }
         
         // Clear auth token
-        apiService.clearAuthToken()
+        await apiService.clearAuthToken()
         authState = .unauthenticated
         errorMessage = nil
         
@@ -170,10 +170,10 @@ class CachedAuthService: ObservableObject {
     }
     
     /// Handle email confirmation with caching
-    func handleEmailConfirmation(accessToken: String, refreshToken: String) {
+    func handleEmailConfirmation(accessToken: String, refreshToken: String) async {
         print("CachedAuthService: Handling email confirmation")
         
-        apiService.setAuthToken(accessToken)
+        await apiService.setAuthToken(accessToken)
         authState = .loading
         errorMessage = nil
         
@@ -194,16 +194,16 @@ class CachedAuthService: ObservableObject {
                 print("CachedAuthService: Email confirmation successful")
             } catch {
                 print("CachedAuthService: Email confirmation failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
     
     /// Handle password reset with caching
-    func handlePasswordReset(accessToken: String) {
+    func handlePasswordReset(accessToken: String) async {
         print("CachedAuthService: Handling password reset")
         
-        apiService.setAuthToken(accessToken)
+        await apiService.setAuthToken(accessToken)
         authState = .loading
         
         Task {
@@ -217,16 +217,16 @@ class CachedAuthService: ObservableObject {
                 print("CachedAuthService: Password reset token validated")
             } catch {
                 print("CachedAuthService: Password reset validation failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
     
     /// Handle general auth callback with caching
-    func handleAuthCallback(accessToken: String) {
+    func handleAuthCallback(accessToken: String) async {
         print("CachedAuthService: Handling auth callback")
         
-        apiService.setAuthToken(accessToken)
+        await apiService.setAuthToken(accessToken)
         authState = .loading
         errorMessage = nil
         
@@ -247,7 +247,7 @@ class CachedAuthService: ObservableObject {
                 print("CachedAuthService: Auth callback successful")
             } catch {
                 print("CachedAuthService: Auth callback failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
@@ -265,7 +265,7 @@ class CachedAuthService: ObservableObject {
             authState = .unauthenticated
             errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
         } else if let accessToken = registrationResponse.accessToken {
-            apiService.setAuthToken(accessToken)
+            await apiService.setAuthToken(accessToken)
             errorMessage = nil
             
             do {
@@ -297,7 +297,7 @@ class CachedAuthService: ObservableObject {
     
     /// Handle authentication response with caching
     private func handleAuthResponse(_ authResponse: AuthResponse) async {
-        apiService.setAuthToken(authResponse.accessToken)
+        await apiService.setAuthToken(authResponse.accessToken)
         errorMessage = nil
         
         do {

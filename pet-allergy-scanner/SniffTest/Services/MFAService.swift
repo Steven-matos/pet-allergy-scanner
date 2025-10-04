@@ -27,7 +27,7 @@ class MFAService: ObservableObject {
     
     /// Check MFA status for current user
     func checkMFAStatus() async {
-        guard apiService.hasAuthToken else { return }
+        guard await apiService.hasAuthToken else { return }
         
         isLoading = true
         errorMessage = nil
@@ -45,7 +45,7 @@ class MFAService: ObservableObject {
     
     /// Setup MFA for current user
     func setupMFA() async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }
@@ -66,7 +66,7 @@ class MFAService: ObservableObject {
     
     /// Enable MFA with verification token
     func enableMFA(token: String) async {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return
         }
@@ -87,7 +87,7 @@ class MFAService: ObservableObject {
     
     /// Verify MFA token
     func verifyMFA(token: String) async -> Bool {
-        guard apiService.hasAuthToken else {
+        guard await apiService.hasAuthToken else {
             errorMessage = "Authentication required"
             return false
         }

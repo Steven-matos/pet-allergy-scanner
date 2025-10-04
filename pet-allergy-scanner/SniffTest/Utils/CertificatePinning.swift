@@ -30,12 +30,22 @@ class CertificatePinning {
         #else
         
         // Get server certificate
-        guard let serverCertificate = SecTrustGetCertificateAtIndex(serverTrust, 0) else {
+        guard let serverCertificate = SecTrustCopyCertificateChain(serverTrust) else {
+            return false
+        }
+        
+        // Get the first certificate from the chain
+        guard CFArrayGetCount(serverCertificate) > 0 else {
+            return false
+        }
+        
+        let certificate = CFArrayGetValueAtIndex(serverCertificate, 0)
+        guard let serverCert = Unmanaged<SecCertificate>.fromOpaque(certificate!).takeUnretainedValue() as SecCertificate? else {
             return false
         }
         
         // Get certificate data
-        let serverCertificateData = SecCertificateCopyData(serverCertificate)
+        let serverCertificateData = SecCertificateCopyData(serverCert)
         let data = CFDataGetBytePtr(serverCertificateData)
         let size = CFDataGetLength(serverCertificateData)
         let serverCertData = Data(bytes: data!, count: size)

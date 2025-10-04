@@ -22,6 +22,7 @@ struct OnboardingView: View {
     @State private var birthYear: Int?
     @State private var birthMonth: Int?
     @State private var weightKg: Double?
+    @State private var activityLevel: PetActivityLevel = .moderate
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
     @State private var vetPhone = ""
@@ -161,7 +162,7 @@ struct OnboardingView: View {
                     .font(.system(size: 100))
                     .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
                 
-                Text("Welcome to SniffSafe!")
+                Text("Welcome to SniffTest!")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -372,6 +373,27 @@ struct OnboardingView: View {
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     }
                 }
+                
+                // Activity Level
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Activity Level")
+                        .font(.headline)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Picker("Activity Level", selection: $activityLevel) {
+                        ForEach(PetActivityLevel.allCases, id: \.self) { level in
+                            VStack(alignment: .leading) {
+                                Text(level.displayName)
+                                    .font(.body)
+                                Text(level.description)
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .tag(level)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
             }
             .padding(.horizontal, 20)
             
@@ -483,6 +505,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,
@@ -501,6 +524,7 @@ struct OnboardingView: View {
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
             weightKg: weightKg,
+            activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,
             vetName: vetName.isEmpty ? nil : vetName,

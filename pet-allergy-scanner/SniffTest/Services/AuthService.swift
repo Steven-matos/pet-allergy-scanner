@@ -61,7 +61,6 @@ enum AuthState: Equatable {
 }
 
 /// Authentication service for managing user authentication state using Swift Concurrency
-@MainActor
 class AuthService: ObservableObject {
     static let shared = AuthService()
     
@@ -78,13 +77,13 @@ class AuthService: ObservableObject {
     private init() {
         // Attempt to restore existing auth token and user session
         // Token is persisted securely using Keychain inside APIService
-        if apiService.hasAuthToken {
-            Task {
+        Task { @MainActor in
+            if await apiService.hasAuthToken {
                 await restoreUserSession()
+            } else {
+                // No token found, user is unauthenticated
+                authState = .unauthenticated
             }
-        } else {
-            // No token found, user is unauthenticated
-            authState = .unauthenticated
         }
     }
 
@@ -96,19 +95,23 @@ class AuthService: ObservableObject {
     
     /// Restore user session from stored token
     private func restoreUserSession() async {
-        authState = .loading
+        await MainActor.run {
+            authState = .loading
+        }
         
         do {
-            var user = try await apiService.getCurrentUser()
+            let user = try await apiService.getCurrentUser()
             
             // Auto-complete onboarding if user has pets but onboarded is false
-            user = await checkAndCompleteOnboardingIfNeeded(user: user)
+            let finalUser = await checkAndCompleteOnboardingIfNeeded(user: user)
             
             // Only transition to authenticated once we have complete user data
-            authState = .authenticated(user)
+            await MainActor.run {
+                authState = .authenticated(finalUser)
+            }
         } catch {
             // Failed to restore session, logout
-            logout()
+            await logout()
         }
     }
     
@@ -120,8 +123,10 @@ class AuthService: ObservableObject {
         firstName: String? = nil,
         lastName: String? = nil
     ) async {
-        authState = .loading
-        errorMessage = nil
+        await MainActor.run {
+            authState = .loading
+            errorMessage = nil
+        }
         
         let userCreate = UserCreate(
             email: email,
@@ -137,30 +142,38 @@ class AuthService: ObservableObject {
             let registrationResponse = try await apiService.register(user: userCreate)
             await handleRegistrationResponse(registrationResponse)
         } catch {
-            authState = .unauthenticated
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = error.localizedDescription
+            }
         }
     }
     
     /// Login user with email and password
     func login(email: String, password: String) async {
-        authState = .loading
-        errorMessage = nil
+        await MainActor.run {
+            authState = .loading
+            errorMessage = nil
+        }
         
         do {
             let authResponse = try await apiService.login(email: email, password: password)
             await handleAuthResponse(authResponse)
         } catch let apiError as APIError {
-            authState = .unauthenticated
-            // Handle email verification errors as informational messages, not errors
-            if case .emailNotVerified(let message) = apiError {
-                errorMessage = message
-            } else {
-                errorMessage = apiError.localizedDescription
+            await MainActor.run {
+                authState = .unauthenticated
+                // Handle email verification errors as informational messages, not errors
+                if case .emailNotVerified(let message) = apiError {
+                    errorMessage = message
+                } else {
+                    errorMessage = apiError.localizedDescription
+                }
             }
         } catch {
-            authState = .unauthenticated
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = error.localizedDescription
+            }
         }
     }
     
@@ -171,10 +184,12 @@ class AuthService: ObservableObject {
     
     /// Logout current user
     /// Clears authentication state and all user-related data
-    func logout() {
-        apiService.clearAuthToken()
-        authState = .unauthenticated
-        errorMessage = nil
+    func logout() async {
+        await apiService.clearAuthToken()
+        await MainActor.run {
+            authState = .unauthenticated
+            errorMessage = nil
+        }
         
         // Clear all user data to prevent 403 errors on logout
         PetService.shared.clearPets()
@@ -185,8 +200,10 @@ class AuthService: ObservableObject {
     func updateProfile(username: String?, firstName: String?, lastName: String?, imageUrl: String? = nil) async {
         guard case .authenticated(let currentUser) = authState else { return }
         
-        authState = .loading
-        errorMessage = nil
+        await MainActor.run {
+            authState = .loading
+            errorMessage = nil
+        }
         
         let userUpdate = UserUpdate(
             username: username,
@@ -199,11 +216,15 @@ class AuthService: ObservableObject {
         
         do {
             let user = try await apiService.updateUser(userUpdate)
-            authState = .authenticated(user)
+            await MainActor.run {
+                authState = .authenticated(user)
+            }
         } catch {
             // Restore previous state on error
-            authState = .authenticated(currentUser)
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                authState = .authenticated(currentUser)
+                errorMessage = error.localizedDescription
+            }
         }
     }
     
@@ -211,61 +232,83 @@ class AuthService: ObservableObject {
     private func handleRegistrationResponse(_ registrationResponse: RegistrationResponse) async {
         if let emailVerificationRequired = registrationResponse.emailVerificationRequired, emailVerificationRequired {
             // Email verification required - show message instead of error
-            authState = .unauthenticated
-            errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
+            }
         } else if let accessToken = registrationResponse.accessToken {
             // Email already verified - proceed with login flow
-            apiService.setAuthToken(accessToken)
-            errorMessage = nil
+            await apiService.setAuthToken(accessToken)
+            
+            await MainActor.run {
+                errorMessage = nil
+            }
             
             // Fetch fresh user data from /me endpoint to get accurate onboarded status
             do {
-                var freshUser = try await apiService.getCurrentUser()
+                let freshUser = try await apiService.getCurrentUser()
                 
                 // Only run auto-onboarding check if user is not already onboarded
-                if !freshUser.onboarded {
-                    freshUser = await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+                let finalUser = if !freshUser.onboarded {
+                    await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+                } else {
+                    freshUser
                 }
                 
                 // Only transition to authenticated once we have complete user data
-                authState = .authenticated(freshUser)
+                await MainActor.run {
+                    authState = .authenticated(finalUser)
+                }
             } catch {
                 // Fallback to registration response user if getCurrentUser fails
-                if let user = registrationResponse.user {
-                    authState = .authenticated(user)
-                } else {
-                    authState = .unauthenticated
-                    errorMessage = "Registration failed. Please try again."
+                await MainActor.run {
+                    if let user = registrationResponse.user {
+                        authState = .authenticated(user)
+                    } else {
+                        authState = .unauthenticated
+                        errorMessage = "Registration failed. Please try again."
+                    }
                 }
             }
         } else {
             // Fallback error
-            authState = .unauthenticated
-            errorMessage = "Registration failed. Please try again."
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = "Registration failed. Please try again."
+            }
         }
     }
     
     /// Handle authentication response
     private func handleAuthResponse(_ authResponse: AuthResponse) async {
         // Store the access token in the API service for future requests
-        apiService.setAuthToken(authResponse.accessToken)
-        errorMessage = nil
+        await apiService.setAuthToken(authResponse.accessToken)
+        
+        await MainActor.run {
+            errorMessage = nil
+        }
         
         // Fetch fresh user data from /me endpoint to get accurate onboarded status
         // This prevents the flicker of showing onboarding screen for users who already completed it
         do {
-            var freshUser = try await apiService.getCurrentUser()
+            let freshUser = try await apiService.getCurrentUser()
             
             // Only run auto-onboarding check if user is not already onboarded
-            if !freshUser.onboarded {
-                freshUser = await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+            let finalUser = if !freshUser.onboarded {
+                await checkAndCompleteOnboardingIfNeeded(user: freshUser)
+            } else {
+                freshUser
             }
             
             // Only transition to authenticated once we have complete user data
-            authState = .authenticated(freshUser)
+            await MainActor.run {
+                authState = .authenticated(finalUser)
+            }
         } catch {
             // Fallback to auth response user if getCurrentUser fails
-            authState = .authenticated(authResponse.user)
+            await MainActor.run {
+                authState = .authenticated(authResponse.user)
+            }
         }
     }
     
@@ -273,26 +316,33 @@ class AuthService: ObservableObject {
     func handleEmailConfirmation(accessToken: String, refreshToken: String) {
         print("AuthService: Handling email confirmation")
         
-        // Store the tokens
-        apiService.setAuthToken(accessToken)
-        authState = .loading
-        errorMessage = nil
-        
-        // Fetch user information
         Task {
+            // Store the tokens
+            await apiService.setAuthToken(accessToken)
+            
+            await MainActor.run {
+                authState = .loading
+                errorMessage = nil
+            }
+            
+            // Fetch user information
             do {
-                var user = try await apiService.getCurrentUser()
+                let user = try await apiService.getCurrentUser()
                 
                 // Only run auto-onboarding check if user is not already onboarded
-                if !user.onboarded {
-                    user = await checkAndCompleteOnboardingIfNeeded(user: user)
+                let finalUser = if !user.onboarded {
+                    await checkAndCompleteOnboardingIfNeeded(user: user)
+                } else {
+                    user
                 }
                 
-                authState = .authenticated(user)
+                await MainActor.run {
+                    authState = .authenticated(finalUser)
+                }
                 print("AuthService: Email confirmation successful")
             } catch {
                 print("AuthService: Email confirmation failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
@@ -301,18 +351,23 @@ class AuthService: ObservableObject {
     func handlePasswordReset(accessToken: String) {
         print("AuthService: Handling password reset")
         
-        // Store the token for password reset flow
-        apiService.setAuthToken(accessToken)
-        authState = .loading
-        
         Task {
+            // Store the token for password reset flow
+            await apiService.setAuthToken(accessToken)
+            
+            await MainActor.run {
+                authState = .loading
+            }
+            
             do {
                 let user = try await apiService.getCurrentUser()
-                authState = .authenticated(user)
+                await MainActor.run {
+                    authState = .authenticated(user)
+                }
                 print("AuthService: Password reset token validated")
             } catch {
                 print("AuthService: Password reset validation failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
@@ -321,25 +376,32 @@ class AuthService: ObservableObject {
     func handleAuthCallback(accessToken: String) {
         print("AuthService: Handling auth callback")
         
-        apiService.setAuthToken(accessToken)
-        authState = .loading
-        errorMessage = nil
-        
-        // Fetch user information
         Task {
+            await apiService.setAuthToken(accessToken)
+            
+            await MainActor.run {
+                authState = .loading
+                errorMessage = nil
+            }
+            
+            // Fetch user information
             do {
-                var user = try await apiService.getCurrentUser()
+                let user = try await apiService.getCurrentUser()
                 
                 // Only run auto-onboarding check if user is not already onboarded
-                if !user.onboarded {
-                    user = await checkAndCompleteOnboardingIfNeeded(user: user)
+                let finalUser = if !user.onboarded {
+                    await checkAndCompleteOnboardingIfNeeded(user: user)
+                } else {
+                    user
                 }
                 
-                authState = .authenticated(user)
+                await MainActor.run {
+                    authState = .authenticated(finalUser)
+                }
                 print("AuthService: Auth callback successful")
             } catch {
                 print("AuthService: Auth callback failed - \(error)")
-                logout()
+                await logout()
             }
         }
     }
@@ -350,7 +412,9 @@ class AuthService: ObservableObject {
         
         do {
             let user = try await apiService.getCurrentUser()
-            authState = .authenticated(user)
+            await MainActor.run {
+                authState = .authenticated(user)
+            }
         } catch {
             print("Failed to refresh user data: \(error)")
         }
@@ -396,6 +460,8 @@ class AuthService: ObservableObject {
     
     /// Clear error message
     func clearError() {
-        errorMessage = nil
+        Task { @MainActor in
+            errorMessage = nil
+        }
     }
 }

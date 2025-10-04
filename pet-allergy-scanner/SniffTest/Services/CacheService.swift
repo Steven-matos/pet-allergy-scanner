@@ -147,19 +147,24 @@ class CacheService: ObservableObject {
     func store<T: Codable>(_ data: T, forKey key: String, policy: CachePolicy? = nil) {
         let cachePolicy = policy ?? cachePolicies[key] ?? .timeBased(1800) // Default 30 minutes
         
-        let entry = CacheEntry<Data>(
-            data: data as! Data,
-            timestamp: Date(),
-            policy: cachePolicy.toSerializableType(),
-            key: key
-        )
-        
-        // Store in memory cache
-        storeInMemory(entry as CacheEntry<Data>, forKey: key)
-        
-        // Store in disk cache for persistent data
-        if shouldPersistToDisk(policy: cachePolicy) {
-            storeOnDisk(entry as CacheEntry<Data>, forKey: key)
+        do {
+            let encodedData = try JSONEncoder().encode(data)
+            let entry = CacheEntry<Data>(
+                data: encodedData,
+                timestamp: Date(),
+                policy: cachePolicy.toSerializableType(),
+                key: key
+            )
+            
+            // Store in memory cache
+            storeInMemory(entry as CacheEntry<Data>, forKey: key)
+            
+            // Store in disk cache for persistent data
+            if shouldPersistToDisk(policy: cachePolicy) {
+                storeOnDisk(entry as CacheEntry<Data>, forKey: key)
+            }
+        } catch {
+            print("❌ Failed to encode data for caching: \(error)")
         }
     }
     
@@ -167,13 +172,20 @@ class CacheService: ObservableObject {
     /// - Parameter key: The cache key
     /// - Returns: Cached data if valid, nil otherwise
     func retrieve<T: Codable>(_ type: T.Type, forKey key: String) -> T? {
-        // Try memory cache first
-        if let memoryEntry = memoryCache[key] as? CacheEntry<T>,
-           memoryEntry.isValid {
-            return memoryEntry.data
+        // Try memory cache first with safe casting
+        if let cachedValue = memoryCache[key] {
+            // Use a more defensive approach to avoid casting errors
+            if let memoryEntry = cachedValue as? CacheEntry<T>,
+               memoryEntry.isValid {
+                return memoryEntry.data
+            } else {
+                print("❌ Memory cache contains invalid data for key \(key), clearing entry")
+                // Clear the corrupted memory cache entry
+                memoryCache.removeValue(forKey: key)
+            }
         }
         
-        // Try disk cache
+        // Try disk cache with error handling
         if let diskEntry = loadFromDisk(type, forKey: key),
            diskEntry.isValid {
             // Restore to memory cache
@@ -230,6 +242,12 @@ class CacheService: ObservableObject {
         memoryCache.removeAll()
         currentMemoryCacheSize = 0
         clearDiskCache()
+    }
+    
+    /// Clear cache for a specific key (both memory and disk)
+    func clearCache(forKey key: String) {
+        memoryCache.removeValue(forKey: key)
+        removeFromDisk(forKey: key)
     }
     
     /// Clear cache for a specific user (useful during logout)
