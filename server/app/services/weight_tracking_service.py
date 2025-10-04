@@ -1,0 +1,358 @@
+"""
+Weight Tracking Service
+Handles pet weight management, goal tracking, and trend analysis
+"""
+
+from typing import List, Optional, Dict, Any, Tuple
+from datetime import datetime, date, timedelta
+from decimal import Decimal
+import statistics
+from ..database import get_supabase_client
+from ..models.phase3_nutrition import (
+    PetWeightRecordCreate, PetWeightRecordResponse,
+    PetWeightGoalCreate, PetWeightGoalResponse,
+    WeightTrendAnalysis, TrendDirection, TrendStrength,
+    WeightManagementDashboard
+)
+
+
+class WeightTrackingService:
+    """
+    Service for managing pet weight tracking and analysis
+    
+    Follows SOLID principles with single responsibility for weight management
+    Implements DRY by reusing common calculation methods
+    Follows KISS by keeping methods focused and simple
+    """
+    
+    def __init__(self):
+        self.supabase = get_supabase_client()
+    
+    async def record_weight(
+        self, 
+        weight_record: PetWeightRecordCreate,
+        user_id: str
+    ) -> PetWeightRecordResponse:
+        """
+        Record a new weight measurement for a pet
+        
+        Args:
+            weight_record: Weight record data
+            user_id: ID of the user recording the weight
+            
+        Returns:
+            Created weight record
+            
+        Raises:
+            ValueError: If pet not found or invalid data
+        """
+        # Verify pet ownership
+        pet_response = self.supabase.table("pets").select("id").eq("id", weight_record.pet_id).eq("user_id", user_id).execute()
+        
+        if not pet_response.data:
+            raise ValueError("Pet not found or access denied")
+        
+        # Insert weight record
+        weight_data = {
+            "pet_id": weight_record.pet_id,
+            "weight_kg": float(weight_record.weight_kg),
+            "recorded_at": weight_record.recorded_at.isoformat(),
+            "notes": weight_record.notes,
+            "recorded_by_user_id": user_id
+        }
+        
+        response = self.supabase.table("pet_weight_records").insert(weight_data).execute()
+        
+        if not response.data:
+            raise ValueError("Failed to record weight")
+        
+        # Update nutritional trends for this date
+        await self._update_nutritional_trends(weight_record.pet_id, weight_record.recorded_at.date())
+        
+        return PetWeightRecordResponse(**response.data[0])
+    
+    async def get_weight_history(
+        self, 
+        pet_id: str, 
+        user_id: str,
+        days_back: int = 30
+    ) -> List[PetWeightRecordResponse]:
+        """
+        Get weight history for a pet
+        
+        Args:
+            pet_id: Pet ID
+            user_id: User ID for authorization
+            days_back: Number of days to look back
+            
+        Returns:
+            List of weight records
+        """
+        # Verify pet ownership
+        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
+        
+        if not pet_response.data:
+            raise ValueError("Pet not found or access denied")
+        
+        # Get weight records
+        start_date = datetime.utcnow() - timedelta(days=days_back)
+        
+        response = self.supabase.table("pet_weight_records")\
+            .select("*")\
+            .eq("pet_id", pet_id)\
+            .gte("recorded_at", start_date.isoformat())\
+            .order("recorded_at", desc=True)\
+            .execute()
+        
+        return [PetWeightRecordResponse(**record) for record in response.data]
+    
+    async def create_weight_goal(
+        self, 
+        goal: PetWeightGoalCreate,
+        user_id: str
+    ) -> PetWeightGoalResponse:
+        """
+        Create a weight goal for a pet
+        
+        Args:
+            goal: Weight goal data
+            user_id: User ID for authorization
+            
+        Returns:
+            Created weight goal
+        """
+        # Verify pet ownership
+        pet_response = self.supabase.table("pets").select("id").eq("id", goal.pet_id).eq("user_id", user_id).execute()
+        
+        if not pet_response.data:
+            raise ValueError("Pet not found or access denied")
+        
+        # Deactivate existing active goals
+        await self._deactivate_existing_goals(goal.pet_id)
+        
+        # Insert new goal
+        goal_data = {
+            "pet_id": goal.pet_id,
+            "goal_type": goal.goal_type.value,
+            "target_weight_kg": float(goal.target_weight_kg) if goal.target_weight_kg else None,
+            "current_weight_kg": float(goal.current_weight_kg) if goal.current_weight_kg else None,
+            "target_date": goal.target_date.isoformat() if goal.target_date else None,
+            "is_active": goal.is_active,
+            "notes": goal.notes
+        }
+        
+        response = self.supabase.table("pet_weight_goals").insert(goal_data).execute()
+        
+        if not response.data:
+            raise ValueError("Failed to create weight goal")
+        
+        return PetWeightGoalResponse(**response.data[0])
+    
+    async def get_active_weight_goal(
+        self, 
+        pet_id: str, 
+        user_id: str
+    ) -> Optional[PetWeightGoalResponse]:
+        """
+        Get active weight goal for a pet
+        
+        Args:
+            pet_id: Pet ID
+            user_id: User ID for authorization
+            
+        Returns:
+            Active weight goal or None
+        """
+        # Verify pet ownership
+        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
+        
+        if not pet_response.data:
+            raise ValueError("Pet not found or access denied")
+        
+        # Get active goal
+        response = self.supabase.table("pet_weight_goals")\
+            .select("*")\
+            .eq("pet_id", pet_id)\
+            .eq("is_active", True)\
+            .execute()
+        
+        if not response.data:
+            return None
+        
+        return PetWeightGoalResponse(**response.data[0])
+    
+    async def analyze_weight_trend(
+        self, 
+        pet_id: str, 
+        user_id: str,
+        days_back: int = 30
+    ) -> WeightTrendAnalysis:
+        """
+        Analyze weight trend for a pet
+        
+        Args:
+            pet_id: Pet ID
+            user_id: User ID for authorization
+            days_back: Number of days to analyze
+            
+        Returns:
+            Weight trend analysis
+        """
+        # Get weight history
+        weight_records = await self.get_weight_history(pet_id, user_id, days_back)
+        
+        if len(weight_records) < 2:
+            return WeightTrendAnalysis(
+                trend_direction=TrendDirection.STABLE,
+                weight_change_kg=0.0,
+                average_daily_change=0.0,
+                trend_strength=TrendStrength.WEAK,
+                days_analyzed=len(weight_records),
+                confidence_level=0.0
+            )
+        
+        # Sort by date
+        sorted_records = sorted(weight_records, key=lambda x: x.recorded_at)
+        
+        # Calculate trend
+        current_weight = sorted_records[-1].weight_kg
+        old_weight = sorted_records[0].weight_kg
+        weight_change = current_weight - old_weight
+        
+        # Calculate daily change
+        days_span = (sorted_records[-1].recorded_at - sorted_records[0].recorded_at).days
+        daily_change = weight_change / days_span if days_span > 0 else 0
+        
+        # Determine trend direction
+        if weight_change > 0.5:
+            trend_direction = TrendDirection.INCREASING
+        elif weight_change < -0.5:
+            trend_direction = TrendDirection.DECREASING
+        else:
+            trend_direction = TrendDirection.STABLE
+        
+        # Determine trend strength
+        abs_change = abs(weight_change)
+        if abs_change > 2.0:
+            trend_strength = TrendStrength.STRONG
+        elif abs_change > 0.5:
+            trend_strength = TrendStrength.MODERATE
+        else:
+            trend_strength = TrendStrength.WEAK
+        
+        # Calculate confidence level based on data points and consistency
+        confidence = min(1.0, len(weight_records) / 14)  # Max confidence at 2 weeks of data
+        
+        return WeightTrendAnalysis(
+            trend_direction=trend_direction,
+            weight_change_kg=round(weight_change, 2),
+            average_daily_change=round(daily_change, 3),
+            trend_strength=trend_strength,
+            days_analyzed=len(weight_records),
+            confidence_level=confidence
+        )
+    
+    async def get_weight_management_dashboard(
+        self, 
+        pet_id: str, 
+        user_id: str
+    ) -> WeightManagementDashboard:
+        """
+        Get comprehensive weight management dashboard data
+        
+        Args:
+            pet_id: Pet ID
+            user_id: User ID for authorization
+            
+        Returns:
+            Weight management dashboard data
+        """
+        # Get current weight (most recent)
+        weight_records = await self.get_weight_history(pet_id, user_id, 1)
+        current_weight = weight_records[0].weight_kg if weight_records else None
+        
+        # Get active weight goal
+        weight_goal = await self.get_active_weight_goal(pet_id, user_id)
+        target_weight = weight_goal.target_weight_kg if weight_goal else None
+        
+        # Get weight trend
+        weight_trend = await self.analyze_weight_trend(pet_id, user_id, 30)
+        
+        # Get weekly progress (last 4 weeks)
+        weekly_progress = await self._get_weekly_progress(pet_id, user_id, 4)
+        
+        # Get recommendations (would be generated by recommendation service)
+        recommendations = []  # TODO: Integrate with recommendation service
+        
+        return WeightManagementDashboard(
+            pet_id=pet_id,
+            current_weight=current_weight,
+            target_weight=target_weight,
+            weight_goal=weight_goal,
+            recent_trend=weight_trend,
+            weekly_progress=weekly_progress,
+            recommendations=recommendations
+        )
+    
+    async def _deactivate_existing_goals(self, pet_id: str) -> None:
+        """Deactivate existing active goals for a pet"""
+        self.supabase.table("pet_weight_goals")\
+            .update({"is_active": False})\
+            .eq("pet_id", pet_id)\
+            .eq("is_active", True)\
+            .execute()
+    
+    async def _update_nutritional_trends(self, pet_id: str, trend_date: date) -> None:
+        """Update nutritional trends for a specific date"""
+        # This would call the database function to update trends
+        # For now, we'll implement a simple version
+        try:
+            self.supabase.rpc("update_nutritional_trends", {
+                "pet_uuid": pet_id,
+                "trend_date": trend_date.isoformat()
+            }).execute()
+        except Exception as e:
+            # Log error but don't fail the weight recording
+            print(f"Failed to update nutritional trends: {e}")
+    
+    async def _get_weekly_progress(
+        self, 
+        pet_id: str, 
+        user_id: str, 
+        weeks: int
+    ) -> List[Dict[str, Any]]:
+        """Get weekly weight progress data"""
+        weekly_data = []
+        
+        for week_offset in range(weeks):
+            week_start = datetime.utcnow() - timedelta(weeks=week_offset + 1)
+            week_end = week_start + timedelta(days=6)
+            
+            # Get weight records for this week
+            week_records = await self.get_weight_history(
+                pet_id, 
+                user_id, 
+                (week_end - datetime.utcnow()).days + 7
+            )
+            
+            # Filter to this week
+            week_records = [
+                r for r in week_records 
+                if week_start.date() <= r.recorded_at.date() <= week_end.date()
+            ]
+            
+            if week_records:
+                start_weight = week_records[0].weight_kg
+                end_weight = week_records[-1].weight_kg
+                weight_change = end_weight - start_weight
+                
+                weekly_data.append({
+                    "week_start": week_start.date().isoformat(),
+                    "week_end": week_end.date().isoformat(),
+                    "start_weight": start_weight,
+                    "end_weight": end_weight,
+                    "weight_change": weight_change,
+                    "measurements": len(week_records)
+                })
+        
+        return weekly_data
