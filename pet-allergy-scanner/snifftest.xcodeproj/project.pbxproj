@@ -10,9 +10,22 @@
 		293A6DBB2E873DAC00B33495 /* SniffTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SniffTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		29677F0C2E91B36400ECE489 /* Exceptions for "SniffTest" folder in "SniffTest" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				App/Info.plist,
+			);
+			target = 293A6DBA2E873DAC00B33495 /* SniffTest */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		293A6DBD2E873DAC00B33495 /* SniffTest */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				29677F0C2E91B36400ECE489 /* Exceptions for "SniffTest" folder in "SniffTest" target */,
+			);
 			path = SniffTest;
 			sourceTree = "<group>";
 		};
