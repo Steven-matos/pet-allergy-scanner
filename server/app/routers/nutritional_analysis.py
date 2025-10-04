@@ -18,8 +18,7 @@ from ..models.nutritional_standards import (
 from ..models.scan import NutritionalAnalysis
 from ..services.nutritional_calculator import NutritionalCalculator
 from ..models.user import User
-from ..models.pet import Pet
-from ..models.nutritional_standards import NutritionalStandard
+from ..models.pet import PetResponse
 from ..routers.auth import get_current_user
 
 router = APIRouter(prefix="/nutritional-analysis", tags=["nutritional-analysis"])
