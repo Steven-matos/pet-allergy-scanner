@@ -10,22 +10,9 @@
 		293A6DBB2E873DAC00B33495 /* SniffTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SniffTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2920B9BE2E89B7B600773244 /* Exceptions for "SniffTest" folder in "SniffTest" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 293A6DBA2E873DAC00B33495 /* SniffTest */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		293A6DBD2E873DAC00B33495 /* SniffTest */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				2920B9BE2E89B7B600773244 /* Exceptions for "SniffTest" folder in "SniffTest" target */,
-			);
 			path = SniffTest;
 			sourceTree = "<group>";
 		};
@@ -274,7 +261,7 @@
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = SniffTest/Info.plist;
+				INFOPLIST_FILE = SniffTest/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SniffTest;
 				INFOPLIST_KEY_CFBundleIdentifier = com.snifftest.app;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
@@ -320,7 +307,7 @@
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = SniffTest/Info.plist;
+				INFOPLIST_FILE = SniffTest/App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = SniffTest;
 				INFOPLIST_KEY_CFBundleIdentifier = com.snifftest.app;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
