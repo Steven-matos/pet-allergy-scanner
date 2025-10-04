@@ -3,7 +3,7 @@ Scan data models and schemas
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -21,7 +21,7 @@ class NutritionalAnalysis(BaseModel):
     calories_per_100g: Optional[float] = Field(None, gt=0, description="Calories per 100g")
     macronutrients: Optional[Dict[str, float]] = Field(default_factory=dict, description="Protein, fat, fiber, moisture, ash percentages")
     minerals: Optional[Dict[str, float]] = Field(default_factory=dict, description="Calcium, phosphorus percentages")
-    recommendations: Optional[Dict[str, any]] = Field(default_factory=dict, description="Pet-specific nutritional recommendations")
+    recommendations: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Pet-specific nutritional recommendations")
 
 class ScanResult(BaseModel):
     """Scan result model"""
