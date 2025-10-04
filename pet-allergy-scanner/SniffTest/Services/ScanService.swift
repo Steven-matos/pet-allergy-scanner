@@ -83,6 +83,7 @@ class ScanService: ObservableObject {
                 rawText: extractedText,
                 status: .pending,
                 result: nil,
+                nutritionalAnalysis: nil,
                 createdAt: Date(),
                 updatedAt: Date()
             )

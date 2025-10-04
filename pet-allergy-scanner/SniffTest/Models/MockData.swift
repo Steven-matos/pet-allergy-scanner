@@ -56,6 +56,7 @@ struct MockData {
         rawText: "Chicken, Rice, Carrots, Peas, Chicken Fat, Natural Flavor",
         status: .completed,
         result: mockScanResult1,
+        nutritionalAnalysis: nil,
         createdAt: Date().addingTimeInterval(-3600), // 1 hour ago
         updatedAt: Date().addingTimeInterval(-3600)
     )
@@ -68,6 +69,7 @@ struct MockData {
         rawText: "Salmon, Sweet Potato, Fish Oil, Vitamins",
         status: .completed,
         result: mockScanResult2,
+        nutritionalAnalysis: nil,
         createdAt: Date().addingTimeInterval(-7200), // 2 hours ago
         updatedAt: Date().addingTimeInterval(-7200)
     )
@@ -80,6 +82,7 @@ struct MockData {
         rawText: "Beef, Brown Rice, Vegetables, Natural Preservatives",
         status: .processing,
         result: nil,
+        nutritionalAnalysis: nil,
         createdAt: Date().addingTimeInterval(-1800), // 30 minutes ago
         updatedAt: Date().addingTimeInterval(-1800)
     )

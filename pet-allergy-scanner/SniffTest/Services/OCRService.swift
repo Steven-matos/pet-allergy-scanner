@@ -13,7 +13,7 @@ import Observation
 import RegexBuilder
 
 /// Nutritional analysis data structure
-struct NutritionalAnalysis {
+struct NutritionalAnalysis: Codable, Equatable, Hashable {
     var servingSizeG: Double?
     var caloriesPerServing: Double?
     var caloriesPer100G: Double?
