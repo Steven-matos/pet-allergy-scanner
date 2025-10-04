@@ -260,9 +260,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SniffTest/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
+				INFOPLIST_KEY_CFBundleDisplayName = SniffTest;
+				INFOPLIST_KEY_CFBundleIdentifier = "com.snifftest.app";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely access your pet's allergy information and scan history.";
@@ -305,9 +306,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F4LAX347X2;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SniffTest/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = SniffSafe;
+				INFOPLIST_KEY_CFBundleDisplayName = SniffTest;
+				INFOPLIST_KEY_CFBundleIdentifier = "com.snifftest.app";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.lifestyle";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access to scan ingredient labels on pet food products to help keep your pets safe from allergens.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Use Face ID to securely access your pet's allergy information and scan history.";
