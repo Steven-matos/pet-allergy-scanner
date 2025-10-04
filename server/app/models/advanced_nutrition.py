@@ -323,8 +323,8 @@ class AnalyticsRequest(BaseModel):
 
 # Response Models
 
-class Phase3NutritionResponse(BaseModel):
-    """Comprehensive Phase 3 nutrition response"""
+class AdvancedNutritionResponse(BaseModel):
+    """Comprehensive advanced nutrition response"""
     weight_records: List[PetWeightRecordResponse]
     weight_goals: List[PetWeightGoalResponse]
     current_trends: List[NutritionalTrendResponse]

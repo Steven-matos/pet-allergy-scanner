@@ -1,5 +1,5 @@
 //
-//  Phase3NutritionView.swift
+//  AdvancedNutritionView.swift
 //  SniffTest
 //
 //  Created by Steven Matos on 9/26/25.
@@ -8,7 +8,7 @@
 import SwiftUI
 
 /**
- * Phase 3 Nutrition View
+ * Advanced Nutrition View
  * 
  * Comprehensive nutrition management interface with support for:
  * - Weight management and tracking
@@ -16,11 +16,11 @@ import SwiftUI
  * - Food comparison and analysis
  * - Advanced health insights
  * 
- * Follows SOLID principles with single responsibility for Phase 3 features
+ * Follows SOLID principles with single responsibility for advanced nutrition features
  * Implements DRY by reusing common UI components
  * Follows KISS by keeping the interface organized and intuitive
  */
-struct Phase3NutritionView: View {
+struct AdvancedNutritionView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var petService = PetService.shared
     @State private var selectedPet: Pet?

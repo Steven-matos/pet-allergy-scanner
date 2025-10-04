@@ -1,5 +1,5 @@
 """
-Phase 3 Advanced Nutritional Analysis Tests
+Advanced Nutritional Analysis Tests
 Comprehensive test suite for weight tracking, trends, comparisons, and analytics
 """
 
@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.main import app
-from app.models.phase3_nutrition import (
+from app.models.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightGoalCreate, WeightGoalType,
     FoodComparisonCreate, AnalyticsType
 )
@@ -415,8 +415,8 @@ class TestAdvancedAnalyticsService:
 
 # Integration Tests
 
-class TestPhase3Integration:
-    """Integration tests for Phase 3 features"""
+class TestAdvancedNutritionIntegration:
+    """Integration tests for advanced nutrition features"""
     
     @pytest.mark.asyncio
     async def test_complete_weight_management_flow(self):
@@ -481,8 +481,8 @@ class TestPhase3Integration:
 
 # Performance Tests
 
-class TestPhase3Performance:
-    """Performance tests for Phase 3 features"""
+class TestAdvancedNutritionPerformance:
+    """Performance tests for advanced nutrition features"""
     
     @pytest.mark.asyncio
     async def test_weight_trend_analysis_performance(self):
