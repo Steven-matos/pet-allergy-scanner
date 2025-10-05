@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Vision
+@preconcurrency import Vision
 import UIKit
 import Combine
 import Observation
@@ -28,7 +28,8 @@ struct NutritionalAnalysis: Codable, Equatable, Hashable {
 
 /// OCR service for extracting text from images using Apple's Vision framework
 @Observable
-class OCRService {
+@MainActor
+class OCRService: @unchecked Sendable {
     static let shared = OCRService()
     
     var isProcessing = false
@@ -98,7 +99,7 @@ class OCRService {
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: options)
         
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { @Sendable in
             do {
                 try handler.perform([request])
             } catch {

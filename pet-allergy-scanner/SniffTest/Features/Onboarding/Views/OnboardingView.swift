@@ -32,6 +32,7 @@ struct OnboardingView: View {
     @State private var isCreatingPet = false
     @State private var showingYearPicker = false
     @State private var showingMonthPicker = false
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     private let totalSteps = 4
     
@@ -356,14 +357,14 @@ struct OnboardingView: View {
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     HStack {
-                        TextField("Weight", value: $weightKg, format: .number)
+                        TextField("Weight (\(unitService.getUnitSymbol()))", value: $weightKg, format: .number)
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: weightKg) { _, _ in
                                 validateForm()
                             }
                         
-                        Text("kg")
+                        Text(unitService.getUnitSymbol())
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     
@@ -499,12 +500,15 @@ struct OnboardingView: View {
     // MARK: - Methods
     
     private func validateForm() {
+        // Convert weight to kg for validation (backend expects kg)
+        let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+        
         let petCreate = PetCreate(
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightKg,
+            weightKg: weightInKg,
             activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,
@@ -518,12 +522,15 @@ struct OnboardingView: View {
     private func createPet() {
         isCreatingPet = true
         
+        // Convert weight to kg for storage (backend expects kg)
+        let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+        
         let petCreate = PetCreate(
             name: name,
             species: species,
             breed: breed.isEmpty ? nil : breed,
             birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightKg,
+            weightKg: weightInKg,
             activityLevel: activityLevel,
             imageUrl: nil,
             knownSensitivities: knownSensitivities,

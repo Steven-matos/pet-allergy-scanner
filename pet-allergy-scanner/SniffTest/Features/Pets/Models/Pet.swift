@@ -15,7 +15,7 @@ struct Pet: Codable, Identifiable, Equatable, Hashable {
     let species: PetSpecies
     let breed: String?
     let birthday: Date?
-    let weightKg: Double?
+    var weightKg: Double?
     let activityLevel: PetActivityLevel?
     let imageUrl: String?
     let knownSensitivities: [String]

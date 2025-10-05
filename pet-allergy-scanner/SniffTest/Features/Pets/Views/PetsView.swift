@@ -96,6 +96,7 @@ struct PetCardView: View {
     let pet: Pet
     let onEdit: () -> Void
     let onDelete: () -> Void
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -178,7 +179,7 @@ struct PetCardView: View {
                         InfoPillView(
                             icon: "scalemass.fill",
                             label: "Weight",
-                            value: "\(String(format: "%.1f", weightKg)) kg"
+                            value: unitService.formatWeight(weightKg)
                         )
                     }
                     
