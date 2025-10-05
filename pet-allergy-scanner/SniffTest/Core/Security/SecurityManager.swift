@@ -10,7 +10,8 @@ import CryptoKit
 import LocalAuthentication
 
 /// Security manager for handling sensitive data and authentication
-class SecurityManager {
+@MainActor
+class SecurityManager: @unchecked Sendable {
     static let shared = SecurityManager()
     
     private init() {}
@@ -51,7 +52,7 @@ class SecurityManager {
     
     /// Validate biometric authentication
     /// - Parameter completion: Completion handler with result
-    func authenticateWithBiometrics(completion: @escaping (Result<Bool, Error>) -> Void) {
+    func authenticateWithBiometrics(completion: @escaping @Sendable (Result<Bool, Error>) -> Void) {
         let context = LAContext()
         var error: NSError?
         

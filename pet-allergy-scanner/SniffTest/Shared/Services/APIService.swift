@@ -12,7 +12,8 @@ import Security
 struct EmptyResponse: Codable {}
 
 /// Main API service for communicating with the backend using Swift Concurrency
-class APIService: ObservableObject {
+@MainActor
+class APIService: ObservableObject, @unchecked Sendable {
     static let shared = APIService()
     
     private let baseURL = Configuration.apiBaseURL

@@ -10,7 +10,8 @@ import Foundation
 /// Cache configuration manager
 /// Implements SOLID principles: Single responsibility for cache configuration
 /// Implements KISS principle with simple configuration management
-class CacheConfiguration {
+@MainActor
+class CacheConfiguration: @unchecked Sendable {
     static let shared = CacheConfiguration()
     
     // MARK: - Configuration Properties

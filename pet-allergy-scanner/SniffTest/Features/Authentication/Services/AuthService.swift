@@ -61,7 +61,8 @@ enum AuthState: Equatable {
 }
 
 /// Authentication service for managing user authentication state using Swift Concurrency
-class AuthService: ObservableObject {
+@MainActor
+class AuthService: ObservableObject, @unchecked Sendable {
     static let shared = AuthService()
     
     @Published var authState: AuthState = .initializing

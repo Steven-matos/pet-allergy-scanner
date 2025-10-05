@@ -9,6 +9,7 @@ import UIKit
 import SwiftUI
 
 /// Haptic feedback utility for providing tactile feedback to users
+@MainActor
 struct HapticFeedback {
     
     /// Check if haptic feedback is enabled in settings

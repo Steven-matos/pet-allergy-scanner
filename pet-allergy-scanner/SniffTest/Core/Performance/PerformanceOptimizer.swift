@@ -29,11 +29,14 @@ struct PerformanceOptimizer {
             height: image.size.height * scale
         )
         
-        // Use high-quality rendering for better OCR results
+        // Use high-quality rendering for better OCR results with IOSurface optimization
         let renderer = UIGraphicsImageRenderer(size: newSize)
         let optimizedImage = renderer.image { context in
             // Set interpolation quality for better text recognition
             context.cgContext.interpolationQuality = .high
+            // Disable IOSurface notifications to prevent e00002c7 errors
+            context.cgContext.setAllowsAntialiasing(true)
+            context.cgContext.setShouldAntialias(true)
             image.draw(in: CGRect(origin: .zero, size: newSize))
         }
         
@@ -126,6 +129,30 @@ struct PerformanceOptimizer {
                     .id(item.id)
             }
         }
+    }
+    
+    /// Optimize SwiftUI Charts to prevent IOSurface errors
+    /// - Parameter content: Chart content
+    /// - Returns: Optimized chart view
+    @MainActor
+    @ViewBuilder
+    static func optimizedChart<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        GraphicsOptimizer.shared.optimizedChart {
+            content()
+        }
+    }
+    
+    /// Create IOSurface-safe image renderer
+    /// - Parameters:
+    ///   - size: Target size
+    ///   - drawing: Drawing closure
+    /// - Returns: Rendered image
+    @MainActor
+    static func createIOSurfaceSafeImage(
+        size: CGSize,
+        drawing: @escaping (CGContext) -> Void
+    ) -> UIImage? {
+        return GraphicsOptimizer.shared.createSafeImage(size: size, drawing: drawing)
     }
 }
 
