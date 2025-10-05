@@ -14,7 +14,7 @@ from ..models.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
-    Phase3NutritionResponse, WeightManagementDashboard,
+    AdvancedNutritionResponse, WeightManagementDashboard,
     NutritionalTrendsDashboard, FoodComparisonDashboard
 )
 from ..models.user import User
@@ -26,11 +26,39 @@ from ..services.advanced_analytics_service import AdvancedAnalyticsService
 
 router = APIRouter(prefix="/advanced-nutrition", tags=["advanced-nutrition"])
 
-# Initialize services
-weight_service = WeightTrackingService()
-trends_service = NutritionalTrendsService()
-comparison_service = FoodComparisonService()
-analytics_service = AdvancedAnalyticsService()
+# Service instances will be created lazily to avoid database initialization issues
+weight_service = None
+trends_service = None
+comparison_service = None
+analytics_service = None
+
+def get_weight_service():
+    """Get weight tracking service instance (lazy initialization)"""
+    global weight_service
+    if weight_service is None:
+        weight_service = WeightTrackingService()
+    return weight_service
+
+def get_trends_service():
+    """Get nutritional trends service instance (lazy initialization)"""
+    global trends_service
+    if trends_service is None:
+        trends_service = NutritionalTrendsService()
+    return trends_service
+
+def get_comparison_service():
+    """Get food comparison service instance (lazy initialization)"""
+    global comparison_service
+    if comparison_service is None:
+        comparison_service = FoodComparisonService()
+    return comparison_service
+
+def get_analytics_service():
+    """Get advanced analytics service instance (lazy initialization)"""
+    global analytics_service
+    if analytics_service is None:
+        analytics_service = AdvancedAnalyticsService()
+    return analytics_service
 
 
 # Weight Tracking Endpoints
@@ -51,7 +79,7 @@ async def record_weight(
         Created weight record
     """
     try:
-        return await weight_service.record_weight(weight_record, current_user.id)
+        return await get_weight_service().record_weight(weight_record, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -79,7 +107,7 @@ async def get_weight_history(
         List of weight records
     """
     try:
-        return await weight_service.get_weight_history(pet_id, current_user.id, days_back)
+        return await get_weight_service().get_weight_history(pet_id, current_user.id, days_back)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -95,23 +123,49 @@ async def create_weight_goal(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Create a weight goal for a pet
+    Create or update a weight goal for a pet (one goal per pet)
     
     Args:
         goal: Weight goal data
         current_user: Authenticated user
         
     Returns:
-        Created weight goal
+        Created or updated weight goal
     """
     try:
-        return await weight_service.create_weight_goal(goal, current_user.id)
+        return await get_weight_service().upsert_weight_goal(goal, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create weight goal: {str(e)}"
+            detail=f"Failed to create/update weight goal: {str(e)}"
+        )
+
+
+@router.put("/weight/goals", response_model=PetWeightGoalResponse)
+async def upsert_weight_goal(
+    goal: PetWeightGoalCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Create or update a weight goal for a pet (explicit upsert endpoint)
+    
+    Args:
+        goal: Weight goal data
+        current_user: Authenticated user
+        
+    Returns:
+        Created or updated weight goal
+    """
+    try:
+        return await get_weight_service().upsert_weight_goal(goal, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upsert weight goal: {str(e)}"
         )
 
 
@@ -131,7 +185,7 @@ async def get_active_weight_goal(
         Active weight goal or None
     """
     try:
-        return await weight_service.get_active_weight_goal(pet_id, current_user.id)
+        return await get_weight_service().get_active_weight_goal(pet_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -159,7 +213,7 @@ async def analyze_weight_trend(
         Weight trend analysis
     """
     try:
-        return await weight_service.analyze_weight_trend(pet_id, current_user.id, days_back)
+        return await get_weight_service().analyze_weight_trend(pet_id, current_user.id, days_back)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -185,7 +239,7 @@ async def get_weight_management_dashboard(
         Weight management dashboard data
     """
     try:
-        return await weight_service.get_weight_management_dashboard(pet_id, current_user.id)
+        return await get_weight_service().get_weight_management_dashboard(pet_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -215,7 +269,7 @@ async def get_nutritional_trends(
         List of nutritional trend records
     """
     try:
-        return await trends_service.get_nutritional_trends(pet_id, current_user.id, days_back)
+        return await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -243,7 +297,7 @@ async def get_trends_dashboard(
         Trends dashboard data
     """
     try:
-        return await trends_service.get_trends_dashboard(pet_id, current_user.id, period)
+        return await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -271,7 +325,7 @@ async def create_food_comparison(
         Created comparison
     """
     try:
-        return await comparison_service.create_comparison(comparison, current_user.id)
+        return await get_comparison_service().create_comparison(comparison, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -297,7 +351,7 @@ async def get_food_comparison(
         Food comparison data
     """
     try:
-        return await comparison_service.get_comparison(comparison_id, current_user.id)
+        return await get_comparison_service().get_comparison(comparison_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -323,7 +377,7 @@ async def get_user_comparisons(
         List of user's comparisons
     """
     try:
-        return await comparison_service.get_user_comparisons(current_user.id, limit)
+        return await get_comparison_service().get_user_comparisons(current_user.id, limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -347,7 +401,7 @@ async def get_comparison_dashboard(
         Comparison dashboard data
     """
     try:
-        return await comparison_service.get_comparison_dashboard(comparison_id, current_user.id)
+        return await get_comparison_service().get_comparison_dashboard(comparison_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -373,7 +427,7 @@ async def delete_food_comparison(
         Success message
     """
     try:
-        success = await comparison_service.delete_comparison(comparison_id, current_user.id)
+        success = await get_comparison_service().delete_comparison(comparison_id, current_user.id)
         if success:
             return {"message": "Comparison deleted successfully"}
         else:
@@ -407,7 +461,7 @@ async def generate_analytics(
         Analytics cache response
     """
     try:
-        return await analytics_service.generate_analytics(
+        return await get_analytics_service().generate_analytics(
             pet_id, current_user.id, analysis_type, force_refresh
         )
     except ValueError as e:
@@ -435,7 +489,7 @@ async def get_health_insights(
         Health insights data
     """
     try:
-        return await analytics_service.get_health_insights(pet_id, current_user.id)
+        return await get_analytics_service().get_health_insights(pet_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -463,7 +517,7 @@ async def analyze_nutritional_patterns(
         Nutritional patterns analysis
     """
     try:
-        return await analytics_service.analyze_nutritional_patterns(
+        return await get_analytics_service().analyze_nutritional_patterns(
             pet_id, current_user.id, analysis_period
         )
     except ValueError as e:
@@ -496,10 +550,10 @@ async def get_advanced_nutrition_dashboard(
         # Get all advanced nutrition data in parallel
         import asyncio
         
-        weight_records_task = weight_service.get_weight_history(pet_id, current_user.id, 30)
-        weight_goals_task = weight_service.get_active_weight_goal(pet_id, current_user.id)
-        trends_task = trends_service.get_nutritional_trends(pet_id, current_user.id, 30)
-        health_insights_task = analytics_service.get_health_insights(pet_id, current_user.id)
+        weight_records_task = get_weight_service().get_weight_history(pet_id, current_user.id, 30)
+        weight_goals_task = get_weight_service().get_active_weight_goal(pet_id, current_user.id)
+        trends_task = get_trends_service().get_nutritional_trends(pet_id, current_user.id, 30)
+        health_insights_task = get_analytics_service().get_health_insights(pet_id, current_user.id)
         
         # Wait for all tasks to complete
         weight_records, weight_goals, trends, health_insights = await asyncio.gather(

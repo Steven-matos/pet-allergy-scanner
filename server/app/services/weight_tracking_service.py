@@ -8,7 +8,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 import statistics
 from ..database import get_supabase_client
-from ..models.phase3_nutrition import (
+from ..models.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
     WeightTrendAnalysis, TrendDirection, TrendStrength,
@@ -106,20 +106,20 @@ class WeightTrackingService:
         
         return [PetWeightRecordResponse(**record) for record in response.data]
     
-    async def create_weight_goal(
+    async def upsert_weight_goal(
         self, 
         goal: PetWeightGoalCreate,
         user_id: str
     ) -> PetWeightGoalResponse:
         """
-        Create a weight goal for a pet
+        Create or update a weight goal for a pet (one goal per pet)
         
         Args:
             goal: Weight goal data
             user_id: User ID for authorization
             
         Returns:
-            Created weight goal
+            Created or updated weight goal
         """
         # Verify pet ownership
         pet_response = self.supabase.table("pets").select("id").eq("id", goal.pet_id).eq("user_id", user_id).execute()
@@ -127,10 +127,12 @@ class WeightTrackingService:
         if not pet_response.data:
             raise ValueError("Pet not found or access denied")
         
-        # Deactivate existing active goals
-        await self._deactivate_existing_goals(goal.pet_id)
+        # Check if pet already has a weight goal
+        existing_goal_response = self.supabase.table("pet_weight_goals")\
+            .select("*")\
+            .eq("pet_id", goal.pet_id)\
+            .execute()
         
-        # Insert new goal
         goal_data = {
             "pet_id": goal.pet_id,
             "goal_type": goal.goal_type.value,
@@ -141,12 +143,44 @@ class WeightTrackingService:
             "notes": goal.notes
         }
         
-        response = self.supabase.table("pet_weight_goals").insert(goal_data).execute()
+        if existing_goal_response.data:
+            # Update existing goal
+            goal_id = existing_goal_response.data[0]["id"]
+            response = self.supabase.table("pet_weight_goals")\
+                .update(goal_data)\
+                .eq("id", goal_id)\
+                .execute()
+            
+            if not response.data:
+                raise ValueError("Failed to update weight goal")
+            
+            return PetWeightGoalResponse(**response.data[0])
+        else:
+            # Create new goal
+            response = self.supabase.table("pet_weight_goals").insert(goal_data).execute()
+            
+            if not response.data:
+                raise ValueError("Failed to create weight goal")
+            
+            return PetWeightGoalResponse(**response.data[0])
+    
+    async def create_weight_goal(
+        self, 
+        goal: PetWeightGoalCreate,
+        user_id: str
+    ) -> PetWeightGoalResponse:
+        """
+        Create a weight goal for a pet (deprecated - use upsert_weight_goal instead)
         
-        if not response.data:
-            raise ValueError("Failed to create weight goal")
-        
-        return PetWeightGoalResponse(**response.data[0])
+        Args:
+            goal: Weight goal data
+            user_id: User ID for authorization
+            
+        Returns:
+            Created weight goal
+        """
+        # Delegate to upsert method for consistency
+        return await self.upsert_weight_goal(goal, user_id)
     
     async def get_active_weight_goal(
         self, 

@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 import statistics
 from ..database import get_supabase_client
-from ..models.phase3_nutrition import (
+from ..models.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
     FoodComparisonMetrics, FoodComparisonDashboard
 )

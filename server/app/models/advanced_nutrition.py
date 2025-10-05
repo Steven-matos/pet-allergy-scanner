@@ -3,7 +3,7 @@ Phase 3 Advanced Nutritional Analysis Models
 Weight tracking, trends, comparisons, and advanced analytics
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
 from enum import Enum
@@ -57,6 +57,9 @@ class PetWeightRecordBase(BaseModel):
     weight_kg: float = Field(..., gt=0, le=200, description="Weight in kilograms")
     recorded_at: datetime = Field(default_factory=datetime.utcnow)
     notes: Optional[str] = Field(None, max_length=500)
+    
+    class Config:
+        validate_by_name = True
 
 
 class PetWeightRecordCreate(PetWeightRecordBase):
@@ -67,23 +70,50 @@ class PetWeightRecordCreate(PetWeightRecordBase):
 class PetWeightRecordResponse(PetWeightRecordBase):
     """Weight record response model"""
     id: str
-    recorded_by_user_id: Optional[str]
+    recorded_by_user_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
+        validate_by_name = True
 
 
 class PetWeightGoalBase(BaseModel):
     """Base weight goal model"""
     pet_id: str
     goal_type: WeightGoalType
-    target_weight_kg: Optional[float] = Field(None, gt=0, le=200)
-    current_weight_kg: Optional[float] = Field(None, gt=0, le=200)
-    target_date: Optional[date] = None
-    is_active: bool = True
+    target_weight_kg: Optional[float] = Field(None, gt=0, le=200, alias="targetWeightKg")
+    current_weight_kg: Optional[float] = Field(None, gt=0, le=200, alias="currentWeightKg")
+    target_date: Optional[date] = Field(None, alias="targetDate")
+    is_active: bool = Field(True, alias="isActive")
     notes: Optional[str] = Field(None, max_length=1000)
+    
+    @field_validator('target_date', mode='before')
+    @classmethod
+    def parse_target_date(cls, v):
+        """Parse target_date from datetime string to date"""
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v
+        if isinstance(v, datetime):
+            return v.date()
+        if isinstance(v, str):
+            # Parse ISO datetime string and extract date
+            try:
+                dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                return dt.date()
+            except ValueError:
+                # Try parsing as date string
+                try:
+                    return datetime.strptime(v, '%Y-%m-%d').date()
+                except ValueError:
+                    raise ValueError(f"Invalid date format: {v}")
+        raise ValueError(f"Invalid date type: {type(v)}")
+    
+    class Config:
+        validate_by_name = True
 
 
 class PetWeightGoalCreate(PetWeightGoalBase):
@@ -94,11 +124,12 @@ class PetWeightGoalCreate(PetWeightGoalBase):
 class PetWeightGoalResponse(PetWeightGoalBase):
     """Weight goal response model"""
     id: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
     
     class Config:
         from_attributes = True
+        allow_population_by_field_name = True
 
 
 # Nutritional Trends Models

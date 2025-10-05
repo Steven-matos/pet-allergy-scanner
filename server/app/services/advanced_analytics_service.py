@@ -9,7 +9,7 @@ from decimal import Decimal
 import statistics
 import json
 from ..database import get_supabase_client
-from ..models.phase3_nutrition import (
+from ..models.advanced_nutrition import (
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
     NutritionalRecommendationCreate, NutritionalRecommendationResponse
