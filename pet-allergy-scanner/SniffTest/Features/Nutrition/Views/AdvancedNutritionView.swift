@@ -23,10 +23,17 @@ import SwiftUI
 struct AdvancedNutritionView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var petService = PetService.shared
-    @State private var selectedPet: Pet?
+    @StateObject private var petSelectionService = NutritionPetSelectionService.shared
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var selectedTab = 0
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showingWeightEntry = false
+    @State private var showingGoalSetting = false
+    
+    private var selectedPet: Pet? {
+        petSelectionService.selectedPet
+    }
     
     var body: some View {
         NavigationStack {
@@ -40,15 +47,107 @@ struct AdvancedNutritionView: View {
                     petSelectionView
                 }
             }
-            .navigationTitle("Advanced Nutrition")
+            .navigationTitle(selectedPet != nil ? "\(selectedPet!.name) - Advanced" : "Advanced Nutrition")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if selectedTab == 0 && selectedPet != nil {
+                        // Weight tab - Add Weight button
+                        Button(action: {
+                            showingWeightEntry = true
+                        }) {
+                            HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                Text("Add Weight")
+                                    .font(ModernDesignSystem.Typography.subheadline)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.buttonPrimary)
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                            .shadow(
+                                color: ModernDesignSystem.Shadows.small.color,
+                                radius: ModernDesignSystem.Shadows.small.radius,
+                                x: ModernDesignSystem.Shadows.small.x,
+                                y: ModernDesignSystem.Shadows.small.y
+                            )
+                        }
+                    } else if selectedTab == 1 && selectedPet != nil {
+                        // Trends tab - Period selector
+                        Button("30 Days") {
+                            // Period selector for trends
+                        }
+                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Refresh") {
+                    Menu {
+                        Button("Refresh Data") {
+                            loadNutritionData()
+                        }
+                        .disabled(selectedPet == nil || isLoading)
+                        
+                        if selectedPet != nil {
+                            Button("Change Pet") {
+                                petSelectionService.clearSelection()
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 2) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                Circle()
+                                    .fill(ModernDesignSystem.Colors.textPrimary)
+                                    .frame(width: 4, height: 4)
+                            }
+                        }
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .shadow(
+                            color: ModernDesignSystem.Shadows.small.color,
+                            radius: ModernDesignSystem.Shadows.small.radius,
+                            x: ModernDesignSystem.Shadows.small.x,
+                            y: ModernDesignSystem.Shadows.small.y
+                        )
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingWeightEntry) {
+            if let pet = selectedPet {
+                WeightEntryView(pet: pet)
+                    .onDisappear {
+                        // Refresh nutrition data when the weight entry sheet is dismissed
                         loadNutritionData()
                     }
-                    .disabled(selectedPet == nil || isLoading)
-                }
+            }
+        }
+        .sheet(isPresented: $showingGoalSetting) {
+            if let pet = selectedPet {
+                WeightGoalSettingView(pet: pet, existingGoal: nil)
+                    .onDisappear {
+                        // Refresh nutrition data when the goal setting sheet is dismissed
+                        loadNutritionData()
+                    }
             }
         }
         .onAppear {
@@ -59,37 +158,37 @@ struct AdvancedNutritionView: View {
     // MARK: - Pet Selection View
     
     private var petSelectionView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
             Image(systemName: "chart.line.uptrend.xyaxis.circle")
                 .font(.system(size: 60))
-                .foregroundColor(.blue)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
             
             Text("Select a Pet")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             Text("Choose a pet to access advanced nutrition features")
-                .font(.body)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             
             if !petService.pets.isEmpty {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
                     ForEach(petService.pets) { pet in
-                        PetSelectionCard(pet: pet) {
-                            selectedPet = pet
+                        AdvancedNutritionPetSelectionCard(pet: pet) {
+                            petSelectionService.selectPet(pet)
                             loadNutritionData()
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, ModernDesignSystem.Spacing.md)
             } else {
                 Text("No pets found. Add a pet to get started.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
     }
     
     // MARK: - Phase 3 Content
@@ -140,37 +239,46 @@ struct AdvancedNutritionView: View {
             } placeholder: {
                 Image(systemName: "pawprint.circle.fill")
                     .font(.title)
-                    .foregroundColor(.blue)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
             }
             .frame(width: 50, height: 50)
             .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 2)
+            )
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                 Text(pet.name)
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
-                Text(pet.species.capitalized)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                Text(pet.species.rawValue.capitalized)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
                 if let weight = pet.weightKg {
-                    Text("\(weight, specifier: "%.1f") kg")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Text(unitService.formatWeight(weight))
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
             }
             
             Spacer()
-            
-            Button("Change Pet") {
-                selectedPet = nil
-            }
-            .font(.caption)
-            .foregroundColor(.blue)
         }
-        .padding()
-        .background(Color(.systemGray6))
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     // MARK: - Tab Selection Section
@@ -183,27 +291,43 @@ struct AdvancedNutritionView: View {
                         selectedTab = index
                     }
                 }) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: ModernDesignSystem.Spacing.xs) {
                         Image(systemName: tabIcon(for: index))
-                            .font(.title3)
-                            .foregroundColor(selectedTab == index ? .blue : .gray)
+                            .font(ModernDesignSystem.Typography.title3)
+                            .foregroundColor(selectedTab == index ? 
+                                ModernDesignSystem.Colors.primary : 
+                                ModernDesignSystem.Colors.textSecondary)
                         
                         Text(tabTitle(for: index))
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .fontWeight(selectedTab == index ? .semibold : .regular)
-                            .foregroundColor(selectedTab == index ? .blue : .gray)
+                            .foregroundColor(selectedTab == index ? 
+                                ModernDesignSystem.Colors.primary : 
+                                ModernDesignSystem.Colors.textSecondary)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, ModernDesignSystem.Spacing.md)
+                    .background(
+                        selectedTab == index ? 
+                            ModernDesignSystem.Colors.softCream : 
+                            Color.clear
+                    )
+                    .overlay(
+                        selectedTab == index ? 
+                            Rectangle()
+                                .frame(height: 3)
+                                .foregroundColor(ModernDesignSystem.Colors.primary) : nil,
+                        alignment: .bottom
+                    )
                 }
                 .buttonStyle(PlainButtonStyle())
             }
         }
-        .background(Color(.systemBackground))
+        .background(ModernDesignSystem.Colors.background)
         .overlay(
             Rectangle()
                 .frame(height: 1)
-                .foregroundColor(Color(.systemGray4)),
+                .foregroundColor(ModernDesignSystem.Colors.lightGray),
             alignment: .bottom
         )
     }
@@ -211,7 +335,7 @@ struct AdvancedNutritionView: View {
     // MARK: - Helper Methods
     
     private func loadNutritionData() {
-        guard let pet = selectedPet else { return }
+        guard selectedPet != nil else { return }
         
         isLoading = true
         errorMessage = nil
@@ -250,9 +374,10 @@ struct AdvancedNutritionView: View {
 
 // MARK: - Supporting Views
 
-struct PetSelectionCard: View {
+struct AdvancedNutritionPetSelectionCard: View {
     let pet: Pet
     let onTap: () -> Void
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         Button(action: onTap) {
@@ -264,36 +389,50 @@ struct PetSelectionCard: View {
                 } placeholder: {
                     Image(systemName: "pawprint.circle.fill")
                         .font(.title)
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 .frame(width: 50, height: 50)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 2)
+                )
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(pet.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text(pet.species.capitalized)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Text(pet.species.rawValue.capitalized)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     if let weight = pet.weightKg {
-                        Text("\(weight, specifier: "%.1f") kg")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(unitService.formatWeight(weight))
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                 }
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .shadow(
+                color: ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -311,9 +450,9 @@ struct AdvancedAnalyticsView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 if isLoading {
-                    ProgressView("Loading analytics...")
+                    ModernLoadingView(message: "Loading analytics...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     // Health Insights Card
@@ -330,55 +469,66 @@ struct AdvancedAnalyticsView: View {
                     analyticsSummarySection
                 }
             }
-            .padding()
+            .padding(ModernDesignSystem.Spacing.lg)
         }
+        .background(ModernDesignSystem.Colors.background)
         .onAppear {
             loadAnalyticsData()
         }
     }
     
     private var analyticsSummarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Analytics Summary")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
-            ], spacing: 12) {
+            ], spacing: ModernDesignSystem.Spacing.md) {
                 AnalyticsSummaryCard(
                     title: "Health Score",
                     value: "\(Int(healthInsights?.overallHealthScore ?? 0))",
                     unit: "/100",
-                    color: .green
+                    color: ModernDesignSystem.Colors.primary
                 )
                 
                 AnalyticsSummaryCard(
                     title: "Nutritional Balance",
                     value: "\(Int(healthInsights?.nutritionalAdequacyScore ?? 0))",
                     unit: "%",
-                    color: .blue
+                    color: ModernDesignSystem.Colors.primary
                 )
                 
                 AnalyticsSummaryCard(
                     title: "Feeding Consistency",
                     value: "\(Int(healthInsights?.feedingConsistencyScore ?? 0))",
                     unit: "%",
-                    color: .orange
+                    color: ModernDesignSystem.Colors.goldenYellow
                 )
                 
                 AnalyticsSummaryCard(
                     title: "Weight Management",
                     value: healthInsights?.weightManagementStatus.capitalized ?? "Unknown",
                     unit: "",
-                    color: .purple
+                    color: ModernDesignSystem.Colors.warmCoral
                 )
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     private func loadAnalyticsData() {
@@ -434,41 +584,40 @@ struct HealthInsightsCard: View {
     let insights: HealthInsights
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Health Insights")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             // Overall Health Score
             HStack {
                 Text("Overall Health Score")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
                 Spacer()
                 
                 Text("\(Int(insights.overallHealthScore))/100")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                    .font(ModernDesignSystem.Typography.title2)
                     .foregroundColor(healthScoreColor(insights.overallHealthScore))
             }
             
             // Health Risks
             if !insights.healthRisks.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Health Risks")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.red)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     
                     ForEach(insights.healthRisks, id: \.self) { risk in
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundColor(.red)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             
                             Text(risk)
-                                .font(.caption)
-                                .foregroundColor(.primary)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             
                             Spacer()
                         }
@@ -478,21 +627,20 @@ struct HealthInsightsCard: View {
             
             // Positive Indicators
             if !insights.positiveIndicators.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Positive Indicators")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.green)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                     
                     ForEach(insights.positiveIndicators, id: \.self) { indicator in
-                        HStack(alignment: .top, spacing: 8) {
+                        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                             Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
                             
                             Text(indicator)
-                                .font(.caption)
-                                .foregroundColor(.primary)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             
                             Spacer()
                         }
@@ -500,19 +648,28 @@ struct HealthInsightsCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     private func healthScoreColor(_ score: Double) -> Color {
         if score >= 80 {
-            return .green
+            return ModernDesignSystem.Colors.primary
         } else if score >= 60 {
-            return .orange
+            return ModernDesignSystem.Colors.goldenYellow
         } else {
-            return .red
+            return ModernDesignSystem.Colors.warmCoral
         }
     }
 }
@@ -521,26 +678,26 @@ struct NutritionalPatternsCard: View {
     let patterns: NutritionalPatterns
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Nutritional Patterns")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             // Feeding Times
             if !patterns.feedingTimes.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Feeding Times")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     HStack {
                         ForEach(patterns.feedingTimes, id: \.self) { time in
                             Text(time)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(8)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                                .background(ModernDesignSystem.Colors.primary.opacity(0.2))
+                                .cornerRadius(ModernDesignSystem.CornerRadius.small)
                         }
                     }
                 }
@@ -548,17 +705,16 @@ struct NutritionalPatternsCard: View {
             
             // Preferred Foods
             if !patterns.preferredFoods.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Preferred Foods")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                    LazyVStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                         ForEach(patterns.preferredFoods, id: \.self) { food in
                             Text("• \(food)")
-                                .font(.caption)
-                                .foregroundColor(.primary)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         }
                     }
                 }
@@ -566,22 +722,21 @@ struct NutritionalPatternsCard: View {
             
             // Optimization Suggestions
             if !patterns.optimizationSuggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Optimization Suggestions")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.blue)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                     
-                    LazyVStack(alignment: .leading, spacing: 4) {
+                    LazyVStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                         ForEach(patterns.optimizationSuggestions, id: \.self) { suggestion in
-                            HStack(alignment: .top, spacing: 8) {
+                            HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                                 Image(systemName: "lightbulb.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.yellow)
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
                                 
                                 Text(suggestion)
-                                    .font(.caption)
-                                    .foregroundColor(.primary)
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                                 
                                 Spacer()
                             }
@@ -590,10 +745,19 @@ struct NutritionalPatternsCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -604,33 +768,42 @@ struct AnalyticsSummaryCard: View {
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
                 Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 if !unit.isEmpty {
                     Text(unit)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
                 Spacer()
                 
                 Image(systemName: "circle.fill")
-                    .font(.caption)
+                    .font(ModernDesignSystem.Typography.caption)
                     .foregroundColor(color)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -672,6 +845,6 @@ class AdvancedAnalyticsService: ObservableObject {
 }
 
 #Preview {
-    Phase3NutritionView()
+    AdvancedNutritionView()
         .environmentObject(AuthService.shared)
 }

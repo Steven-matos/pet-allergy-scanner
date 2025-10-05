@@ -26,42 +26,29 @@ struct NutritionalTrendsView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var trendsService = NutritionalTrendsService.shared
     @StateObject private var petService = PetService.shared
-    @State private var selectedPet: Pet?
+    @StateObject private var petSelectionService = NutritionPetSelectionService.shared
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var selectedPeriod: TrendPeriod = .thirtyDays
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingPeriodSelector = false
     
+    private var selectedPet: Pet? {
+        petSelectionService.selectedPet
+    }
+    
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if isLoading {
-                    ProgressView("Loading trends...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let pet = selectedPet {
-                    trendsContent(for: pet)
-                } else {
-                    petSelectionView
-                }
-            }
-            .navigationTitle("Nutritional Trends")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(selectedPeriod.displayName) {
-                        showingPeriodSelector = true
-                    }
-                    .disabled(selectedPet == nil)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Refresh") {
-                        loadTrendsData()
-                    }
-                    .disabled(selectedPet == nil || isLoading)
-                }
+        VStack(spacing: 0) {
+            if isLoading {
+                ModernLoadingView(message: "Loading trends...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let pet = selectedPet {
+                trendsContent(for: pet)
+            } else {
+                petSelectionView
             }
         }
+        .background(ModernDesignSystem.Colors.background)
         .sheet(isPresented: $showingPeriodSelector) {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
         }
@@ -73,37 +60,37 @@ struct NutritionalTrendsView: View {
     // MARK: - Pet Selection View
     
     private var petSelectionView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
             Image(systemName: "chart.line.uptrend.xyaxis")
                 .font(.system(size: 60))
-                .foregroundColor(.blue)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
             
             Text("Select a Pet")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             Text("Choose a pet to view nutritional trends")
-                .font(.body)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             
             if !petService.pets.isEmpty {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
                     ForEach(petService.pets) { pet in
-                        PetSelectionCard(pet: pet) {
-                            selectedPet = pet
+                        NutritionalTrendsPetSelectionCard(pet: pet) {
+                            petSelectionService.selectPet(pet)
                             loadTrendsData()
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, ModernDesignSystem.Spacing.md)
             } else {
                 Text("No pets found. Add a pet to get started.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
     }
     
     // MARK: - Trends Content
@@ -111,7 +98,7 @@ struct NutritionalTrendsView: View {
     @ViewBuilder
     private func trendsContent(for pet: Pet) -> some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Summary Cards
                 summaryCardsSection(for: pet)
                 
@@ -149,8 +136,9 @@ struct NutritionalTrendsView: View {
                     InsightsCard(insights: trendsService.insights(for: pet.id))
                 }
             }
-            .padding()
+            .padding(ModernDesignSystem.Spacing.lg)
         }
+        .background(ModernDesignSystem.Colors.background)
         .refreshable {
             await loadTrendsDataAsync()
         }
@@ -163,23 +151,23 @@ struct NutritionalTrendsView: View {
         LazyVGrid(columns: [
             GridItem(.flexible()),
             GridItem(.flexible())
-        ], spacing: 12) {
+        ], spacing: ModernDesignSystem.Spacing.md) {
             // Average Daily Calories
             SummaryCard(
                 title: "Avg Daily Calories",
                 value: "\(Int(trendsService.averageDailyCalories(for: pet.id)))",
                 unit: "kcal",
                 trend: trendsService.calorieTrend(for: pet.id),
-                color: .orange
+                color: ModernDesignSystem.Colors.goldenYellow
             )
             
             // Feeding Frequency
             SummaryCard(
                 title: "Feeding Frequency",
-                value: "\(trendsService.averageFeedingFrequency(for: pet.id), specifier: "%.1f")",
+                value: "\(String(format: "%.1f", trendsService.averageFeedingFrequency(for: pet.id)))",
                 unit: "times/day",
                 trend: trendsService.feedingTrend(for: pet.id),
-                color: .green
+                color: ModernDesignSystem.Colors.primary
             )
             
             // Nutritional Balance
@@ -188,16 +176,16 @@ struct NutritionalTrendsView: View {
                 value: "\(Int(trendsService.nutritionalBalanceScore(for: pet.id)))",
                 unit: "%",
                 trend: trendsService.balanceTrend(for: pet.id),
-                color: .blue
+                color: ModernDesignSystem.Colors.primary
             )
             
             // Weight Change
             SummaryCard(
                 title: "Weight Change",
-                value: "\(trendsService.totalWeightChange(for: pet.id), specifier: "%.1f")",
-                unit: "kg",
+                value: "\(String(format: "%.1f", trendsService.totalWeightChange(for: pet.id)))",
+                unit: unitService.getUnitSymbol(),
                 trend: trendsService.weightChangeTrend(for: pet.id),
-                color: .purple
+                color: ModernDesignSystem.Colors.warmCoral
             )
         }
     }
@@ -205,7 +193,7 @@ struct NutritionalTrendsView: View {
     // MARK: - Helper Methods
     
     private func loadTrendsData() {
-        guard let pet = selectedPet else { return }
+        guard selectedPet != nil else { return }
         
         isLoading = true
         errorMessage = nil
@@ -234,9 +222,10 @@ struct NutritionalTrendsView: View {
 
 // MARK: - Supporting Views
 
-struct PetSelectionCard: View {
+struct NutritionalTrendsPetSelectionCard: View {
     let pet: Pet
     let onTap: () -> Void
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         Button(action: onTap) {
@@ -248,30 +237,50 @@ struct PetSelectionCard: View {
                 } placeholder: {
                     Image(systemName: "pawprint.circle.fill")
                         .font(.title)
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 .frame(width: 50, height: 50)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 2)
+                )
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(pet.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text(pet.species.capitalized)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Text(pet.species.rawValue.capitalized)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    if let weight = pet.weightKg {
+                        Text(unitService.formatWeight(weight))
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
                 }
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .shadow(
+                color: ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -285,30 +294,38 @@ struct SummaryCard: View {
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
                 Text(value)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text(unit)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
                 Spacer()
                 
                 trendIcon
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     @ViewBuilder
@@ -316,16 +333,16 @@ struct SummaryCard: View {
         switch trend {
         case .increasing:
             Image(systemName: "arrow.up.right")
-                .font(.caption)
-                .foregroundColor(.green)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
         case .decreasing:
             Image(systemName: "arrow.down.right")
-                .font(.caption)
-                .foregroundColor(.red)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
         case .stable:
             Image(systemName: "minus")
-                .font(.caption)
-                .foregroundColor(.gray)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
     }
 }
@@ -335,9 +352,10 @@ struct CalorieTrendsChart: View {
     let petName: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Calorie Trends")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
                 Chart(trends) { trend in
@@ -345,18 +363,18 @@ struct CalorieTrendsChart: View {
                         x: .value("Date", trend.date),
                         y: .value("Calories", trend.calories)
                     )
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     
                     AreaMark(
                         x: .value("Date", trend.date),
                         y: .value("Calories", trend.calories)
                     )
-                    .foregroundStyle(.orange.opacity(0.2))
+                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow.opacity(0.2))
                     
                     if let target = trend.target {
                         RuleMark(y: .value("Target", target))
-                            .foregroundStyle(.green)
+                            .foregroundStyle(ModernDesignSystem.Colors.primary)
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                     }
                 }
@@ -378,15 +396,24 @@ struct CalorieTrendsChart: View {
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Calorie trends chart requires iOS 16+")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -395,9 +422,10 @@ struct MacronutrientTrendsChart: View {
     let petName: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Macronutrient Trends")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
                 Chart(trends) { trend in
@@ -405,21 +433,21 @@ struct MacronutrientTrendsChart: View {
                         x: .value("Date", trend.date),
                         y: .value("Protein", trend.protein)
                     )
-                    .foregroundStyle(.red)
+                    .foregroundStyle(ModernDesignSystem.Colors.warmCoral)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     
                     LineMark(
                         x: .value("Date", trend.date),
                         y: .value("Fat", trend.fat)
                     )
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(ModernDesignSystem.Colors.primary)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                     
                     LineMark(
                         x: .value("Date", trend.date),
                         y: .value("Fiber", trend.fiber)
                     )
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                 }
                 .frame(height: 200)
@@ -441,15 +469,24 @@ struct MacronutrientTrendsChart: View {
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Macronutrient trends chart requires iOS 16+")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -458,9 +495,10 @@ struct FeedingPatternsChart: View {
     let petName: String
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Feeding Patterns")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
                 Chart(patterns) { pattern in
@@ -468,13 +506,13 @@ struct FeedingPatternsChart: View {
                         x: .value("Date", pattern.date),
                         y: .value("Feedings", pattern.feedingCount)
                     )
-                    .foregroundStyle(.green)
+                    .foregroundStyle(ModernDesignSystem.Colors.primary)
                     
                     LineMark(
                         x: .value("Date", pattern.date),
                         y: .value("Compatibility", pattern.compatibilityScore)
                     )
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
                     .lineStyle(StrokeStyle(lineWidth: 2))
                 }
                 .frame(height: 200)
@@ -495,15 +533,24 @@ struct FeedingPatternsChart: View {
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Feeding patterns chart requires iOS 16+")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -511,56 +558,64 @@ struct WeightCorrelationCard: View {
     let correlation: WeightCorrelation
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Weight Correlation")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text("Correlation Strength")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     Text(correlation.strength.capitalized)
-                        .font(.title3)
-                        .fontWeight(.semibold)
+                        .font(ModernDesignSystem.Typography.title3)
                         .foregroundColor(correlationColor)
                 }
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: 4) {
+                VStack(alignment: .trailing, spacing: ModernDesignSystem.Spacing.xs) {
                     Text("Correlation")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     Text("\(correlation.correlation, specifier: "%.2f")")
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
             }
             
             Text(correlation.interpretation)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.subheadline)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     private var correlationColor: Color {
         switch correlation.strength {
         case "strong":
-            return .green
+            return ModernDesignSystem.Colors.primary
         case "moderate":
-            return .orange
+            return ModernDesignSystem.Colors.goldenYellow
         case "weak":
-            return .red
+            return ModernDesignSystem.Colors.warmCoral
         default:
-            return .gray
+            return ModernDesignSystem.Colors.textSecondary
         }
     }
 }
@@ -569,31 +624,41 @@ struct InsightsCard: View {
     let insights: [String]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Insights")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
                 ForEach(insights, id: \.self) { insight in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                         Image(systemName: "lightbulb.fill")
-                            .font(.caption)
-                            .foregroundColor(.yellow)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
                             .padding(.top, 2)
                         
                         Text(insight)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         
                         Spacer()
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -638,56 +703,8 @@ struct PeriodSelectionView: View {
 
 // MARK: - Data Models
 
-enum TrendPeriod: CaseIterable {
-    case sevenDays
-    case thirtyDays
-    case ninetyDays
-    
-    var displayName: String {
-        switch self {
-        case .sevenDays:
-            return "7 Days"
-        case .thirtyDays:
-            return "30 Days"
-        case .ninetyDays:
-            return "90 Days"
-        }
-    }
-}
 
-enum TrendDirection {
-    case increasing
-    case decreasing
-    case stable
-}
 
-struct CalorieTrend: Identifiable {
-    let id = UUID()
-    let date: Date
-    let calories: Double
-    let target: Double?
-}
-
-struct MacronutrientTrend: Identifiable {
-    let id = UUID()
-    let date: Date
-    let protein: Double
-    let fat: Double
-    let fiber: Double
-}
-
-struct FeedingPattern: Identifiable {
-    let id = UUID()
-    let date: Date
-    let feedingCount: Int
-    let compatibilityScore: Double
-}
-
-struct WeightCorrelation {
-    let correlation: Double
-    let strength: String
-    let interpretation: String
-}
 
 #Preview {
     NutritionalTrendsView()

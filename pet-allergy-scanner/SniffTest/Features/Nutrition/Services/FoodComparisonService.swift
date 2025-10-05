@@ -191,7 +191,7 @@ class FoodComparisonService: ObservableObject {
         let proteinValues = foods.map { $0.proteinPercentage }
         if let maxProtein = proteinValues.max(), let minProtein = proteinValues.min() {
             if maxProtein - minProtein > 10 {
-                recommendations.append("Protein content varies significantly (\(minProtein, specifier: "%.1f")% - \(maxProtein, specifier: "%.1f")%)")
+                recommendations.append("Protein content varies significantly (\(String(format: "%.1f", minProtein))% - \(String(format: "%.1f", maxProtein))%)")
             }
         }
         
@@ -199,7 +199,7 @@ class FoodComparisonService: ObservableObject {
         let calorieValues = foods.map { $0.caloriesPer100g }
         if let maxCalories = calorieValues.max(), let minCalories = calorieValues.min() {
             if maxCalories - minCalories > 100 {
-                recommendations.append("Calorie content varies significantly (\(minCalories, specifier: "%.0f") - \(maxCalories, specifier: "%.0f") kcal/100g)")
+                recommendations.append("Calorie content varies significantly (\(String(format: "%.0f", minCalories)) - \(String(format: "%.0f", maxCalories)) kcal/100g)")
             }
         }
         
@@ -235,17 +235,17 @@ class FoodComparisonService: ObservableObject {
             return (food, calorieScore * 0.25 + proteinScore * 0.25 + fatScore * 0.20 + fiberScore * 0.15 + costScore * 0.15 + compatibilityScore * 0.15)
         }
         
-        let bestOverall = overallScores.max { $0.1 < $1.1 }?.0.name ?? "Unknown"
+        let bestOverall = overallScores.max { $0.1 < $1.1 }?.0.foodName ?? "Unknown"
         
         // Best value (lowest cost per calorie)
         let bestValue = foods.min { 
             (metrics.costPerCalorie[$0.id] ?? Double.infinity) < (metrics.costPerCalorie[$1.id] ?? Double.infinity) 
-        }?.name ?? "Unknown"
+        }?.foodName ?? "Unknown"
         
         // Best nutrition (highest nutritional density)
         let bestNutrition = foods.max { 
             (metrics.nutritionalDensity[$0.id] ?? 0) < (metrics.nutritionalDensity[$1.id] ?? 0) 
-        }?.name ?? "Unknown"
+        }?.foodName ?? "Unknown"
         
         return BestOptions(
             overall: bestOverall,
@@ -312,13 +312,6 @@ struct FoodComparisonResults {
     let nutritionalDensity: [String: Double]
     let compatibilityScores: [String: Double]
     let recommendations: [String]
-}
-
-struct SavedComparison: Identifiable {
-    let id: String
-    let name: String
-    let foodCount: Int
-    let createdAt: Date
 }
 
 struct ComparisonMetrics {

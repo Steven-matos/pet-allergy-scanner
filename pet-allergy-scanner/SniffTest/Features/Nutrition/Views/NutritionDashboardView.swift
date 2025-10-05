@@ -20,6 +20,7 @@ import Combine
 struct NutritionDashboardView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var petService = PetService.shared
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var selectedPet: Pet?
     @State private var showingPremiumUpgrade = false
     @State private var isLoading = false
@@ -138,7 +139,7 @@ struct PetSelectionSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(pets) { pet in
-                        PetSelectionCard(
+                        NutritionDashboardPetSelectionCard(
                             pet: pet,
                             isSelected: selectedPet?.id == pet.id
                         ) {
@@ -156,7 +157,7 @@ struct PetSelectionSection: View {
 /**
  * Individual Pet Selection Card
  */
-struct PetSelectionCard: View {
+struct NutritionDashboardPetSelectionCard: View {
     let pet: Pet
     let isSelected: Bool
     let onTap: () -> Void
@@ -203,6 +204,7 @@ struct PetSelectionCard: View {
  */
 struct NutritionOverviewSection: View {
     let pet: Pet
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -244,7 +246,7 @@ struct NutritionOverviewSection: View {
                 
                 NutritionMetricCard(
                     title: "Weight",
-                    value: pet.weightKg != nil ? "\(Int(pet.weightKg!)) kg" : "Not set",
+                    value: pet.weightKg != nil ? unitService.formatWeight(pet.weightKg!, precision: 0) : "Not set",
                     icon: "scalemass",
                     color: .purple
                 )

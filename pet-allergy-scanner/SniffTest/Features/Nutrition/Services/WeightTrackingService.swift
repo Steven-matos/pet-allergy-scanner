@@ -33,6 +33,8 @@ class WeightTrackingService: ObservableObject {
     @Published var error: Error?
     
     private let apiService: APIService
+    private let unitService = WeightUnitPreferenceService.shared
+    private let petService = PetService.shared
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -44,14 +46,17 @@ class WeightTrackingService: ObservableObject {
     /**
      * Record a new weight measurement for a pet
      * - Parameter petId: The pet's ID
-     * - Parameter weight: Weight in kilograms
+     * - Parameter weight: Weight in the user's selected unit
      * - Parameter notes: Optional notes about the measurement
      */
     func recordWeight(petId: String, weight: Double, notes: String? = nil) async throws {
+        // Convert weight to kg for storage (backend expects kg)
+        let weightInKg = unitService.convertToKg(weight)
+        
         let weightRecord = WeightRecord(
             id: UUID().uuidString,
             petId: petId,
-            weightKg: weight,
+            weightKg: weightInKg,
             recordedAt: Date(),
             notes: notes,
             recordedByUserId: nil
@@ -62,20 +67,90 @@ class WeightTrackingService: ObservableObject {
             weightHistory[petId] = []
         }
         weightHistory[petId]?.insert(weightRecord, at: 0)
-        currentWeights[petId] = weight
+        currentWeights[petId] = weightInKg
         
         // Send to backend
         try await apiService.recordWeight(weightRecord)
+        
+        // Update pet's current weight in PetService
+        await updatePetWeight(petId: petId, weightKg: weightInKg)
         
         // Generate recommendations
         await generateRecommendations(for: petId)
     }
     
     /**
-     * Create a weight goal for a pet
+     * Create or update a weight goal for a pet (one goal per pet)
      * - Parameter petId: The pet's ID
      * - Parameter goalType: Type of weight goal
-     * - Parameter targetWeight: Target weight in kilograms
+     * - Parameter targetWeight: Target weight in the user's selected unit
+     * - Parameter targetDate: Target date for achieving the goal
+     * - Parameter notes: Optional notes about the goal
+     */
+    func upsertWeightGoal(
+        petId: String,
+        goalType: WeightGoalType,
+        targetWeight: Double,
+        targetDate: Date,
+        notes: String? = nil
+    ) async throws {
+        // Convert target weight to kg for storage (backend expects kg)
+        let targetWeightInKg = unitService.convertToKg(targetWeight)
+        
+        // Get current weight from pet or weight history - this will be the starting weight for the goal
+        let currentWeightKg: Double?
+        if let currentWeight = currentWeights[petId] {
+            currentWeightKg = currentWeight
+        } else if let latestRecord = weightHistory[petId]?.first {
+            currentWeightKg = latestRecord.weightKg
+        } else if let pet = petService.pets.first(where: { $0.id == petId }) {
+            // Get weight from pet's profile as fallback
+            currentWeightKg = pet.weightKg
+        } else {
+            // If no weight data available, we can't create a meaningful goal
+            print("⚠️ Warning: No weight data available for pet \(petId), cannot create goal")
+            currentWeightKg = nil
+        }
+        
+        // Check if pet already has a goal
+        let existingGoal = weightGoals[petId]
+        let isUpdating = existingGoal != nil
+        
+        print("🎯 \(isUpdating ? "Updating" : "Creating") weight goal - Starting weight: \(currentWeightKg ?? 0), Target: \(targetWeightInKg), Goal type: \(goalType)")
+        
+        let weightGoal = WeightGoal(
+            id: existingGoal?.id ?? UUID().uuidString, // Keep existing ID if updating
+            petId: petId,
+            goalType: goalType,
+            targetWeightKg: targetWeightInKg,
+            currentWeightKg: currentWeightKg,
+            targetDate: targetDate,
+            isActive: true,
+            notes: notes,
+            createdAt: existingGoal?.createdAt ?? Date(), // Keep original creation date if updating
+            updatedAt: Date()
+        )
+        
+        // Update local storage
+        weightGoals[petId] = weightGoal
+        print("✅ \(isUpdating ? "Updated" : "Created") weight goal locally: \(weightGoal.id)")
+        
+        // Send to backend
+        do {
+            try await apiService.createWeightGoal(weightGoal) // Backend now handles upsert
+            print("✅ Successfully saved weight goal to backend: \(weightGoal.id)")
+        } catch {
+            print("❌ Failed to save weight goal to backend: \(error.localizedDescription)")
+            // Don't throw error - keep the goal locally even if backend fails
+            print("⚠️ Keeping goal locally despite backend failure")
+        }
+    }
+    
+    /**
+     * Create a weight goal for a pet (deprecated - use upsertWeightGoal instead)
+     * - Parameter petId: The pet's ID
+     * - Parameter goalType: Type of weight goal
+     * - Parameter targetWeight: Target weight in the user's selected unit
      * - Parameter targetDate: Target date for achieving the goal
      * - Parameter notes: Optional notes about the goal
      */
@@ -86,24 +161,39 @@ class WeightTrackingService: ObservableObject {
         targetDate: Date,
         notes: String? = nil
     ) async throws {
-        let weightGoal = WeightGoal(
-            id: UUID().uuidString,
+        // Delegate to upsert method for consistency
+        try await upsertWeightGoal(
             petId: petId,
             goalType: goalType,
-            targetWeightKg: targetWeight,
-            currentWeightKg: currentWeights[petId],
+            targetWeight: targetWeight,
             targetDate: targetDate,
-            isActive: true,
-            notes: notes,
-            createdAt: Date(),
-            updatedAt: Date()
+            notes: notes
         )
-        
-        // Add to local storage
-        weightGoals[petId] = weightGoal
-        
-        // Send to backend
-        try await apiService.createWeightGoal(weightGoal)
+    }
+    
+    /**
+     * Update an existing weight goal for a pet (deprecated - use upsertWeightGoal instead)
+     * - Parameter petId: The pet's ID
+     * - Parameter goalType: Type of weight goal
+     * - Parameter targetWeight: Target weight in the user's selected unit
+     * - Parameter targetDate: Target date for achieving the goal
+     * - Parameter notes: Optional notes about the goal
+     */
+    func updateWeightGoal(
+        petId: String,
+        goalType: WeightGoalType,
+        targetWeight: Double,
+        targetDate: Date,
+        notes: String? = nil
+    ) async throws {
+        // Delegate to upsert method for consistency
+        try await upsertWeightGoal(
+            petId: petId,
+            goalType: goalType,
+            targetWeight: targetWeight,
+            targetDate: targetDate,
+            notes: notes
+        )
     }
     
     /**
@@ -120,8 +210,18 @@ class WeightTrackingService: ObservableObject {
             weightHistory[petId] = history
             
             // Load weight goals
-            if let goal = try await apiService.getActiveWeightGoal(petId: petId) {
-                weightGoals[petId] = goal
+            do {
+                if let goal = try await apiService.getActiveWeightGoal(petId: petId) {
+                    print("✅ Loaded weight goal from backend: \(goal.id)")
+                    weightGoals[petId] = goal
+                } else {
+                    print("⚠️ No weight goal found in backend for pet: \(petId)")
+                    // Clear local goal if no goal exists in backend
+                    weightGoals[petId] = nil
+                }
+            } catch {
+                // If goal loading fails, keep local goal but log the error
+                print("❌ Failed to load weight goal from backend: \(error.localizedDescription)")
             }
             
             // Update current weight
@@ -256,6 +356,36 @@ class WeightTrackingService: ObservableObject {
     
     // MARK: - Private Methods
     
+    /**
+     * Update pet's current weight in PetService
+     * - Parameter petId: Pet ID
+     * - Parameter weightKg: New weight in kg
+     */
+    private func updatePetWeight(petId: String, weightKg: Double) async {
+        // Find the pet in PetService and update its weight
+        if petService.pets.firstIndex(where: { $0.id == petId }) != nil {
+            let petUpdate = PetUpdate(
+                name: nil,
+                breed: nil,
+                birthday: nil,
+                weightKg: weightKg,
+                activityLevel: nil,
+                imageUrl: nil,
+                knownSensitivities: nil,
+                vetName: nil,
+                vetPhone: nil
+            )
+            
+            // Update the pet's weight through PetService
+            await MainActor.run {
+                petService.updatePet(id: petId, petUpdate: petUpdate)
+            }
+            
+            // The PetService.updatePet method should handle the UI update
+            // The pet's weight will be updated through the PetService
+        }
+    }
+    
     private func generateRecommendations(for petId: String) async {
         let history = weightHistory(for: petId)
         let goal = activeWeightGoal(for: petId)
@@ -356,11 +486,6 @@ struct WeightTrendAnalysis {
     let confidenceLevel: Double
 }
 
-enum TrendDirection {
-    case increasing
-    case decreasing
-    case stable
-}
 
 enum TrendStrength {
     case weak
@@ -368,70 +493,210 @@ enum TrendStrength {
     case strong
 }
 
+// MARK: - API Request/Response Models
+
+struct WeightRecordCreate: Codable {
+    let pet_id: String
+    let weight_kg: Double
+    let recorded_at: Date
+    let notes: String?
+    let recorded_by_user_id: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case pet_id
+        case weight_kg
+        case recorded_at
+        case notes
+        case recorded_by_user_id
+    }
+}
+
+struct WeightRecordResponse: Codable {
+    let id: String
+    let pet_id: String
+    let weight_kg: Double
+    let recorded_at: Date
+    let notes: String?
+    let recorded_by_user_id: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case pet_id
+        case weight_kg
+        case recorded_at
+        case notes
+        case recorded_by_user_id
+    }
+}
+
+struct WeightGoalCreate: Codable {
+    let pet_id: String
+    let goal_type: String
+    let targetWeightKg: Double?
+    let currentWeightKg: Double?
+    let targetDate: Date?
+    let notes: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case pet_id
+        case goal_type
+        case targetWeightKg
+        case currentWeightKg
+        case targetDate
+        case notes
+    }
+}
+
+struct WeightGoalUpdate: Codable {
+    let goal_type: String
+    let targetWeightKg: Double?
+    let targetDate: Date?
+    let notes: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case goal_type
+        case targetWeightKg
+        case targetDate
+        case notes
+    }
+}
+
+struct WeightGoalResponse: Codable {
+    let id: String
+    let pet_id: String
+    let goal_type: String
+    let targetWeightKg: Double?
+    let currentWeightKg: Double?
+    let targetDate: Date?
+    let isActive: Bool
+    let notes: String?
+    let createdAt: Date
+    let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case pet_id
+        case goal_type
+        case targetWeightKg
+        case currentWeightKg
+        case targetDate
+        case isActive
+        case notes
+        case createdAt
+        case updatedAt
+    }
+}
+
 // MARK: - API Service Extensions
 
 extension APIService {
+    /**
+     * Record a new weight measurement for a pet
+     * - Parameter weightRecord: Weight record data
+     */
     func recordWeight(_ weightRecord: WeightRecord) async throws {
-        // Implementation would call the backend API
-        // For now, simulate API call
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-    }
-    
-    func createWeightGoal(_ weightGoal: WeightGoal) async throws {
-        // Implementation would call the backend API
-        // For now, simulate API call
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-    }
-    
-    func getWeightHistory(petId: String) async throws -> [WeightRecord] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        let requestBody = WeightRecordCreate(
+            pet_id: weightRecord.petId,
+            weight_kg: weightRecord.weightKg,
+            recorded_at: weightRecord.recordedAt,
+            notes: weightRecord.notes,
+            recorded_by_user_id: weightRecord.recordedByUserId
+        )
         
-        return [
-            WeightRecord(
-                id: "1",
-                petId: petId,
-                weightKg: 25.5,
-                recordedAt: Date().addingTimeInterval(-86400), // 1 day ago
-                notes: "Morning weight",
-                recordedByUserId: nil
-            ),
-            WeightRecord(
-                id: "2",
-                petId: petId,
-                weightKg: 25.3,
-                recordedAt: Date().addingTimeInterval(-172800), // 2 days ago
-                notes: nil,
-                recordedByUserId: nil
-            ),
-            WeightRecord(
-                id: "3",
-                petId: petId,
-                weightKg: 25.7,
-                recordedAt: Date().addingTimeInterval(-259200), // 3 days ago
-                notes: "After exercise",
-                recordedByUserId: nil
-            )
-        ]
+        let _: WeightRecordResponse = try await post(
+            endpoint: "/advanced-nutrition/weight/record",
+            body: requestBody,
+            responseType: WeightRecordResponse.self
+        )
     }
     
+    /**
+     * Create a new weight goal for a pet
+     * - Parameter weightGoal: Weight goal data
+     */
+    func createWeightGoal(_ weightGoal: WeightGoal) async throws {
+        let requestBody = WeightGoalCreate(
+            pet_id: weightGoal.petId,
+            goal_type: weightGoal.goalType.rawValue,
+            targetWeightKg: weightGoal.targetWeightKg,
+            currentWeightKg: weightGoal.currentWeightKg,
+            targetDate: weightGoal.targetDate,
+            notes: weightGoal.notes
+        )
+        
+        let _: WeightGoalResponse = try await post(
+            endpoint: "/advanced-nutrition/weight/goals",
+            body: requestBody,
+            responseType: WeightGoalResponse.self
+        )
+    }
+    
+    /**
+     * Update an existing weight goal for a pet
+     * - Parameter weightGoal: Updated weight goal data
+     */
+    func updateWeightGoal(_ weightGoal: WeightGoal) async throws {
+        let requestBody = WeightGoalUpdate(
+            goal_type: weightGoal.goalType.rawValue,
+            targetWeightKg: weightGoal.targetWeightKg,
+            targetDate: weightGoal.targetDate,
+            notes: weightGoal.notes
+        )
+        
+        let _: WeightGoalResponse = try await post(
+            endpoint: "/advanced-nutrition/weight/goals/\(weightGoal.id)",
+            body: requestBody,
+            responseType: WeightGoalResponse.self
+        )
+    }
+    
+    /**
+     * Get weight history for a pet
+     * - Parameter petId: Pet ID
+     * - Returns: Array of weight records
+     */
+    func getWeightHistory(petId: String) async throws -> [WeightRecord] {
+        let response: [WeightRecordResponse] = try await get(
+            endpoint: "/advanced-nutrition/weight/history/\(petId)",
+            responseType: [WeightRecordResponse].self
+        )
+        
+        return response.map { response in
+            WeightRecord(
+                id: response.id,
+                petId: response.pet_id,
+                weightKg: response.weight_kg,
+                recordedAt: response.recorded_at,
+                notes: response.notes,
+                recordedByUserId: response.recorded_by_user_id
+            )
+        }
+    }
+    
+    /**
+     * Get active weight goal for a pet
+     * - Parameter petId: Pet ID
+     * - Returns: Active weight goal or nil
+     */
     func getActiveWeightGoal(petId: String) async throws -> WeightGoal? {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
+        let response: WeightGoalResponse? = try await get(
+            endpoint: "/advanced-nutrition/weight/goals/\(petId)/active",
+            responseType: WeightGoalResponse?.self
+        )
+        
+        guard let response = response else { return nil }
         
         return WeightGoal(
-            id: "goal1",
-            petId: petId,
-            goalType: .maintenance,
-            targetWeightKg: 25.0,
-            currentWeightKg: 25.5,
-            targetDate: Calendar.current.date(byAdding: .month, value: 1, to: Date()),
-            isActive: true,
-            notes: "Maintain healthy weight",
-            createdAt: Date().addingTimeInterval(-604800), // 1 week ago
-            updatedAt: Date().addingTimeInterval(-604800)
+            id: response.id,
+            petId: response.pet_id,
+            goalType: WeightGoalType(rawValue: response.goal_type) ?? .maintenance,
+            targetWeightKg: response.targetWeightKg,
+            currentWeightKg: response.currentWeightKg,
+            targetDate: response.targetDate,
+            isActive: response.isActive,
+            notes: response.notes,
+            createdAt: response.createdAt,
+            updatedAt: response.updatedAt
         )
     }
 }

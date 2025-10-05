@@ -202,9 +202,9 @@ class NutritionalTrendsService: ObservableObject {
         let last = patterns.first!.feedingCount
         let change = last - first
         
-        if change > 0.5 {
+        if Double(change) > 0.5 {
             return .increasing
-        } else if change < -0.5 {
+        } else if Double(change) < -0.5 {
             return .decreasing
         } else {
             return .stable

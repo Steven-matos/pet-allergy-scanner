@@ -25,43 +25,49 @@ struct WeightManagementView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var weightService = WeightTrackingService.shared
     @StateObject private var petService = PetService.shared
-    @State private var selectedPet: Pet?
+    @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @State private var showingWeightEntry = false
     @State private var showingGoalSetting = false
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var refreshTrigger = false
+    
+    private var selectedPet: Pet? {
+        petSelectionService.selectedPet
+    }
     
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                if isLoading {
-                    ProgressView("Loading weight data...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let pet = selectedPet {
-                    weightManagementContent(for: pet)
-                } else {
-                    petSelectionView
-                }
-            }
-            .navigationTitle("Weight Management")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add Weight") {
-                        showingWeightEntry = true
-                    }
-                    .disabled(selectedPet == nil)
-                }
+        VStack(spacing: 0) {
+            if isLoading {
+                ModernLoadingView(message: "Loading weight data...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let pet = selectedPet {
+                weightManagementContent(for: pet)
+            } else {
+                petSelectionView
             }
         }
+        .background(ModernDesignSystem.Colors.background)
         .sheet(isPresented: $showingWeightEntry) {
             if let pet = selectedPet {
                 WeightEntryView(pet: pet)
+                    .onDisappear {
+                        // Refresh weight data when the entry sheet is dismissed
+                        loadWeightData()
+                        // Force UI refresh
+                        refreshTrigger.toggle()
+                    }
             }
         }
         .sheet(isPresented: $showingGoalSetting) {
             if let pet = selectedPet {
-                WeightGoalSettingView(pet: pet)
+                WeightGoalSettingView(pet: pet, existingGoal: nil)
+                    .onDisappear {
+                        // Refresh weight data when the goal setting sheet is dismissed
+                        loadWeightData()
+                        // Force UI refresh
+                        refreshTrigger.toggle()
+                    }
             }
         }
         .onAppear {
@@ -72,37 +78,37 @@ struct WeightManagementView: View {
     // MARK: - Pet Selection View
     
     private var petSelectionView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
             Image(systemName: "pawprint.circle")
                 .font(.system(size: 60))
-                .foregroundColor(.orange)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
             
             Text("Select a Pet")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             Text("Choose a pet to view weight management data")
-                .font(.body)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.center)
             
             if !petService.pets.isEmpty {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
                     ForEach(petService.pets) { pet in
                         PetSelectionCard(pet: pet) {
-                            selectedPet = pet
+                            petSelectionService.selectPet(pet)
                             loadWeightData()
                         }
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, ModernDesignSystem.Spacing.md)
             } else {
                 Text("No pets found. Add a pet to get started.")
-                    .font(.body)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
     }
     
     // MARK: - Weight Management Content
@@ -110,13 +116,14 @@ struct WeightManagementView: View {
     @ViewBuilder
     private func weightManagementContent(for pet: Pet) -> some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Current Weight Card
                 CurrentWeightCard(
                     pet: pet,
-                    currentWeight: weightService.currentWeight(for: pet.id),
+                    currentWeight: weightService.currentWeights[pet.id] ?? pet.weightKg,
                     weightGoal: weightService.activeWeightGoal(for: pet.id)
                 )
+                .id(refreshTrigger) // Force refresh when trigger changes
                 
                 // Weight Trend Chart
                 if !weightService.weightHistory(for: pet.id).isEmpty {
@@ -124,11 +131,22 @@ struct WeightManagementView: View {
                         weightHistory: weightService.weightHistory(for: pet.id),
                         petName: pet.name
                     )
+                } else {
+                    // No weight data - show empty state with chart preview
+                    EmptyWeightChartCard(pet: pet)
                 }
                 
                 // Goal Progress
                 if let goal = weightService.activeWeightGoal(for: pet.id) {
-                    GoalProgressCard(goal: goal, currentWeight: weightService.currentWeight(for: pet.id))
+                    GoalProgressCard(
+                        goal: goal, 
+                        currentWeight: weightService.currentWeights[pet.id] ?? pet.weightKg, 
+                        pet: pet
+                    )
+                    .id("\(goal.id)-\(weightService.currentWeights[pet.id] ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
+                } else {
+                    // No goal set - show "Set Goal" card
+                    SetGoalCard(pet: pet)
                 }
                 
                 // Recent Weight Entries
@@ -142,8 +160,9 @@ struct WeightManagementView: View {
                     RecommendationsCard(recommendations: weightService.recommendations(for: pet.id))
                 }
             }
-            .padding()
+            .padding(ModernDesignSystem.Spacing.lg)
         }
+        .background(ModernDesignSystem.Colors.background)
         .refreshable {
             await loadWeightDataAsync()
         }
@@ -152,7 +171,7 @@ struct WeightManagementView: View {
     // MARK: - Helper Methods
     
     private func loadWeightData() {
-        guard let pet = selectedPet else { return }
+        guard selectedPet != nil else { return }
         
         isLoading = true
         errorMessage = nil
@@ -169,6 +188,7 @@ struct WeightManagementView: View {
             try await weightService.loadWeightData(for: pet.id)
             await MainActor.run {
                 isLoading = false
+                refreshTrigger.toggle() // Trigger UI refresh
             }
         } catch {
             await MainActor.run {
@@ -184,6 +204,7 @@ struct WeightManagementView: View {
 struct PetSelectionCard: View {
     let pet: Pet
     let onTap: () -> Void
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         Button(action: onTap) {
@@ -195,36 +216,40 @@ struct PetSelectionCard: View {
                 } placeholder: {
                     Image(systemName: "pawprint.circle.fill")
                         .font(.title)
-                        .foregroundColor(.orange)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 .frame(width: 50, height: 50)
                 .clipShape(Circle())
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(pet.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text(pet.species.capitalized)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Text(pet.species.rawValue.capitalized)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     if let weight = pet.weightKg {
-                        Text("\(weight, specifier: "%.1f") kg")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Text(unitService.formatWeight(weight))
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                 }
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.surface)
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -234,176 +259,347 @@ struct CurrentWeightCard: View {
     let pet: Pet
     let currentWeight: Double?
     let weightGoal: WeightGoal?
+    @State private var showingGoalEdit = false
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             HStack {
                 Text("Current Weight")
-                    .font(.headline)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Spacer()
                 
                 if let weight = currentWeight {
-                    Text("\(weight, specifier: "%.1f") kg")
-                        .font(.title2)
+                    Text(unitService.formatWeight(weight))
+                        .font(ModernDesignSystem.Typography.title2)
                         .fontWeight(.bold)
-                        .foregroundColor(.primary)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 } else {
                     Text("Not recorded")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
             }
             
             if let goal = weightGoal {
                 HStack {
-                    Text("Goal: \(goal.targetWeightKg ?? 0, specifier: "%.1f") kg")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                    Text("Goal: \(unitService.formatWeight(goal.targetWeightKg ?? 0))")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     Spacer()
                     
-                    if let current = currentWeight, let target = goal.targetWeightKg {
-                        let progress = (current / target) * 100
-                        Text("\(progress, specifier: "%.0f")%")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundColor(progress >= 95 && progress <= 105 ? .green : .orange)
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        if let current = currentWeight, let target = goal.targetWeightKg {
+                            let progress = (current / target) * 100
+                            Text("\(progress, specifier: "%.0f")%")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                            .foregroundColor(progress >= 95 && progress <= 105 ? 
+                                ModernDesignSystem.Colors.primary : 
+                                ModernDesignSystem.Colors.goldenYellow)
+                        }
+                        
+                        Button(action: {
+                            showingGoalEdit = true
+                        }) {
+                            Image(systemName: "pencil")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                        }
+                    }
+                }
+            } else {
+                // No goal set - show "Set Goal" button
+                HStack {
+                    Text("No weight goal set")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        showingGoalEdit = true
+                    }) {
+                        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(ModernDesignSystem.Typography.caption)
+                            Text("Set Goal")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+        .sheet(isPresented: $showingGoalEdit) {
+            WeightGoalSettingView(pet: pet, existingGoal: weightGoal)
+        }
     }
 }
 
 struct WeightTrendChart: View {
     let weightHistory: [WeightRecord]
     let petName: String
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Weight Trend")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            if #available(iOS 16.0, *) {
-                Chart(weightHistory.prefix(30)) { record in
-                    LineMark(
-                        x: .value("Date", record.recordedAt),
-                        y: .value("Weight", record.weightKg)
-                    )
-                    .foregroundStyle(.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    
-                    PointMark(
-                        x: .value("Date", record.recordedAt),
-                        y: .value("Weight", record.weightKg)
-                    )
-                    .foregroundStyle(.blue)
-                    .symbolSize(50)
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                        AxisValueLabel(format: .dateTime.month().day())
+            PerformanceOptimizer.optimizedChart {
+                if #available(iOS 16.0, *) {
+                    Chart(weightHistory.prefix(30)) { record in
+                        // Area under the line for better visual appeal
+                        AreaMark(
+                            x: .value("Date", record.recordedAt),
+                            y: .value("Weight", record.weightKg)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary.opacity(0.2))
+                        
+                        // Main line
+                        LineMark(
+                            x: .value("Date", record.recordedAt),
+                            y: .value("Weight", record.weightKg)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary)
+                        .lineStyle(StrokeStyle(lineWidth: 3))
+                        
+                        // Data points
+                        PointMark(
+                            x: .value("Date", record.recordedAt),
+                            y: .value("Weight", record.weightKg)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary)
+                        .symbolSize(60)
+                        .symbol(.circle)
                     }
-                }
-                .chartYAxis {
-                    AxisMarks { value in
-                        AxisValueLabel {
-                            if let weight = value.as(Double.self) {
-                                Text("\(weight, specifier: "%.1f") kg")
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                            AxisValueLabel(format: .dateTime.month().day())
+                                .foregroundStyle(ModernDesignSystem.Colors.textSecondary)
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisValueLabel {
+                                if let weight = value.as(Double.self) {
+                                    Text(unitService.formatWeight(weight))
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
                             }
                         }
                     }
+                    .chartBackground { chartProxy in
+                        // Add subtle grid lines
+                        Rectangle()
+                            .fill(ModernDesignSystem.Colors.lightGray.opacity(0.3))
+                    }
                 }
-            } else {
-                // Fallback for iOS 15 and earlier
-                Text("Weight trend chart requires iOS 16+")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .frame(height: 200)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
 struct GoalProgressCard: View {
     let goal: WeightGoal
     let currentWeight: Double?
+    let pet: Pet
+    @State private var showingGoalEdit = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             HStack {
                 Text("Goal Progress")
-                    .font(.headline)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Spacer()
                 
-                Text(goal.goalType.displayName)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Text(goal.goalType.displayName)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Button(action: {
+                        showingGoalEdit = true
+                    }) {
+                        Image(systemName: "pencil")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    }
+                }
             }
             
             if let current = currentWeight, let target = goal.targetWeightKg {
                 let progress = calculateProgress(current: current, target: target, goalType: goal.goalType)
                 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     HStack {
                         Text("Progress")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         
                         Spacer()
                         
                         Text("\(Int(progress * 100))%")
-                            .font(.subheadline)
+                            .font(ModernDesignSystem.Typography.subheadline)
                             .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     }
                     
-                    ProgressView(value: progress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: progressColor(progress)))
+                    // Enhanced progress visualization
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        ProgressView(value: progress)
+                            .progressViewStyle(LinearProgressViewStyle(tint: progressColor(progress)))
+                            .scaleEffect(y: 2) // Make progress bar thicker
+                        
+                        // Additional progress info
+                        HStack {
+                            Text("Goal Progress")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Spacer()
+                            
+                            if let startingWeight = goal.currentWeightKg {
+                                let weightChange = current - startingWeight
+                                let changeText = weightChange >= 0 ? "+\(String(format: "%.1f", weightChange))" : "\(String(format: "%.1f", weightChange))"
+                                Text(changeText)
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(weightChange >= 0 ? 
+                                        ModernDesignSystem.Colors.primary : 
+                                        ModernDesignSystem.Colors.warmCoral)
+                            }
+                        }
+                    }
                 }
             } else {
                 Text("Set a target weight to track progress")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+        .sheet(isPresented: $showingGoalEdit) {
+            WeightGoalSettingView(pet: pet, existingGoal: goal)
+        }
     }
     
     private func calculateProgress(current: Double, target: Double, goalType: WeightGoalType) -> Double {
+        // Get the starting weight from the goal's currentWeightKg (weight when goal was set)
+        let startingWeight: Double
+        if let goalStartingWeight = goal.currentWeightKg {
+            startingWeight = goalStartingWeight
+        } else {
+            // If no starting weight, use current weight as starting point
+            startingWeight = current
+            print("⚠️ Warning: No starting weight found for goal, using current weight: \(startingWeight)")
+        }
+        
+        print("📊 Progress calculation - Current: \(current), Target: \(target), Starting: \(startingWeight), GoalType: \(goalType)")
+        
         switch goalType {
         case .weightLoss:
-            // For weight loss, progress is how much weight has been lost
-            return min(1.0, max(0.0, (target - current) / target))
+            // For weight loss, progress is how much weight has been lost from starting point
+            let totalWeightToLose = startingWeight - target
+            let weightLost = startingWeight - current
+            guard totalWeightToLose > 0 else { 
+                print("📊 Weight loss: Invalid target (target >= starting weight)")
+                return 0.0 
+            }
+            
+            // If no weight has been lost yet (current weight >= starting weight), show 0% progress
+            if weightLost <= 0 {
+                print("📊 Weight loss: No progress yet (current: \(current), starting: \(startingWeight))")
+                return 0.0
+            }
+            
+            let progress = min(1.0, max(0.0, weightLost / totalWeightToLose))
+            print("📊 Weight loss progress: \(progress * 100)% (lost: \(weightLost), total to lose: \(totalWeightToLose))")
+            return progress
+            
         case .weightGain:
-            // For weight gain, progress is how much weight has been gained
-            return min(1.0, max(0.0, (current - target) / target))
+            // For weight gain, progress is how much weight has been gained from starting point
+            let totalWeightToGain = target - startingWeight
+            let weightGained = current - startingWeight
+            guard totalWeightToGain > 0 else { 
+                print("📊 Weight gain: Invalid target (target <= starting weight)")
+                return 0.0 
+            }
+            
+            // If no weight has been gained yet (current weight <= starting weight), show 0% progress
+            if weightGained <= 0 {
+                print("📊 Weight gain: No progress yet (current: \(current), starting: \(startingWeight))")
+                return 0.0
+            }
+            
+            let progress = min(1.0, max(0.0, weightGained / totalWeightToGain))
+            print("📊 Weight gain progress: \(progress * 100)% (gained: \(weightGained), total to gain: \(totalWeightToGain))")
+            return progress
+            
         case .maintenance, .healthImprovement:
-            // For maintenance, progress is how close to target
-            return min(1.0, max(0.0, 1.0 - abs(current - target) / target))
+            // For maintenance, progress is how close to target (inverse of distance)
+            let distanceFromTarget = abs(current - target)
+            let maxDistance = max(abs(startingWeight - target), 1.0) // Avoid division by zero
+            let progress = min(1.0, max(0.0, 1.0 - (distanceFromTarget / maxDistance)))
+            print("📊 Maintenance progress: \(progress * 100)% (distance: \(distanceFromTarget), max distance: \(maxDistance))")
+            return progress
         }
     }
     
     private func progressColor(_ progress: Double) -> Color {
         if progress >= 0.8 {
-            return .green
+            return ModernDesignSystem.Colors.primary // Deep Forest Green for good progress
         } else if progress >= 0.5 {
-            return .orange
+            return ModernDesignSystem.Colors.goldenYellow // Golden Yellow for moderate progress
         } else {
-            return .red
+            return ModernDesignSystem.Colors.warmCoral // Warm Coral for low progress
         }
     }
 }
@@ -413,55 +609,67 @@ struct RecentWeightEntriesCard: View {
     let weightHistory: [WeightRecord]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             HStack {
                 Text("Recent Entries")
-                    .font(.headline)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Spacer()
                 
                 if weightHistory.count > 5 {
                     Text("View All")
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                 }
             }
             
             if weightHistory.isEmpty {
                 Text("No weight entries yet. Tap 'Add Weight' to get started.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
+                    .padding(.vertical, ModernDesignSystem.Spacing.lg)
             } else {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
                     ForEach(weightHistory.prefix(5)) { record in
                         WeightEntryRow(record: record)
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
 struct WeightEntryRow: View {
     let record: WeightRecord
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(record.weightKg, specifier: "%.1f") kg")
-                    .font(.subheadline)
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(unitService.formatWeight(record.weightKg))
+                    .font(ModernDesignSystem.Typography.subheadline)
                     .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 if let notes = record.notes, !notes.isEmpty {
                     Text(notes)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .lineLimit(1)
                 }
             }
@@ -469,10 +677,158 @@ struct WeightEntryRow: View {
             Spacer()
             
             Text(record.recordedAt, style: .relative)
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+    }
+}
+
+struct EmptyWeightChartCard: View {
+    let pet: Pet
+    @State private var showingWeightEntry = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Text("Weight Trend")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Button(action: {
+                    showingWeightEntry = true
+                }) {
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(ModernDesignSystem.Typography.caption)
+                        Text("Add Weight")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                }
+            }
+            
+            VStack(alignment: .center, spacing: ModernDesignSystem.Spacing.lg) {
+                // Chart placeholder with sample data visualization
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("📊")
+                        .font(.system(size: 40))
+                    
+                    Text("No weight data yet")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Text("Record your first weight to see trends and charts")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(height: 200)
+                .frame(maxWidth: .infinity)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                        .fill(ModernDesignSystem.Colors.lightGray)
+                        .overlay(
+                            // Sample chart visualization
+                            VStack {
+                                Spacer()
+                                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                                    ForEach(0..<7, id: \.self) { index in
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(ModernDesignSystem.Colors.primary.opacity(0.3))
+                                            .frame(width: 8, height: CGFloat(20 + (index * 8)))
+                                    }
+                                }
+                                .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                                Spacer()
+                            }
+                        )
+                )
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+        .sheet(isPresented: $showingWeightEntry) {
+            WeightEntryView(pet: pet)
+        }
+    }
+}
+
+struct SetGoalCard: View {
+    let pet: Pet
+    @State private var showingGoalSetting = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Text("Weight Goal")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Button(action: {
+                    showingGoalSetting = true
+                }) {
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(ModernDesignSystem.Typography.caption)
+                        Text("Set Goal")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                Text("Set a weight goal to track your pet's progress")
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                
+                Text("• Weight loss goals")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                
+                Text("• Weight gain goals")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                
+                Text("• Maintenance goals")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+        .sheet(isPresented: $showingGoalSetting) {
+            WeightGoalSettingView(pet: pet, existingGoal: nil)
+        }
     }
 }
 
@@ -480,31 +836,41 @@ struct RecommendationsCard: View {
     let recommendations: [String]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Recommendations")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            LazyVStack(spacing: 8) {
+            LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
                 ForEach(recommendations, id: \.self) { recommendation in
-                    HStack(alignment: .top, spacing: 8) {
+                    HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                         Image(systemName: "lightbulb.fill")
-                            .font(.caption)
-                            .foregroundColor(.orange)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.warning)
                             .padding(.top, 2)
                         
                         Text(recommendation)
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         
                         Spacer()
                     }
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -514,6 +880,7 @@ struct WeightEntryView: View {
     let pet: Pet
     @Environment(\.dismiss) private var dismiss
     @StateObject private var weightService = WeightTrackingService.shared
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var weight: String = ""
     @State private var notes: String = ""
     @State private var isRecording = false
@@ -524,26 +891,31 @@ struct WeightEntryView: View {
             Form {
                 Section("Weight Information") {
                     HStack {
-                        TextField("Weight (kg)", text: $weight)
+                        TextField("Weight (\(unitService.getUnitSymbol()))", text: $weight)
                             .keyboardType(.decimalPad)
+                            .modernInputField()
                         
-                        Text("kg")
-                            .foregroundColor(.secondary)
+                        Text(unitService.getUnitSymbol())
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                 }
                 
                 Section("Notes (Optional)") {
                     TextField("Add notes about this weight measurement", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
+                        .modernInputField()
                 }
             }
             .navigationTitle("Record Weight")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.background, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -551,12 +923,14 @@ struct WeightEntryView: View {
                         recordWeight()
                     }
                     .disabled(weight.isEmpty || isRecording)
+                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
                     errorMessage = nil
                 }
+                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -573,6 +947,7 @@ struct WeightEntryView: View {
         
         Task {
             do {
+                // Store weight directly in the selected unit (no conversion needed)
                 try await weightService.recordWeight(
                     petId: pet.id,
                     weight: weightValue,
@@ -596,14 +971,20 @@ struct WeightEntryView: View {
 
 struct WeightGoalSettingView: View {
     let pet: Pet
+    let existingGoal: WeightGoal?
     @Environment(\.dismiss) private var dismiss
     @StateObject private var weightService = WeightTrackingService.shared
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var goalType: WeightGoalType = .maintenance
     @State private var targetWeight: String = ""
     @State private var targetDate = Date().addingTimeInterval(30 * 24 * 60 * 60) // 30 days from now
     @State private var notes: String = ""
     @State private var isCreating = false
     @State private var errorMessage: String?
+    
+    private var isEditing: Bool {
+        existingGoal != nil
+    }
     
     var body: some View {
         NavigationStack {
@@ -619,11 +1000,12 @@ struct WeightGoalSettingView: View {
                 
                 Section("Target Weight") {
                     HStack {
-                        TextField("Target weight (kg)", text: $targetWeight)
+                        TextField("Target weight (\(unitService.getUnitSymbol()))", text: $targetWeight)
                             .keyboardType(.decimalPad)
+                            .modernInputField()
                         
-                        Text("kg")
-                            .foregroundColor(.secondary)
+                        Text(unitService.getUnitSymbol())
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                 }
                 
@@ -634,15 +1016,19 @@ struct WeightGoalSettingView: View {
                 Section("Notes (Optional)") {
                     TextField("Add notes about this goal", text: $notes, axis: .vertical)
                         .lineLimit(3...6)
+                        .modernInputField()
                 }
             }
-            .navigationTitle("Set Weight Goal")
+            .navigationTitle(isEditing ? "Edit Weight Goal" : "Set Weight Goal")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.background, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -650,14 +1036,30 @@ struct WeightGoalSettingView: View {
                         createGoal()
                     }
                     .disabled(targetWeight.isEmpty || isCreating)
+                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
                     errorMessage = nil
                 }
+                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
             } message: {
                 Text(errorMessage ?? "")
+            }
+            .onAppear {
+                if let goal = existingGoal {
+                    goalType = goal.goalType
+                    // Convert goal weight from kg to selected unit for display
+                    if let goalWeightKg = goal.targetWeightKg {
+                        let convertedWeight = unitService.convertFromKg(goalWeightKg)
+                        targetWeight = String(format: "%.1f", convertedWeight)
+                    } else {
+                        targetWeight = ""
+                    }
+                    targetDate = goal.targetDate ?? Date().addingTimeInterval(30 * 24 * 60 * 60)
+                    notes = goal.notes ?? ""
+                }
             }
         }
     }
@@ -672,7 +1074,8 @@ struct WeightGoalSettingView: View {
         
         Task {
             do {
-                try await weightService.createWeightGoal(
+                // Use upsert method - handles both create and update automatically
+                try await weightService.upsertWeightGoal(
                     petId: pet.id,
                     goalType: goalType,
                     targetWeight: targetWeightValue,
