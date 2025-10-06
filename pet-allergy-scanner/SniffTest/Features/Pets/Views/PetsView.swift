@@ -8,6 +8,7 @@
 import SwiftUI
 
 /// Main view for displaying and managing user's pets
+/// Follows Trust & Nature Design System for consistent styling
 struct PetsView: View {
     @EnvironmentObject var petService: PetService
     @State private var showingAddPet = false
@@ -18,11 +19,9 @@ struct PetsView: View {
     
     var body: some View {
         NavigationStack {
-            VStack {
+            VStack(spacing: 0) {
                 if petService.isLoading {
-                    ProgressView("Loading pets...")
-                        .tint(ModernDesignSystem.Colors.deepForestGreen)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    ModernLoadingView(message: "Loading pets...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if petService.pets.isEmpty {
                     EmptyPetsView {
@@ -30,7 +29,7 @@ struct PetsView: View {
                     }
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 16) {
+                        LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
                             ForEach(petService.pets) { pet in
                                 PetCardView(
                                     pet: pet,
@@ -44,18 +43,24 @@ struct PetsView: View {
                                 )
                             }
                         }
-                        .padding()
+                        .padding(ModernDesignSystem.Spacing.md)
                     }
                 }
             }
             .navigationTitle("My Pets")
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showingAddPet = true
                     }) {
                         Image(systemName: "plus")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
                     }
+                    .accessibilityLabel("Add new pet")
+                    .accessibilityHint("Opens the add pet form")
                 }
             }
             .sheet(isPresented: $showingAddPet) {
@@ -92,6 +97,7 @@ struct PetsView: View {
 }
 
 /// Enhanced pet card view with detailed information and action buttons
+/// Follows Trust & Nature Design System card patterns
 struct PetCardView: View {
     let pet: Pet
     let onEdit: () -> Void
@@ -100,62 +106,75 @@ struct PetCardView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header with Pet Name and Actions
-            HStack(spacing: 12) {
-                // Pet Photo or Icon
+            // Hero Pet Image Section - Focal Point
+            ZStack(alignment: .topTrailing) {
+                // Large Pet Image as focal point
                 RemoteImageView(petImageUrl: pet.imageUrl, species: pet.species)
-                    .frame(width: 56, height: 56)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 2))
+                    .frame(height: 200)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                 
-                // Pet Name and Species
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(pet.name)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    Text(pet.species.displayName)
-                        .font(.subheadline)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                
-                Spacer()
-                
-                // Action Buttons
-                HStack(spacing: 8) {
+                // Action Buttons positioned over the image with Trust & Nature styling
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
                     Button(action: onEdit) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 16))
-                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                            .frame(width: 36, height: 36)
-                            .background(ModernDesignSystem.Colors.deepForestGreen.opacity(0.1))
-                            .cornerRadius(8)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(ModernDesignSystem.Colors.textPrimary.opacity(0.8))
+                            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                            .shadow(
+                                color: ModernDesignSystem.Shadows.small.color,
+                                radius: ModernDesignSystem.Shadows.small.radius,
+                                x: ModernDesignSystem.Shadows.small.x,
+                                y: ModernDesignSystem.Shadows.small.y
+                            )
                     }
                     .accessibilityLabel("Edit \(pet.name)")
                     .accessibilityHint("Opens the edit pet form")
                     
                     Button(action: onDelete) {
                         Image(systemName: "trash")
-                            .font(.system(size: 16))
-                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
-                            .frame(width: 36, height: 36)
-                            .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
-                            .cornerRadius(8)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                            .background(ModernDesignSystem.Colors.warmCoral.opacity(0.9))
+                            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                            .shadow(
+                                color: ModernDesignSystem.Shadows.small.color,
+                                radius: ModernDesignSystem.Shadows.small.radius,
+                                x: ModernDesignSystem.Shadows.small.x,
+                                y: ModernDesignSystem.Shadows.small.y
+                            )
                     }
                     .accessibilityLabel("Delete \(pet.name)")
                     .accessibilityHint("Deletes this pet from your profile")
                 }
+                .padding(ModernDesignSystem.Spacing.md)
             }
-            .padding()
             
-            Divider()
-                .padding(.horizontal)
+            // Pet Name and Species with Trust & Nature colors
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(pet.name)
+                    .font(ModernDesignSystem.Typography.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(pet.species.displayName)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+            .padding(.bottom, ModernDesignSystem.Spacing.md)
+            .frame(maxWidth: .infinity, alignment: .leading)
             
-            // Pet Details Grid
-            VStack(spacing: 12) {
-                // Breed and Age Row
-                HStack(spacing: 12) {
+            // Pet Details Grid with consistent spacing
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Breed and Age Row with Trust & Nature spacing
+                HStack(spacing: ModernDesignSystem.Spacing.md) {
                     if let breed = pet.breed, !breed.isEmpty {
                         InfoPillView(
                             icon: "pawprint.fill",
@@ -173,8 +192,8 @@ struct PetCardView: View {
                     }
                 }
                 
-                // Weight and Allergies Row
-                HStack(spacing: 12) {
+                // Weight and Allergies Row with Trust & Nature spacing
+                HStack(spacing: ModernDesignSystem.Spacing.md) {
                     if let weightKg = pet.weightKg {
                         InfoPillView(
                             icon: "scalemass.fill",
@@ -193,45 +212,45 @@ struct PetCardView: View {
                     }
                 }
                 
-                // Sensitivities List
+                // Sensitivities List with Trust & Nature styling
                 if !pet.knownSensitivities.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                         Text("Food Sensitivities")
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             .textCase(.uppercase)
                         
-                        FlowLayout(spacing: 8) {
+                        FlowLayout(spacing: ModernDesignSystem.Spacing.sm) {
                             ForEach(pet.knownSensitivities, id: \.self) { sensitivity in
                                 Text(sensitivity)
-                                    .font(.caption)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
                                     .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
                                     .foregroundColor(ModernDesignSystem.Colors.warmCoral)
-                                    .cornerRadius(12)
+                                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
                             }
                         }
                     }
                 }
                 
-                // Veterinary Information
+                // Veterinary Information with Trust & Nature styling
                 if (pet.vetName != nil && !pet.vetName!.isEmpty) || (pet.vetPhone != nil && !pet.vetPhone!.isEmpty) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                         Text("Veterinary Information")
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             .textCase(.uppercase)
                         
                         if let vetName = pet.vetName, !vetName.isEmpty {
-                            HStack(spacing: 8) {
+                            HStack(spacing: ModernDesignSystem.Spacing.sm) {
                                 Image(systemName: "cross.case.fill")
-                                    .font(.caption)
+                                    .font(ModernDesignSystem.Typography.caption)
                                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                                 Text(vetName)
-                                    .font(.subheadline)
+                                    .font(ModernDesignSystem.Typography.subheadline)
                                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             }
                         }
@@ -239,29 +258,29 @@ struct PetCardView: View {
                         if let vetPhone = pet.vetPhone, !vetPhone.isEmpty {
                             if let phoneURL = URL(string: "tel://\(vetPhone.replacingOccurrences(of: " ", with: ""))") {
                                 Link(destination: phoneURL) {
-                                    HStack(spacing: 8) {
+                                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
                                         Image(systemName: "phone.fill")
-                                            .font(.caption)
-                                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.primary)
                                         Text(vetPhone)
-                                            .font(.subheadline)
-                                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                                            .font(ModernDesignSystem.Typography.subheadline)
+                                            .foregroundColor(ModernDesignSystem.Colors.primary)
                                             .underline()
                                         Spacer()
                                         Image(systemName: "arrow.up.right")
-                                            .font(.caption2)
-                                            .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                                            .font(ModernDesignSystem.Typography.caption2)
+                                            .foregroundColor(ModernDesignSystem.Colors.primary)
                                     }
                                 }
                                 .accessibilityLabel("Call \(vetPhone)")
                                 .accessibilityHint("Opens phone to call vet")
                             } else {
-                                HStack(spacing: 8) {
+                                HStack(spacing: ModernDesignSystem.Spacing.sm) {
                                     Image(systemName: "phone.fill")
-                                        .font(.caption)
+                                        .font(ModernDesignSystem.Typography.caption)
                                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                                     Text(vetPhone)
-                                        .font(.subheadline)
+                                        .font(ModernDesignSystem.Typography.subheadline)
                                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                                 }
                             }
@@ -269,11 +288,21 @@ struct PetCardView: View {
                     }
                 }
             }
-            .padding()
+            .padding(ModernDesignSystem.Spacing.lg)
         }
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        // Apply Trust & Nature card styling with enhanced shadow for hero image
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
+                .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.2), lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.large)
+        .shadow(
+            color: ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Pet card for \(pet.name)")
     }
@@ -281,6 +310,7 @@ struct PetCardView: View {
 }
 
 /// Reusable info pill component for displaying pet details
+/// Follows Trust & Nature Design System styling
 struct InfoPillView: View {
     let icon: String
     let label: String
@@ -288,27 +318,27 @@ struct InfoPillView: View {
     var isWarning: Bool = false
     
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: ModernDesignSystem.Spacing.xs) {
             Image(systemName: icon)
-                .font(.caption2)
-                .foregroundColor(isWarning ? ModernDesignSystem.Colors.warmCoral : ModernDesignSystem.Colors.deepForestGreen)
+                .font(ModernDesignSystem.Typography.caption2)
+                .foregroundColor(isWarning ? ModernDesignSystem.Colors.warmCoral : ModernDesignSystem.Colors.primary)
             
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs / 2) {
                 Text(label)
-                    .font(.caption2)
+                    .font(ModernDesignSystem.Typography.caption2)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
                 Text(value)
-                    .font(.caption)
+                    .font(ModernDesignSystem.Typography.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+        .padding(.vertical, ModernDesignSystem.Spacing.sm)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background((isWarning ? ModernDesignSystem.Colors.warmCoral : ModernDesignSystem.Colors.deepForestGreen).opacity(0.08))
-        .cornerRadius(10)
+        .background((isWarning ? ModernDesignSystem.Colors.warmCoral : ModernDesignSystem.Colors.primary).opacity(0.08))
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
     }
 }
 
