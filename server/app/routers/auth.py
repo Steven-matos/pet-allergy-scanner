@@ -38,7 +38,6 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
         if user_data_response.data:
             onboarded_status = user_data_response.data[0].get("onboarded", False)
             image_url = user_data_response.data[0].get("image_url")
-            logger.debug(f"Retrieved user data - onboarded: {onboarded_status}")
         else:
             logger.info(f"User {user_id} not found in public.users, creating record")
             # If user doesn't exist in public.users, create them
@@ -136,7 +135,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                 detail="Invalid authentication credentials"
             )
         
-        logger.debug(f"Successfully authenticated user: {response.user.id}")
         return response.user
     except Exception as e:
         logger.error(f"Authentication error: {e}")
@@ -456,9 +454,7 @@ async def update_current_user(
                 logger.info(f"Created user record for {current_user.id}")
             except Exception as insert_error:
                 # User might already exist due to race condition or previous creation
-                if "duplicate key value violates unique constraint" in str(insert_error):
-                    logger.debug(f"User {current_user.id} already exists, continuing with update")
-                else:
+                if "duplicate key value violates unique constraint" not in str(insert_error):
                     logger.error(f"Failed to create user record: {insert_error}")
                     raise insert_error
         
@@ -478,7 +474,6 @@ async def update_current_user(
                     current_user.id,
                     {"user_metadata": update_data}
                 )
-                logger.debug(f"Updated auth user metadata for {current_user.id}")
             except Exception as auth_update_error:
                 logger.warning(f"Failed to update auth user metadata: {auth_update_error}")
                 # Don't fail the entire operation if auth metadata update fails
@@ -490,7 +485,6 @@ async def update_current_user(
             current_image_url = None
             if current_user_data.data:
                 current_image_url = current_user_data.data[0].get("image_url")
-                logger.debug(f"Current user has image: {bool(current_image_url)}")
         except Exception as e:
             logger.error(f"Error fetching current user data: {e}")
             current_image_url = None
@@ -515,12 +509,10 @@ async def update_current_user(
                         # Extract the storage path from the full URL
                         storage_path = current_image_url.split("/storage/v1/object/public/user-images/")[-1]
                         service_supabase.storage.from_("user-images").remove([storage_path])
-                        logger.debug(f"Deleted old user image: {storage_path}")
                     except Exception as e:
                         logger.warning(f"Failed to delete old user image: {e}")
             
             public_update_data["image_url"] = user_update.image_url
-            logger.debug(f"Updating user image URL")
         if user_update.role is not None:
             public_update_data["role"] = user_update.role.value
         
@@ -563,7 +555,6 @@ async def update_current_user(
             onboarded_status = user_data_response.data[0].get("onboarded", False)
             image_url = user_data_response.data[0].get("image_url")
             role = user_data_response.data[0].get("role", "free")
-            logger.debug(f"Retrieved user data - onboarded: {onboarded_status}")
         
         return UserResponse(
             id=current_user.id,
@@ -638,5 +629,4 @@ async def logout_user():
     This endpoint exists for compatibility but doesn't perform server-side session invalidation
     since Supabase handles JWT validation statefully.
     """
-    logger.debug("User logout requested")
     return {"message": "Successfully logged out"}

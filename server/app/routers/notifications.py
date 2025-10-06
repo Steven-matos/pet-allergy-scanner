@@ -14,7 +14,10 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.user import User
 from app.utils.security import get_current_user
+from app.utils.logging_config import get_logger
 from app.services.push_notification_service import PushNotificationService
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 security = HTTPBearer()
@@ -245,4 +248,4 @@ async def send_delayed_notification(device_token: str, payload: Dict[str, Any], 
     try:
         await push_service.send_notification(device_token, payload)
     except Exception as e:
-        print(f"Failed to send delayed notification: {e}")
+        logger.error(f"Failed to send delayed notification: {e}")

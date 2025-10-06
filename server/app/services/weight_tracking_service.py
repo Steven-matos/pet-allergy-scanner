@@ -8,12 +8,15 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 import statistics
 from ..database import get_supabase_client
+from ..utils.logging_config import get_logger
 from ..models.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
     WeightTrendAnalysis, TrendDirection, TrendStrength,
     WeightManagementDashboard
 )
+
+logger = get_logger(__name__)
 
 
 class WeightTrackingService:
@@ -347,7 +350,7 @@ class WeightTrackingService:
             }).execute()
         except Exception as e:
             # Log error but don't fail the weight recording
-            print(f"Failed to update nutritional trends: {e}")
+            logger.warning(f"Failed to update nutritional trends: {e}")
     
     async def _get_weekly_progress(
         self, 
