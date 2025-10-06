@@ -200,6 +200,63 @@ class APIService: ObservableObject, @unchecked Sendable {
         return try await performRequest(request, responseType: T.self)
     }
     
+    /**
+     * Generic PUT request method
+     * - Parameter endpoint: The API endpoint to call
+     * - Parameter body: The request body to send
+     * - Returns: Decoded response of type T
+     */
+    func put<T: Codable, U: Codable>(endpoint: String, body: T, responseType: U.Type) async throws -> U {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = await createRequest(url: url, method: "PUT")
+        
+        do {
+            request.httpBody = try createJSONEncoder().encode(body)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        return try await performRequest(request, responseType: U.self)
+    }
+    
+    /**
+     * Generic DELETE request method
+     * - Parameter endpoint: The API endpoint to call
+     */
+    func delete(endpoint: String) async throws {
+        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = await createRequest(url: url, method: "DELETE")
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return // Success
+                case 401:
+                    throw APIError.authenticationError
+                case 400...499:
+                    throw APIError.serverError(httpResponse.statusCode)
+                case 500...599:
+                    throw APIError.serverError(httpResponse.statusCode)
+                default:
+                    throw APIError.unknownError
+                }
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
+        }
+    }
+    
     /// Create JSON encoder with consistent date encoding strategy
     private func createJSONEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

@@ -911,7 +911,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     
     try:
         # First try to decode as Supabase JWT token
-        logger.info(f"Attempting Supabase JWT validation for token: {credentials.credentials[:50]}...")
         payload = jwt.decode(
             credentials.credentials, 
             settings.supabase_jwt_secret, 
@@ -923,7 +922,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         if user_id is None:
             logger.error("Supabase JWT validation failed: no user ID in payload")
             raise credentials_exception
-        logger.info(f"Supabase JWT validation successful for user: {user_id}")
             
     except JWTError as e:
         logger.warning(f"Supabase JWT validation failed: {e}, trying server secret key")
@@ -938,7 +936,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             if user_id is None:
                 logger.error("Server JWT validation failed: no user ID in payload")
                 raise credentials_exception
-            logger.info(f"Server JWT validation successful for user: {user_id}")
         except JWTError as e2:
             logger.error(f"Server JWT validation also failed: {e2}")
             raise credentials_exception

@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     enable_audit_logging: bool = Field(default=True, description="Enable audit logging")
     session_timeout_minutes: int = Field(default=480, ge=30, le=1440, description="Session timeout in minutes")
     
+    # Logging Configuration
+    log_level: str = Field(default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    verbose_logging: bool = Field(default=False, description="Enable verbose logging for debugging")
+    
     # GDPR Compliance
     data_retention_days: int = Field(default=365, ge=30, le=2555, description="Data retention period in days")
     enable_data_export: bool = Field(default=True, description="Enable data export for GDPR")
