@@ -26,25 +26,38 @@ struct ModernDesignSystem {
     // MARK: - Colors - Trust & Nature Palette
     
     struct Colors {
-        // Trust & Nature Primary Colors
-        static let deepForestGreen = Color(red: 0.176, green: 0.353, blue: 0.239) // #2D5A3D
-        static let softCream = Color(red: 0.996, green: 0.992, blue: 0.973) // #FEFDF8
-        static let goldenYellow = Color(red: 1.0, green: 0.843, blue: 0.0) // #FFD700
-        static let charcoalGray = Color(red: 0.173, green: 0.243, blue: 0.314) // #2C3E50
-        static let warmCoral = Color(red: 1.0, green: 0.498, blue: 0.498) // #FF7F7F
-        static let lightGray = Color(red: 0.878, green: 0.878, blue: 0.878) // #E0E0E0
+        // Trust & Nature Primary Colors (Exact match to design system)
+        static let primary = Color(hex: "#2D5016") // Deep Forest Green
+        static let warmCoral = Color(hex: "#E67E22") // Warm Coral  
+        static let goldenYellow = Color(hex: "#F39C12") // Golden Yellow
+        
+        // Supporting Colors (Exact match to design system)
+        static let softCream = Color(hex: "#F8F6F0") // Soft Cream
+        static let textPrimary = Color(hex: "#2C3E50") // Charcoal Gray
+        static let textSecondary = Color(hex: "#BDC3C7") // Light Gray
+        static let borderPrimary = Color(hex: "#95A5A6") // Border Primary
+        
+        // Legacy colors for backward compatibility
+        static let deepForestGreen = primary
+        static let charcoalGray = textPrimary
+        static let lightGray = textSecondary
         
         // Primary colors (using Trust & Nature palette)
-        static let primary = deepForestGreen
-        static let primaryVariant = deepForestGreen.opacity(0.8)
+        static let primaryVariant = primary.opacity(0.8)
         static let secondary = goldenYellow
         static let secondaryVariant = goldenYellow.opacity(0.8)
         
         // Semantic colors (using Trust & Nature palette)
-        static let success = deepForestGreen
+        static let success = Color(hex: "#27AE60") // Success/Safe
         static let warning = goldenYellow
-        static let error = warmCoral
-        static let info = deepForestGreen
+        static let error = Color(hex: "#E74C3C") // Error
+        static let info = primary
+        
+        // Status colors with accessibility (Trust & Nature palette)
+        static let safe = Color(hex: "#27AE60") // Success/Safe
+        static let caution = goldenYellow
+        static let unsafe = Color(hex: "#E74C3C") // Error
+        static let unknown = textSecondary
         
         // Background colors (with dark mode support)
         static let background = Color(.systemBackground)
@@ -53,35 +66,29 @@ struct ModernDesignSystem {
         static let onBackground = Color(.label)
         static let onSurface = Color(.label)
         static let onPrimary = Color.white
-        static let onSecondary = charcoalGray
-        
-        // Status colors with accessibility (Trust & Nature palette)
-        static let safe = deepForestGreen
-        static let caution = goldenYellow
-        static let unsafe = warmCoral
-        static let unknown = lightGray
+        static let onSecondary = textPrimary
         
         // Tab bar colors
         static let tabBarBackground = softCream
-        static let tabBarActive = deepForestGreen
-        static let tabBarInactive = charcoalGray.opacity(0.6)
+        static let tabBarActive = primary
+        static let tabBarInactive = textSecondary
         
         // Button colors
-        static let buttonPrimary = deepForestGreen
+        static let buttonPrimary = primary
         static let buttonSecondary = Color.white
         static let buttonAccent = goldenYellow
         static let buttonDestructive = warmCoral
         
         // Border colors
-        static let borderPrimary = deepForestGreen
-        static let borderSecondary = lightGray
+        static let borderSecondary = textSecondary
         static let borderAccent = goldenYellow
         
         // Text colors
-        static let textPrimary = charcoalGray
-        static let textSecondary = charcoalGray.opacity(0.7)
         static let textOnPrimary = Color.white
-        static let textOnAccent = charcoalGray
+        static let textOnAccent = textPrimary
+        
+        // Additional Trust & Nature colors for completeness
+        static let accent = goldenYellow
     }
     
     // MARK: - Typography
@@ -243,17 +250,49 @@ enum ButtonStyle {
 struct StatusIndicator: View {
     let status: String
     let text: String
-    
+}
+
+// MARK: - Color Extension for Hex Support
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+
+// MARK: - StatusIndicator Implementation
+
+extension StatusIndicator {
     var body: some View {
         HStack(spacing: ModernDesignSystem.Spacing.sm) {
             Circle()
                 .fill(statusColor)
-                .frame(width: 12, height: 12)
-                .accessibilityLabel("Status indicator: \(status)")
+                .frame(width: 8, height: 8)
             
             Text(text)
-                .font(ModernDesignSystem.Typography.body)
-                .foregroundColor(ModernDesignSystem.Colors.onBackground)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
     }
     
@@ -261,12 +300,12 @@ struct StatusIndicator: View {
         switch status.lowercased() {
         case "safe":
             return ModernDesignSystem.Colors.safe
-        case "caution":
+        case "caution", "warning":
             return ModernDesignSystem.Colors.caution
-        case "unsafe":
+        case "unsafe", "error":
             return ModernDesignSystem.Colors.unsafe
         default:
-            return ModernDesignSystem.Colors.unknown
+            return ModernDesignSystem.Colors.textSecondary
         }
     }
 }
