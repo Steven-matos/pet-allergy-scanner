@@ -15,9 +15,9 @@ struct ScanResultView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Overall Safety Result
+                VStack(spacing: ModernDesignSystem.Spacing.xl) {
                     if let result = scan.result {
+                        // Overall Safety Result
                         SafetyResultCard(result: result, settingsManager: settingsManager)
                         
                         // Ingredients Analysis
@@ -35,22 +35,23 @@ struct ScanResultView: View {
                             AnalysisDetailsSection(details: result.analysisDetails)
                         }
                     } else {
-                        Text("Analysis in progress...")
-                            .font(.headline)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding()
+                        // Loading state
+                        LoadingStateView()
                     }
                 }
-                .padding()
+                .padding(ModernDesignSystem.Spacing.lg)
             }
+            .background(ModernDesignSystem.Colors.softCream)
             .navigationTitle("Scan Results")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
         }
@@ -62,22 +63,21 @@ struct SafetyResultCard: View {
     let settingsManager: SettingsManager
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
             HStack {
                 Image(systemName: iconForSafety(result.overallSafety))
                     .font(.system(size: 40))
                     .foregroundColor(colorForSafety(result.overallSafety))
                     .accessibilityLabel("Safety status: \(result.safetyDisplayName)")
                 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(result.safetyDisplayName)
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        .font(ModernDesignSystem.Typography.title2)
                         .foregroundColor(colorForSafety(result.overallSafety))
                         .accessibilityAddTraits(.isHeader)
                     
                     Text("Overall Safety")
-                        .font(.subheadline)
+                        .font(ModernDesignSystem.Typography.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
@@ -86,14 +86,14 @@ struct SafetyResultCard: View {
             
             // Show confidence score only if detailed reports are enabled
             if settingsManager.shouldShowDetailedAnalysis && result.confidenceScore > 0 {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     HStack {
                         Text("Confidence Score")
-                            .font(.subheadline)
+                            .font(ModernDesignSystem.Typography.subheadline)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         Spacer()
                         Text("\(Int(result.confidenceScore * 100))%")
-                            .font(.subheadline)
+                            .font(ModernDesignSystem.Typography.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     }
@@ -104,9 +104,13 @@ struct SafetyResultCard: View {
                 }
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
         .background(colorForSafety(result.overallSafety).opacity(0.1))
-        .cornerRadius(12)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(colorForSafety(result.overallSafety), lineWidth: 2)
+        )
     }
     
     private func colorForSafety(_ safety: String) -> Color {
@@ -140,10 +144,11 @@ struct IngredientsAnalysisSection: View {
     let result: ScanResult
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
             Text("Ingredients Analysis")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             
             if !result.unsafeIngredients.isEmpty {
                 UnsafeIngredientsList(ingredients: result.unsafeIngredients)
@@ -153,6 +158,7 @@ struct IngredientsAnalysisSection: View {
                 SafeIngredientsList(ingredients: result.safeIngredients)
             }
         }
+        .modernCard()
     }
 }
 
@@ -160,13 +166,13 @@ struct UnsafeIngredientsList: View {
     let ingredients: [String]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             HStack {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     .accessibilityLabel("Warning icon")
                 Text("Unsafe Ingredients (\(ingredients.count))")
-                    .font(.subheadline)
+                    .font(ModernDesignSystem.Typography.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     .accessibilityAddTraits(.isHeader)
@@ -177,17 +183,21 @@ struct UnsafeIngredientsList: View {
                     Text("•")
                         .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     Text(ingredient)
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .accessibilityLabel("Unsafe ingredient: \(ingredient)")
                     Spacer()
                 }
-                .padding(.leading, 16)
+                .padding(.leading, ModernDesignSystem.Spacing.md)
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
-        .cornerRadius(8)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.warmCoral, lineWidth: 1)
+        )
     }
 }
 
@@ -195,13 +205,13 @@ struct SafeIngredientsList: View {
     let ingredients: [String]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             HStack {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(ModernDesignSystem.Colors.safe)
                     .accessibilityLabel("Safe icon")
                 Text("Safe Ingredients (\(ingredients.count))")
-                    .font(.subheadline)
+                    .font(ModernDesignSystem.Typography.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.safe)
                     .accessibilityAddTraits(.isHeader)
@@ -212,17 +222,21 @@ struct SafeIngredientsList: View {
                     Text("•")
                         .foregroundColor(ModernDesignSystem.Colors.safe)
                     Text(ingredient)
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .accessibilityLabel("Safe ingredient: \(ingredient)")
                     Spacer()
                 }
-                .padding(.leading, 16)
+                .padding(.leading, ModernDesignSystem.Spacing.md)
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.safe.opacity(0.1))
-        .cornerRadius(8)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.safe, lineWidth: 1)
+        )
     }
 }
 
@@ -230,13 +244,13 @@ struct NutritionalAnalysisSection: View {
     let nutritionalAnalysis: NutritionalAnalysis
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
             HStack {
                 Image(systemName: "chart.bar.fill")
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .accessibilityLabel("Nutritional analysis icon")
                 Text("Nutritional Analysis")
-                    .font(.headline)
+                    .font(ModernDesignSystem.Typography.title3)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     .accessibilityAddTraits(.isHeader)
             }
@@ -261,6 +275,7 @@ struct NutritionalAnalysisSection: View {
                 MineralsCard(nutritionalAnalysis: nutritionalAnalysis)
             }
         }
+        .modernCard()
     }
     
     private func hasMacronutrientData() -> Bool {
@@ -283,31 +298,31 @@ struct CalorieInfoCard: View {
     let caloriesPer100G: Double?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Calorie Information")
-                .font(.subheadline)
+                .font(ModernDesignSystem.Typography.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
                 HStack {
                     Text("Per Serving")
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     Spacer()
                     Text("\(Int(caloriesPerServing)) kcal")
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .fontWeight(.medium)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
                 
                 HStack {
                     Text("Serving Size")
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     Spacer()
                     Text("\(Int(servingSize))g")
-                        .font(.body)
+                        .font(ModernDesignSystem.Typography.body)
                         .fontWeight(.medium)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
@@ -315,20 +330,24 @@ struct CalorieInfoCard: View {
                 if let caloriesPer100G = caloriesPer100G {
                     HStack {
                         Text("Per 100g")
-                            .font(.body)
+                            .font(ModernDesignSystem.Typography.body)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         Spacer()
                         Text("\(Int(caloriesPer100G)) kcal")
-                            .font(.body)
+                            .font(ModernDesignSystem.Typography.body)
                             .fontWeight(.medium)
                             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     }
                 }
             }
         }
-        .padding()
+        .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.primary.opacity(0.1))
-        .cornerRadius(8)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+        )
     }
 }
 
@@ -336,13 +355,13 @@ struct MacronutrientsCard: View {
     let nutritionalAnalysis: NutritionalAnalysis
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Macronutrients")
-                .font(.subheadline)
+                .font(ModernDesignSystem.Typography.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
                 if let protein = nutritionalAnalysis.proteinPercent {
                     NutrientRow(name: "Protein", value: protein, unit: "%")
                 }
@@ -360,9 +379,13 @@ struct MacronutrientsCard: View {
                 }
             }
         }
-        .padding()
-        .background(ModernDesignSystem.Colors.surfaceVariant)
-        .cornerRadius(8)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
     }
 }
 
@@ -370,13 +393,13 @@ struct MineralsCard: View {
     let nutritionalAnalysis: NutritionalAnalysis
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Minerals")
-                .font(.subheadline)
+                .font(ModernDesignSystem.Typography.subheadline)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            VStack(spacing: 8) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
                 if let calcium = nutritionalAnalysis.calciumPercent {
                     NutrientRow(name: "Calcium", value: calcium, unit: "%")
                 }
@@ -385,9 +408,13 @@ struct MineralsCard: View {
                 }
             }
         }
-        .padding()
-        .background(ModernDesignSystem.Colors.surfaceVariant)
-        .cornerRadius(8)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
     }
 }
 
@@ -399,11 +426,11 @@ struct NutrientRow: View {
     var body: some View {
         HStack {
             Text(name)
-                .font(.body)
+                .font(ModernDesignSystem.Typography.body)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             Spacer()
             Text("\(String(format: "%.1f", value))\(unit)")
-                .font(.body)
+                .font(ModernDesignSystem.Typography.body)
                 .fontWeight(.medium)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
         }
@@ -414,27 +441,47 @@ struct AnalysisDetailsSection: View {
     let details: [String: String]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Analysis Details")
-                .font(.headline)
+                .font(ModernDesignSystem.Typography.title3)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
             
             ForEach(Array(details.keys.sorted()), id: \.self) { key in
                 HStack {
                     Text(key.capitalized)
-                        .font(.subheadline)
+                        .font(ModernDesignSystem.Typography.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     Spacer()
                     Text(details[key] ?? "")
-                        .font(.subheadline)
+                        .font(ModernDesignSystem.Typography.subheadline)
                         .fontWeight(.medium)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
             }
         }
-        .padding()
-        .background(ModernDesignSystem.Colors.surfaceVariant)
-        .cornerRadius(8)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .modernCard()
+    }
+}
+
+/**
+ * Loading state view with Trust & Nature styling
+ */
+struct LoadingStateView: View {
+    var body: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            ProgressView()
+                .scaleEffect(1.2)
+                .tint(ModernDesignSystem.Colors.primary)
+                .accessibilityLabel("Loading")
+            
+            Text("Analysis in progress...")
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .padding(ModernDesignSystem.Spacing.xl)
+        .modernCard()
     }
 }
 
