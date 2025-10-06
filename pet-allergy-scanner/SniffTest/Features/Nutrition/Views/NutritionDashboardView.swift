@@ -570,7 +570,7 @@ struct HistoryItem: View {
                     .frame(width: 8, height: 8)
                 
                 Rectangle()
-                    .fill(Color.gray.opacity(0.3))
+                    .fill(ModernDesignSystem.Colors.lightGray.opacity(0.3))
                     .frame(width: 1, height: 20)
             }
             

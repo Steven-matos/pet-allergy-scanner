@@ -20,7 +20,7 @@ struct MFASetupView: View {
                 VStack(spacing: 16) {
                     Image(systemName: "shield.checkered")
                         .font(.system(size: 60))
-                        .foregroundColor(.blue)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                     
                     Text("Multi-Factor Authentication")
                         .font(.largeTitle)
@@ -65,7 +65,7 @@ struct MFASetupView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .padding()
-                                    .background(Color.gray.opacity(0.1))
+                                    .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
                                     .cornerRadius(8)
                             }
                         }
@@ -91,7 +91,7 @@ struct MFASetupView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.blue)
+                            .background(ModernDesignSystem.Colors.primary)
                             .foregroundColor(.white)
                             .cornerRadius(10)
                             .disabled(verificationToken.count != 6 || mfaService.isLoading)
@@ -118,7 +118,7 @@ struct MFASetupView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.orange)
+                        .background(ModernDesignSystem.Colors.warning)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                     }
@@ -134,7 +134,7 @@ struct MFASetupView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(ModernDesignSystem.Colors.primary)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                         .disabled(mfaService.isLoading)
@@ -210,7 +210,7 @@ struct BackupCodesView: View {
                         Text(code)
                             .font(.monospaced(.body)())
                             .padding()
-                            .background(Color.gray.opacity(0.1))
+                            .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
                             .cornerRadius(8)
                     }
                 }
@@ -223,7 +223,7 @@ struct BackupCodesView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.blue)
+                .background(ModernDesignSystem.Colors.primary)
                 .foregroundColor(.white)
                 .cornerRadius(10)
                 .padding(.horizontal)
