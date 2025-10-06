@@ -28,10 +28,11 @@ struct NutritionalTrendsView: View {
     @StateObject private var petService = PetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
-    @State private var selectedPeriod: TrendPeriod = .thirtyDays
+    @Binding var selectedPeriod: TrendPeriod
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingPeriodSelector = false
+    @State private var showingFeedingLog = false
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -51,6 +52,13 @@ struct NutritionalTrendsView: View {
         .background(ModernDesignSystem.Colors.background)
         .sheet(isPresented: $showingPeriodSelector) {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
+        }
+        .sheet(isPresented: $showingFeedingLog) {
+            FeedingLogView()
+                .onDisappear {
+                    // Refresh trends data when the feeding log sheet is dismissed
+                    loadTrendsData()
+                }
         }
         .onAppear {
             loadTrendsData()
@@ -101,6 +109,9 @@ struct NutritionalTrendsView: View {
             VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Summary Cards
                 summaryCardsSection(for: pet)
+                
+                // Quick Action Card - Log Feeding
+                quickActionCard
                 
                 // Calorie Trends Chart
                 if !trendsService.calorieTrends(for: pet.id).isEmpty {
@@ -188,6 +199,74 @@ struct NutritionalTrendsView: View {
                 color: ModernDesignSystem.Colors.warmCoral
             )
         }
+    }
+    
+    // MARK: - Quick Action Card
+    
+    private var quickActionCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(.title2)
+                
+                Text("Quick Actions")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            Button(action: {
+                showingFeedingLog = true
+            }) {
+                HStack {
+                    Image(systemName: "fork.knife")
+                        .font(.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                    
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Log Feeding Session")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                        
+                        Text("Record what your pet ate today")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary.opacity(0.8))
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                }
+                .padding(ModernDesignSystem.Spacing.md)
+                .background(ModernDesignSystem.Colors.buttonPrimary)
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     // MARK: - Helper Methods
@@ -707,6 +786,6 @@ struct PeriodSelectionView: View {
 
 
 #Preview {
-    NutritionalTrendsView()
+    NutritionalTrendsView(selectedPeriod: .constant(.thirtyDays))
         .environmentObject(AuthService.shared)
 }

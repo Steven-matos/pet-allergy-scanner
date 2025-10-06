@@ -253,89 +253,95 @@ class NutritionalTrendsService: ObservableObject {
     // MARK: - Private Methods
     
     private func loadCalorieTrends(petId: String, period: TrendPeriod) async throws -> [CalorieTrend] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        // Load real feeding data from backend
+        let response = try await apiService.get(
+            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            responseType: [NutritionalTrendResponse].self
+        )
         
-        let days = period.days
-        let now = Date()
-        
-        return (0..<days).map { dayOffset in
-            let date = Calendar.current.date(byAdding: .day, value: -dayOffset, to: now) ?? now
-            let baseCalories = 300.0
-            let variation = Double.random(in: -50...50)
-            let calories = baseCalories + variation + Double(dayOffset) * 2 // Slight upward trend
-            
-            return CalorieTrend(
-                date: date,
-                calories: calories,
-                target: 300.0
+        // Convert API response to CalorieTrend models
+        return response.map { trend in
+            CalorieTrend(
+                date: trend.trendDate,
+                calories: trend.totalCalories,
+                target: nil // User-defined targets will be implemented later
             )
-        }.reversed()
+        }.sorted { $0.date < $1.date }
     }
     
     private func loadMacronutrientTrends(petId: String, period: TrendPeriod) async throws -> [MacronutrientTrend] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        // Load real feeding data from backend
+        let response = try await apiService.get(
+            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            responseType: [NutritionalTrendResponse].self
+        )
         
-        let days = period.days
-        let now = Date()
-        
-        return (0..<days).map { dayOffset in
-            let date = Calendar.current.date(byAdding: .day, value: -dayOffset, to: now) ?? now
-            
-            return MacronutrientTrend(
-                date: date,
-                protein: 25.0 + Double.random(in: -5...5),
-                fat: 12.0 + Double.random(in: -3...3),
-                fiber: 4.0 + Double.random(in: -1...1)
+        // Convert API response to MacronutrientTrend models
+        return response.map { trend in
+            MacronutrientTrend(
+                date: trend.trendDate,
+                protein: trend.totalProteinG,
+                fat: trend.totalFatG,
+                fiber: trend.totalFiberG
             )
-        }.reversed()
+        }.sorted { $0.date < $1.date }
     }
     
     private func loadFeedingPatterns(petId: String, period: TrendPeriod) async throws -> [FeedingPattern] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        // Load real feeding data from backend
+        let response = try await apiService.get(
+            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            responseType: [NutritionalTrendResponse].self
+        )
         
-        let days = period.days
-        let now = Date()
-        
-        return (0..<days).map { dayOffset in
-            let date = Calendar.current.date(byAdding: .day, value: -dayOffset, to: now) ?? now
-            
-            return FeedingPattern(
-                date: date,
-                feedingCount: Int.random(in: 1...3),
-                compatibilityScore: 70.0 + Double.random(in: -20...20)
+        // Convert API response to FeedingPattern models
+        return response.map { trend in
+            FeedingPattern(
+                date: trend.trendDate,
+                feedingCount: trend.feedingCount,
+                compatibilityScore: trend.averageCompatibilityScore
             )
-        }.reversed()
+        }.sorted { $0.date < $1.date }
     }
     
     private func loadWeightCorrelation(petId: String, period: TrendPeriod) async throws -> WeightCorrelation? {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-        
-        return WeightCorrelation(
-            correlation: Double.random(in: -0.8...0.8),
-            strength: ["weak", "moderate", "strong"].randomElement() ?? "weak",
-            interpretation: "Positive correlation between calorie intake and weight change"
-        )
+        // Load weight correlation data from backend
+        do {
+            let response = try await apiService.get(
+                endpoint: "/advanced-nutrition/trends/dashboard/\(petId)?days_back=\(period.days)",
+                responseType: NutritionalTrendsDashboard.self
+            )
+            
+            guard let correlation = response.weightCorrelation else { return nil }
+            
+            return WeightCorrelation(
+                correlation: correlation.correlation,
+                strength: correlation.strength,
+                interpretation: correlation.interpretation
+            )
+        } catch {
+            // Return nil if no weight correlation data available
+            return nil
+        }
     }
     
     private func loadInsights(petId: String, period: TrendPeriod) async throws -> [String] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-        
-        return [
-            "Calorie intake has been consistent over the past \(period.displayName.lowercased())",
-            "Feeding frequency is optimal for your pet's needs",
-            "Nutritional balance is within healthy ranges",
-            "Consider monitoring weight changes more closely"
-        ]
+        // Load insights from backend dashboard
+        do {
+            let response = try await apiService.get(
+                endpoint: "/advanced-nutrition/trends/dashboard/\(petId)?days_back=\(period.days)",
+                responseType: NutritionalTrendsDashboard.self
+            )
+            
+            return response.insights
+        } catch {
+            // Return default insights if backend data unavailable
+            return [
+                "Start logging your pet's feeding to see personalized insights",
+                "Regular feeding tracking helps identify nutritional patterns",
+                "Monitor your pet's weight alongside feeding habits"
+            ]
+        }
     }
     
     private func calculateDerivedMetrics(for petId: String) {
@@ -392,6 +398,70 @@ struct FeedingPattern: Identifiable {
 }
 
 struct WeightCorrelation {
+    let correlation: Double
+    let strength: String
+    let interpretation: String
+}
+
+/**
+ * Nutritional Trend Response
+ * Response model from backend API
+ */
+struct NutritionalTrendResponse: Codable {
+    let petId: String
+    let trendDate: Date
+    let totalCalories: Double
+    let totalProteinG: Double
+    let totalFatG: Double
+    let totalFiberG: Double
+    let feedingCount: Int
+    let averageCompatibilityScore: Double
+    let weightChangeKg: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case petId = "pet_id"
+        case trendDate = "trend_date"
+        case totalCalories = "total_calories"
+        case totalProteinG = "total_protein_g"
+        case totalFatG = "total_fat_g"
+        case totalFiberG = "total_fiber_g"
+        case feedingCount = "feeding_count"
+        case averageCompatibilityScore = "average_compatibility_score"
+        case weightChangeKg = "weight_change_kg"
+    }
+}
+
+/**
+ * Nutritional Trends Dashboard
+ * Dashboard response from backend API
+ */
+struct NutritionalTrendsDashboard: Codable {
+    let petId: String
+    let periodStart: Date
+    let periodEnd: Date
+    let totalCalories: Double
+    let averageDailyCalories: Double
+    let averageFeedingFrequency: Double
+    let weightCorrelation: WeightCorrelationData?
+    let insights: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case petId = "pet_id"
+        case periodStart = "period_start"
+        case periodEnd = "period_end"
+        case totalCalories = "total_calories"
+        case averageDailyCalories = "average_daily_calories"
+        case averageFeedingFrequency = "average_feeding_frequency"
+        case weightCorrelation = "weight_correlation"
+        case insights
+    }
+}
+
+/**
+ * Weight Correlation Data
+ * Weight correlation information from backend
+ */
+struct WeightCorrelationData: Codable {
     let correlation: Double
     let strength: String
     let interpretation: String

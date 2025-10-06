@@ -460,7 +460,7 @@ struct NutritionAnalysisRequest: Codable {
 
 /**
  * Nutritional Information
- * Optional detailed nutritional breakdown
+ * Contains nutritional data for a food item
  */
 struct NutritionalInfo: Codable {
     let caloriesPer100g: Double?
@@ -468,6 +468,9 @@ struct NutritionalInfo: Codable {
     let fatPercentage: Double?
     let fiberPercentage: Double?
     let moisturePercentage: Double?
+    let ashPercentage: Double?
+    let ingredients: [String]?
+    let allergens: [String]?
     
     enum CodingKeys: String, CodingKey {
         case caloriesPer100g = "calories_per_100g"
@@ -475,6 +478,9 @@ struct NutritionalInfo: Codable {
         case fatPercentage = "fat_percentage"
         case fiberPercentage = "fiber_percentage"
         case moisturePercentage = "moisture_percentage"
+        case ashPercentage = "ash_percentage"
+        case ingredients
+        case allergens
     }
 }
 

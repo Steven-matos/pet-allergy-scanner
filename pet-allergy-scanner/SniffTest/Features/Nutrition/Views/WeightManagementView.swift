@@ -95,10 +95,10 @@ struct WeightManagementView: View {
             if !petService.pets.isEmpty {
                 LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
                     ForEach(petService.pets) { pet in
-                        PetSelectionCard(pet: pet) {
+                        PetSelectionCard(pet: pet, onTap: {
                             petSelectionService.selectPet(pet)
                             loadWeightData()
-                        }
+                        })
                     }
                 }
                 .padding(.horizontal, ModernDesignSystem.Spacing.md)
@@ -201,59 +201,6 @@ struct WeightManagementView: View {
 
 // MARK: - Supporting Views
 
-struct PetSelectionCard: View {
-    let pet: Pet
-    let onTap: () -> Void
-    @StateObject private var unitService = WeightUnitPreferenceService.shared
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack {
-                AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "pawprint.circle.fill")
-                        .font(.title)
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                    Text(pet.name)
-                        .font(ModernDesignSystem.Typography.title3)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    Text(pet.species.rawValue.capitalized)
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    
-                    if let weight = pet.weightKg {
-                        Text(unitService.formatWeight(weight))
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            }
-            .padding(ModernDesignSystem.Spacing.lg)
-            .background(ModernDesignSystem.Colors.surface)
-            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-            .overlay(
-                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
 
 struct CurrentWeightCard: View {
     let pet: Pet

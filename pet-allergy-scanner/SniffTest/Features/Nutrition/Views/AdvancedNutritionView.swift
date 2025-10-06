@@ -30,6 +30,8 @@ struct AdvancedNutritionView: View {
     @State private var errorMessage: String?
     @State private var showingWeightEntry = false
     @State private var showingGoalSetting = false
+    @State private var showingPeriodSelector = false
+    @State private var selectedPeriod: TrendPeriod = .thirtyDays
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -79,18 +81,39 @@ struct AdvancedNutritionView: View {
                         }
                     } else if selectedTab == 1 && selectedPet != nil {
                         // Trends tab - Period selector
-                        Button("30 Days") {
-                            // Period selector for trends
+                        Button(action: {
+                            showingPeriodSelector = true
+                        }) {
+                            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                Image(systemName: "calendar")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                                
+                                Text(selectedPeriod.displayName)
+                                    .font(ModernDesignSystem.Typography.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                
+                                Image(systemName: "chevron.down")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                            .shadow(
+                                color: ModernDesignSystem.Shadows.small.color,
+                                radius: ModernDesignSystem.Shadows.small.radius,
+                                x: ModernDesignSystem.Shadows.small.x,
+                                y: ModernDesignSystem.Shadows.small.y
+                            )
                         }
-                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(ModernDesignSystem.Colors.softCream)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                        )
-                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .buttonStyle(PlainButtonStyle())
                     }
                 }
                 
@@ -150,6 +173,9 @@ struct AdvancedNutritionView: View {
                     }
             }
         }
+        .sheet(isPresented: $showingPeriodSelector) {
+            PeriodSelectionView(selectedPeriod: $selectedPeriod)
+        }
         .onAppear {
             loadNutritionData()
         }
@@ -196,8 +222,11 @@ struct AdvancedNutritionView: View {
     @ViewBuilder
     private func phase3Content(for pet: Pet) -> some View {
         VStack(spacing: 0) {
-            // Pet Header
+            // Pet Header with margin
             petHeaderSection(pet)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                .padding(.top, ModernDesignSystem.Spacing.md)
+                .padding(.bottom, ModernDesignSystem.Spacing.sm)
             
             // Tab Selection
             tabSelectionSection
@@ -210,7 +239,7 @@ struct AdvancedNutritionView: View {
                     .tag(0)
                 
                 // Nutritional Trends Tab
-                NutritionalTrendsView()
+                NutritionalTrendsView(selectedPeriod: $selectedPeriod)
                     .environmentObject(authService)
                     .tag(1)
                 
