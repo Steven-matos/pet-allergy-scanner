@@ -823,6 +823,23 @@ struct RecommendationsCard: View {
 
 // MARK: - Weight Entry View
 
+/**
+ * Weight Entry View following Trust & Nature Design System
+ * 
+ * Features:
+ * - Card-based layout with soft cream backgrounds
+ * - Trust & Nature color palette throughout
+ * - Consistent spacing and typography
+ * - Professional, nature-inspired design
+ * - Accessible form controls
+ * 
+ * Design System Compliance:
+ * - Uses ModernDesignSystem for all styling
+ * - Follows Trust & Nature color palette
+ * - Implements consistent spacing scale
+ * - Applies proper shadows and corner radius
+ * - Maintains accessibility standards
+ */
 struct WeightEntryView: View {
     let pet: Pet
     @Environment(\.dismiss) private var dismiss
@@ -835,34 +852,30 @@ struct WeightEntryView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Weight Information") {
-                    HStack {
-                        TextField("Weight (\(unitService.getUnitSymbol()))", text: $weight)
-                            .keyboardType(.decimalPad)
-                            .modernInputField()
-                        
-                        Text(unitService.getUnitSymbol())
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // MARK: - Pet Information Card
+                    petInformationCard
+                    
+                    // MARK: - Weight Information Card
+                    weightInformationCard
+                    
+                    // MARK: - Notes Card
+                    notesCard
                 }
-                
-                Section("Notes (Optional)") {
-                    TextField("Add notes about this weight measurement", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
-                        .modernInputField()
-                }
+                .padding(ModernDesignSystem.Spacing.md)
             }
+            .background(ModernDesignSystem.Colors.background)
             .navigationTitle("Record Weight")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(ModernDesignSystem.Colors.background, for: .navigationBar)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -870,18 +883,196 @@ struct WeightEntryView: View {
                         recordWeight()
                     }
                     .disabled(weight.isEmpty || isRecording)
-                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    .foregroundColor(weight.isEmpty || isRecording ? ModernDesignSystem.Colors.textSecondary : ModernDesignSystem.Colors.primary)
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
                     errorMessage = nil
                 }
-                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
             } message: {
                 Text(errorMessage ?? "")
             }
         }
+    }
+    
+    // MARK: - Pet Information Card
+    private var petInformationCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "pawprint.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Pet Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Pet Name
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Pet Name")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        Image(systemName: pet.species.icon)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text(pet.name)
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                    }
+                    .padding(ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Current Weight (if available)
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Current Weight")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        if let currentWeight = pet.weightKg {
+                            Text(unitService.formatWeight(currentWeight))
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        } else {
+                            Text("Not recorded")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Weight Information Card
+    private var weightInformationCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "scalemass.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Weight Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Weight Input
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Weight (\(unitService.getUnitSymbol()))")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        TextField("Enter weight", text: $weight)
+                            .font(ModernDesignSystem.Typography.body)
+                            .keyboardType(.decimalPad)
+                            .modernInputField()
+                        
+                        Text(unitService.getUnitSymbol())
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .padding(.trailing, ModernDesignSystem.Spacing.sm)
+                    }
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Notes Card
+    private var notesCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "note.text")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Notes (Optional)")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Notes Input
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Add notes about this weight measurement")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    TextField("Add notes about this weight measurement", text: $notes, axis: .vertical)
+                        .font(ModernDesignSystem.Typography.body)
+                        .lineLimit(3...6)
+                        .modernInputField()
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     private func recordWeight() {
@@ -916,6 +1107,23 @@ struct WeightEntryView: View {
 
 // MARK: - Weight Goal Setting View
 
+/**
+ * Weight Goal Setting View following Trust & Nature Design System
+ * 
+ * Features:
+ * - Card-based layout with soft cream backgrounds
+ * - Trust & Nature color palette throughout
+ * - Consistent spacing and typography
+ * - Professional, nature-inspired design
+ * - Accessible form controls
+ * 
+ * Design System Compliance:
+ * - Uses ModernDesignSystem for all styling
+ * - Follows Trust & Nature color palette
+ * - Implements consistent spacing scale
+ * - Applies proper shadows and corner radius
+ * - Maintains accessibility standards
+ */
 struct WeightGoalSettingView: View {
     let pet: Pet
     let existingGoal: WeightGoal?
@@ -935,47 +1143,36 @@ struct WeightGoalSettingView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Goal Type") {
-                    Picker("Goal Type", selection: $goalType) {
-                        ForEach(WeightGoalType.allCases, id: \.self) { type in
-                            Text(type.displayName).tag(type)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // MARK: - Pet Information Card
+                    petInformationCard
+                    
+                    // MARK: - Goal Type Card
+                    goalTypeCard
+                    
+                    // MARK: - Target Weight Card
+                    targetWeightCard
+                    
+                    // MARK: - Target Date Card
+                    targetDateCard
+                    
+                    // MARK: - Notes Card
+                    notesCard
                 }
-                
-                Section("Target Weight") {
-                    HStack {
-                        TextField("Target weight (\(unitService.getUnitSymbol()))", text: $targetWeight)
-                            .keyboardType(.decimalPad)
-                            .modernInputField()
-                        
-                        Text(unitService.getUnitSymbol())
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                }
-                
-                Section("Target Date") {
-                    DatePicker("When do you want to reach this goal?", selection: $targetDate, in: Date()..., displayedComponents: .date)
-                }
-                
-                Section("Notes (Optional)") {
-                    TextField("Add notes about this goal", text: $notes, axis: .vertical)
-                        .lineLimit(3...6)
-                        .modernInputField()
-                }
+                .padding(ModernDesignSystem.Spacing.md)
             }
+            .background(ModernDesignSystem.Colors.background)
             .navigationTitle(isEditing ? "Edit Weight Goal" : "Set Weight Goal")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(ModernDesignSystem.Colors.background, for: .navigationBar)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -983,14 +1180,14 @@ struct WeightGoalSettingView: View {
                         createGoal()
                     }
                     .disabled(targetWeight.isEmpty || isCreating)
-                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    .foregroundColor(targetWeight.isEmpty || isCreating ? ModernDesignSystem.Colors.textSecondary : ModernDesignSystem.Colors.primary)
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {
                 Button("OK") {
                     errorMessage = nil
                 }
-                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
             } message: {
                 Text(errorMessage ?? "")
             }
@@ -1009,6 +1206,251 @@ struct WeightGoalSettingView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Pet Information Card
+    private var petInformationCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "pawprint.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Pet Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Pet Name
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Pet Name")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        Image(systemName: pet.species.icon)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text(pet.name)
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                    }
+                    .padding(ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Goal Type Card
+    private var goalTypeCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "target")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Goal Type")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Goal Type Picker
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Select the type of weight goal")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Picker("Goal Type", selection: $goalType) {
+                        ForEach(WeightGoalType.allCases, id: \.self) { type in
+                            Text(type.displayName).tag(type)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Target Weight Card
+    private var targetWeightCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "scalemass.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Target Weight")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Target Weight Input
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Target weight (\(unitService.getUnitSymbol()))")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        TextField("Enter target weight", text: $targetWeight)
+                            .font(ModernDesignSystem.Typography.body)
+                            .keyboardType(.decimalPad)
+                            .modernInputField()
+                        
+                        Text(unitService.getUnitSymbol())
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .padding(.trailing, ModernDesignSystem.Spacing.sm)
+                    }
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Target Date Card
+    private var targetDateCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "calendar")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Target Date")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Target Date Picker
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("When do you want to reach this goal?")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    DatePicker("Target Date", selection: $targetDate, in: Date()..., displayedComponents: .date)
+                        .datePickerStyle(CompactDatePickerStyle())
+                        .font(ModernDesignSystem.Typography.body)
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Notes Card
+    private var notesCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "note.text")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Notes (Optional)")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Notes Input
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Add notes about this goal")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    TextField("Add notes about this goal", text: $notes, axis: .vertical)
+                        .font(ModernDesignSystem.Typography.body)
+                        .lineLimit(3...6)
+                        .modernInputField()
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     private func createGoal() {
