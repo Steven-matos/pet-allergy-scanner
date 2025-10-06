@@ -7,6 +7,20 @@
 
 import SwiftUI
 
+/**
+ * Forgot Password View - Trust & Nature Design System Compliant
+ * 
+ * Redesigned password reset screen following the Trust & Nature Design System:
+ * - Proper spacing using ModernDesignSystem.Spacing scale
+ * - Typography hierarchy with design system fonts
+ * - Trust & Nature color palette throughout
+ * - Modern card-based layout with proper shadows
+ * - Enhanced visual hierarchy and user experience
+ * 
+ * Follows SOLID principles with single responsibility for password reset
+ * Implements DRY by reusing design system components
+ * Follows KISS by keeping the interface clean and intuitive
+ */
 struct ForgotPasswordView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authService: AuthService
@@ -19,87 +33,20 @@ struct ForgotPasswordView: View {
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 24) {
-                // Header
-                VStack(spacing: 16) {
-                    Image(systemName: "key.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.xl) {
+                    // Header Section
+                    headerSection
                     
-                    Text("Reset Password")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    // Main Reset Card
+                    resetPasswordCard
                     
-                    Text("Enter your email address and we'll send you a link to reset your password.")
-                        .font(.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+                    // Cancel Section
+                    cancelSection
                 }
-                .padding(.top, 40)
-                
-                // Email Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Email Address")
-                        .font(.headline)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    TextField("Enter your email", text: $email)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .keyboardType(.emailAddress)
-                        .autocapitalization(.none)
-                        .onChange(of: email) { _, newEmail in
-                            isEmailValid = InputValidator.isValidEmail(newEmail)
-                        }
-                    
-                    // Email validation feedback
-                    if !email.isEmpty {
-                        HStack(spacing: 6) {
-                            Image(systemName: isEmailValid ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
-                                .font(.caption)
-                            
-                            Text(isEmailValid ? "Valid email format" : "Invalid email format")
-                                .font(.caption)
-                                .foregroundColor(isEmailValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                
-                // Reset Password Button
-                Button(action: handleResetPassword) {
-                    HStack {
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .foregroundColor(.white)
-                        } else {
-                            Image(systemName: "envelope.fill")
-                        }
-                        
-                        Text("Send Reset Link")
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(isFormValid ? ModernDesignSystem.Colors.deepForestGreen : ModernDesignSystem.Colors.textSecondary)
-                    .foregroundColor(.white)
-                    .cornerRadius(12)
-                    .font(.headline)
-                }
-                .disabled(!isFormValid || isLoading)
-                .padding(.horizontal)
-                
-                Spacer()
-                
-                // Cancel Button
-                Button("Cancel") {
-                    dismiss()
-                }
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                .padding(.bottom, 20)
+                .padding(ModernDesignSystem.Spacing.lg)
             }
+            .background(ModernDesignSystem.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar {
@@ -107,6 +54,7 @@ struct ForgotPasswordView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
         }
@@ -124,9 +72,172 @@ struct ForgotPasswordView: View {
         }
     }
     
+    // MARK: - Header Section
+    
+    private var headerSection: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Reset Password Icon
+            Image(systemName: "key.fill")
+                .font(.system(size: 60))
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+                .accessibilityLabel("Password reset icon")
+            
+            // Title with design system typography
+            Text("Reset Password")
+                .font(ModernDesignSystem.Typography.largeTitle)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            
+            // Description with proper color and spacing
+            Text("Enter your email address and we'll send you a link to reset your password.")
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+        }
+        .padding(.top, ModernDesignSystem.Spacing.xl)
+    }
+    
+    // MARK: - Reset Password Card
+    
+    private var resetPasswordCard: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Card Header
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Text("Password Reset")
+                    .font(ModernDesignSystem.Typography.title)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text("We'll send you a secure link to reset your password")
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            // Email Input Section
+            emailInputSection
+            
+            // Reset Button Section
+            resetButtonSection
+        }
+        .padding(ModernDesignSystem.Spacing.xl)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.large)
+        .shadow(
+            color: ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
+        )
+    }
+    
+    // MARK: - Email Input Section
+    
+    private var emailInputSection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Email Label
+            Text("Email Address")
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            // Email Input Field
+            TextField("Enter your email", text: $email)
+                .modernInputField()
+                .keyboardType(.emailAddress)
+                .autocapitalization(.none)
+                .onChange(of: email) { _, newEmail in
+                    isEmailValid = InputValidator.isValidEmail(newEmail)
+                }
+            
+            // Email validation feedback
+            if !email.isEmpty {
+                validationFeedback(
+                    isValid: isEmailValid,
+                    message: isEmailValid ? "Valid email format" : "Invalid email format"
+                )
+            }
+        }
+    }
+    
+    // MARK: - Reset Button Section
+    
+    private var resetButtonSection: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
+            // Main reset button
+            Button(action: handleResetPassword) {
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .tint(ModernDesignSystem.Colors.textOnPrimary)
+                    } else {
+                        Image(systemName: "envelope.fill")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                    }
+                    
+                    Text("Send Reset Link")
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(ModernDesignSystem.Spacing.lg)
+                .background(isFormValid ? ModernDesignSystem.Colors.buttonPrimary : ModernDesignSystem.Colors.textSecondary)
+                .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+            }
+            .disabled(!isFormValid || isLoading)
+            
+            // Help text
+            Text("Check your email for the reset link. It may take a few minutes to arrive.")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+    }
+    
+    // MARK: - Cancel Section
+    
+    private var cancelSection: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
+            Button("Cancel") {
+                dismiss()
+            }
+            .font(ModernDesignSystem.Typography.body)
+            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .padding(.bottom, ModernDesignSystem.Spacing.xl)
+    }
+    
+    // MARK: - Helper Views
+    
+    private func validationFeedback(isValid: Bool, message: String) -> some View {
+        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+            Image(systemName: isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundColor(isValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+                .font(ModernDesignSystem.Typography.caption)
+            
+            Text(message)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(isValid ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.unsafe)
+        }
+    }
+    
+    // MARK: - Computed Properties
+    
     private var isFormValid: Bool {
         return !email.isEmpty && isEmailValid
     }
+    
+    // MARK: - Helper Methods
     
     private func handleResetPassword() {
         isLoading = true
