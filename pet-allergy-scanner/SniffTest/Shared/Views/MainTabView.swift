@@ -41,6 +41,7 @@ struct MainTabView: View {
             // History Tab
             HistoryView()
                 .environmentObject(authService)
+                .environmentObject(notificationManager)
                 .tabItem {
                     Image(systemName: "clock.arrow.circlepath")
                     Text("History")
@@ -66,14 +67,13 @@ struct MainTabView: View {
         .onAppear {
             petService.loadPets()
         }
-        // Temporarily disabled to test navigation issue
-        // .onChange(of: notificationManager.navigateToScan) { oldValue, newValue in
-        //     print("🔍 MainTabView: navigateToScan changed from \(oldValue) to \(newValue)")
-        //     if newValue && !oldValue {
-        //         print("🔍 MainTabView: Navigating to scan tab (selectedTab = 0)")
-        //         selectedTab = 0 // Navigate to scan tab
-        //     }
-        // }
+        .onChange(of: notificationManager.navigateToScan) { oldValue, newValue in
+            print("🔍 MainTabView: navigateToScan changed from \(oldValue) to \(newValue)")
+            if newValue && !oldValue {
+                print("🔍 MainTabView: Navigating to scan tab (selectedTab = 0)")
+                selectedTab = 0 // Navigate to scan tab
+            }
+        }
         .accentColor(ModernDesignSystem.Colors.tabBarActive)
         .background(ModernDesignSystem.Colors.tabBarBackground)
     }
