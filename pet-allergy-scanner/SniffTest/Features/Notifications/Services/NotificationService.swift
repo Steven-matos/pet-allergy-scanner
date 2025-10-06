@@ -202,11 +202,12 @@ class NotificationService: NSObject, ObservableObject {
             trigger: trigger
         )
         
+        let finalBirthday = nextBirthday
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("❌ Failed to schedule birthday notification for \(pet.name): \(error)")
             } else {
-                print("✅ Scheduled birthday notification for \(pet.name) on \(nextBirthday)")
+                print("✅ Scheduled birthday notification for \(pet.name) on \(finalBirthday)")
             }
         }
     }

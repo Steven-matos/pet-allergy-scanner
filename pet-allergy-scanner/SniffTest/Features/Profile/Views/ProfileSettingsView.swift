@@ -32,6 +32,7 @@ struct ProfileSettingsView: View {
     @StateObject private var gdprService = GDPRService.shared
     @StateObject private var analyticsManager = AnalyticsManager.shared
     @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
+    @StateObject private var weightUnitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         NavigationStack {
@@ -367,6 +368,17 @@ struct ProfileSettingsView: View {
     // MARK: - App Settings Section
     private var appSettingsSection: some View {
         Section(header: Text("App Settings")) {
+            // Weight Unit Preference
+            Picker("Weight Unit", selection: $weightUnitService.selectedUnit) {
+                ForEach(WeightUnit.allCases, id: \.self) { unit in
+                    Text(unit.displayName).tag(unit)
+                }
+            }
+            .pickerStyle(MenuPickerStyle())
+            .onChange(of: weightUnitService.selectedUnit) { _, newUnit in
+                weightUnitService.setUnit(newUnit)
+            }
+            
             // Haptic Feedback
             Toggle("Haptic Feedback", isOn: $settingsManager.enableHapticFeedback)
                 .tint(ModernDesignSystem.Colors.primary)

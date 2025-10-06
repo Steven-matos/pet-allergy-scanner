@@ -9,7 +9,8 @@ import Foundation
 import Security
 
 /// Secure data manager for handling sensitive information like backup codes and tokens
-class SecureDataManager {
+@MainActor
+class SecureDataManager: @unchecked Sendable {
     static let shared = SecureDataManager()
     
     private init() {}

@@ -83,7 +83,7 @@ class CertificatePinning {
 }
 
 /// URL session delegate for certificate pinning
-class CertificatePinningDelegate: NSObject, URLSessionDelegate {
+class CertificatePinningDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     
     func urlSession(
         _ session: URLSession,

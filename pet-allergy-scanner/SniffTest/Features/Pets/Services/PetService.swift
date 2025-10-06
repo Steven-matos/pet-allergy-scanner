@@ -8,7 +8,8 @@
 import Foundation
 
 /// Pet service for managing pet profiles
-class PetService: ObservableObject {
+@MainActor
+class PetService: ObservableObject, @unchecked Sendable {
     static let shared = PetService()
     
     @Published var pets: [Pet] = []

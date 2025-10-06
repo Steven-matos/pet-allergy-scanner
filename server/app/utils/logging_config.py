@@ -1,6 +1,6 @@
 """
 Centralized logging configuration for the SniffTest API
-Provides consistent logging setup across all modules
+Provides consistent logging setup across all modules with clean console output
 """
 
 import logging
@@ -9,10 +9,10 @@ from typing import Optional
 from app.core.config import settings
 
 
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colors for different log levels"""
+class CleanFormatter(logging.Formatter):
+    """Clean formatter with minimal noise and clear structure"""
     
-    # Color codes
+    # Color codes for different environments
     COLORS = {
         'DEBUG': '\033[36m',    # Cyan
         'INFO': '\033[32m',     # Green
@@ -23,36 +23,55 @@ class ColoredFormatter(logging.Formatter):
     }
     
     def format(self, record):
-        # Add color to the level name
-        if record.levelname in self.COLORS:
+        # Clean up module names for better readability
+        if hasattr(record, 'name'):
+            # Shorten common module paths
+            name = record.name
+            if name.startswith('app.routers.'):
+                name = name.replace('app.routers.', '')
+            elif name.startswith('app.services.'):
+                name = name.replace('app.services.', '')
+            elif name.startswith('app.middleware.'):
+                name = name.replace('app.middleware.', '')
+            elif name == '__main__':
+                name = 'main'
+            record.name = name
+        
+        # Add color to the level name in development
+        if settings.environment != "production" and record.levelname in self.COLORS:
             record.levelname = f"{self.COLORS[record.levelname]}{record.levelname}{self.COLORS['RESET']}"
+        
         return super().format(record)
 
 
 def setup_logging(log_level: Optional[str] = None) -> None:
     """
-    Set up centralized logging configuration
+    Set up centralized logging configuration with clean console output
     
     Args:
         log_level: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
-    # Determine log level
+    # Determine log level - Use settings or parameter
     if log_level:
         level = getattr(logging, log_level.upper(), logging.INFO)
     else:
-        level = logging.DEBUG if settings.debug else logging.INFO
+        # Use configured log level, with DEBUG only in development when verbose logging is enabled
+        if settings.verbose_logging and settings.environment == "development":
+            level = logging.DEBUG
+        else:
+            level = getattr(logging, settings.log_level.upper(), logging.INFO)
     
-    # Create formatters
+    # Create formatters based on environment
     if settings.environment == "production":
-        # Production: Simple format, no colors
+        # Production: Clean format, no colors, structured for log aggregation
         formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "%(asctime)s | %(levelname)-8s | %(name)-15s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
     else:
-        # Development: Colored format with more details
-        formatter = ColoredFormatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        # Development: Clean format with colors and shorter timestamps
+        formatter = CleanFormatter(
+            "%(asctime)s | %(levelname)-8s | %(name)-15s | %(message)s",
             datefmt="%H:%M:%S"
         )
     
@@ -60,24 +79,42 @@ def setup_logging(log_level: Optional[str] = None) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
     
-    # Remove existing handlers
+    # Remove existing handlers to avoid duplicates
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
     
-    # Console handler
+    # Console handler with clean output
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
     
-    # Set specific logger levels to reduce noise
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.error").setLevel(logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("supabase").setLevel(logging.WARNING)
+    # Suppress noisy third-party loggers
+    _suppress_noisy_loggers()
     
-    # Audit logger (separate from main logging)
+    # Set up audit logging (separate from main logging)
+    _setup_audit_logging()
+
+
+def _suppress_noisy_loggers() -> None:
+    """Suppress noisy third-party loggers to reduce console clutter"""
+    noisy_loggers = {
+        "uvicorn.access": logging.WARNING,      # Only show access errors
+        "uvicorn.error": logging.INFO,          # Show uvicorn errors
+        "httpx": logging.WARNING,                # Only show HTTP client errors
+        "httpcore": logging.WARNING,             # Only show HTTP core errors
+        "supabase": logging.WARNING,            # Only show Supabase errors
+        "urllib3": logging.WARNING,              # Only show urllib3 errors
+        "asyncio": logging.WARNING,             # Only show asyncio errors
+        "multipart": logging.WARNING,           # Only show multipart errors
+    }
+    
+    for logger_name, level in noisy_loggers.items():
+        logging.getLogger(logger_name).setLevel(level)
+
+
+def _setup_audit_logging() -> None:
+    """Set up separate audit logging for security events"""
     audit_logger = logging.getLogger("audit")
     audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False  # Don't propagate to root logger
@@ -85,7 +122,7 @@ def setup_logging(log_level: Optional[str] = None) -> None:
     if not audit_logger.handlers:
         audit_handler = logging.FileHandler("audit.log")
         audit_formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s",
+            "%(asctime)s | %(levelname)-8s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
         audit_handler.setFormatter(audit_formatter)
@@ -105,24 +142,20 @@ def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
 
 
-def log_function_call(logger: logging.Logger, func_name: str, **kwargs) -> None:
-    """
-    Log function call with parameters (for debug purposes)
-    
-    Args:
-        logger: Logger instance
-        func_name: Function name
-        **kwargs: Function parameters to log
-    """
-    if logger.isEnabledFor(logging.DEBUG):
-        params = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
-        logger.debug(f"Calling {func_name}({params})")
+def log_startup(logger: logging.Logger, service_name: str) -> None:
+    """Log service startup with clean formatting"""
+    logger.info(f"🚀 Starting {service_name}")
+
+
+def log_shutdown(logger: logging.Logger, service_name: str) -> None:
+    """Log service shutdown with clean formatting"""
+    logger.info(f"🛑 Shutting down {service_name}")
 
 
 def log_database_operation(logger: logging.Logger, operation: str, table: str, 
                           record_id: Optional[str] = None, success: bool = True) -> None:
     """
-    Log database operations consistently
+    Log database operations consistently - only log errors and important operations
     
     Args:
         logger: Logger instance
@@ -131,19 +164,19 @@ def log_database_operation(logger: logging.Logger, operation: str, table: str,
         record_id: Record ID if available
         success: Whether operation was successful
     """
-    if success:
-        if record_id:
-            logger.info(f"Database {operation} on {table} for ID {record_id}")
-        else:
-            logger.info(f"Database {operation} on {table}")
-    else:
-        logger.error(f"Database {operation} failed on {table}")
+    if not success:
+        # Always log database errors
+        logger.error(f"DB {operation} failed on {table}")
+    elif operation in ["CREATE", "DELETE"] and record_id:
+        # Only log important operations (CREATE/DELETE) with record IDs
+        logger.info(f"DB {operation} on {table} for ID {record_id}")
+    # Skip logging for READ operations and simple operations to reduce noise
 
 
 def log_api_request(logger: logging.Logger, method: str, path: str, 
                    status_code: int, processing_time: float) -> None:
     """
-    Log API requests consistently
+    Log API requests consistently - only log errors, slow requests, and important endpoints
     
     Args:
         logger: Logger instance
@@ -153,9 +186,15 @@ def log_api_request(logger: logging.Logger, method: str, path: str,
         processing_time: Request processing time in seconds
     """
     if status_code >= 400:
-        logger.warning(f"{method} {path} - {status_code} ({processing_time:.3f}s)")
-    else:
-        logger.info(f"{method} {path} - {status_code} ({processing_time:.3f}s)")
+        # Always log errors
+        logger.warning(f"API {method} {path} → {status_code} ({processing_time:.3f}s)")
+    elif processing_time > 1.0:
+        # Log slow requests
+        logger.warning(f"⏱️  Slow API {method} {path} → {status_code} ({processing_time:.3f}s)")
+    elif path in ["/health", "/api/v1/auth/login", "/api/v1/auth/register"]:
+        # Only log important endpoints
+        logger.info(f"API {method} {path} → {status_code} ({processing_time:.3f}s)")
+    # Skip logging for routine GET requests to reduce noise
 
 
 def log_security_event(logger: logging.Logger, event_type: str, details: str, 
@@ -170,6 +209,22 @@ def log_security_event(logger: logging.Logger, event_type: str, details: str,
         user_id: User ID if available
     """
     if user_id:
-        logger.warning(f"Security event: {event_type} - {details} (User: {user_id})")
+        logger.warning(f"🔒 Security: {event_type} - {details} (User: {user_id})")
     else:
-        logger.warning(f"Security event: {event_type} - {details}")
+        logger.warning(f"🔒 Security: {event_type} - {details}")
+
+
+def log_performance(logger: logging.Logger, operation: str, duration: float, 
+                   threshold: float = 1.0) -> None:
+    """
+    Log performance metrics for operations that take longer than threshold
+    
+    Args:
+        logger: Logger instance
+        operation: Operation name
+        duration: Duration in seconds
+        threshold: Warning threshold in seconds
+    """
+    if duration > threshold:
+        logger.warning(f"⏱️  Slow operation: {operation} took {duration:.3f}s")
+    # Skip logging for fast operations to reduce noise

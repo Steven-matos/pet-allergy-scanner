@@ -29,6 +29,7 @@ struct EditPetView: View {
     @State private var validationErrors: [String] = []
     @State private var showingYearPicker = false
     @State private var showingMonthPicker = false
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         NavigationStack {
@@ -166,7 +167,7 @@ struct EditPetView: View {
                         HStack {
                             Text("Weight")
                             Spacer()
-                            TextField("kg", value: $weightKg, format: .number)
+                            TextField(unitService.getUnitSymbol(), value: $weightKg, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .onChange(of: weightKg) { _, _ in
@@ -290,7 +291,8 @@ struct EditPetView: View {
         print("🔍 EditPetView: Loading pet data - imageUrl: \(pet.imageUrl ?? "nil")")
         name = pet.name
         breed = pet.breed ?? ""
-        weightKg = pet.weightKg
+        // Convert stored kg weight to selected unit for display
+        weightKg = pet.weightKg != nil ? unitService.convertFromKg(pet.weightKg!) : nil
         activityLevel = pet.effectiveActivityLevel
         knownSensitivities = pet.knownSensitivities
         vetName = pet.vetName ?? ""
@@ -385,11 +387,15 @@ struct EditPetView: View {
                     newImageUrl = nil // No change
                 }
                 
+                // Convert weight to kg for storage (backend expects kg)
+                let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+                let originalWeightInKg = pet.weightKg
+                
                 let petUpdate = PetUpdate(
                     name: name != pet.name ? name : nil,
                     breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
                     birthday: createBirthday(year: birthYear, month: birthMonth),
-                    weightKg: weightKg != pet.weightKg ? weightKg : nil,
+                    weightKg: weightInKg != originalWeightInKg ? weightInKg : nil,
                     activityLevel: activityLevel != pet.effectiveActivityLevel ? activityLevel : nil,
                     imageUrl: newImageUrl,
                     knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,

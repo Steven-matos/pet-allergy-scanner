@@ -27,6 +27,7 @@ struct AddPetView: View {
     @State private var validationErrors: [String] = []
     @State private var showingYearPicker = false
     @State private var showingMonthPicker = false
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         NavigationStack {
@@ -165,7 +166,7 @@ struct AddPetView: View {
                         HStack {
                             Text("Weight")
                             Spacer()
-                            TextField("kg", value: $weightKg, format: .number)
+                            TextField(unitService.getUnitSymbol(), value: $weightKg, format: .number)
                                 .keyboardType(.decimalPad)
                                 .multilineTextAlignment(.trailing)
                                 .onChange(of: weightKg) { _, _ in
@@ -341,12 +342,15 @@ struct AddPetView: View {
                     print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
                 }
                 
+                // Convert weight to kg for storage (backend expects kg)
+                let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+                
                 let petCreate = PetCreate(
                     name: name,
                     species: species,
                     breed: breed.isEmpty ? nil : breed,
                     birthday: createBirthday(year: birthYear, month: birthMonth),
-                    weightKg: weightKg,
+                    weightKg: weightInKg,
                     activityLevel: activityLevel,
                     imageUrl: imageUrl,
                     knownSensitivities: knownSensitivities,

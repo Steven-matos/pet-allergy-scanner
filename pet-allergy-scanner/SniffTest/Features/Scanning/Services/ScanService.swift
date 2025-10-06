@@ -11,7 +11,8 @@ import Combine
 
 /// Scan service for managing scan operations and history
 /// Respects user settings for auto-save and analysis behavior
-class ScanService: ObservableObject {
+@MainActor
+class ScanService: ObservableObject, @unchecked Sendable {
     static let shared = ScanService()
     
     @Published var recentScans: [Scan] = []

@@ -379,11 +379,12 @@ class NotificationSettingsManager: NSObject, ObservableObject {
             trigger: trigger
         )
         
+        let finalTriggerDate = triggerDate
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
                 print("❌ Failed to schedule birthday easter egg for \(pet.name): \(error)")
             } else {
-                print("✅ Scheduled birthday easter egg for \(pet.name) on \(triggerDate)")
+                print("✅ Scheduled birthday easter egg for \(pet.name) on \(finalTriggerDate)")
             }
         }
     }

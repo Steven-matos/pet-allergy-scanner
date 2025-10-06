@@ -345,10 +345,12 @@ struct ScanView: View {
             showingCamera = true
         case .notDetermined:
             cameraPermissionService.requestCameraPermission { status in
-                if status == .authorized {
-                    showingCamera = true
-                } else {
-                    showingPermissionAlert = true
+                Task { @MainActor in
+                    if status == .authorized {
+                        showingCamera = true
+                    } else {
+                        showingPermissionAlert = true
+                    }
                 }
             }
         case .denied, .restricted:

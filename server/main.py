@@ -17,7 +17,7 @@ import logging
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, nutrition
+from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, nutrition, advanced_nutrition, food_management
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
@@ -27,7 +27,7 @@ from app.middleware.request_limits import RequestSizeMiddleware, APIVersionMiddl
 load_dotenv()
 
 # Configure centralized logging
-from app.utils.logging_config import setup_logging, get_logger
+from app.utils.logging_config import setup_logging, get_logger, log_startup, log_shutdown
 setup_logging()
 logger = get_logger(__name__)
 
@@ -38,15 +38,15 @@ security = HTTPBearer()
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
     # Startup
-    logger.info("Starting SniffTest API...")
+    log_startup(logger, "SniffTest API")
     db_initialized = await init_db()
     if db_initialized:
-        logger.info("Database initialized successfully")
+        logger.info("✅ Database connection established")
     else:
-        logger.warning("Database initialization failed, but application will continue")
+        logger.warning("⚠️  Database initialization failed, but application will continue")
     yield
     # Shutdown
-    logger.info("Shutting down SniffTest API...")
+    log_shutdown(logger, "SniffTest API")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -108,6 +108,8 @@ app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["gdpr"])
 app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
 app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutritional-analysis"])
 app.include_router(nutrition.router, prefix="/api/v1", tags=["nutrition"])
+app.include_router(advanced_nutrition.router, prefix="/api/v1", tags=["advanced-nutrition"])
+app.include_router(food_management.router, prefix="/api/v1", tags=["food-management"])
 
 @app.get("/")
 async def root():

@@ -132,8 +132,8 @@ struct HelpSupportView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
                         
-                        InfoRow(title: "Version", value: Bundle.main.appVersion)
-                        InfoRow(title: "Build", value: Bundle.main.buildNumber)
+                        SimpleInfoRow(title: "Version", value: Bundle.main.appVersion)
+                        SimpleInfoRow(title: "Build", value: Bundle.main.buildNumber)
                         
                         Button(action: {
                             if let url = URL(string: "https://petallergycheck.com/privacy") {
@@ -292,8 +292,8 @@ struct FAQCategoryRow: View {
     }
 }
 
-/// Info row component
-struct InfoRow: View {
+/// Simple info row component for displaying title-value pairs
+struct SimpleInfoRow: View {
     let title: String
     let value: String
     

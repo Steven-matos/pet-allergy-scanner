@@ -232,7 +232,6 @@ async def update_pet(
                         # Extract the storage path from the full URL
                         storage_path = current_image_url.split("/storage/v1/object/public/pet-images/")[-1]
                         supabase.storage.from_("pet-images").remove([storage_path])
-                        logger.debug(f"Deleted old pet image: {storage_path}")
                     except Exception as e:
                         logger.warning(f"Failed to delete old pet image: {e}")
             

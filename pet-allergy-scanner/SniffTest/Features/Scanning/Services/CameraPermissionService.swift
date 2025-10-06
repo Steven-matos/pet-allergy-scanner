@@ -12,7 +12,8 @@ import Observation
 
 /// Service for managing camera permissions and access
 @Observable
-class CameraPermissionService {
+@MainActor
+class CameraPermissionService: @unchecked Sendable {
     static let shared = CameraPermissionService()
     
     var authorizationStatus: AVAuthorizationStatus = .notDetermined
@@ -28,7 +29,7 @@ class CameraPermissionService {
     
     /// Request camera permission from the user
     /// - Parameter completion: Completion handler with the authorization status
-    func requestCameraPermission(completion: @escaping (AVAuthorizationStatus) -> Void) {
+    func requestCameraPermission(completion: @escaping @Sendable (AVAuthorizationStatus) -> Void) {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             DispatchQueue.main.async {
                 self?.updateAuthorizationStatus()

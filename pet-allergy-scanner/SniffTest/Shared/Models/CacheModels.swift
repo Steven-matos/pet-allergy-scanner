@@ -8,7 +8,7 @@
 import Foundation
 
 /// Cache configuration for different data types
-struct CacheConfig {
+struct CacheConfig: Sendable {
     let key: CacheKey
     let policy: CachePolicy
     let shouldPersist: Bool

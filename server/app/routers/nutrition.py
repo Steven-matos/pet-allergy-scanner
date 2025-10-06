@@ -24,6 +24,11 @@ from ..models.nutrition import (
     NutritionGoal,
     NutritionCompatibilityLevel
 )
+from ..models.calorie_goals import (
+    CalorieGoalCreate,
+    CalorieGoalResponse,
+    CalorieGoalUpdate
+)
 from ..models.pet import PetResponse
 from ..models.user import UserResponse
 from ..utils.security import get_current_user
@@ -718,3 +723,251 @@ async def _generate_comparative_insights(insights: MultiPetNutritionInsights) ->
             })
     
     return comparative_insights
+
+
+# Calorie Goals Endpoints
+
+@router.post("/calorie-goals", response_model=CalorieGoalResponse)
+async def create_calorie_goal(
+    goal: CalorieGoalCreate,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Create or update a calorie goal for a pet
+    
+    Args:
+        goal: Calorie goal data
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        Created or updated calorie goal
+    """
+    try:
+        # Verify pet ownership
+        pet = db.query(PetResponse).filter(
+            PetResponse.id == goal.pet_id,
+            PetResponse.user_id == current_user.id
+        ).first()
+        
+        if not pet:
+            raise HTTPException(status_code=404, detail="Pet not found")
+        
+        # Check if goal already exists
+        existing_goal = db.query(CalorieGoalResponse).filter(
+            CalorieGoalResponse.pet_id == goal.pet_id
+        ).first()
+        
+        if existing_goal:
+            # Update existing goal
+            existing_goal.daily_calories = goal.daily_calories
+            existing_goal.notes = goal.notes
+            existing_goal.updated_at = datetime.utcnow()
+            db.commit()
+            db.refresh(existing_goal)
+            return existing_goal
+        else:
+            # Create new goal
+            calorie_goal = CalorieGoalResponse(
+                id=str(uuid.uuid4()),
+                **goal.dict(),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            
+            db.add(calorie_goal)
+            db.commit()
+            db.refresh(calorie_goal)
+            
+            return calorie_goal
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/calorie-goals", response_model=List[CalorieGoalResponse])
+async def get_calorie_goals(
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Get all calorie goals for the current user's pets
+    
+    Args:
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        List of calorie goals
+    """
+    try:
+        # Get user's pet IDs
+        user_pets = db.query(PetResponse).filter(
+            PetResponse.user_id == current_user.id
+        ).all()
+        
+        pet_ids = [pet.id for pet in user_pets]
+        
+        # Get calorie goals for user's pets
+        goals = db.query(CalorieGoalResponse).filter(
+            CalorieGoalResponse.pet_id.in_(pet_ids)
+        ).all()
+        
+        return goals
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/calorie-goals/{pet_id}", response_model=Optional[CalorieGoalResponse])
+async def get_pet_calorie_goal(
+    pet_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Get calorie goal for a specific pet
+    
+    Args:
+        pet_id: Pet ID
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        Pet's calorie goal or None if not set
+    """
+    try:
+        # Verify pet ownership
+        pet = db.query(PetResponse).filter(
+            PetResponse.id == pet_id,
+            PetResponse.user_id == current_user.id
+        ).first()
+        
+        if not pet:
+            raise HTTPException(status_code=404, detail="Pet not found")
+        
+        # Get calorie goal
+        goal = db.query(CalorieGoalResponse).filter(
+            CalorieGoalResponse.pet_id == pet_id
+        ).first()
+        
+        return goal
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.delete("/calorie-goals/{pet_id}")
+async def delete_calorie_goal(
+    pet_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Delete calorie goal for a specific pet
+    
+    Args:
+        pet_id: Pet ID
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        Success message
+    """
+    try:
+        # Verify pet ownership
+        pet = db.query(PetResponse).filter(
+            PetResponse.id == pet_id,
+            PetResponse.user_id == current_user.id
+        ).first()
+        
+        if not pet:
+            raise HTTPException(status_code=404, detail="Pet not found")
+        
+        # Delete goal
+        goal = db.query(CalorieGoalResponse).filter(
+            CalorieGoalResponse.pet_id == pet_id
+        ).first()
+        
+        if goal:
+            db.delete(goal)
+            db.commit()
+        
+        return {"message": "Calorie goal deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/daily-summary/{pet_id}", response_model=Optional[DailyNutritionSummaryResponse])
+async def get_daily_summary(
+    pet_id: str,
+    date: date = Query(..., description="Date to get summary for"),
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Get daily nutrition summary for a specific pet and date
+    
+    Args:
+        pet_id: Pet ID
+        date: Date to get summary for
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        Daily nutrition summary or None if no data
+    """
+    try:
+        # Verify pet ownership
+        pet = db.query(PetResponse).filter(
+            PetResponse.id == pet_id,
+            PetResponse.user_id == current_user.id
+        ).first()
+        
+        if not pet:
+            raise HTTPException(status_code=404, detail="Pet not found")
+        
+        # Get daily summary
+        summary = db.query(DailyNutritionSummaryResponse).filter(
+            DailyNutritionSummaryResponse.pet_id == pet_id,
+            DailyNutritionSummaryResponse.date == date
+        ).first()
+        
+        return summary
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@router.get("/food-analysis/{food_analysis_id}", response_model=FoodAnalysisResponse)
+async def get_food_analysis(
+    food_analysis_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Get food analysis by ID
+    
+    Args:
+        food_analysis_id: Food analysis ID
+        db: Database session
+        current_user: Current authenticated user
+        
+    Returns:
+        Food analysis details
+    """
+    try:
+        # Get food analysis
+        food_analysis = db.query(FoodAnalysisResponse).filter(
+            FoodAnalysisResponse.id == food_analysis_id
+        ).first()
+        
+        if not food_analysis:
+            raise HTTPException(status_code=404, detail="Food analysis not found")
+        
+        return food_analysis
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

@@ -10,7 +10,7 @@ import Combine
 import UIKit
 
 /// Cache policy defining how data should be cached and when it expires
-enum CachePolicy {
+enum CachePolicy: Sendable {
     /// Cache indefinitely until manually invalidated
     case permanent
     /// Cache for a specific duration
@@ -18,7 +18,7 @@ enum CachePolicy {
     /// Cache until app is terminated (memory only)
     case session
     /// Cache with custom validation logic
-    case custom(validator: () -> Bool)
+    case custom(validator: @Sendable () -> Bool)
 }
 
 /// Cache entry containing data, metadata, and expiration info
