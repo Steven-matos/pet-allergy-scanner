@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
 from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus
 from app.models.ingredient import IngredientAnalysis
-from app.routers.auth import get_current_user
+from app.core.security.jwt_handler import get_current_user
 from app.routers.ingredients import analyze_ingredients
 from app.database import get_supabase_client
 from supabase import Client
@@ -102,8 +102,8 @@ async def analyze_scan(
         pet = pet_response.data[0]
         
         # Sanitize and extract ingredients from text
-        from app.utils.security import SecurityValidator
-        sanitized_text = SecurityValidator.sanitize_text(analysis_request.extracted_text, max_length=10000)
+        from app.core.validation.input_validator import InputValidator
+        sanitized_text = InputValidator.sanitize_text(analysis_request.extracted_text, max_length=10000)
         ingredients = extract_ingredients_from_text(sanitized_text)
         
         # Analyze ingredients

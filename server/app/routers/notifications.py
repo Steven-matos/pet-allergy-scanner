@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models.user import User
-from app.utils.security import get_current_user
+from app.core.security.jwt_handler import get_current_user
 from app.utils.logging_config import get_logger
 from app.services.push_notification_service import PushNotificationService
 

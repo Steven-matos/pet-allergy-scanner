@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from app.models.pet import PetCreate, PetResponse, PetUpdate
-from app.routers.auth import get_current_user, security
+from app.core.security.jwt_handler import get_current_user, security
 from app.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger

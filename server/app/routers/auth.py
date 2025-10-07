@@ -9,6 +9,8 @@ from app.core.config import settings
 from app.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
+from app.core.validation.input_validator import InputValidator
+from app.core.security.jwt_handler import security
 
 async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserResponse:
     """
@@ -75,7 +77,6 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
     )
 
 router = APIRouter()
-security = HTTPBearer()
 logger = get_logger(__name__)
 
 async def get_user_email_by_username_or_email(identifier: str) -> str:
@@ -97,8 +98,8 @@ async def get_user_email_by_username_or_email(identifier: str) -> str:
         # Check if identifier is an email (contains @)
         if "@" in identifier:
             # It's an email, validate and return
-            from app.utils.security import SecurityValidator
-            validated_email = SecurityValidator.validate_email(identifier)
+            from app.core.validation.input_validator import InputValidator
+            validated_email = InputValidator.validate_email(identifier)
             return validated_email
         
         # It's a username, look up the user
@@ -152,14 +153,12 @@ async def register_user(user_data: UserCreate):
     Returns success message instructing user to verify their email
     """
     try:
-        from app.utils.security import SecurityValidator
-        
         # Validate and sanitize input
-        validated_email = SecurityValidator.validate_email(user_data.email)
-        validated_password = SecurityValidator.validate_password(user_data.password)
-        validated_username = SecurityValidator.validate_username(user_data.username) if user_data.username else None
-        sanitized_first_name = SecurityValidator.sanitize_text(user_data.first_name or "", max_length=100)
-        sanitized_last_name = SecurityValidator.sanitize_text(user_data.last_name or "", max_length=100)
+        validated_email = InputValidator.validate_email(user_data.email)
+        validated_password = InputValidator.validate_password(user_data.password)
+        validated_username = InputValidator.validate_username(user_data.username) if user_data.username else None
+        sanitized_first_name = InputValidator.sanitize_text(user_data.first_name or "", max_length=100)
+        sanitized_last_name = InputValidator.sanitize_text(user_data.last_name or "", max_length=100)
         
         supabase = get_supabase_client()
         
@@ -394,7 +393,7 @@ async def update_current_user(
     try:
         # Import at function level to ensure it's always available
         from supabase import create_client
-        from app.utils.security import SecurityValidator
+        from app.core.validation.input_validator import InputValidator
         
         # Use the existing authenticated Supabase client
         supabase = get_supabase_client()
@@ -587,8 +586,6 @@ async def reset_password(reset_data: dict):
     Sends a password reset email using Supabase Auth
     """
     try:
-        from app.utils.security import SecurityValidator
-        
         email = reset_data.get("email")
         if not email:
             raise HTTPException(
@@ -597,7 +594,7 @@ async def reset_password(reset_data: dict):
             )
         
         # Validate email format
-        validated_email = SecurityValidator.validate_email(email)
+        validated_email = InputValidator.validate_email(email)
         
         supabase = get_supabase_client()
         

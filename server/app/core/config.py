@@ -11,23 +11,25 @@ class Settings(BaseSettings):
     """Application settings configuration with security enhancements"""
     
     # Supabase Configuration
-    supabase_url: str = Field(..., description="Supabase project URL")
-    supabase_key: str = Field(..., description="Supabase anon key")
-    supabase_service_role_key: str = Field(..., description="Supabase service role key")
-    supabase_jwt_secret: str = Field(..., description="Supabase JWT secret for token validation")
+    supabase_url: str = Field(..., alias="SUPABASE_URL", description="Supabase project URL")
+    supabase_key: str = Field(..., alias="SUPABASE_KEY", description="Supabase anon key")
+    supabase_service_role_key: str = Field(..., alias="SUPABASE_SERVICE_ROLE_KEY", description="Supabase service role key")
+    supabase_jwt_secret: str = Field(..., alias="SUPABASE_JWT_SECRET", description="Supabase JWT secret for token validation")
     
     # Security Configuration
-    secret_key: str = Field(..., min_length=32, description="Strong secret key for JWT signing")
-    algorithm: str = Field(default="HS256", description="JWT algorithm")
-    access_token_expire_minutes: int = Field(default=30, ge=5, le=1440, description="Token expiration in minutes")
+    secret_key: str = Field(..., alias="SECRET_KEY", min_length=32, description="Strong secret key for JWT signing")
+    algorithm: str = Field(default="HS256", alias="ALGORITHM", description="JWT algorithm")
+    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES", ge=5, le=1440, description="Token expiration in minutes")
     
     # CORS and Security Headers
     allowed_origins_str: Optional[str] = Field(
         default=None,
+        alias="ALLOWED_ORIGINS_STR",
         description="Comma-separated allowed CORS origins"
     )
     allowed_hosts_str: Optional[str] = Field(
         default=None,
+        alias="ALLOWED_HOSTS_STR",
         description="Comma-separated trusted hosts"
     )
     
@@ -65,16 +67,16 @@ class Settings(BaseSettings):
     auth_rate_limit_per_minute: int = Field(default=5, ge=1, le=20, description="Auth rate limit per minute")
     
     # Database Configuration
-    database_url: str = Field(..., description="Database connection URL")
-    database_pool_size: int = Field(default=10, ge=1, le=100, description="Database connection pool size")
-    database_timeout: int = Field(default=30, ge=5, le=300, description="Database query timeout in seconds")
+    database_url: str = Field(..., alias="DATABASE_URL", description="Database connection URL")
+    database_pool_size: int = Field(default=10, alias="DATABASE_POOL_SIZE", ge=1, le=100, description="Database connection pool size")
+    database_timeout: int = Field(default=30, alias="DATABASE_TIMEOUT", ge=5, le=300, description="Database query timeout in seconds")
     
     # File Upload Limits
     max_file_size_mb: int = Field(default=10, ge=1, le=100, description="Maximum file upload size in MB")
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Maximum request size in MB")
     
     # Environment
-    environment: str = Field(default="development", description="Application environment")
+    environment: str = Field(default="development", alias="ENVIRONMENT", description="Application environment")
     debug: bool = Field(default=False, description="Debug mode")
     
     # API Configuration
@@ -96,14 +98,15 @@ class Settings(BaseSettings):
     enable_data_deletion: bool = Field(default=True, description="Enable data deletion for GDPR")
     
     # Push Notification Configuration (APNs)
-    APNS_URL: str = Field(
+    apns_url: str = Field(
         default="https://api.sandbox.push.apple.com",
+        alias="APNS_URL",
         description="APNs server URL (sandbox for development, production for release)"
     )
-    APNS_KEY_ID: str = Field(..., description="APNs key ID")
-    APNS_TEAM_ID: str = Field(..., description="APNs team ID")
-    APNS_BUNDLE_ID: str = Field(..., description="App bundle identifier")
-    APNS_PRIVATE_KEY: str = Field(..., description="APNs private key (P8 format)")
+    apns_key_id: str = Field(..., alias="APNS_KEY_ID", description="APNs key ID")
+    apns_team_id: str = Field(..., alias="APNS_TEAM_ID", description="APNs team ID")
+    apns_bundle_id: str = Field(..., alias="APNS_BUNDLE_ID", description="App bundle identifier")
+    apns_private_key: str = Field(..., alias="APNS_PRIVATE_KEY", description="APNs private key (P8 format)")
     
     @field_validator('secret_key')
     @classmethod
