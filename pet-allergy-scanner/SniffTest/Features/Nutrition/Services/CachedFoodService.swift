@@ -48,9 +48,9 @@ class CachedFoodService: ObservableObject {
      * Observe authentication changes to manage user-specific cache
      */
     private func observeAuthChanges() {
-        authService.$currentUser
-            .sink { [weak self] user in
-                if user == nil {
+        authService.$authState
+            .sink { [weak self] authState in
+                if !authState.isAuthenticated {
                     // Clear cache on logout
                     self?.clearCache()
                 }
