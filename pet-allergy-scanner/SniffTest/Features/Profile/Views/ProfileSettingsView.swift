@@ -57,15 +57,23 @@ struct ProfileSettingsView: View {
                     
                     // MARK: - Settings Cards
                     VStack(spacing: ModernDesignSystem.Spacing.md) {
-                        accountCard
-                        petManagementCard
-                        scanPreferencesCard
-                        notificationsCard
-                        privacySecurityCard
+                        // Account & Subscription
+                        accountSubscriptionCard
+                        
+                        // Pet & Scanning
+                        petScanningCard
+                        
+                        // Preferences & Notifications
+                        preferencesNotificationsCard
+                        
+                        // Privacy & Data
+                        privacyDataCard
+                        
+                        // App Settings
                         appSettingsCard
-                        dataManagementCard
-                        supportHelpCard
-                        aboutCard
+                        
+                        // Support & About
+                        supportAboutCard
                     }
                 }
                 .padding(ModernDesignSystem.Spacing.md)
@@ -207,8 +215,8 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - Account Card
-    private var accountCard: some View {
+    // MARK: - Account & Subscription Card
+    private var accountSubscriptionCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
@@ -216,7 +224,7 @@ struct ProfileSettingsView: View {
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Account")
+                Text("Account & Subscription")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -321,8 +329,8 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - Pet Management Card
-    private var petManagementCard: some View {
+    // MARK: - Pet & Scanning Card
+    private var petScanningCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
@@ -330,7 +338,7 @@ struct ProfileSettingsView: View {
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Pet Management")
+                Text("Pet & Scanning")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -387,112 +395,61 @@ struct ProfileSettingsView: View {
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
-            }
-        }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
-        )
-    }
-    
-    // MARK: - Scan Preferences Card
-    private var scanPreferencesCard: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            // Card Header
-            HStack {
-                Image(systemName: "camera.fill")
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Scan Preferences")
-                    .font(ModernDesignSystem.Typography.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
                 
-                Spacer()
-            }
-            
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // Camera Quality
+                // Scan Preferences Section
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                    Text("Image Quality")
+                    Text("Scan Preferences")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
-                    Picker("Image Quality", selection: $settingsManager.cameraResolution) {
-                        Text("Low (Faster)").tag("low")
-                        Text("Medium (Balanced)").tag("medium")
-                        Text("High (Best)").tag("high")
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // Camera Quality
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Image Quality")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Picker("Image Quality", selection: $settingsManager.cameraResolution) {
+                                Text("Low (Faster)").tag("low")
+                                Text("Medium (Balanced)").tag("medium")
+                                Text("High (Best)").tag("high")
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .accentColor(ModernDesignSystem.Colors.primary)
+                        }
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Auto-save Scans
+                        HStack {
+                            Text("Auto-save Scans")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            Spacer()
+                            Toggle("", isOn: $settingsManager.scanAutoSave)
+                                .tint(ModernDesignSystem.Colors.primary)
+                        }
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Auto-analyze Scans
+                        HStack {
+                            Text("Auto-analyze Scans")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            Spacer()
+                            Toggle("", isOn: $settingsManager.enableAutoAnalysis)
+                                .tint(ModernDesignSystem.Colors.primary)
+                        }
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .accentColor(ModernDesignSystem.Colors.primary)
                 }
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Auto-save Scans
-                HStack {
-                    Text("Auto-save Scans")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $settingsManager.scanAutoSave)
-                        .tint(ModernDesignSystem.Colors.primary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Auto Analysis
-                HStack {
-                    Text("Auto-analyze Ingredients")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $settingsManager.enableAutoAnalysis)
-                        .tint(ModernDesignSystem.Colors.primary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Detailed Reports
-                HStack {
-                    Text("Detailed Safety Reports")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $settingsManager.enableDetailedReports)
-                        .tint(ModernDesignSystem.Colors.primary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Scan History
-                HStack {
-                    Text("Scan History")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text("\(ScanService.shared.recentScans.count) scans")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -510,8 +467,8 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - Notifications Card
-    private var notificationsCard: some View {
+    // MARK: - Preferences & Notifications Card
+    private var preferencesNotificationsCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
@@ -519,7 +476,7 @@ struct ProfileSettingsView: View {
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Notifications")
+                Text("Preferences & Notifications")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -578,8 +535,8 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - Privacy & Security Card
-    private var privacySecurityCard: some View {
+    // MARK: - Privacy & Data Card
+    private var privacyDataCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
@@ -587,7 +544,7 @@ struct ProfileSettingsView: View {
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Privacy & Security")
+                Text("Privacy & Data")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -647,6 +604,58 @@ struct ProfileSettingsView: View {
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Data Management Section
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Data Management")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // Cache Management
+                        Button(action: { showingClearCacheAlert = true }) {
+                            HStack {
+                                Image(systemName: "externaldrive")
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                                Text("Clear Cache")
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                Spacer()
+                                Text(cacheSize)
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Reset Settings
+                        Button(action: { showingResetSettingsAlert = true }) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(ModernDesignSystem.Colors.warning)
+                                Text("Reset Settings")
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
                 }
             }
         }
@@ -748,88 +757,8 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - Data Management Card
-    private var dataManagementCard: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            // Card Header
-            HStack {
-                Image(systemName: "externaldrive.fill")
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .font(ModernDesignSystem.Typography.title3)
-                
-                Text("Data Management")
-                    .font(ModernDesignSystem.Typography.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                
-                Spacer()
-            }
-            
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // Cache Size
-                HStack {
-                    Text("Cache Size")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text(cacheSize)
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Clear Cache
-                Button(action: { showingClearCacheAlert = true }) {
-                    HStack {
-                        Image(systemName: "trash")
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Text("Clear Cache")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Spacer()
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Reset Settings
-                Button(action: { showingResetSettingsAlert = true }) {
-                    HStack {
-                        Image(systemName: "arrow.counterclockwise")
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Text("Reset Settings")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Spacer()
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
-        )
-    }
-    
-    // MARK: - Support & Help Card
-    private var supportHelpCard: some View {
+    // MARK: - Support & About Card
+    private var supportAboutCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
@@ -837,7 +766,7 @@ struct ProfileSettingsView: View {
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
-                Text("Support & Help")
+                Text("Support & About")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -897,104 +826,92 @@ struct ProfileSettingsView: View {
                     .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
                 .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
-        )
-    }
-    
-    // MARK: - About Card
-    private var aboutCard: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            // Card Header
-            HStack {
-                Image(systemName: "info.circle.fill")
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .font(ModernDesignSystem.Typography.title3)
                 
-                Text("About")
-                    .font(ModernDesignSystem.Typography.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
                 
-                Spacer()
-            }
-            
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // App Version
-                HStack {
-                    Text("Version")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text(Bundle.main.appVersion)
-                        .font(ModernDesignSystem.Typography.body)
+                // About Section
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("About")
+                        .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Build Number
-                HStack {
-                    Text("Build")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text(Bundle.main.buildNumber)
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Terms of Service
-                NavigationLink(destination: TermsOfServiceView()) {
-                    HStack {
-                        Image(systemName: "doc.text.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Text("Terms of Service")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // App Version
+                        HStack {
+                            Text("Version")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            Spacer()
+                            Text(Bundle.main.appVersion)
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Build Number
+                        HStack {
+                            Text("Build")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            Spacer()
+                            Text(Bundle.main.buildNumber)
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Terms of Service
+                        Button(action: { 
+                            if let url = URL(string: "https://snifftest.app/terms") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "doc.text")
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                                Text("Terms of Service")
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Divider()
+                            .background(ModernDesignSystem.Colors.borderPrimary)
+                        
+                        // Privacy Policy
+                        Button(action: { 
+                            if let url = URL(string: "https://snifftest.app/privacy") {
+                                UIApplication.shared.open(url)
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "shield")
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                                Text("Privacy Policy")
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Privacy Policy
-                NavigationLink(destination: PrivacyPolicyView()) {
-                    HStack {
-                        Image(systemName: "hand.raised.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Text("Privacy Policy")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
             }
         }
