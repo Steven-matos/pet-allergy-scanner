@@ -7,9 +7,23 @@
 
 import SwiftUI
 
-/// Unified profile and settings view for the pet allergy scanner app
-/// Combines user profile information with comprehensive settings management
-/// Provides access to account management, pet preferences, scan settings, privacy controls, and app configuration
+/**
+ * Unified profile and settings view following Trust & Nature Design System
+ * 
+ * Features:
+ * - Warm, trustworthy profile header with soft cream background
+ * - Card-based layout with consistent spacing and shadows
+ * - Trust & Nature color palette throughout
+ * - Accessible typography hierarchy
+ * - Professional, nature-inspired design
+ * 
+ * Design System Compliance:
+ * - Uses ModernDesignSystem for all styling
+ * - Follows Trust & Nature color palette
+ * - Implements consistent spacing scale
+ * - Applies proper shadows and corner radius
+ * - Maintains accessibility standards
+ */
 struct ProfileSettingsView: View {
     // MARK: - Settings Manager
     @StateObject private var settingsManager = SettingsManager.shared
@@ -36,44 +50,31 @@ struct ProfileSettingsView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // MARK: - Profile Header Section
-                profileHeaderSection
-                
-                // MARK: - Settings Form
-                Form {
-                    // MARK: - Account Section
-                    accountSection
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // MARK: - Profile Header Card
+                    profileHeaderCard
                     
-                    // MARK: - Pet Management Section
-                    petManagementSection
-                    
-                    // MARK: - Scan Preferences Section
-                    scanPreferencesSection
-                    
-                    // MARK: - Notifications Section
-                    notificationsSection
-                    
-                    // MARK: - Privacy & Security Section
-                    privacySecuritySection
-                    
-                    // MARK: - App Settings Section
-                    appSettingsSection
-                    
-                    // MARK: - Data Management Section
-                    dataManagementSection
-                    
-                    // MARK: - Support & Help Section
-                    supportHelpSection
-                    
-                    // MARK: - About Section
-                    aboutSection
+                    // MARK: - Settings Cards
+                    VStack(spacing: ModernDesignSystem.Spacing.md) {
+                        accountCard
+                        petManagementCard
+                        scanPreferencesCard
+                        notificationsCard
+                        privacySecurityCard
+                        appSettingsCard
+                        dataManagementCard
+                        supportHelpCard
+                        aboutCard
+                    }
                 }
-                .scrollContentBackground(.hidden)
-                .background(Color.clear)
+                .padding(ModernDesignSystem.Spacing.md)
             }
+            .background(ModernDesignSystem.Colors.background)
             .navigationTitle("Profile & Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
                 calculateCacheSize()
                 Task {
@@ -136,373 +137,880 @@ struct ProfileSettingsView: View {
         .trackScreen("ProfileSettings")
     }
     
-    // MARK: - Profile Header Section
-    private var profileHeaderSection: some View {
-        VStack(spacing: 16) {
-            // Profile Picture or Default Icon
+    // MARK: - Profile Header Card
+    private var profileHeaderCard: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Profile Picture with Trust & Nature styling
             RemoteImageView(userImageUrl: authService.currentUser?.imageUrl)
                 .frame(width: 80, height: 80)
                 .clipShape(Circle())
-                .overlay(Circle().stroke(ModernDesignSystem.Colors.primary, lineWidth: 3))
+                .overlay(
+                    Circle()
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 2)
+                )
                 .onAppear {
                     print("🔍 ProfileSettingsView: User data - imageUrl: \(authService.currentUser?.imageUrl ?? "nil")")
                     print("🔍 ProfileSettingsView: Full user data: \(authService.currentUser?.description ?? "nil")")
                 }
             
             if let user = authService.currentUser {
-                Text("\(user.firstName ?? "") \(user.lastName ?? "")")
-                    .font(ModernDesignSystem.Typography.title2)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                
-                Text(user.email)
-                    .font(ModernDesignSystem.Typography.body)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                
-                Text(user.role.displayName)
-                    .font(ModernDesignSystem.Typography.caption)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(user.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.lightGray)
-                    .foregroundColor(user.role == .premium ? ModernDesignSystem.Colors.textOnAccent : ModernDesignSystem.Colors.textPrimary)
-                    .cornerRadius(12)
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    // User Name with Trust & Nature typography
+                    Text("\(user.firstName ?? "") \(user.lastName ?? "")")
+                        .font(ModernDesignSystem.Typography.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .multilineTextAlignment(.center)
+                    
+                    // Email with secondary text styling
+                    Text(user.email)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                    
+                    // Role badge with Trust & Nature colors
+                    Text(user.role.displayName)
+                        .font(ModernDesignSystem.Typography.caption)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(
+                            user.role == .premium ? 
+                            ModernDesignSystem.Colors.goldenYellow : 
+                            ModernDesignSystem.Colors.textSecondary
+                        )
+                        .foregroundColor(
+                            user.role == .premium ? 
+                            ModernDesignSystem.Colors.textOnAccent : 
+                            ModernDesignSystem.Colors.textOnPrimary
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
             } else {
                 Text("No user data available")
                     .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
-        .padding(.top, 20)
-        .padding(.bottom, 20)
-        .background(ModernDesignSystem.Colors.surfaceVariant)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
-    // MARK: - Account Section
-    private var accountSection: some View {
-        Section(header: Text("Account")) {
-            // Edit Profile
-            Button(action: { showingEditProfile = true }) {
-                HStack {
-                    Image(systemName: "person.circle.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Edit Profile")
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
+    // MARK: - Account Card
+    private var accountCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "person.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Account")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
             }
-            .buttonStyle(PlainButtonStyle())
             
-            // Subscription
-            Button(action: { showingSubscriptionView = true }) {
-                HStack {
-                    Image(systemName: "crown.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
-                    Text("Subscription")
-                    Spacer()
-                    Text(authService.currentUser?.role.rawValue.capitalized ?? "Free")
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Multi-Factor Authentication
-            Button(action: { showingMFASetup = true }) {
-                HStack {
-                    Image(systemName: mfaService.isMFAEnabled ? "checkmark.shield.fill" : "shield")
-                        .foregroundColor(mfaService.isMFAEnabled ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.textSecondary)
-                    Text("Two-Factor Authentication")
-                    Spacer()
-                    Text(mfaService.isMFAEnabled ? "Enabled" : "Disabled")
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Sign Out
-            Button(action: { showingSignOutAlert = true }) {
-                HStack {
-                    Image(systemName: "arrow.right.square")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
-                    Text("Sign Out")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
-                    Spacer()
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-    }
-    
-    // MARK: - Pet Management Section
-    private var petManagementSection: some View {
-        Section(header: Text("Pet Management")) {
-            // Default Pet Selection
-            if !petService.pets.isEmpty {
-                Picker("Default Pet for Scans", selection: $settingsManager.defaultPetId) {
-                    Text("None").tag(nil as String?)
-                    ForEach(petService.pets) { pet in
-                        Text(pet.name).tag(pet.id as String?)
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Edit Profile
+                Button(action: { showingEditProfile = true }) {
+                    HStack {
+                        Image(systemName: "person.circle")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Edit Profile")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
-                .pickerStyle(MenuPickerStyle())
-            } else {
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Subscription
+                Button(action: { showingSubscriptionView = true }) {
+                    HStack {
+                        Image(systemName: "crown.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                        Text("Subscription")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Text(authService.currentUser?.role.rawValue.capitalized ?? "Free")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Multi-Factor Authentication
+                Button(action: { showingMFASetup = true }) {
+                    HStack {
+                        Image(systemName: mfaService.isMFAEnabled ? "checkmark.shield.fill" : "shield")
+                            .foregroundColor(mfaService.isMFAEnabled ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.textSecondary)
+                        Text("Two-Factor Authentication")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Text(mfaService.isMFAEnabled ? "Enabled" : "Disabled")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Sign Out
+                Button(action: { showingSignOutAlert = true }) {
+                    HStack {
+                        Image(systemName: "arrow.right.square")
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Text("Sign Out")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Spacer()
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Pet Management Card
+    private var petManagementCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "pawprint.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Pet Management")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Default Pet Selection
+                if !petService.pets.isEmpty {
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Default Pet for Scans")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        Picker("Default Pet for Scans", selection: $settingsManager.defaultPetId) {
+                            Text("None").tag(nil as String?)
+                            ForEach(petService.pets) { pet in
+                                Text(pet.name).tag(pet.id as String?)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .accentColor(ModernDesignSystem.Colors.primary)
+                    }
+                    
+                    Divider()
+                        .background(ModernDesignSystem.Colors.borderPrimary)
+                } else {
+                    HStack {
+                        Image(systemName: "pawprint")
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Text("No pets added yet")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Spacer()
+                        NavigationLink("Add Pet", destination: AddPetView())
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    
+                    Divider()
+                        .background(ModernDesignSystem.Colors.borderPrimary)
+                }
+                
+                // Pet Count
                 HStack {
-                    Image(systemName: "pawprint")
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    Text("No pets added yet")
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    Text("Total Pets")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     Spacer()
-                    NavigationLink("Add Pet", destination: AddPetView())
+                    Text("\(petService.pets.count)")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Scan Preferences Card
+    private var scanPreferencesCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "camera.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Scan Preferences")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Camera Quality
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Image Quality")
                         .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Picker("Image Quality", selection: $settingsManager.cameraResolution) {
+                        Text("Low (Faster)").tag("low")
+                        Text("Medium (Balanced)").tag("medium")
+                        Text("High (Best)").tag("high")
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .accentColor(ModernDesignSystem.Colors.primary)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Auto-save Scans
+                HStack {
+                    Text("Auto-save Scans")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settingsManager.scanAutoSave)
+                        .tint(ModernDesignSystem.Colors.primary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Auto Analysis
+                HStack {
+                    Text("Auto-analyze Ingredients")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settingsManager.enableAutoAnalysis)
+                        .tint(ModernDesignSystem.Colors.primary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Detailed Reports
+                HStack {
+                    Text("Detailed Safety Reports")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settingsManager.enableDetailedReports)
+                        .tint(ModernDesignSystem.Colors.primary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Scan History
+                HStack {
+                    Text("Scan History")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text("\(ScanService.shared.recentScans.count) scans")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Notifications Card
+    private var notificationsCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "bell.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Notifications")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Master Notification Toggle
+                HStack {
+                    Text("Push Notifications")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $notificationSettingsManager.enableNotifications)
+                        .tint(ModernDesignSystem.Colors.primary)
+                        .onChange(of: notificationSettingsManager.enableNotifications) { _, newValue in
+                            if newValue {
+                                Task {
+                                    await notificationSettingsManager.requestPermission()
+                                }
+                            }
+                        }
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                // Engagement Notifications - only show when notifications are enabled
+                if notificationSettingsManager.enableNotifications {
+                    Divider()
+                        .background(ModernDesignSystem.Colors.borderPrimary)
+                    
+                    HStack {
+                        Text("Engagement Reminders")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Toggle("", isOn: $notificationSettingsManager.engagementNotificationsEnabled)
+                            .tint(ModernDesignSystem.Colors.primary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
             }
-            
-            // Pet Count
-            HStack {
-                Text("Total Pets")
-                Spacer()
-                Text("\(petService.pets.count)")
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
-    // MARK: - Scan Preferences Section
-    private var scanPreferencesSection: some View {
-        Section(header: Text("Scan Preferences")) {
-            // Camera Quality
-            Picker("Image Quality", selection: $settingsManager.cameraResolution) {
-                Text("Low (Faster)").tag("low")
-                Text("Medium (Balanced)").tag("medium")
-                Text("High (Best)").tag("high")
-            }
-            .pickerStyle(MenuPickerStyle())
-            
-            // Auto-save Scans
-            Toggle("Auto-save Scans", isOn: $settingsManager.scanAutoSave)
-                .tint(ModernDesignSystem.Colors.primary)
-            
-            // Auto Analysis
-            Toggle("Auto-analyze Ingredients", isOn: $settingsManager.enableAutoAnalysis)
-                .tint(ModernDesignSystem.Colors.primary)
-            
-            // Detailed Reports
-            Toggle("Detailed Safety Reports", isOn: $settingsManager.enableDetailedReports)
-                .tint(ModernDesignSystem.Colors.primary)
-            
-            // Scan History
+    // MARK: - Privacy & Security Card
+    private var privacySecurityCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
             HStack {
-                Text("Scan History")
+                Image(systemName: "shield.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Privacy & Security")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
                 Spacer()
-                Text("\(ScanService.shared.recentScans.count) scans")
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Analytics
+                HStack {
+                    Text("Analytics & Usage Data")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settingsManager.enableAnalytics)
+                        .tint(ModernDesignSystem.Colors.primary)
+                        .onChange(of: settingsManager.enableAnalytics) { _, newValue in
+                            analyticsManager.setAnalyticsEnabled(newValue)
+                        }
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // GDPR Controls
+                Button(action: { showingGDPRView = true }) {
+                    HStack {
+                        Image(systemName: "hand.raised.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Data & Privacy Controls")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Camera Permissions
+                NavigationLink(destination: CameraPermissionsView()) {
+                    HStack {
+                        Image(systemName: "camera.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Camera Permissions")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
-    // MARK: - Notifications Section
-    private var notificationsSection: some View {
-        Section(header: Text("Notifications")) {
-            // Master Notification Toggle
-            Toggle("Push Notifications", isOn: $notificationSettingsManager.enableNotifications)
-                .tint(ModernDesignSystem.Colors.primary)
-                .onChange(of: notificationSettingsManager.enableNotifications) { _, newValue in
-                    if newValue {
-                        Task {
-                            await notificationSettingsManager.requestPermission()
+    // MARK: - App Settings Card
+    private var appSettingsCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "gearshape.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("App Settings")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Weight Unit Preference
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Weight Unit")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Picker("Weight Unit", selection: $weightUnitService.selectedUnit) {
+                        ForEach(WeightUnit.allCases, id: \.self) { unit in
+                            Text(unit.displayName).tag(unit)
                         }
                     }
+                    .pickerStyle(MenuPickerStyle())
+                    .accentColor(ModernDesignSystem.Colors.primary)
+                    .onChange(of: weightUnitService.selectedUnit) { _, newUnit in
+                        weightUnitService.setUnit(newUnit)
+                    }
                 }
-            
-            // Engagement Notifications - only show when notifications are enabled
-            if notificationSettingsManager.enableNotifications {
-                Toggle("Engagement Reminders", isOn: $notificationSettingsManager.engagementNotificationsEnabled)
-                    .tint(ModernDesignSystem.Colors.primary)
-            }
-        }
-    }
-    
-    // MARK: - Privacy & Security Section
-    private var privacySecuritySection: some View {
-        Section(header: Text("Privacy & Security")) {
-            // Analytics
-            Toggle("Analytics & Usage Data", isOn: $settingsManager.enableAnalytics)
-                .tint(ModernDesignSystem.Colors.primary)
-                .onChange(of: settingsManager.enableAnalytics) { _, newValue in
-                    analyticsManager.setAnalyticsEnabled(newValue)
-                }
-            
-            // GDPR Controls
-            Button(action: { showingGDPRView = true }) {
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Haptic Feedback
                 HStack {
-                    Image(systemName: "hand.raised.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Data & Privacy Controls")
+                    Text("Haptic Feedback")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
+                    Toggle("", isOn: $settingsManager.enableHapticFeedback)
+                        .tint(ModernDesignSystem.Colors.primary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Dark Mode
+                HStack {
+                    Image(systemName: "moon.fill")
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                    Text("Dark Mode")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text("System")
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
             }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Camera Permissions
-            NavigationLink(destination: CameraPermissionsView()) {
-                HStack {
-                    Image(systemName: "camera.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Camera Permissions")
-                }
-            }
-            
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
-    // MARK: - App Settings Section
-    private var appSettingsSection: some View {
-        Section(header: Text("App Settings")) {
-            // Weight Unit Preference
-            Picker("Weight Unit", selection: $weightUnitService.selectedUnit) {
-                ForEach(WeightUnit.allCases, id: \.self) { unit in
-                    Text(unit.displayName).tag(unit)
-                }
-            }
-            .pickerStyle(MenuPickerStyle())
-            .onChange(of: weightUnitService.selectedUnit) { _, newUnit in
-                weightUnitService.setUnit(newUnit)
-            }
-            
-            // Haptic Feedback
-            Toggle("Haptic Feedback", isOn: $settingsManager.enableHapticFeedback)
-                .tint(ModernDesignSystem.Colors.primary)
-            
-            // Dark Mode
+    // MARK: - Data Management Card
+    private var dataManagementCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
             HStack {
-                Image(systemName: "moon.fill")
+                Image(systemName: "externaldrive.fill")
                     .foregroundColor(ModernDesignSystem.Colors.primary)
-                Text("Dark Mode")
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Data Management")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
                 Spacer()
-                Text("System")
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            }
-        }
-    }
-    
-    // MARK: - Data Management Section
-    private var dataManagementSection: some View {
-        Section(header: Text("Data Management")) {
-            // Cache Size
-            HStack {
-                Text("Cache Size")
-                Spacer()
-                Text(cacheSize)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
             
-            // Clear Cache
-            Button(action: { showingClearCacheAlert = true }) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Cache Size
                 HStack {
-                    Image(systemName: "trash")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
-                    Text("Clear Cache")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
+                    Text("Cache Size")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     Spacer()
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            // Reset Settings
-            Button(action: { showingResetSettingsAlert = true }) {
-                HStack {
-                    Image(systemName: "arrow.counterclockwise")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
-                    Text("Reset Settings")
-                        .foregroundColor(ModernDesignSystem.Colors.error)
-                    Spacer()
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-    }
-    
-    // MARK: - Support & Help Section
-    private var supportHelpSection: some View {
-        Section(header: Text("Support & Help")) {
-            // Help Center
-            NavigationLink(destination: HelpCenterView()) {
-                HStack {
-                    Image(systemName: "questionmark.circle.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Help Center")
-                }
-            }
-            
-            // Contact Support
-            NavigationLink(destination: ContactSupportView()) {
-                HStack {
-                    Image(systemName: "envelope.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Contact Support")
-                }
-            }
-            
-            // Rate App
-            Button(action: rateApp) {
-                HStack {
-                    Image(systemName: "star.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
-                    Text("Rate App")
-                    Spacer()
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-        }
-    }
-    
-    // MARK: - About Section
-    private var aboutSection: some View {
-        Section(header: Text("About")) {
-            // App Version
-            HStack {
-                Text("Version")
-                Spacer()
-                Text(Bundle.main.appVersion)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            }
-            
-            // Build Number
-            HStack {
-                Text("Build")
-                Spacer()
-                Text(Bundle.main.buildNumber)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            }
-            
-            // Terms of Service
-            NavigationLink(destination: TermsOfServiceView()) {
-                HStack {
-                    Image(systemName: "doc.text.fill")
+                    Text(cacheSize)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    Text("Terms of Service")
                 }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Clear Cache
+                Button(action: { showingClearCacheAlert = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Text("Clear Cache")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Spacer()
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Reset Settings
+                Button(action: { showingResetSettingsAlert = true }) {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise")
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Text("Reset Settings")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                        Spacer()
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Support & Help Card
+    private var supportHelpCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "questionmark.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Support & Help")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
             }
             
-            // Privacy Policy
-            NavigationLink(destination: PrivacyPolicyView()) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Help Center
+                NavigationLink(destination: HelpCenterView()) {
+                    HStack {
+                        Image(systemName: "questionmark.circle.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Help Center")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Contact Support
+                NavigationLink(destination: ContactSupportView()) {
+                    HStack {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Contact Support")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Rate App
+                Button(action: rateApp) {
+                    HStack {
+                        Image(systemName: "star.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                        Text("Rate App")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - About Card
+    private var aboutCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("About")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // App Version
                 HStack {
-                    Image(systemName: "hand.raised.fill")
+                    Text("Version")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text(Bundle.main.appVersion)
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    Text("Privacy Policy")
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Build Number
+                HStack {
+                    Text("Build")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text(Bundle.main.buildNumber)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Terms of Service
+                NavigationLink(destination: TermsOfServiceView()) {
+                    HStack {
+                        Image(systemName: "doc.text.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Text("Terms of Service")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Privacy Policy
+                NavigationLink(destination: PrivacyPolicyView()) {
+                    HStack {
+                        Image(systemName: "hand.raised.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        Text("Privacy Policy")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     // MARK: - Helper Methods
@@ -653,49 +1161,17 @@ struct CameraPermissionsView: View {
 }
 
 
-/// View for help center
+/**
+ * Help Center View
+ * 
+ * Uses the existing HelpSupportView with Trust & Nature Design System
+ */
 struct HelpCenterView: View {
     var body: some View {
-        List {
-            Section("Getting Started") {
-                HelpItem(title: "How to Add a Pet", description: "Learn how to create a pet profile")
-                HelpItem(title: "How to Scan Ingredients", description: "Step-by-step scanning guide")
-                HelpItem(title: "Understanding Results", description: "What the safety ratings mean")
-            }
-            
-            Section("Troubleshooting") {
-                HelpItem(title: "Camera Not Working", description: "Fix camera issues")
-                HelpItem(title: "Scan Not Accurate", description: "Improve scan quality")
-                HelpItem(title: "App Crashes", description: "Common crash solutions")
-            }
-            
-            Section("Account & Privacy") {
-                HelpItem(title: "Account Settings", description: "Manage your account")
-                HelpItem(title: "Data Privacy", description: "How we protect your data")
-                HelpItem(title: "Delete Account", description: "Remove your account")
-            }
-        }
-        .navigationTitle("Help Center")
-        .navigationBarTitleDisplayMode(.inline)
+        HelpSupportView()
     }
 }
 
-/// Help item component
-struct HelpItem: View {
-    let title: String
-    let description: String
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-            Text(title)
-                .font(ModernDesignSystem.Typography.bodyEmphasized)
-            Text(description)
-                .font(ModernDesignSystem.Typography.caption)
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-        }
-        .padding(.vertical, ModernDesignSystem.Spacing.xs)
-    }
-}
 
 /// View for contact support
 struct ContactSupportView: View {
@@ -781,23 +1257,146 @@ struct EmailSupportView: View {
 struct TermsOfServiceView: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-                Text("Terms of Service")
-                    .font(ModernDesignSystem.Typography.title)
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                // Header Card
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                    HStack {
+                        Image(systemName: "doc.text.fill")
+                            .font(.title2)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Terms of Service")
+                                .font(ModernDesignSystem.Typography.title)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("Last updated: October, 2025")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        Spacer()
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+                .background(ModernDesignSystem.Colors.softCream)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
                 
-                Text("Last updated: January 1, 2025")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                // Introduction Section
+                LegalSectionCard(
+                    title: "Introduction",
+                    icon: "hand.raised.fill",
+                    content: "Welcome to SniffTest, your trusted companion for pet nutrition and allergy scanning. By using our app, you agree to be bound by these Terms of Service. Please read them carefully."
+                )
                 
-                Text("By using Pet Allergy Scanner, you agree to these terms...")
-                    .font(ModernDesignSystem.Typography.body)
+                // Acceptance of Terms
+                LegalSectionCard(
+                    title: "Acceptance of Terms",
+                    icon: "checkmark.circle.fill",
+                    content: "By downloading, installing, or using the SniffTest app, you acknowledge that you have read, understood, and agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to these terms, please do not use our app."
+                )
                 
-                // Add full terms content here
+                // Service Description
+                LegalSectionCard(
+                    title: "Service Description",
+                    icon: "pawprint.fill",
+                    content: "SniffTest provides informational pet nutrition analysis and ingredient scanning services for educational purposes only. Our app uses OCR technology to analyze pet food ingredients and provide general information. This service is NOT a substitute for professional veterinary advice, diagnosis, or treatment. Always consult your veterinarian for medical decisions regarding your pet's health."
+                )
+                
+                // User Responsibilities
+                LegalSectionCard(
+                    title: "User Responsibilities",
+                    icon: "person.fill",
+                    content: "You are responsible for: (1) Providing accurate pet information, (2) Using the app in accordance with applicable laws, (3) Not sharing false or misleading information, (4) Respecting intellectual property rights, and (5) Maintaining the security of your account."
+                )
+                
+                // Prohibited Uses
+                LegalSectionCard(
+                    title: "Prohibited Uses",
+                    icon: "exclamationmark.triangle.fill",
+                    content: "You may not: (1) Use the app for illegal purposes, (2) Attempt to reverse engineer or hack the app, (3) Share false information about pet health, (4) Use the app to harm animals, (5) Violate any applicable laws or regulations."
+                )
+                
+                // Intellectual Property
+                LegalSectionCard(
+                    title: "Intellectual Property",
+                    icon: "copyright.fill",
+                    content: "All content, features, and functionality of SniffTest are owned by us and are protected by copyright, trademark, and other intellectual property laws. You may not copy, modify, or distribute our content without permission."
+                )
+                
+                // Disclaimers
+                LegalSectionCard(
+                    title: "Disclaimers",
+                    icon: "info.circle.fill",
+                    content: "SniffTest is provided 'as is' without warranties of any kind, express or implied. We do not guarantee the accuracy, completeness, or reliability of any nutritional information, allergy assessments, or recommendations. The app is for informational and educational purposes only and should never replace professional veterinary advice, diagnosis, or treatment. Always consult with a licensed veterinarian for all pet health decisions."
+                )
+                
+                // Limitation of Liability
+                LegalSectionCard(
+                    title: "Limitation of Liability",
+                    icon: "shield.fill",
+                    content: "To the maximum extent permitted by applicable law, our total liability to you for any claims arising from or related to the app shall not exceed the amount you paid for the app in the 12 months preceding the claim. We shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to pet health issues, financial losses, or data loss. Some jurisdictions do not allow limitation of liability, so these limitations may not apply to you."
+                )
+                
+                // Termination
+                LegalSectionCard(
+                    title: "Termination",
+                    icon: "stop.circle.fill",
+                    content: "We may terminate or suspend your access to the app at any time, with or without notice, for any reason, including violation of these terms. You may stop using the app at any time."
+                )
+                
+                // Changes to Terms
+                LegalSectionCard(
+                    title: "Changes to Terms",
+                    icon: "arrow.clockwise.circle.fill",
+                    content: "We reserve the right to modify these terms at any time. We will notify users of significant changes through the app or email. Continued use of the app after changes constitutes acceptance of the new terms."
+                )
+                
+                // Governing Law and Dispute Resolution
+                LegalSectionCard(
+                    title: "Governing Law and Dispute Resolution",
+                    icon: "scale.3d.fill",
+                    content: "These terms are governed by the laws of [Your Jurisdiction]. Any disputes arising from these terms or your use of the app shall be resolved through binding arbitration administered by [Arbitration Organization]. You waive your right to participate in class action lawsuits or class-wide arbitration. You may opt out of this arbitration clause within 30 days of first using the app by contacting us at legal@snifftest.com."
+                )
+                
+                // Force Majeure
+                LegalSectionCard(
+                    title: "Force Majeure",
+                    icon: "exclamationmark.triangle.fill",
+                    content: "We shall not be liable for any failure or delay in performance due to circumstances beyond our reasonable control, including but not limited to acts of God, natural disasters, war, terrorism, government actions, internet outages, or other force majeure events."
+                )
+                
+                // Severability
+                LegalSectionCard(
+                    title: "Severability",
+                    icon: "doc.text.fill",
+                    content: "If any provision of these terms is found to be unenforceable or invalid, the remaining provisions shall remain in full force and effect. We will replace any invalid provision with a valid provision that most closely reflects the original intent."
+                )
+                
+                // Contact Information
+                LegalSectionCard(
+                    title: "Contact Information",
+                    icon: "envelope.fill",
+                    content: "If you have questions about these Terms of Service, please contact us at legal@snifftest.com or through our support channels within the app."
+                )
             }
             .padding(ModernDesignSystem.Spacing.lg)
         }
+        .background(ModernDesignSystem.Colors.background)
         .navigationTitle("Terms of Service")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
     }
 }
 
@@ -805,23 +1404,189 @@ struct TermsOfServiceView: View {
 struct PrivacyPolicyView: View {
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-                Text("Privacy Policy")
-                    .font(ModernDesignSystem.Typography.title)
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                // Header Card
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                    HStack {
+                        Image(systemName: "hand.raised.fill")
+                            .font(.title2)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Privacy Policy")
+                                .font(ModernDesignSystem.Typography.title)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("Last updated: October, 2025")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        Spacer()
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+                .background(ModernDesignSystem.Colors.softCream)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
                 
-                Text("Last updated: January 1, 2025")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                // Introduction Section
+                LegalSectionCard(
+                    title: "Introduction",
+                    icon: "shield.fill",
+                    content: "At SniffTest, we are committed to protecting your privacy and the privacy of your pets. This Privacy Policy explains how we collect, use, and safeguard your personal information when you use our app."
+                )
                 
-                Text("We respect your privacy and are committed to protecting your personal data...")
-                    .font(ModernDesignSystem.Typography.body)
+                // Information We Collect
+                LegalSectionCard(
+                    title: "Information We Collect",
+                    icon: "doc.text.fill",
+                    content: "We collect the following categories of information: (1) Account information (name, email address), (2) Pet information (name, species, weight, known sensitivities), (3) Scan data (food images, ingredient analysis results), (4) Usage data (app interactions, feature usage, preferences), and (5) Device information (device type, operating system, app version). We collect this information to provide our services and improve user experience."
+                )
                 
-                // Add full privacy policy content here
+                // How We Use Information
+                LegalSectionCard(
+                    title: "How We Use Information",
+                    icon: "gearshape.fill",
+                    content: "We use your information for the following purposes: (1) Provide nutrition analysis services (legitimate interest), (2) Improve app functionality and user experience (legitimate interest), (3) Send important updates and notifications (contract performance), (4) Provide customer support (contract performance), (5) Ensure app security and prevent fraud (legitimate interest), (6) Comply with legal obligations (legal obligation), and (7) Conduct research and analytics with anonymized data (legitimate interest)."
+                )
+                
+                // Data Sharing
+                LegalSectionCard(
+                    title: "Data Sharing",
+                    icon: "person.2.fill",
+                    content: "We do not sell your personal data. We may share information with: (1) Service providers who help us operate the app, (2) Legal authorities when required by law, (3) Third parties with your explicit consent, and (4) In case of business transfers (merger, acquisition)."
+                )
+                
+                // Data Security
+                LegalSectionCard(
+                    title: "Data Security",
+                    icon: "lock.fill",
+                    content: "We implement reasonable security measures to protect your data, including encryption, secure authentication, access controls, and regular security assessments. However, no method of transmission over the internet or electronic storage is 100% secure. While we strive to protect your information, we cannot guarantee absolute security and you use our services at your own risk."
+                )
+                
+                // Your Rights
+                LegalSectionCard(
+                    title: "Your Rights",
+                    icon: "person.crop.circle.fill",
+                    content: "You have the following rights regarding your personal data: (1) Access - request copies of your data, (2) Rectification - correct inaccurate information, (3) Erasure - delete your data (subject to legal obligations), (4) Portability - export your data in a machine-readable format, (5) Objection - object to certain processing activities, (6) Restriction - limit how we process your data, (7) Withdraw consent - withdraw consent for consent-based processing, and (8) Complaints - file complaints with supervisory authorities. To exercise these rights, contact us at privacy@snifftest.com."
+                )
+                
+                // Children's Privacy
+                LegalSectionCard(
+                    title: "Children's Privacy",
+                    icon: "figure.child.fill",
+                    content: "Our app is not intended for children under 13. We do not knowingly collect personal information from children under 13. If we discover we have collected such information, we will delete it immediately."
+                )
+                
+                // International Transfers
+                LegalSectionCard(
+                    title: "International Transfers",
+                    icon: "globe.fill",
+                    content: "Your information may be transferred to and processed in countries other than your own. We ensure appropriate safeguards are in place to protect your data in accordance with applicable privacy laws."
+                )
+                
+                // Data Retention
+                LegalSectionCard(
+                    title: "Data Retention",
+                    icon: "clock.fill",
+                    content: "We retain your data only as long as necessary for the purposes outlined in this policy and to comply with legal obligations. Account data is retained while your account is active and for a reasonable period after deactivation. Scan data may be retained for service improvement purposes, subject to your rights to deletion. Specific retention periods may vary based on data type and legal requirements."
+                )
+                
+                // Cookies and Tracking
+                LegalSectionCard(
+                    title: "Cookies and Tracking",
+                    icon: "eye.fill",
+                    content: "We use cookies and similar technologies to: (1) Remember your preferences, (2) Analyze app usage, (3) Improve performance, and (4) Provide personalized experiences. You can control these through your device settings."
+                )
+                
+                // GDPR Compliance
+                LegalSectionCard(
+                    title: "GDPR Compliance",
+                    icon: "globe.europe.africa.fill",
+                    content: "For users in the European Union, we comply with the General Data Protection Regulation (GDPR). We process your personal data based on legitimate interests, contract performance, and consent where required. You have enhanced rights under GDPR, including the right to data portability and the right to be forgotten. Our Data Protection Officer can be contacted at dpo@snifftest.com."
+                )
+                
+                // CCPA Compliance
+                LegalSectionCard(
+                    title: "CCPA Compliance",
+                    icon: "building.2.fill",
+                    content: "For California residents, we comply with the California Consumer Privacy Act (CCPA). You have the right to know what personal information we collect, the right to delete personal information, the right to opt-out of the sale of personal information (we do not sell personal information), and the right to non-discrimination. To exercise these rights, contact us at privacy@snifftest.com."
+                )
+                
+                // Changes to Privacy Policy
+                LegalSectionCard(
+                    title: "Changes to Privacy Policy",
+                    icon: "arrow.clockwise.circle.fill",
+                    content: "We may update this Privacy Policy from time to time. We will notify you of significant changes through the app or email. Your continued use of the app after changes constitutes acceptance of the updated policy."
+                )
+                
+                // Contact Information
+                LegalSectionCard(
+                    title: "Contact Information",
+                    icon: "envelope.fill",
+                    content: "For privacy-related questions or to exercise your rights, contact us at privacy@snifftest.com or through our support channels within the app. We will respond to your request within 30 days as required by applicable law."
+                )
             }
             .padding(ModernDesignSystem.Spacing.lg)
         }
+        .background(ModernDesignSystem.Colors.background)
         .navigationTitle("Privacy Policy")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+        .toolbarColorScheme(.light, for: .navigationBar)
+    }
+}
+
+/// Reusable legal section card component following Trust & Nature design system
+struct LegalSectionCard: View {
+    let title: String
+    let icon: String
+    let content: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack(spacing: ModernDesignSystem.Spacing.md) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .frame(width: 24, height: 24)
+                
+                Text(title)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+            }
+            
+            Text(content)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                .lineSpacing(4)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 

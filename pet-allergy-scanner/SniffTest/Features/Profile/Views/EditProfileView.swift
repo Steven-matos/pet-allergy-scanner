@@ -7,7 +7,23 @@
 
 import SwiftUI
 
-/// View for editing user profile information
+/**
+ * Edit Profile View following Trust & Nature Design System
+ * 
+ * Features:
+ * - Card-based layout with soft cream backgrounds
+ * - Trust & Nature color palette throughout
+ * - Consistent spacing and typography
+ * - Professional, nature-inspired design
+ * - Accessible form controls
+ * 
+ * Design System Compliance:
+ * - Uses ModernDesignSystem for all styling
+ * - Follows Trust & Nature color palette
+ * - Implements consistent spacing scale
+ * - Applies proper shadows and corner radius
+ * - Maintains accessibility standards
+ */
 struct EditProfileView: View {
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
@@ -22,88 +38,33 @@ struct EditProfileView: View {
     
     var body: some View {
         NavigationStack {
-            Form {
-                // Profile Photo Section
-                Section {
-                    HStack {
-                        Spacer()
-                        ProfileImagePickerView(selectedImage: $selectedImage, currentImageUrl: authService.currentUser?.imageUrl)
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-                }
-                
-                Section(header: Text("Account Information")) {
-                    // Email (read-only)
-                    HStack {
-                        Text("Email")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        Text(authService.currentUser?.email ?? "")
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    }
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // MARK: - Profile Photo Card
+                    profilePhotoCard
                     
-                    // Username
-                    HStack {
-                        Text("Username")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        TextField("Enter username", text: $username)
-                            .multilineTextAlignment(.trailing)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                    }
-                }
-                
-                Section(header: Text("Personal Information")) {
-                    // First Name
-                    HStack {
-                        Text("First Name")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        TextField("Enter first name", text: $firstName)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    // MARK: - Account Information Card
+                    accountInformationCard
                     
-                    // Last Name
-                    HStack {
-                        Text("Last Name")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        TextField("Enter last name", text: $lastName)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-                
-                Section(header: Text("Account Details")) {
-                    HStack {
-                        Text("Account Type")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        Text(authService.currentUser?.role.displayName ?? "Free")
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background(authService.currentUser?.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.lightGray)
-                            .foregroundColor(authService.currentUser?.role == .premium ? ModernDesignSystem.Colors.textOnAccent : ModernDesignSystem.Colors.textPrimary)
-                            .cornerRadius(8)
-                    }
+                    // MARK: - Personal Information Card
+                    personalInformationCard
                     
-                    HStack {
-                        Text("Member Since")
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Spacer()
-                        Text(authService.currentUser?.createdAt ?? Date(), style: .date)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    }
+                    // MARK: - Account Details Card
+                    accountDetailsCard
                 }
+                .padding(ModernDesignSystem.Spacing.md)
             }
+            .background(ModernDesignSystem.Colors.background)
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
@@ -111,6 +72,7 @@ struct EditProfileView: View {
                         saveProfile()
                     }
                     .disabled(isSaving || !hasChanges())
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
             .onAppear {
@@ -129,6 +91,240 @@ struct EditProfileView: View {
                 Text(authService.errorMessage ?? "Failed to update profile")
             }
         }
+    }
+    
+    // MARK: - Profile Photo Card
+    private var profilePhotoCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "camera.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Profile Photo")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            // Profile Image Picker
+            HStack {
+                Spacer()
+                ProfileImagePickerView(selectedImage: $selectedImage, currentImageUrl: authService.currentUser?.imageUrl)
+                Spacer()
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Account Information Card
+    private var accountInformationCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "person.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Account Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Email (read-only)
+                HStack {
+                    Text("Email")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    Spacer()
+                    Text(authService.currentUser?.email ?? "")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Username
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Username")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    TextField("Enter username", text: $username)
+                        .font(ModernDesignSystem.Typography.body)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .modernInputField()
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Personal Information Card
+    private var personalInformationCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "person.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Personal Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // First Name
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("First Name")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    TextField("Enter first name", text: $firstName)
+                        .font(ModernDesignSystem.Typography.body)
+                        .modernInputField()
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Last Name
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Last Name")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    TextField("Enter last name", text: $lastName)
+                        .font(ModernDesignSystem.Typography.body)
+                        .modernInputField()
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Account Details Card
+    private var accountDetailsCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Card Header
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(ModernDesignSystem.Typography.title3)
+                
+                Text("Account Details")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Account Type
+                HStack {
+                    Text("Account Type")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text(authService.currentUser?.role.displayName ?? "Free")
+                        .font(ModernDesignSystem.Typography.body)
+                        .fontWeight(.medium)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(
+                            authService.currentUser?.role == .premium ? 
+                            ModernDesignSystem.Colors.goldenYellow : 
+                            ModernDesignSystem.Colors.textSecondary
+                        )
+                        .foregroundColor(
+                            authService.currentUser?.role == .premium ? 
+                            ModernDesignSystem.Colors.textOnAccent : 
+                            ModernDesignSystem.Colors.textOnPrimary
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Member Since
+                HStack {
+                    Text("Member Since")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text(authService.currentUser?.createdAt ?? Date(), style: .date)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
     /// Load current user data into form fields

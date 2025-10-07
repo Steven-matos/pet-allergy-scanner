@@ -20,13 +20,38 @@ struct CameraView: UIViewControllerRepresentable {
         self.onError = onError
     }
     
-    func makeUIViewController(context: Context) -> UIImagePickerController {
+    func makeUIViewController(context: Context) -> UIViewController {
+        // Check if running on simulator
+        #if targetEnvironment(simulator)
+        return createSimulatorViewController(context: context)
+        #else
+        return createCameraViewController(context: context)
+        #endif
+    }
+    
+    private func createSimulatorViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = false
+        
+        // Accessibility
+        picker.accessibilityLabel = "Photo library for testing ingredient scanning"
+        picker.accessibilityHint = "Select an image from your photo library to test ingredient scanning"
+        
+        return picker
+    }
+    
+    private func createCameraViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
         picker.sourceType = .camera
         picker.cameraDevice = .rear
         picker.cameraFlashMode = .auto
         picker.allowsEditing = false
+        
+        // Set camera quality and resolution
+        picker.videoQuality = .typeHigh
         
         // Accessibility
         picker.accessibilityLabel = "Camera for scanning ingredient labels"
@@ -35,7 +60,7 @@ struct CameraView: UIViewControllerRepresentable {
         return picker
     }
     
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
     
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -50,6 +75,14 @@ struct CameraView: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
             if let image = info[.originalImage] as? UIImage {
+                // Validate image dimensions
+                guard image.size.width > 0 && image.size.height > 0 else {
+                    HapticFeedback.error()
+                    parent.onError("Invalid image dimensions")
+                    picker.dismiss(animated: true)
+                    return
+                }
+                
                 // Provide haptic feedback for successful capture
                 HapticFeedback.success()
                 parent.onImageCaptured(image)
@@ -66,6 +99,7 @@ struct CameraView: UIViewControllerRepresentable {
         }
     }
 }
+
 
 #Preview {
     CameraView(

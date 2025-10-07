@@ -7,24 +7,50 @@
 
 import SwiftUI
 
+/**
+ * Scan History View - Redesigned with Trust & Nature Design System
+ * 
+ * Features:
+ * - Soft cream background for warmth and comfort
+ * - Modern card-based layout for scan history items
+ * - Consistent spacing and typography following design system
+ * - Trust & Nature color palette throughout
+ * - Proper loading and empty states
+ * - Navigation to scan view via NotificationManager
+ */
 struct HistoryView: View {
     @StateObject private var scanService = ScanService.shared
+    @EnvironmentObject var notificationManager: NotificationManager
     
     var body: some View {
         NavigationStack {
-            VStack {
+            ZStack {
+                // Trust & Nature background
+                ModernDesignSystem.Colors.softCream
+                    .ignoresSafeArea()
+                
                 if scanService.isLoading {
-                    ProgressView("Loading history...")
+                    ModernLoadingView(message: "Loading your scan history...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if scanService.recentScans.isEmpty {
-                    EmptyHistoryView()
+                    EmptyHistoryView(onStartScanning: {
+                        notificationManager.handleNavigateToScan()
+                    })
                 } else {
-                    List(scanService.recentScans) { scan in
-                        ScanHistoryRowView(scan: scan)
+                    ScrollView {
+                        LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
+                            ForEach(scanService.recentScans) { scan in
+                                ScanHistoryRowView(scan: scan)
+                            }
+                        }
+                        .padding(ModernDesignSystem.Spacing.md)
                     }
                 }
             }
             .navigationTitle("Scan History")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
                 scanService.loadRecentScans()
             }
@@ -32,75 +58,108 @@ struct HistoryView: View {
     }
 }
 
+/**
+ * Empty History State - Redesigned with Trust & Nature Design System
+ * 
+ * Features:
+ * - Uses ModernEmptyState component for consistency
+ * - Trust & Nature color palette and typography
+ * - Warm, inviting messaging that encourages action
+ * - Proper spacing and accessibility
+ * - Navigation callback to switch to scan tab
+ */
 struct EmptyHistoryView: View {
+    let onStartScanning: () -> Void
+    
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
-            
-            Text("No Scans Yet")
-                .font(.title2)
-                .fontWeight(.semibold)
-            
-            Text("Start scanning pet food ingredients to see your history here")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-        }
+        ModernEmptyState(
+            icon: "clock.arrow.circlepath",
+            title: "No Scans Yet",
+            message: "Start scanning pet food ingredients to build your nutrition history and keep your pets healthy.",
+            actionTitle: "Start Scanning",
+            action: onStartScanning
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
+/**
+ * Scan History Row View - Redesigned with Trust & Nature Design System
+ * 
+ * Features:
+ * - Modern card styling with soft cream background
+ * - Trust & Nature color palette for safety indicators
+ * - Proper spacing and typography hierarchy
+ * - Status indicators with semantic colors
+ * - Clean, professional layout
+ */
 struct ScanHistoryRowView: View {
     let scan: Scan
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(scan.result?.productName ?? "Unknown Product")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Header with product name and safety status
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text(scan.result?.productName ?? "Unknown Product")
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .lineLimit(2)
+                    
+                    Text(scan.createdAt, style: .date)
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
                 
                 Spacer()
                 
                 if let result = scan.result {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(colorForSafety(result.overallSafety))
-                            .frame(width: 8, height: 8)
-                        Text(result.safetyDisplayName)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    StatusIndicator(
+                        status: result.overallSafety,
+                        text: result.safetyDisplayName
+                    )
                 }
             }
             
+            // Ingredients count and additional info
             if let result = scan.result {
-                Text("Found \(result.ingredientsFound.count) ingredients")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "list.bullet")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Text("Found \(result.ingredientsFound.count) ingredients")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Spacer()
+                    
+                    // Confidence score indicator
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Image(systemName: "star.fill")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                        
+                        Text("\(Int(result.confidenceScore * 100))%")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                }
             }
-            
-            Text(scan.createdAt, style: .date)
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
-        .padding(.vertical, 4)
-    }
-    
-    private func colorForSafety(_ safety: String) -> Color {
-        switch safety {
-        case "safe":
-            return .green
-        case "caution":
-            return .yellow
-        case "unsafe":
-            return .red
-        default:
-            return .gray
-        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 

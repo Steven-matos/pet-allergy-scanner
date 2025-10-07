@@ -39,8 +39,20 @@ async def init_db():
                 error_msg = str(e)
                 if "nodename nor servname provided" in error_msg:
                     logger.error(f"DNS resolution failed for Supabase URL: {settings.supabase_url}")
-                    logger.error("This might be due to network connectivity issues or the Supabase project being paused")
+                    logger.error("🔧 TROUBLESHOOTING STEPS:")
+                    logger.error("   1. Check if your Supabase project is paused at https://supabase.com/dashboard")
+                    logger.error("   2. Verify the project URL in your Supabase dashboard")
+                    logger.error("   3. If paused, click 'Resume' to reactivate your project")
+                    logger.error("   4. If the URL changed, update SUPABASE_URL in your .env file")
+                    logger.error("   5. Run 'python3 test_connection.py' for detailed diagnostics")
                     # Don't retry on DNS errors, they won't resolve
+                    raise e
+                elif "401" in error_msg or "403" in error_msg:
+                    logger.error(f"Authentication failed for Supabase URL: {settings.supabase_url}")
+                    logger.error("🔧 AUTHENTICATION ISSUES:")
+                    logger.error("   1. Check your SUPABASE_KEY in .env file")
+                    logger.error("   2. Verify API keys in Supabase dashboard > Settings > API")
+                    logger.error("   3. Regenerate keys if necessary")
                     raise e
                 elif attempt == max_retries - 1:
                     raise e
@@ -57,6 +69,7 @@ async def init_db():
         logger.error(f"Database connection failed: {e}")
         # Don't raise the error immediately, let the app start but log the issue
         logger.warning("Application will start without database monitoring due to connection issues")
+        logger.warning("Run 'python3 test_connection.py' for detailed diagnostics")
         return False
 
 async def _start_connection_monitoring():
