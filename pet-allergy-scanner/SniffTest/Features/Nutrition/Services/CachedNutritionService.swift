@@ -50,9 +50,9 @@ class CachedNutritionService: ObservableObject {
      * Observe authentication changes to manage user-specific cache
      */
     private func observeAuthChanges() {
-        authService.$currentUser
-            .sink { [weak self] user in
-                if user == nil {
+        authService.$authState
+            .sink { [weak self] authState in
+                if !authState.isAuthenticated {
                     // Clear cache on logout
                     self?.clearCache()
                 }
@@ -69,7 +69,7 @@ class CachedNutritionService: ObservableObject {
      */
     func getNutritionalRequirements(for petId: String) async throws -> PetNutritionalRequirements {
         // Try cache first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
             if let cached = cacheService.retrieve(PetNutritionalRequirements.self, forKey: cacheKey) {
                 nutritionalRequirements[petId] = cached
@@ -81,7 +81,7 @@ class CachedNutritionService: ObservableObject {
         let requirements = try await loadNutritionalRequirementsFromServer(for: petId)
         
         // Cache the result
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
             cacheService.store(requirements, forKey: cacheKey)
         }
@@ -100,7 +100,7 @@ class CachedNutritionService: ObservableObject {
         nutritionalRequirements[pet.id] = requirements
         
         // Cache the calculated requirements
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: pet.id)
             cacheService.store(requirements, forKey: cacheKey)
         }
@@ -177,7 +177,7 @@ class CachedNutritionService: ObservableObject {
      */
     func loadFoodAnalyses(for petId: String) async throws {
         // Try cache first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
             if let cached = cacheService.retrieve([FoodNutritionalAnalysis].self, forKey: cacheKey) {
                 // Update local cache
@@ -204,7 +204,7 @@ class CachedNutritionService: ObservableObject {
         }
         
         // Cache the result
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
             cacheService.store(analyses, forKey: cacheKey)
         }
@@ -236,7 +236,7 @@ class CachedNutritionService: ObservableObject {
         feedingRecords.append(record)
         
         // Invalidate related caches
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: request.petId)
             cacheService.invalidate(forKey: cacheKey)
         }
@@ -254,7 +254,7 @@ class CachedNutritionService: ObservableObject {
      */
     func loadFeedingRecords(for petId: String, days: Int = 30) async throws {
         // Try cache first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
             if let cached = cacheService.retrieve([FeedingRecord].self, forKey: cacheKey) {
                 // Update local cache
@@ -281,7 +281,7 @@ class CachedNutritionService: ObservableObject {
         }
         
         // Cache the result
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
             cacheService.store(records, forKey: cacheKey)
         }
@@ -309,7 +309,7 @@ class CachedNutritionService: ObservableObject {
      */
     func loadDailySummaries(for petId: String, days: Int = 30) async throws {
         // Try cache first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
             if let cached = cacheService.retrieve([DailyNutritionSummary].self, forKey: cacheKey) {
                 dailySummaries[petId] = cached
@@ -326,7 +326,7 @@ class CachedNutritionService: ObservableObject {
         dailySummaries[petId] = summaries
         
         // Cache the result
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
             cacheService.store(summaries, forKey: cacheKey)
         }
@@ -404,7 +404,7 @@ class CachedNutritionService: ObservableObject {
         dailySummaries[petId]?.sort { $0.date > $1.date }
         
         // Update cache
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
             cacheService.store(dailySummaries[petId] ?? [], forKey: cacheKey)
         }
@@ -504,7 +504,7 @@ class CachedNutritionService: ObservableObject {
      */
     func refreshPetData(petId: String) async throws {
         // Invalidate caches first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKeys = [
                 CacheKey.nutritionRequirements.scoped(forPetId: petId),
                 CacheKey.feedingRecords.scoped(forPetId: petId),
@@ -514,7 +514,7 @@ class CachedNutritionService: ObservableObject {
         }
         
         // Reload data
-        try await getNutritionalRequirements(for: petId)
+        _ = try await getNutritionalRequirements(for: petId)
         try await loadFoodAnalyses(for: petId)
         try await loadFeedingRecords(for: petId)
         try await loadDailySummaries(for: petId)

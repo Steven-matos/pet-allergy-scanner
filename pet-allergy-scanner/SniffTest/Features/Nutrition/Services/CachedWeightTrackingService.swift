@@ -52,9 +52,9 @@ class CachedWeightTrackingService: ObservableObject {
      * Observe authentication changes to manage user-specific cache
      */
     private func observeAuthChanges() {
-        authService.$currentUser
-            .sink { [weak self] user in
-                if user == nil {
+        authService.$authState
+            .sink { [weak self] authState in
+                if !authState.isAuthenticated {
                     // Clear cache on logout
                     self?.clearCache()
                 }
@@ -94,7 +94,7 @@ class CachedWeightTrackingService: ObservableObject {
         try await apiService.recordWeight(weightRecord)
         
         // Invalidate weight history cache
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
             cacheService.invalidate(forKey: cacheKey)
         }
@@ -173,7 +173,7 @@ class CachedWeightTrackingService: ObservableObject {
         }
         
         // Cache the weight goal
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
             cacheService.store(weightGoal, forKey: cacheKey)
         }
@@ -185,7 +185,7 @@ class CachedWeightTrackingService: ObservableObject {
      */
     func loadWeightData(for petId: String) async throws {
         // Try cache first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             // Try weight history cache
             let historyCacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
             if let cachedHistory = cacheService.retrieve([WeightRecord].self, forKey: historyCacheKey) {
@@ -221,7 +221,7 @@ class CachedWeightTrackingService: ObservableObject {
             weightHistory[petId] = history
             
             // Cache weight history
-            if let userId = currentUserId {
+            if currentUserId != nil {
                 let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
                 cacheService.store(history, forKey: cacheKey)
             }
@@ -233,7 +233,7 @@ class CachedWeightTrackingService: ObservableObject {
                     weightGoals[petId] = goal
                     
                     // Cache weight goal
-                    if let userId = currentUserId {
+                    if currentUserId != nil {
                         let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
                         cacheService.store(goal, forKey: cacheKey)
                     }
@@ -243,7 +243,7 @@ class CachedWeightTrackingService: ObservableObject {
                     weightGoals[petId] = nil
                     
                     // Invalidate goal cache
-                    if let userId = currentUserId {
+                    if currentUserId != nil {
                         let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
                         cacheService.invalidate(forKey: cacheKey)
                     }
@@ -488,7 +488,7 @@ class CachedWeightTrackingService: ObservableObject {
      */
     func refreshWeightData(petId: String) async throws {
         // Invalidate caches first
-        if let userId = currentUserId {
+        if currentUserId != nil {
             let cacheKeys = [
                 CacheKey.weightRecords.scoped(forPetId: petId),
                 CacheKey.weightGoals.scoped(forPetId: petId)
