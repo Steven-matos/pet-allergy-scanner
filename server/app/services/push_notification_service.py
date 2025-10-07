@@ -20,11 +20,11 @@ class PushNotificationService:
     """Service for sending push notifications via APNs"""
     
     def __init__(self):
-        self.apns_url = settings.APNS_URL
-        self.apns_key_id = settings.APNS_KEY_ID
-        self.apns_team_id = settings.APNS_TEAM_ID
-        self.apns_bundle_id = settings.APNS_BUNDLE_ID
-        self.apns_private_key = settings.APNS_PRIVATE_KEY
+        self.apns_url = settings.apns_url
+        self.apns_key_id = settings.apns_key_id
+        self.apns_team_id = settings.apns_team_id
+        self.apns_bundle_id = settings.apns_bundle_id
+        self.apns_private_key = settings.apns_private_key
         
     async def send_notification(
         self, 

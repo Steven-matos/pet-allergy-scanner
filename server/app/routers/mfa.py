@@ -5,7 +5,7 @@ Multi-Factor Authentication (MFA) router
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Optional
-from app.routers.auth import get_current_user
+from app.core.security.jwt_handler import get_current_user
 from app.services.mfa_service import MFAService
 from app.utils.logging_config import get_logger
 

@@ -19,7 +19,7 @@ from ..models.food_items import (
     FoodAnalysisResponse
 )
 from ..models.user import UserResponse
-from ..utils.security import get_current_user
+from ..core.security.jwt_handler import get_current_user
 from ..utils.error_handling import create_error_response, APIError
 
 router = APIRouter(prefix="/foods", tags=["food-management"])
