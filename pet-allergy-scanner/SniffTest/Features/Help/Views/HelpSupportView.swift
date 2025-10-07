@@ -226,10 +226,7 @@ struct HelpSupportView: View {
             sectionHeader(title: "App Information")
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                InfoCard(title: "Version", value: Bundle.main.appVersion)
-                InfoCard(title: "Build", value: Bundle.main.buildNumber)
-                        
-                        NavigationLink(destination: PrivacyPolicyView()) {
+                    NavigationLink(destination: PrivacyPolicyView()) {
                     LinkCard(
                         icon: "hand.raised.fill",
                         title: "Privacy Policy",
@@ -237,7 +234,7 @@ struct HelpSupportView: View {
                     )
                 }
                         
-                        NavigationLink(destination: TermsOfServiceView()) {
+                    NavigationLink(destination: TermsOfServiceView()) {
                     LinkCard(
                         icon: "doc.text.fill",
                         title: "Terms of Service",
@@ -913,17 +910,6 @@ private let privacyFAQs: [FAQArticle] = [
         isImportant: true
     )
 ]
-
-/// Bundle extension for app version info
-extension Bundle {
-    var appVersion: String {
-        return infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-    }
-    
-    var buildNumber: String {
-        return infoDictionary?["CFBundleVersion"] as? String ?? "1"
-    }
-}
 
 #Preview {
     HelpSupportView()

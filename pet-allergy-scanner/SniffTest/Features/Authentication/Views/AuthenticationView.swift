@@ -23,7 +23,7 @@ import SwiftUI
  */
 struct AuthenticationView: View {
     @EnvironmentObject var authService: AuthService
-    @State private var isLoginMode = true
+    @State private var isLoginMode = false
     @State private var email = ""
     @State private var password = ""
     @State private var username = ""
