@@ -201,7 +201,7 @@ class HybridScanService: @unchecked Sendable {
         image: UIImage? = nil
     ) async -> HybridScanResult {
         
-        let scanMethod: ScanMethod
+        let scanMethod: ScanDetectionMethod
         let confidence: Float
         
         if let barcode = barcode, let _ = productInfo {
@@ -311,7 +311,7 @@ struct HybridScanResult: Codable {
     let productInfo: ProductInfo?
     let ocrText: String
     let ocrAnalysis: NutritionalAnalysis?
-    let scanMethod: ScanMethod
+    let scanMethod: ScanDetectionMethod
     let confidence: Float
     let processingTime: TimeInterval
     let error: Error?
@@ -322,7 +322,7 @@ struct HybridScanResult: Codable {
         productInfo: ProductInfo?,
         ocrText: String,
         ocrAnalysis: NutritionalAnalysis?,
-        scanMethod: ScanMethod,
+        scanMethod: ScanDetectionMethod,
         confidence: Float,
         processingTime: TimeInterval,
         error: Error? = nil,
@@ -350,7 +350,7 @@ struct HybridScanResult: Codable {
         productInfo = try container.decodeIfPresent(ProductInfo.self, forKey: .productInfo)
         ocrText = try container.decode(String.self, forKey: .ocrText)
         ocrAnalysis = try container.decodeIfPresent(NutritionalAnalysis.self, forKey: .ocrAnalysis)
-        scanMethod = try container.decode(ScanMethod.self, forKey: .scanMethod)
+        scanMethod = try container.decode(ScanDetectionMethod.self, forKey: .scanMethod)
         confidence = try container.decode(Float.self, forKey: .confidence)
         processingTime = try container.decode(TimeInterval.self, forKey: .processingTime)
         error = nil // Error is not encoded
@@ -427,15 +427,29 @@ enum ScanProgress: String, CaseIterable {
 }
 
 /**
- * Scan method used for result
+ * Scan detection method used for internal scanning results
+ * Different from API ScanMethod which is used for server communication
  */
-enum ScanMethod: String, Codable, CaseIterable {
+enum ScanDetectionMethod: String, Codable, CaseIterable {
     case barcodeOnly = "barcodeOnly"
     case barcodeWithProduct = "barcodeWithProduct"
     case ocrOnly = "ocrOnly"
     case hybrid = "hybrid"
     case failed = "failed"
     
+    /// Convert detection method to API scan method for server requests
+    func toAPIScanMethod() -> ScanMethod {
+        switch self {
+        case .barcodeOnly, .barcodeWithProduct:
+            return .barcode
+        case .ocrOnly:
+            return .ocr
+        case .hybrid:
+            return .hybrid
+        case .failed:
+            return .ocr  // Default to OCR for failed scans
+        }
+    }
 }
 
 /**

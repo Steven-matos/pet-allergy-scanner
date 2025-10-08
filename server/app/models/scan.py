@@ -14,6 +14,12 @@ class ScanStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class ScanMethod(str, Enum):
+    """Scan method enumeration"""
+    BARCODE = "barcode"  # Barcode scan only - no image saved
+    OCR = "ocr"  # OCR scan - image saved for processing
+    HYBRID = "hybrid"  # Both barcode and OCR - image saved
+
 class NutritionalAnalysis(BaseModel):
     """Nutritional analysis model for pet food"""
     serving_size_g: Optional[float] = Field(None, gt=0, description="Serving size in grams")
@@ -41,6 +47,7 @@ class ScanBase(BaseModel):
     image_url: Optional[str] = None
     raw_text: Optional[str] = None
     status: ScanStatus = ScanStatus.PENDING
+    scan_method: ScanMethod = ScanMethod.OCR
     result: Optional[ScanResult] = None
     nutritional_analysis: Optional[NutritionalAnalysis] = None
 
@@ -69,3 +76,5 @@ class ScanAnalysisRequest(BaseModel):
     pet_id: str
     extracted_text: str
     product_name: Optional[str] = None
+    scan_method: ScanMethod = ScanMethod.OCR
+    image_data: Optional[str] = None  # Base64 encoded image for OCR scans

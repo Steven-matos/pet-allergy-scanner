@@ -94,7 +94,7 @@ class ScanService: ObservableObject, @unchecked Sendable {
                 id: UUID().uuidString,
                 userId: "local",
                 petId: petId,
-                imageUrl: nil,
+                imageUrl: nil,  // Local scans don't save images
                 rawText: extractedText,
                 status: .pending,
                 result: nil,
@@ -109,9 +109,10 @@ class ScanService: ObservableObject, @unchecked Sendable {
         
         let scanCreate = ScanCreate(
             petId: petId,
-            imageUrl: nil, // In a real app, you would upload the image first
+            imageUrl: nil,  // Image uploaded server-side for OCR scans
             rawText: extractedText,
-            status: .pending
+            status: .pending,
+            scanMethod: .ocr  // Default to OCR
         )
         
         Task { @MainActor in
