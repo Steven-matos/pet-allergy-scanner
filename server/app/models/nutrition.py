@@ -63,12 +63,39 @@ class FoodAnalysisCreate(BaseModel):
     nutritional_info: Optional['NutritionalInfo'] = None
 
 class NutritionalInfo(BaseModel):
-    """Optional detailed nutritional breakdown"""
-    calories_per_100g: Optional[float] = Field(None, ge=0)
-    protein_percentage: Optional[float] = Field(None, ge=0, le=100)
-    fat_percentage: Optional[float] = Field(None, ge=0, le=100)
-    fiber_percentage: Optional[float] = Field(None, ge=0, le=100)
-    moisture_percentage: Optional[float] = Field(None, ge=0, le=100)
+    """
+    Standardized nutritional information model with 22 fields
+    Matches the API reference structure for consistent data handling
+    """
+    # Nutritional Values (numbers or null)
+    calories_per_100g: Optional[float] = Field(None, ge=0, description="Calories per 100g")
+    protein_percentage: Optional[float] = Field(None, ge=0, le=100, description="Protein percentage")
+    fat_percentage: Optional[float] = Field(None, ge=0, le=100, description="Fat percentage")
+    fiber_percentage: Optional[float] = Field(None, ge=0, le=100, description="Fiber percentage")
+    moisture_percentage: Optional[float] = Field(None, ge=0, le=100, description="Moisture percentage")
+    ash_percentage: Optional[float] = Field(None, ge=0, le=100, description="Ash percentage")
+    carbohydrates_percentage: Optional[float] = Field(None, ge=0, le=100, description="Carbohydrates percentage")
+    sugars_percentage: Optional[float] = Field(None, ge=0, le=100, description="Sugars percentage")
+    saturated_fat_percentage: Optional[float] = Field(None, ge=0, le=100, description="Saturated fat percentage")
+    sodium_percentage: Optional[float] = Field(None, ge=0, le=100, description="Sodium percentage")
+    
+    # Arrays (empty arrays if missing)
+    ingredients: List[str] = Field(default_factory=list, description="List of ingredients")
+    allergens: List[str] = Field(default_factory=list, description="List of allergens")
+    additives: List[str] = Field(default_factory=list, description="List of food additives")
+    vitamins: List[str] = Field(default_factory=list, description="List of vitamins")
+    minerals: List[str] = Field(default_factory=list, description="List of minerals")
+    
+    # Strings (empty strings if missing)
+    source: str = Field(default="", description="Data source identifier")
+    external_id: str = Field(default="", description="External system ID")
+    data_quality_score: float = Field(default=0.0, ge=0, le=1, description="Data completeness score (0-1)")
+    last_updated: str = Field(default="", description="Last update timestamp")
+    
+    # Objects (empty objects if missing)
+    nutrient_levels: Dict[str, Any] = Field(default_factory=dict, description="Nutrient level classifications")
+    packaging_info: Dict[str, Any] = Field(default_factory=dict, description="Packaging details")
+    manufacturing_info: Dict[str, Any] = Field(default_factory=dict, description="Manufacturing details")
 
 class FoodAnalysisResponse(FoodAnalysisBase):
     """Food analysis response model"""
