@@ -600,76 +600,65 @@ struct AdvancedAnalyticsView: View {
         errorMessage = nil
         
         Task {
-            do {
-                // Generate analytics from cached data instead of making new API calls
-                let petId = pet.id
-                
-                // Get cached weight data for analysis
-                let weightTrend = cachedWeightService.analyzeWeightTrend(for: petId)
-                let currentWeight = cachedWeightService.currentWeight(for: petId)
-                let weightGoal = cachedWeightService.activeWeightGoal(for: petId)
-                let recommendations = cachedWeightService.recommendations(for: petId)
-                
-                // Get cached nutrition data for analysis
-                let feedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
-                let dailySummaries = cachedNutritionService.dailySummaries[petId] ?? []
-                
-                // Calculate analytics from cached data
-                let healthScore = calculateHealthScore(
-                    weightTrend: weightTrend,
-                    feedingRecords: feedingRecords,
-                    dailySummaries: dailySummaries
-                )
-                
-                let nutritionalScore = calculateNutritionalScore(dailySummaries: dailySummaries)
-                let consistencyScore = calculateConsistencyScore(feedingRecords: feedingRecords)
-                
-                let healthRisks = generateHealthRisks(
-                    weightTrend: weightTrend,
-                    dailySummaries: dailySummaries,
-                    recommendations: recommendations
-                )
-                
-                let positiveIndicators = generatePositiveIndicators(
-                    weightTrend: weightTrend,
-                    dailySummaries: dailySummaries
-                )
-                
-                let insights = HealthInsights(
-                    petId: petId,
-                    analysisDate: Date(),
-                    weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
-                    nutritionalAdequacyScore: nutritionalScore,
-                    feedingConsistencyScore: consistencyScore,
-                    healthRisks: healthRisks,
-                    positiveIndicators: positiveIndicators,
-                    recommendations: recommendations,
-                    overallHealthScore: healthScore
-                )
-                
-                let patterns = NutritionalPatterns(
-                    petId: petId,
-                    analysisPeriod: "30_days",
-                    feedingTimes: extractFeedingTimes(feedingRecords: feedingRecords),
-                    preferredFoods: extractPreferredFoods(feedingRecords: feedingRecords),
-                    nutritionalGaps: healthRisks,
-                    seasonalPatterns: [:],
-                    behavioralInsights: generateBehavioralInsights(feedingRecords: feedingRecords),
-                    optimizationSuggestions: recommendations
-                )
-                
-                await MainActor.run {
-                    healthInsights = insights
-                    nutritionalPatterns = patterns
-                    isLoading = false
-                }
-                
-            } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
-                }
-                print("❌ Failed to load analytics data: \(error)")
+            // Generate analytics from cached data instead of making new API calls
+            let petId = pet.id
+            
+            // Get cached weight data for analysis
+            let weightTrend = cachedWeightService.analyzeWeightTrend(for: petId)
+            let recommendations = cachedWeightService.recommendations(for: petId)
+            
+            // Get cached nutrition data for analysis
+            let feedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
+            let dailySummaries = cachedNutritionService.dailySummaries[petId] ?? []
+            
+            // Calculate analytics from cached data
+            let healthScore = calculateHealthScore(
+                weightTrend: weightTrend,
+                feedingRecords: feedingRecords,
+                dailySummaries: dailySummaries
+            )
+            
+            let nutritionalScore = calculateNutritionalScore(dailySummaries: dailySummaries)
+            let consistencyScore = calculateConsistencyScore(feedingRecords: feedingRecords)
+            
+            let healthRisks = generateHealthRisks(
+                weightTrend: weightTrend,
+                dailySummaries: dailySummaries,
+                recommendations: recommendations
+            )
+            
+            let positiveIndicators = generatePositiveIndicators(
+                weightTrend: weightTrend,
+                dailySummaries: dailySummaries
+            )
+            
+            let insights = HealthInsights(
+                petId: petId,
+                analysisDate: Date(),
+                weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
+                nutritionalAdequacyScore: nutritionalScore,
+                feedingConsistencyScore: consistencyScore,
+                healthRisks: healthRisks,
+                positiveIndicators: positiveIndicators,
+                recommendations: recommendations,
+                overallHealthScore: healthScore
+            )
+            
+            let patterns = NutritionalPatterns(
+                petId: petId,
+                analysisPeriod: "30_days",
+                feedingTimes: extractFeedingTimes(feedingRecords: feedingRecords),
+                preferredFoods: extractPreferredFoods(feedingRecords: feedingRecords),
+                nutritionalGaps: healthRisks,
+                seasonalPatterns: [:],
+                behavioralInsights: generateBehavioralInsights(feedingRecords: feedingRecords),
+                optimizationSuggestions: recommendations
+            )
+            
+            await MainActor.run {
+                healthInsights = insights
+                nutritionalPatterns = patterns
+                isLoading = false
             }
         }
     }
