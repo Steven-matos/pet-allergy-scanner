@@ -23,7 +23,7 @@ import Charts
  */
 struct WeightManagementView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var weightService = WeightTrackingService.shared
+    @StateObject private var weightService = CachedWeightTrackingService.shared
     @StateObject private var petService = PetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @State private var showingWeightEntry = false

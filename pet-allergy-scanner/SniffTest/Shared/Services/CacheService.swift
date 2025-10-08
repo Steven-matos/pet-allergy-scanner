@@ -77,6 +77,16 @@ enum CacheKey: String, CaseIterable {
     case healthStatus = "health_status"
     case systemMetrics = "system_metrics"
     
+    // Nutrition data
+    case nutritionRequirements = "nutrition_requirements"
+    case foodDatabase = "food_database"
+    case recentFoods = "recent_foods"
+    case feedingRecords = "feeding_records"
+    case dailySummaries = "daily_summaries"
+    case weightRecords = "weight_records"
+    case weightGoals = "weight_goals"
+    case nutritionalTrends = "nutritional_trends"
+    
     /// Generate a scoped key for user-specific data
     func scoped(forUserId userId: String) -> String {
         return "\(rawValue)_user_\(userId)"
@@ -111,7 +121,17 @@ class CacheService: ObservableObject {
         CacheKey.safeAlternatives.rawValue: .timeBased(86400), // 24 hours
         CacheKey.mfaStatus.rawValue: .timeBased(1800), // 30 minutes
         CacheKey.healthStatus.rawValue: .timeBased(300), // 5 minutes
-        CacheKey.systemMetrics.rawValue: .timeBased(600) // 10 minutes
+        CacheKey.systemMetrics.rawValue: .timeBased(600), // 10 minutes
+        
+        // Nutrition data policies
+        CacheKey.nutritionRequirements.rawValue: .timeBased(3600), // 1 hour
+        CacheKey.foodDatabase.rawValue: .timeBased(86400), // 24 hours
+        CacheKey.recentFoods.rawValue: .timeBased(1800), // 30 minutes
+        CacheKey.feedingRecords.rawValue: .timeBased(900), // 15 minutes
+        CacheKey.dailySummaries.rawValue: .timeBased(1800), // 30 minutes
+        CacheKey.weightRecords.rawValue: .timeBased(3600), // 1 hour
+        CacheKey.weightGoals.rawValue: .timeBased(7200), // 2 hours
+        CacheKey.nutritionalTrends.rawValue: .timeBased(7200) // 2 hours
     ]
     
     /// File manager for disk operations

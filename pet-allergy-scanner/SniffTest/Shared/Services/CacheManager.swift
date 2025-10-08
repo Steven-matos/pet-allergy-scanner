@@ -44,6 +44,12 @@ class CacheManager: ObservableObject {
             keys: [.scans, .scanHistory, .mfaStatus],
             dependencies: [.scans: [.pets]],
             maxConcurrent: 2
+        ),
+        CacheWarmingStrategy(
+            priority: .medium,
+            keys: [.nutritionRequirements, .recentFoods, .feedingRecords],
+            dependencies: [.nutritionRequirements: [.pets]],
+            maxConcurrent: 2
         )
     ]
     

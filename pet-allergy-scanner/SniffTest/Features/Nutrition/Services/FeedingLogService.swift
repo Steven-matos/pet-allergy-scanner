@@ -32,6 +32,7 @@ class FeedingLogService: ObservableObject {
     @Published var error: Error?
     
     private let apiService: APIService
+    private let cachedNutritionService = CachedNutritionService.shared
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -41,7 +42,7 @@ class FeedingLogService: ObservableObject {
     // MARK: - Public API
     
     /**
-     * Log a feeding record for a pet
+     * Log a feeding record for a pet using cached service
      * - Parameter feedingRecord: The feeding record to log
      */
     func logFeeding(_ feedingRecord: FeedingRecordRequest) async throws {
@@ -49,17 +50,11 @@ class FeedingLogService: ObservableObject {
         error = nil
         
         do {
-            let response = try await apiService.post(
-                endpoint: "/nutrition/feeding",
-                body: feedingRecord,
-                responseType: FeedingRecord.self
-            )
+            // Use cached nutrition service for better performance
+            let response = try await cachedNutritionService.recordFeeding(feedingRecord)
             
             // Add to local cache
             recentFeedingRecords.insert(response, at: 0)
-            
-            // Update daily summary
-            await updateDailySummary(for: feedingRecord.petId, date: feedingRecord.feedingTime)
             
         } catch {
             self.error = error
@@ -70,7 +65,7 @@ class FeedingLogService: ObservableObject {
     }
     
     /**
-     * Get feeding records for a pet
+     * Get feeding records for a pet using cached service
      * - Parameter petId: The pet's ID
      * - Parameter days: Number of days to fetch (default: 30)
      */
@@ -79,12 +74,9 @@ class FeedingLogService: ObservableObject {
         error = nil
         
         do {
-            let response = try await apiService.get(
-                endpoint: "/nutrition/feeding/\(petId)?days=\(days)",
-                responseType: [FeedingRecord].self
-            )
-            
-            recentFeedingRecords = response
+            // Use cached nutrition service for better performance
+            try await cachedNutritionService.loadFeedingRecords(for: petId, days: days)
+            recentFeedingRecords = cachedNutritionService.feedingRecords
             
         } catch {
             self.error = error
@@ -96,11 +88,18 @@ class FeedingLogService: ObservableObject {
     }
     
     /**
-     * Get daily nutrition summary for a pet
+     * Get daily nutrition summary for a pet using cached service
      * - Parameter petId: The pet's ID
      * - Parameter date: The date to get summary for
      */
     func getDailySummary(for petId: String, date: Date) async throws -> DailyNutritionSummary? {
+        // Try cached service first
+        if let cachedSummary = cachedNutritionService.getDailySummary(for: petId, on: date) {
+            dailySummaries[petId] = cachedSummary
+            return cachedSummary
+        }
+        
+        // Fallback to server if not in cache
         let formatter = ISO8601DateFormatter()
         let dateString = formatter.string(from: date)
         
