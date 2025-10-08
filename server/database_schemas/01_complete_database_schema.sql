@@ -31,8 +31,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 -- Pets table
 CREATE TABLE IF NOT EXISTS public.pets (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
-    name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 100),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,    name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 100),
     species TEXT NOT NULL CHECK (species IN ('dog', 'cat')),
     breed TEXT,
     birthday DATE,
@@ -86,6 +85,49 @@ CREATE TABLE IF NOT EXISTS public.favorites (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, pet_id, product_name, brand)
+);
+
+-- =============================================================================
+-- FOOD ITEMS TABLE (Pet Food Database)
+-- =============================================================================
+
+-- Food items table (comprehensive pet food database)
+CREATE TABLE IF NOT EXISTS public.food_items (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 200),
+    brand TEXT CHECK (LENGTH(brand) <= 100),
+    barcode TEXT UNIQUE CHECK (LENGTH(barcode) <= 50),
+    category TEXT CHECK (LENGTH(category) <= 50),
+    species TEXT CHECK (species IN ('dog', 'cat', 'both', 'unknown')),
+    life_stage TEXT CHECK (life_stage IN ('puppy', 'kitten', 'adult', 'senior', 'all', 'unknown')),
+    product_type TEXT CHECK (product_type IN ('dry', 'wet', 'treat', 'supplement', 'unknown')),
+    quantity TEXT,
+    quantity_value DECIMAL(10,2),
+    quantity_unit TEXT,
+    country TEXT,
+    language TEXT DEFAULT 'en',
+    image_url TEXT,
+    ingredients_image_url TEXT,
+    nutrition_image_url TEXT,
+    data_completeness DECIMAL(3,2) CHECK (data_completeness >= 0 AND data_completeness <= 1),
+    last_updated_external TIMESTAMP WITH TIME ZONE,
+    external_source TEXT DEFAULT 'openpetfoodfacts',
+    external_id TEXT,
+    keywords TEXT[],
+    categories_hierarchy TEXT[],
+    brands_hierarchy TEXT[],
+    allergens_hierarchy TEXT[],
+    additives_tags TEXT[],
+    vitamins_tags TEXT[],
+    minerals_tags TEXT[],
+    nova_group INTEGER,
+    nutrition_grade TEXT,
+    nutrient_levels JSONB DEFAULT '{}',
+    packaging_info JSONB DEFAULT '{}',
+    manufacturing_info JSONB DEFAULT '{}',
+    nutritional_info JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =============================================================================
@@ -263,6 +305,36 @@ CREATE INDEX IF NOT EXISTS idx_scans_pet_id ON public.scans(pet_id);
 CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON public.favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_favorites_pet_id ON public.favorites(pet_id);
 
+-- Food items table indexes
+CREATE INDEX IF NOT EXISTS idx_food_items_name ON public.food_items(name);
+CREATE INDEX IF NOT EXISTS idx_food_items_brand ON public.food_items(brand);
+CREATE INDEX IF NOT EXISTS idx_food_items_barcode ON public.food_items(barcode);
+CREATE INDEX IF NOT EXISTS idx_food_items_category ON public.food_items(category);
+CREATE INDEX IF NOT EXISTS idx_food_items_species ON public.food_items(species);
+CREATE INDEX IF NOT EXISTS idx_food_items_life_stage ON public.food_items(life_stage);
+CREATE INDEX IF NOT EXISTS idx_food_items_product_type ON public.food_items(product_type);
+CREATE INDEX IF NOT EXISTS idx_food_items_country ON public.food_items(country);
+CREATE INDEX IF NOT EXISTS idx_food_items_language ON public.food_items(language);
+CREATE INDEX IF NOT EXISTS idx_food_items_external_id ON public.food_items(external_id);
+CREATE INDEX IF NOT EXISTS idx_food_items_external_source ON public.food_items(external_source);
+CREATE INDEX IF NOT EXISTS idx_food_items_nova_group ON public.food_items(nova_group);
+CREATE INDEX IF NOT EXISTS idx_food_items_nutrition_grade ON public.food_items(nutrition_grade);
+
+-- GIN indexes for array fields
+CREATE INDEX IF NOT EXISTS idx_food_items_keywords ON public.food_items USING GIN (keywords);
+CREATE INDEX IF NOT EXISTS idx_food_items_categories_hierarchy ON public.food_items USING GIN (categories_hierarchy);
+CREATE INDEX IF NOT EXISTS idx_food_items_brands_hierarchy ON public.food_items USING GIN (brands_hierarchy);
+CREATE INDEX IF NOT EXISTS idx_food_items_allergens_hierarchy ON public.food_items USING GIN (allergens_hierarchy);
+CREATE INDEX IF NOT EXISTS idx_food_items_additives_tags ON public.food_items USING GIN (additives_tags);
+CREATE INDEX IF NOT EXISTS idx_food_items_vitamins_tags ON public.food_items USING GIN (vitamins_tags);
+CREATE INDEX IF NOT EXISTS idx_food_items_minerals_tags ON public.food_items USING GIN (minerals_tags);
+
+-- GIN indexes for JSONB fields
+CREATE INDEX IF NOT EXISTS idx_food_items_nutrient_levels ON public.food_items USING GIN (nutrient_levels);
+CREATE INDEX IF NOT EXISTS idx_food_items_packaging_info ON public.food_items USING GIN (packaging_info);
+CREATE INDEX IF NOT EXISTS idx_food_items_manufacturing_info ON public.food_items USING GIN (manufacturing_info);
+CREATE INDEX IF NOT EXISTS idx_food_items_nutritional_info ON public.food_items USING GIN (nutritional_info);
+
 -- Nutrition table indexes
 CREATE INDEX IF NOT EXISTS idx_nutritional_requirements_pet_id ON public.nutritional_requirements(pet_id);
 CREATE INDEX IF NOT EXISTS idx_food_analyses_pet_id ON public.food_analyses(pet_id);
@@ -349,6 +421,10 @@ CREATE TRIGGER update_food_comparisons_updated_at
     BEFORE UPDATE ON public.food_comparisons
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_food_items_updated_at
+    BEFORE UPDATE ON public.food_items
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- =============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =============================================================================
@@ -359,6 +435,7 @@ ALTER TABLE public.pets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ingredients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.food_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutritional_requirements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.food_analyses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.feeding_records ENABLE ROW LEVEL SECURITY;
@@ -419,6 +496,10 @@ CREATE POLICY "Users can delete own favorites" ON public.favorites
 
 -- Ingredients are public (read-only for users)
 CREATE POLICY "Anyone can view ingredients" ON public.ingredients
+    FOR SELECT USING (true);
+
+-- Food items are public (read-only for users)
+CREATE POLICY "Anyone can view food items" ON public.food_items
     FOR SELECT USING (true);
 
 -- Nutrition policies (all follow same pattern - users can only access their own pets' data)
@@ -571,9 +652,10 @@ ON CONFLICT (name) DO NOTHING;
 DO $$
 BEGIN
   RAISE NOTICE '✅ Complete database schema created successfully!';
-  RAISE NOTICE '📊 Tables: 16 total (core + nutrition + advanced)';
+  RAISE NOTICE '📊 Tables: 17 total (core + food_items + nutrition + advanced)';
   RAISE NOTICE '🔒 RLS: Enabled on all tables with optimized policies';
-  RAISE NOTICE '📈 Indexes: 25+ performance indexes created';
+  RAISE NOTICE '📈 Indexes: 30+ performance indexes created';
   RAISE NOTICE '🔄 Triggers: Updated_at triggers for all tables';
   RAISE NOTICE '🌱 Data: Initial ingredient data inserted';
+  RAISE NOTICE '🍽️  Food Items: Comprehensive pet food database ready';
 END $$;
