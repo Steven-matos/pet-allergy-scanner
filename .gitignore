@@ -109,4 +109,5 @@ local_settings.py
 Info.plist
 *.p8
 *.jsonl
+.migrations/
 # Reference: https://fastapi.tiangolo.com/deployment/ — cross-check with @Web for latest best practices

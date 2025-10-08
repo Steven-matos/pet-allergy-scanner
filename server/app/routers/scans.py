@@ -4,14 +4,16 @@ Scan management and analysis router
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
-from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus
+from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus, ScanMethod
 from app.models.ingredient import IngredientAnalysis
 from app.core.security.jwt_handler import get_current_user
 from app.routers.ingredients import analyze_ingredients
 from app.database import get_supabase_client
+from app.services.storage_service import StorageService
 from supabase import Client
 from app.utils.logging_config import get_logger
 import re
+import base64
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -44,7 +46,8 @@ async def create_scan(
             "pet_id": scan_data.pet_id,
             "image_url": scan_data.image_url,
             "raw_text": scan_data.raw_text,
-            "status": scan_data.status.value
+            "status": scan_data.status.value,
+            "scan_method": scan_data.scan_method.value
         }
         
         response = supabase.table("scans").insert(scan_record).execute()
@@ -85,7 +88,9 @@ async def analyze_scan(
     """
     Analyze extracted text from a scan
     
-    Processes extracted text and performs ingredient analysis
+    Processes extracted text and performs ingredient analysis.
+    For OCR and hybrid scans, uploads the image to storage.
+    For barcode scans, no image is saved.
     """
     try:
         supabase = get_supabase_client()
@@ -98,6 +103,47 @@ async def analyze_scan(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pet profile not found"
             )
+        
+        pet = pet_response.data[0]
+        
+        # Handle image upload for OCR and hybrid scans only
+        image_url = None
+        if analysis_request.scan_method in [ScanMethod.OCR, ScanMethod.HYBRID]:
+            if analysis_request.image_data:
+                try:
+                    # Decode base64 image
+                    image_bytes = base64.b64decode(analysis_request.image_data)
+                    
+                    # Create a temporary scan record to get scan_id
+                    temp_scan = {
+                        "user_id": current_user.id,
+                        "pet_id": analysis_request.pet_id,
+                        "status": ScanStatus.PROCESSING.value,
+                        "scan_method": analysis_request.scan_method.value
+                    }
+                    temp_response = supabase.table("scans").insert(temp_scan).execute()
+                    
+                    if not temp_response.data:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Failed to create scan record"
+                        )
+                    
+                    scan_id = temp_response.data[0]["id"]
+                    
+                    # Upload image to storage
+                    image_url = await StorageService.upload_scan_image(
+                        image_data=image_bytes,
+                        user_id=current_user.id,
+                        scan_id=scan_id,
+                        optimize=True
+                    )
+                    
+                    logger.info(f"Scan image uploaded for OCR scan: {scan_id}")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to upload scan image: {e}")
+                    # Continue without image - don't fail the entire scan
         
         pet = pet_response.data[0]
         
@@ -144,14 +190,26 @@ async def analyze_scan(
             }
         )
         
-        # Update scan record
-        update_data = {
+        # Update or create scan record
+        scan_data = {
             "status": ScanStatus.COMPLETED.value,
             "result": scan_result.dict(),
-            "raw_text": analysis_request.extracted_text
+            "raw_text": analysis_request.extracted_text,
+            "scan_method": analysis_request.scan_method.value
         }
         
-        response = supabase.table("scans").update(update_data).eq("pet_id", analysis_request.pet_id).execute()
+        # Add image_url if it was uploaded
+        if image_url:
+            scan_data["image_url"] = image_url
+        
+        # If we created a temp scan earlier, update it
+        if image_url and 'scan_id' in locals():
+            response = supabase.table("scans").update(scan_data).eq("id", scan_id).execute()
+        else:
+            # Create new scan record (for barcode scans without image)
+            scan_data["user_id"] = current_user.id
+            scan_data["pet_id"] = analysis_request.pet_id
+            response = supabase.table("scans").insert(scan_data).execute()
         
         if not response.data:
             raise HTTPException(

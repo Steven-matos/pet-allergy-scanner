@@ -75,6 +75,35 @@ enum ScanStatus: String, Codable, CaseIterable {
     }
 }
 
+/// Scan method enumeration - determines if image should be saved
+enum ScanMethod: String, Codable, CaseIterable {
+    case barcode = "barcode"  // Barcode scan only - no image saved
+    case ocr = "ocr"          // OCR scan - image saved for processing
+    case hybrid = "hybrid"    // Both barcode and OCR - image saved
+    
+    /// Display name for scan method
+    var displayName: String {
+        switch self {
+        case .barcode:
+            return "Barcode"
+        case .ocr:
+            return "OCR"
+        case .hybrid:
+            return "Hybrid"
+        }
+    }
+    
+    /// Whether this scan method requires image storage
+    var requiresImageStorage: Bool {
+        switch self {
+        case .barcode:
+            return false  // Barcode value is enough
+        case .ocr, .hybrid:
+            return true   // Need image for OCR processing
+        }
+    }
+}
+
 /// Scan result model containing analysis results
 struct ScanResult: Codable, Equatable, Hashable {
     let productName: String?
@@ -150,6 +179,22 @@ struct ScanCreate: Codable {
     let imageUrl: String?
     let rawText: String?
     let status: ScanStatus
+    let scanMethod: ScanMethod
+    
+    /// Initialize a new scan creation request
+    init(
+        petId: String,
+        imageUrl: String? = nil,
+        rawText: String? = nil,
+        status: ScanStatus = .pending,
+        scanMethod: ScanMethod = .ocr
+    ) {
+        self.petId = petId
+        self.imageUrl = imageUrl
+        self.rawText = rawText
+        self.status = status
+        self.scanMethod = scanMethod
+    }
     
     /// Validation for scan creation data
     var isValid: Bool {
@@ -176,6 +221,7 @@ struct ScanCreate: Codable {
         case imageUrl = "image_url"
         case rawText = "raw_text"
         case status
+        case scanMethod = "scan_method"
     }
 }
 
@@ -184,6 +230,23 @@ struct ScanAnalysisRequest: Codable {
     let petId: String
     let extractedText: String
     let productName: String?
+    let scanMethod: ScanMethod
+    let imageData: String?  // Base64 encoded image for OCR scans
+    
+    /// Initialize a new scan analysis request
+    init(
+        petId: String,
+        extractedText: String,
+        productName: String? = nil,
+        scanMethod: ScanMethod = .ocr,
+        imageData: String? = nil
+    ) {
+        self.petId = petId
+        self.extractedText = extractedText
+        self.productName = productName
+        self.scanMethod = scanMethod
+        self.imageData = imageData
+    }
     
     /// Validation for analysis request data
     var isValid: Bool {
@@ -202,6 +265,11 @@ struct ScanAnalysisRequest: Codable {
             errors.append("Extracted text is required")
         }
         
+        // Validate image requirement for OCR scans
+        if scanMethod.requiresImageStorage && imageData == nil {
+            errors.append("Image data is required for OCR scans")
+        }
+        
         return errors
     }
     
@@ -209,5 +277,7 @@ struct ScanAnalysisRequest: Codable {
         case petId = "pet_id"
         case extractedText = "extracted_text"
         case productName = "product_name"
+        case scanMethod = "scan_method"
+        case imageData = "image_data"
     }
 }

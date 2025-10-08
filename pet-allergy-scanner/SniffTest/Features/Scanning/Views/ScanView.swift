@@ -252,10 +252,30 @@ struct ScanView: View {
         let ingredients = result.ocrText
         let manufacturerCode = result.productInfo?.manufacturerCode
         
+        // Determine API scan method based on what was detected
+        let apiScanMethod: ScanMethod
+        if result.scanMethod == .barcodeOnly {
+            apiScanMethod = .barcode  // No image needed
+        } else if result.barcode != nil && !result.ocrText.isEmpty {
+            apiScanMethod = .hybrid   // Both barcode and OCR - save image
+        } else {
+            apiScanMethod = .ocr      // OCR only - save image
+        }
+        
+        // Convert image to base64 for OCR and hybrid scans
+        var imageData: String? = nil
+        if apiScanMethod.requiresImageStorage, let image = result.lastCapturedImage {
+            if let jpegData = image.jpegData(compressionQuality: 0.8) {
+                imageData = jpegData.base64EncodedString()
+            }
+        }
+        
         let analysisRequest = ScanAnalysisRequest(
             petId: pet.id,
             extractedText: ingredients,
-            productName: manufacturerCode
+            productName: manufacturerCode,
+            scanMethod: apiScanMethod,
+            imageData: imageData
         )
         
         scanService.analyzeScan(analysisRequest) { scan in
@@ -591,9 +611,9 @@ struct QuickTipsCard: View {
     }
 }
 
-// MARK: - Scan Method Extension
+// MARK: - Scan Detection Method Extension
 
-extension ScanMethod {
+extension ScanDetectionMethod {
     var displayName: String {
         switch self {
         case .barcodeOnly:
