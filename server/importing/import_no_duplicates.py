@@ -186,6 +186,51 @@ def extract_allergens(product):
     
     return allergens[:10]
 
+def extract_additives(product):
+    """Extract food additives from product data."""
+    additives = []
+    
+    # Check additives_tags
+    additives_tags = product.get('additives_tags', [])
+    if isinstance(additives_tags, list):
+        for tag in additives_tags:
+            if isinstance(tag, str) and tag.startswith('en:'):
+                additive_name = tag[3:].replace('-', ' ').title()
+                if additive_name not in additives:
+                    additives.append(additive_name)
+    
+    return additives[:20]
+
+def extract_vitamins(product):
+    """Extract vitamins from product data."""
+    vitamins = []
+    
+    # Check vitamins_tags
+    vitamins_tags = product.get('vitamins_tags', [])
+    if isinstance(vitamins_tags, list):
+        for tag in vitamins_tags:
+            if isinstance(tag, str) and tag.startswith('en:'):
+                vitamin_name = tag[3:].replace('-', ' ').title()
+                if vitamin_name not in vitamins:
+                    vitamins.append(vitamin_name)
+    
+    return vitamins[:20]
+
+def extract_minerals(product):
+    """Extract minerals from product data."""
+    minerals = []
+    
+    # Check minerals_tags
+    minerals_tags = product.get('minerals_tags', [])
+    if isinstance(minerals_tags, list):
+        for tag in minerals_tags:
+            if isinstance(tag, str) and tag.startswith('en:'):
+                mineral_name = tag[3:].replace('-', ' ').title()
+                if mineral_name not in minerals:
+                    minerals.append(mineral_name)
+    
+    return minerals[:20]
+
 def calculate_data_completeness(product):
     """Calculate data completeness score."""
     score = 0.0
@@ -229,17 +274,27 @@ def extract_comprehensive_data(product):
         species, life_stage = extract_species_info(product)
         product_type = extract_product_type(product)
         
-        # Extract nutritional data
+        # Extract nutritional data - all 22 fields
         nutriments = product.get('nutriments', {})
+        
+        # Core nutritional values (10 fields)
         calories = safe_float(nutriments.get('energy-kcal_100g') or nutriments.get('energy_100g'))
         protein = safe_float(nutriments.get('proteins_100g'))
         fat = safe_float(nutriments.get('fat_100g'))
         fiber = safe_float(nutriments.get('fiber_100g'))
         moisture = safe_float(nutriments.get('water_100g'))
         ash = safe_float(nutriments.get('ash_100g'))
+        carbohydrates = safe_float(nutriments.get('carbohydrates_100g'))
+        sugars = safe_float(nutriments.get('sugars_100g'))
+        saturated_fat = safe_float(nutriments.get('saturated-fat_100g'))
+        sodium = safe_float(nutriments.get('sodium_100g'))
         
+        # Extract arrays (5 fields)
         ingredients = extract_ingredients(product)
         allergens = extract_allergens(product)
+        additives = extract_additives(product)
+        vitamins = extract_vitamins(product)
+        minerals = extract_minerals(product)
         
         country = product.get('countries', '')
         language = product.get('lang', 'en')
@@ -266,14 +321,24 @@ def extract_comprehensive_data(product):
             'product_type': product_type,
             'country': country[:100] if country else None,
             'language': language[:10] if language else 'en',
+            # Core nutritional values (10 fields)
             'calories_per_100g': calories,
             'protein_percentage': protein,
             'fat_percentage': fat,
             'fiber_percentage': fiber,
             'moisture_percentage': moisture,
             'ash_percentage': ash,
+            'carbohydrates_percentage': carbohydrates,
+            'sugars_percentage': sugars,
+            'saturated_fat_percentage': saturated_fat,
+            'sodium_percentage': sodium,
+            # Arrays (5 fields)
             'ingredients': ingredients,
             'allergens': allergens,
+            'additives': additives,
+            'vitamins': vitamins,
+            'minerals': minerals,
+            # Metadata
             'keywords': keywords,
             'categories_hierarchy': categories_hierarchy,
             'brands_hierarchy': brands_hierarchy,
@@ -329,8 +394,10 @@ def insert_food_item(conn, product_data, dry_run=False):
         if dry_run:
             return True
         
-        # Prepare nutritional info JSONB
+        # Prepare nutritional info JSONB - all 22 fields
         nutritional_info = {}
+        
+        # Core nutritional values (10 fields)
         if product_data['calories_per_100g'] is not None:
             nutritional_info['calories_per_100g'] = product_data['calories_per_100g']
         if product_data['protein_percentage'] is not None:
@@ -343,14 +410,32 @@ def insert_food_item(conn, product_data, dry_run=False):
             nutritional_info['moisture_percentage'] = product_data['moisture_percentage']
         if product_data['ash_percentage'] is not None:
             nutritional_info['ash_percentage'] = product_data['ash_percentage']
-        if product_data['ingredients']:
-            nutritional_info['ingredients'] = product_data['ingredients']
-        if product_data['allergens']:
-            nutritional_info['allergens'] = product_data['allergens']
+        if product_data['carbohydrates_percentage'] is not None:
+            nutritional_info['carbohydrates_percentage'] = product_data['carbohydrates_percentage']
+        if product_data['sugars_percentage'] is not None:
+            nutritional_info['sugars_percentage'] = product_data['sugars_percentage']
+        if product_data['saturated_fat_percentage'] is not None:
+            nutritional_info['saturated_fat_percentage'] = product_data['saturated_fat_percentage']
+        if product_data['sodium_percentage'] is not None:
+            nutritional_info['sodium_percentage'] = product_data['sodium_percentage']
         
+        # Arrays (5 fields) - always include, even if empty
+        nutritional_info['ingredients'] = product_data.get('ingredients', [])
+        nutritional_info['allergens'] = product_data.get('allergens', [])
+        nutritional_info['additives'] = product_data.get('additives', [])
+        nutritional_info['vitamins'] = product_data.get('vitamins', [])
+        nutritional_info['minerals'] = product_data.get('minerals', [])
+        
+        # Metadata (4 fields)
         nutritional_info['source'] = 'openpetfoodfacts'
         nutritional_info['external_id'] = product_data['external_id']
         nutritional_info['data_quality_score'] = product_data['data_completeness']
+        nutritional_info['last_updated'] = product_data.get('last_updated', '')
+        
+        # Objects (3 fields) - always include, even if empty
+        nutritional_info['nutrient_levels'] = product_data.get('nutrient_levels', {})
+        nutritional_info['packaging_info'] = product_data.get('packaging_info', {})
+        nutritional_info['manufacturing_info'] = product_data.get('manufacturing_info', {})
         
         cursor = conn.cursor()
         
