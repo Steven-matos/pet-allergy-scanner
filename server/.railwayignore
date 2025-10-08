@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.log
+
+# Tests
+tests/
+*.test.py
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Migrations (run these manually or via CI/CD)
+migrations/
+
+# Database schemas (already applied to Supabase)
+database_schemas/
+
+# Local scripts
+importing/
+standardizor/
+
+# Audit logs
+audit.log
