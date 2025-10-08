@@ -219,19 +219,19 @@ class CachedFoodService: ObservableObject {
             recentFoods.insert(response, at: 0)
             
             // Update recent foods cache
-            if let userId = currentUserId {
-                let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
+            if currentUserId != nil {
+                let cacheKey = CacheKey.recentFoods.scoped(forUserId: currentUserId!)
                 cacheService.store(recentFoods, forKey: cacheKey)
             }
             
+            isLoading = false
             return response
             
         } catch {
             self.error = error
+            isLoading = false
             throw error
         }
-        
-        isLoading = false
     }
     
     /**

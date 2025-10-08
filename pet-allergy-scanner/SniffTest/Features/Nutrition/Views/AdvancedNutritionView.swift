@@ -638,7 +638,7 @@ struct AdvancedAnalyticsView: View {
                 let insights = HealthInsights(
                     petId: petId,
                     analysisDate: Date(),
-                    weightManagementStatus: weightTrend.trendDirection.rawValue,
+                    weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
                     nutritionalAdequacyScore: nutritionalScore,
                     feedingConsistencyScore: consistencyScore,
                     healthRisks: healthRisks,
@@ -828,6 +828,20 @@ struct AdvancedAnalyticsView: View {
         }
         
         return insights
+    }
+    
+    /**
+     * Convert TrendDirection to string representation
+     */
+    private func trendDirectionString(_ direction: TrendDirection) -> String {
+        switch direction {
+        case .increasing:
+            return "increasing"
+        case .decreasing:
+            return "decreasing"
+        case .stable:
+            return "stable"
+        }
     }
 }
 
