@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "pip install -r requirements.txt"
+buildCommand = "pip install -r requirements-lock.txt"
 
 [deploy]
 startCommand = "python3 railway_start.py"
