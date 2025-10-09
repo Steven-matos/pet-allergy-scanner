@@ -13,10 +13,12 @@ import os
 import sys
 import logging
 
-# Configure basic logging first
+# Configure basic logging first - write to stdout instead of stderr
+# so Railway doesn't interpret INFO logs as errors
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    stream=sys.stdout  # Railway interprets stderr as error-level, so use stdout
 )
 logger = logging.getLogger(__name__)
 
@@ -123,7 +125,29 @@ def main():
             log_level="info",
             access_log=True,
             # Don't use reload in production
-            reload=False
+            reload=False,
+            # Configure uvicorn to use proper logging
+            log_config={
+                "version": 1,
+                "disable_existing_loggers": False,
+                "formatters": {
+                    "default": {
+                        "format": "%(levelname)s: %(message)s",
+                    },
+                },
+                "handlers": {
+                    "default": {
+                        "formatter": "default",
+                        "class": "logging.StreamHandler",
+                        "stream": "ext://sys.stdout",  # Use stdout instead of stderr
+                    },
+                },
+                "loggers": {
+                    "uvicorn": {"handlers": ["default"], "level": "INFO"},
+                    "uvicorn.error": {"handlers": ["default"], "level": "INFO"},
+                    "uvicorn.access": {"handlers": ["default"], "level": "INFO"},
+                },
+            }
         )
         
     except KeyboardInterrupt:

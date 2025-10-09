@@ -142,6 +142,7 @@ class Settings(BaseSettings):
         "env_file": ".env",
         "case_sensitive": False,
         "env_parse_none_str": "None",
+        "populate_by_name": True,  # Pydantic V2: allows field names or aliases
     }
 
 # Global settings instance
