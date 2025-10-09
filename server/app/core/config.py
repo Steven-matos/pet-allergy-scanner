@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Security Configuration
     secret_key: str = Field(..., alias="SECRET_KEY", min_length=32, description="Strong secret key for JWT signing")
     algorithm: str = Field(default="HS256", alias="ALGORITHM", description="JWT algorithm")
-    access_token_expire_minutes: int = Field(default=30, alias="ACCESS_TOKEN_EXPIRE_MINUTES", ge=5, le=1440, description="Token expiration in minutes")
+    access_token_expire_minutes: int = Field(default=1440, alias="ACCESS_TOKEN_EXPIRE_MINUTES", ge=5, le=43200, description="Token expiration in minutes (max 30 days)")
     
     # CORS and Security Headers
     allowed_origins_str: Optional[str] = Field(
