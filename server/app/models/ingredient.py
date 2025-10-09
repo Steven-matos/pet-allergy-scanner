@@ -2,7 +2,7 @@
 Ingredient data models and schemas
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum

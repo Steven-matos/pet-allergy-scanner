@@ -3,7 +3,7 @@ Food Items Models
 Models for managing food database and items
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 

@@ -3,7 +3,7 @@ Nutritional standards data models and schemas
 Based on AAFCO guidelines for pet nutrition
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional
 from datetime import datetime
 from enum import Enum

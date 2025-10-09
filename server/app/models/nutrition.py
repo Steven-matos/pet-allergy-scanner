@@ -2,7 +2,7 @@
 Nutrition data models and schemas for pet nutrition tracking
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum

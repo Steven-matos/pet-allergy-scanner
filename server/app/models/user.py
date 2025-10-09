@@ -2,7 +2,7 @@
 User data models and schemas
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum

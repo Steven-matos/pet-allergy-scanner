@@ -3,7 +3,7 @@ Phase 3 Advanced Nutritional Analysis Models
 Weight tracking, trends, comparisons, and advanced analytics
 """
 
-from pydantic import BaseModel, Field, validator, field_validator
+from pydantic import BaseModel, ConfigDict, Field, validator, field_validator, ConfigDict
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime, date
 from enum import Enum
@@ -58,8 +58,7 @@ class PetWeightRecordBase(BaseModel):
     recorded_at: datetime = Field(default_factory=datetime.utcnow)
     notes: Optional[str] = Field(None, max_length=500)
     
-    class Config:
-        validate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class PetWeightRecordCreate(PetWeightRecordBase):
@@ -74,9 +73,7 @@ class PetWeightRecordResponse(PetWeightRecordBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
-        validate_by_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class PetWeightGoalBase(BaseModel):
@@ -112,8 +109,7 @@ class PetWeightGoalBase(BaseModel):
                     raise ValueError(f"Invalid date format: {v}")
         raise ValueError(f"Invalid date type: {type(v)}")
     
-    class Config:
-        validate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class PetWeightGoalCreate(PetWeightGoalBase):
@@ -127,9 +123,7 @@ class PetWeightGoalResponse(PetWeightGoalBase):
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
     
-    class Config:
-        from_attributes = True
-        allow_population_by_field_name = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 # Nutritional Trends Models
@@ -153,8 +147,7 @@ class NutritionalTrendResponse(NutritionalTrendBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WeightTrendAnalysis(BaseModel):
@@ -188,8 +181,7 @@ class FoodComparisonResponse(FoodComparisonBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FoodComparisonMetrics(BaseModel):
@@ -229,8 +221,7 @@ class NutritionalAnalyticsCacheResponse(NutritionalAnalyticsCacheBase):
     id: str
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Recommendations Models
@@ -259,8 +250,7 @@ class NutritionalRecommendationResponse(NutritionalRecommendationBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Advanced Analytics Models
