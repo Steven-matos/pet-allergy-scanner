@@ -21,12 +21,17 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     
     def __init__(self, app: ASGIApp):
         super().__init__(app)
+        import os
+        
+        # Ensure logs directory exists
+        os.makedirs("logs", exist_ok=True)
+        
         self.audit_logger = logging.getLogger("audit")
         self.audit_logger.setLevel(logging.INFO)
         
         # Create audit log handler
         if not self.audit_logger.handlers:
-            handler = logging.FileHandler("audit.log")
+            handler = logging.FileHandler("logs/audit.log")
             formatter = logging.Formatter(
                 "%(asctime)s - %(levelname)s - %(message)s"
             )

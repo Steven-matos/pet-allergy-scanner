@@ -98,21 +98,38 @@ See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for comprehensive deploymen
 
 ```
 server/
-├── app/
+├── app/                   # Main application code
 │   ├── core/              # Configuration and settings
 │   ├── middleware/        # Security, rate limiting, audit logging
 │   ├── models/            # Pydantic models and schemas
 │   ├── routers/           # API endpoints
 │   ├── services/          # Business logic
 │   └── utils/             # Helper functions
+├── database_schemas/      # Database schema files
+├── importing/             # Data import scripts
+├── keys/                  # APNs certificates (gitignored)
+│   └── AuthKey_*.p8       # Apple Push Notification keys
+├── logs/                  # Application logs (gitignored)
+│   └── audit.log          # Security audit log
 ├── migrations/            # Database migrations
+├── scripts/               # Utility and deployment scripts
+│   ├── railway_start.py   # Railway deployment startup
+│   ├── test_config.py     # Configuration testing
+│   ├── check-deployment-ready.py  # Pre-deployment checks
+│   └── generate-railway-vars.py   # Railway env generator
+├── standardizor/          # Data standardization utilities
 ├── tests/                 # Unit and integration tests
 ├── main.py                # FastAPI application entry point
 ├── start.py               # Development server script
 ├── requirements.txt       # Python dependencies
+├── requirements-lock.txt  # Locked dependencies
 ├── Procfile               # Railway/Heroku process file
 ├── railway.toml           # Railway configuration
-└── RAILWAY_DEPLOYMENT.md  # Deployment guide
+├── railway.json           # Railway metadata
+├── .env                   # Environment variables (gitignored)
+├── env.example            # Environment variables template
+├── .gitignore             # Git ignore patterns
+└── .railwayignore         # Railway ignore patterns
 ```
 
 ## 🔐 Environment Variables
@@ -153,6 +170,34 @@ pytest --cov=app tests/
 
 # Run specific test file
 pytest tests/test_auth.py
+```
+
+## 🛠️ Utility Scripts
+
+The `scripts/` directory contains helpful utilities:
+
+### Configuration Testing
+```bash
+# Test environment configuration
+python scripts/test_config.py
+
+# Generate secure secret key
+python scripts/test_config.py --generate-key
+```
+
+### Deployment Preparation
+```bash
+# Check if ready for Railway deployment
+python scripts/check-deployment-ready.py
+
+# Generate Railway environment variable commands
+python scripts/generate-railway-vars.py
+```
+
+### Production Startup
+```bash
+# Railway uses this automatically (via railway.toml)
+python scripts/railway_start.py
 ```
 
 ## 📊 API Endpoints

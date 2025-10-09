@@ -115,12 +115,17 @@ def _suppress_noisy_loggers() -> None:
 
 def _setup_audit_logging() -> None:
     """Set up separate audit logging for security events"""
+    import os
+    
+    # Ensure logs directory exists
+    os.makedirs("logs", exist_ok=True)
+    
     audit_logger = logging.getLogger("audit")
     audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False  # Don't propagate to root logger
     
     if not audit_logger.handlers:
-        audit_handler = logging.FileHandler("audit.log")
+        audit_handler = logging.FileHandler("logs/audit.log")
         audit_formatter = logging.Formatter(
             "%(asctime)s | %(levelname)-8s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"

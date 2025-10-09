@@ -1,6 +1,6 @@
-# Xcode
-#
-# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+# =============================================================================
+# iOS / Xcode
+# =============================================================================
 
 ## User settings
 xcuserdata/
@@ -17,51 +17,110 @@ xcuserdata/
 timeline.xctimeline
 playground.xcworkspace
 
-# Swift Package Manager
-#
-# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
-# Packages/
-# Package.pins
-# Package.resolved
-# *.xcodeproj
-#
-# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
-# hence it is not needed unless you have added a package configuration file to your project
-# .swiftpm
-
+## Build
 .build/
 
-# CocoaPods
-#
-# We recommend against adding the Pods directory to your .gitignore. However
-# you should judge for yourself, the pros and cons are mentioned at:
-# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
-#
-# Pods/
-#
-# Add this line if you want to avoid checking in source code from the Xcode workspace
-# *.xcworkspace
+## CocoaPods
+Pods/
 
-# Carthage
-#
-# Add this line if you want to avoid checking in source code from Carthage dependencies.
-# Carthage/Checkouts
-
+## Carthage
 Carthage/Build/
 
-# fastlane
-#
-# It is recommended to not store the screenshots in the git repo.
-# Instead, use fastlane to re-generate the screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/#source-control
-
+## fastlane
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
-# Supabase (if used in server context)
+# =============================================================================
+# Python / FastAPI
+# =============================================================================
+
+## Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+## Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+## Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+## Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache/
+
+## Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+
+# =============================================================================
+# Environment & Secrets
+# =============================================================================
+
+## Environment Variables
+.env
+.env.*
+.env.local
+.env.*.local
+
+## APNs Certificates - IMPORTANT: Keep secure!
+*.p8
+server/keys/
+AuthKey_*.p8
+
+## Local settings
+local_settings.py
+
+# =============================================================================
+# Logs
+# =============================================================================
+
+*.log
+*.log.*
+server/logs/
+audit.log
+
+# =============================================================================
+# Database
+# =============================================================================
+
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# =============================================================================
+# Supabase
+# =============================================================================
+
 .supabase/
 supabase/.env
 supabase/.env.*
@@ -77,37 +136,47 @@ supabase/tmp/
 supabase/backups/
 supabase/dumps/
 supabase/node_modules/
-# General environment files (do not commit secrets)
-.env
-.env.*
-# Reference: https://supabase.com/docs/guides/hosting/overview — cross-check with @Web for updates
 
-# FastAPI and Python server ignores
-venv/
-.env
-.env.*
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# =============================================================================
+# IDE / Editors
+# =============================================================================
 
-instance/
-*.db
-*.sqlite3
-*.log
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 
-htmlcov/
-.coverage
-.tox/
-.pytest_cache/
-.cache/
+# =============================================================================
+# Deployment
+# =============================================================================
 
+## Railway
+.railway/
+
+## Static/Media files
 staticfiles/
 mediafiles/
 
-local_settings.py
-Info.plist
-*.p8
+# =============================================================================
+# Data Files
+# =============================================================================
+
 *.jsonl
 .migrations/
-# Reference: https://fastapi.tiangolo.com/deployment/ — cross-check with @Web for latest best practices
+
+# =============================================================================
+# Temporary / Debug
+# =============================================================================
+
+debug_*.py
+temp_*.py
+
+# =============================================================================
+# Backup Files
+# =============================================================================
+
+*.backup
+*.bak
+project.pbxproj.backup

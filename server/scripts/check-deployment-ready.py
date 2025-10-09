@@ -46,7 +46,7 @@ def main():
     all_good &= check_file_exists("Procfile")
     all_good &= check_file_exists("railway.toml")
     all_good &= check_file_exists(".env")
-    all_good &= check_file_exists("AuthKey_KJ9V6V9G59.p8")
+    all_good &= check_file_exists("keys/AuthKey_KJ9V6V9G59.p8")
     print()
     
     # Check optional files
