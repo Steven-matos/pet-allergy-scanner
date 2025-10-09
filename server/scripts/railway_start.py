@@ -12,6 +12,13 @@ This script ensures the app starts correctly on Railway by:
 import os
 import sys
 import logging
+from pathlib import Path
+
+# Add parent directory to Python path so we can import the app module
+# This is necessary because the script is now in scripts/ subdirectory
+script_dir = Path(__file__).resolve().parent
+server_dir = script_dir.parent
+sys.path.insert(0, str(server_dir))
 
 # Configure basic logging first - write to stdout instead of stderr
 # so Railway doesn't interpret INFO logs as errors
@@ -113,6 +120,10 @@ def main():
             logger.error(f"❌ Failed to import uvicorn: {e}")
             logger.error("   This should not happen on Railway")
             sys.exit(1)
+        
+        # Change to server directory so uvicorn can find main.py
+        logger.info(f"📂 Changing to server directory: {server_dir}")
+        os.chdir(server_dir)
         
         # Start the server
         logger.info(f"🎬 Starting uvicorn server on 0.0.0.0:{port}")
