@@ -4,7 +4,7 @@ Application configuration settings with enhanced security
 
 import os
 from typing import List, Optional
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, ConfigDict
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -137,13 +137,13 @@ class Settings(BaseSettings):
             raise ValueError('Environment must be development, staging, or production')
         return v
     
-    
-    model_config = {
-        "env_file": ".env",
-        "case_sensitive": False,
-        "env_parse_none_str": "None",
-        "populate_by_name": True,  # Pydantic V2: allows field names or aliases
-    }
+    # Pydantic V2 configuration using ConfigDict
+    model_config = ConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        env_parse_none_str="None",
+        populate_by_name=True,  # Pydantic V2: allows using both field names and aliases
+    )
 
 # Global settings instance
 settings = Settings()
