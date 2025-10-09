@@ -37,15 +37,26 @@ security = HTTPBearer()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager for startup and shutdown events"""
+    """
+    Application lifespan manager for startup and shutdown events
+    
+    Gracefully handles startup failures to ensure health checks can respond
+    even if database connection fails
+    """
     # Startup
     log_startup(logger, "SniffTest API")
-    db_initialized = await init_db()
-    if db_initialized:
-        logger.info("✅ Database connection established")
-    else:
-        logger.warning("⚠️  Database initialization failed, but application will continue")
+    try:
+        db_initialized = await init_db()
+        if db_initialized:
+            logger.info("✅ Database connection established")
+        else:
+            logger.warning("⚠️  Database initialization failed, API will run in limited mode")
+    except Exception as e:
+        logger.error(f"⚠️  Startup error: {e}")
+        logger.warning("Application starting in degraded mode - health check will respond but features may be limited")
+    
     yield
+    
     # Shutdown
     log_shutdown(logger, "SniffTest API")
 

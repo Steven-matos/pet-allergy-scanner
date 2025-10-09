@@ -110,14 +110,14 @@ class Settings(BaseSettings):
     
     # Push Notification Configuration (APNs)
     apns_url: str = Field(
-        default="https://api.sandbox.push.apple.com",
+        default="https://api.push.apple.com",
         alias="APNS_URL",
         description="APNs server URL (sandbox for development, production for release)"
     )
-    apns_key_id: str = Field(..., alias="APNS_KEY_ID", description="APNs key ID")
-    apns_team_id: str = Field(..., alias="APNS_TEAM_ID", description="APNs team ID")
-    apns_bundle_id: str = Field(..., alias="APNS_BUNDLE_ID", description="App bundle identifier")
-    apns_private_key: str = Field(..., alias="APNS_PRIVATE_KEY", description="APNs private key (P8 format)")
+    apns_key_id: Optional[str] = Field(default=None, alias="APNS_KEY_ID", description="APNs key ID")
+    apns_team_id: Optional[str] = Field(default=None, alias="APNS_TEAM_ID", description="APNs team ID")
+    apns_bundle_id: Optional[str] = Field(default=None, alias="APNS_BUNDLE_ID", description="App bundle identifier")
+    apns_private_key: Optional[str] = Field(default=None, alias="APNS_PRIVATE_KEY", description="APNs private key (P8 format)")
     
     @field_validator('secret_key')
     @classmethod

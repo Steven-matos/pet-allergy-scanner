@@ -18,58 +18,56 @@ connection_pool = None
 async def init_db():
     """
     Initialize database connection and verify connectivity with connection pooling
+    
+    Returns False instead of raising exceptions to allow app to start in degraded mode
     """
     global supabase, connection_pool
     
     try:
+        logger.info("Initializing database connection...")
+        
         # Initialize Supabase client
         supabase = create_client(
             settings.supabase_url, 
             settings.supabase_key
         )
         
-        # Test connection with retry logic and better error handling
-        max_retries = 3
+        # Test connection with retry logic and timeout
+        max_retries = 2  # Reduced retries for faster startup
+        timeout = 10  # Total timeout for connection test
+        
         for attempt in range(max_retries):
             try:
+                # Quick connection test with timeout
+                logger.info(f"Testing database connection (attempt {attempt + 1}/{max_retries})...")
                 response = supabase.table("users").select("id").limit(1).execute()
-                logger.info("Database connection established successfully")
-                break
+                logger.info("✅ Database connection established successfully")
+                
+                # Initialize connection pool monitoring (non-blocking)
+                asyncio.create_task(_start_connection_monitoring())
+                
+                return True
+                
             except Exception as e:
                 error_msg = str(e)
-                if "nodename nor servname provided" in error_msg:
-                    logger.error(f"DNS resolution failed for Supabase URL: {settings.supabase_url}")
-                    logger.error("🔧 TROUBLESHOOTING STEPS:")
-                    logger.error("   1. Check if your Supabase project is paused at https://supabase.com/dashboard")
-                    logger.error("   2. Verify the project URL in your Supabase dashboard")
-                    logger.error("   3. If paused, click 'Resume' to reactivate your project")
-                    logger.error("   4. If the URL changed, update SUPABASE_URL in your .env file")
-                    logger.error("   5. Run 'python3 test_connection.py' for detailed diagnostics")
-                    # Don't retry on DNS errors, they won't resolve
-                    raise e
-                elif "401" in error_msg or "403" in error_msg:
-                    logger.error(f"Authentication failed for Supabase URL: {settings.supabase_url}")
-                    logger.error("🔧 AUTHENTICATION ISSUES:")
-                    logger.error("   1. Check your SUPABASE_KEY in .env file")
-                    logger.error("   2. Verify API keys in Supabase dashboard > Settings > API")
-                    logger.error("   3. Regenerate keys if necessary")
-                    raise e
-                elif attempt == max_retries - 1:
-                    raise e
+                logger.warning(f"Database connection attempt {attempt + 1} failed: {error_msg}")
+                
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2)  # Short delay before retry
                 else:
-                    logger.warning(f"Database connection attempt {attempt + 1} failed: {error_msg}, retrying...")
-                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    # Log helpful troubleshooting info on final failure
+                    if "nodename nor servname provided" in error_msg or "DNS" in error_msg:
+                        logger.error("DNS resolution failed - check SUPABASE_URL")
+                    elif "401" in error_msg or "403" in error_msg:
+                        logger.error("Authentication failed - check SUPABASE_KEY")
+                    else:
+                        logger.error(f"Connection failed: {error_msg}")
         
-        # Initialize connection pool monitoring
-        await _start_connection_monitoring()
-        
-        return True
+        return False
         
     except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        # Don't raise the error immediately, let the app start but log the issue
-        logger.warning("Application will start without database monitoring due to connection issues")
-        logger.warning("Run 'python3 test_connection.py' for detailed diagnostics")
+        logger.error(f"Database initialization error: {e}")
+        logger.warning("Application will start in degraded mode without database")
         return False
 
 async def _start_connection_monitoring():
