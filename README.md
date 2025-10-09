@@ -505,8 +505,9 @@ The server automatically adds the following security headers:
 
 2. **Update API Configuration**:
    - Open `Info.plist`
-   - Set `API_BASE_URL` to your server URL
-   - Example: `http://localhost:8000/api/v1`
+   - Set `API_BASE_URL` to your server URL:
+     - Development: `http://localhost:8000/api/v1`
+     - Production: `https://snifftest-api-production.up.railway.app/api/v1`
 
 3. **Configure Signing**:
    - Select your development team
@@ -554,7 +555,7 @@ Complete API reference is available in [API_DOCS.md](API_DOCS.md).
 
 ### Base URLs
 - **Development**: `http://localhost:8000/api/v1`
-- **Production**: `https://your-domain.com/api/v1`
+- **Production**: `https://snifftest-api-production.up.railway.app/api/v1`
 
 ### Authentication
 All endpoints require JWT Bearer token:
@@ -654,13 +655,29 @@ SniffTest/
 ## Deployment
 
 ### Backend
-- **Development**: `python start.py`
-- **Production**: Gunicorn with Uvicorn workers
-- **Platforms**: Vercel, Railway, Heroku ready
+
+#### Production (Railway)
+- **API URL**: `https://snifftest-api-production.up.railway.app`
+- **Health Check**: `https://snifftest-api-production.up.railway.app/health`
+- **Interactive Docs**: `https://snifftest-api-production.up.railway.app/docs` (when DEBUG=true)
+- **Platform**: Railway deployment with automatic HTTPS
+
+#### Development
+- **Local Server**: `python start.py`
+- **API URL**: `http://localhost:8000/api/v1`
+- **Docs**: `http://localhost:8000/docs`
+
+#### Deployment Options
+- **Railway**: Currently deployed ✅
+- **Vercel**: Serverless deployment ready
+- **Heroku**: Platform as a Service ready
 - **Docker**: Included Dockerfile and docker-compose.yml
 
 ### iOS App
 - **Development**: Xcode simulator or device
+- **API Configuration**: Update `API_BASE_URL` in `Info.plist`
+  - Development: `http://localhost:8000/api/v1`
+  - Production: `https://snifftest-api-production.up.railway.app/api/v1`
 - **Distribution**: TestFlight for beta testing
 - **App Store**: Production release via App Store Connect
 

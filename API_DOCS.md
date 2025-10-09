@@ -5,6 +5,7 @@ Complete API reference for the Pet Allergy Scanner backend service.
 ## Table of Contents
 
 - [Base URL](#base-url)
+- [Interactive API Documentation](#interactive-api-documentation)
 - [Authentication](#authentication)
 - [Error Handling](#error-handling)
 - [Rate Limiting](#rate-limiting)
@@ -22,8 +23,24 @@ Complete API reference for the Pet Allergy Scanner backend service.
 
 ```
 Development: http://localhost:8000/api/v1
-Production: https://your-domain.com/api/v1
+Production: https://snifftest-api-production.up.railway.app/api/v1
 ```
+
+## Interactive API Documentation
+
+FastAPI provides auto-generated interactive documentation:
+
+### Development (localhost)
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI Schema**: http://localhost:8000/openapi.json
+
+### Production
+- **Swagger UI**: https://snifftest-api-production.up.railway.app/docs
+- **ReDoc**: https://snifftest-api-production.up.railway.app/redoc
+- **OpenAPI Schema**: https://snifftest-api-production.up.railway.app/openapi.json
+
+> **Note**: Interactive docs are only enabled when `DEBUG=true` is set in environment variables for security reasons.
 
 ## Authentication
 
@@ -721,7 +738,7 @@ interface IngredientAnalysis {
 import Foundation
 
 class PetAllergyScannerAPI {
-    private let baseURL = "https://your-api-domain.com/api/v1"
+    private let baseURL = "https://snifftest-api-production.up.railway.app/api/v1"
     private let session = URLSession.shared
     
     func createPet(_ pet: PetCreate) async throws -> Pet {
@@ -766,4 +783,5 @@ class PetAllergyScannerAPI:
 
 ---
 
-*Last updated: January 2025*
+*Last updated: October 2025*
+*Production API: https://snifftest-api-production.up.railway.app*
