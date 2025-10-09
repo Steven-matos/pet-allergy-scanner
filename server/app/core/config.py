@@ -57,9 +57,20 @@ class Settings(BaseSettings):
     
     @property
     def allowed_hosts(self) -> List[str]:
-        """Get allowed hosts as a list"""
+        """
+        Get allowed hosts as a list
+        
+        Returns a wildcard pattern for production environments to allow Railway
+        and other deployment platforms to access the health check endpoints
+        """
         if self.allowed_hosts_str:
             return [host.strip() for host in self.allowed_hosts_str.split(',') if host.strip()]
+        
+        # In production/staging, allow all hosts (Railway requires this for health checks)
+        if self.environment in ['production', 'staging']:
+            return ["*"]
+        
+        # Development: restrict to local only
         return ["localhost", "127.0.0.1"]
     
     # Rate Limiting
