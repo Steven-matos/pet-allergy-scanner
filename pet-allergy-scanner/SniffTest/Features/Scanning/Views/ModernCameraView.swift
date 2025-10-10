@@ -46,11 +46,8 @@ struct ModernCameraView: UIViewControllerRepresentable {
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        #if targetEnvironment(simulator)
-        return createSimulatorViewController(context: context)
-        #else
-        return createModernCameraViewController(context: context)
-        #endif
+        return isCameraUsable() ? createModernCameraViewController(context: context)
+                                : createSimulatorViewController(context: context)
     }
     
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
@@ -159,6 +156,22 @@ struct ModernCameraView: UIViewControllerRepresentable {
     }
 }
 
+// MARK: - Camera Capability Helpers
+
+extension ModernCameraView {
+    /// Returns true when the device can present a live camera feed (hardware + permission state)
+    private func isCameraUsable() -> Bool {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        if !UIImagePickerController.isSourceTypeAvailable(.camera) { return false }
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        if status == .restricted || status == .denied { return false }
+        return true
+        #endif
+    }
+}
+
 // MARK: - Modern Camera View Controller
 
 /**
@@ -197,14 +210,15 @@ class ModernCameraViewController: UIViewController {
     
     // MARK: - State
     private var isSessionRunning = false
+    private var isSessionConfigured = false
     private var lastBarcodeDetectionTime: Date?
     private let barcodeDetectionCooldown: TimeInterval = 1.0 // Prevent spam detection
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupCameraSession()
         setupUI()
         setupVision()
+        authorizeAndSetupSession()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -276,18 +290,46 @@ class ModernCameraViewController: UIViewController {
         videoPreviewLayer.videoGravity = .resizeAspectFill
         videoPreviewLayer.frame = view.bounds
         view.layer.addSublayer(videoPreviewLayer)
+        
+        isSessionConfigured = true
+    }
+
+    private func authorizeAndSetupSession() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        switch status {
+        case .authorized:
+            setupCameraSession()
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    if granted {
+                        self.setupCameraSession()
+                        self.startCameraSession()
+                    } else {
+                        self.delegate?.cameraViewController(self, didFailWithError: CameraError.deviceNotFound)
+                    }
+                }
+            }
+        case .denied, .restricted:
+            delegate?.cameraViewController(self, didFailWithError: CameraError.deviceNotFound)
+        @unknown default:
+            delegate?.cameraViewController(self, didFailWithError: CameraError.sessionConfigurationFailed)
+        }
     }
     
     private func setupVideoDataOutput() {
+        // Initialize processing queue BEFORE assigning delegate to avoid nil queue crash
+        videoDataOutputQueue = DispatchQueue(label: "VideoDataOutputQueue", qos: .userInitiated)
+        
         videoDataOutput = AVCaptureVideoDataOutput()
-        videoDataOutput.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
+        videoDataOutput.alwaysDiscardsLateVideoFrames = true
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        videoDataOutput.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
         
         if captureSession.canAddOutput(videoDataOutput) {
             captureSession.addOutput(videoDataOutput)
         }
-        
-        videoDataOutputQueue = DispatchQueue(label: "VideoDataOutputQueue", qos: .userInitiated)
     }
     
     private func setupVision() {
@@ -352,6 +394,7 @@ class ModernCameraViewController: UIViewController {
     
     private func startCameraSession() {
         guard !isSessionRunning else { return }
+        guard isSessionConfigured, captureSession != nil else { return }
         
         Task { @MainActor in
             captureSession.startRunning()
