@@ -3,12 +3,16 @@ JWT token handling and user authentication
 
 Extracted from app.utils.security.get_current_user
 Follows Single Responsibility Principle: Authentication only
+
+Security Note: Migrated from python-jose to PyJWT to eliminate ecdsa dependency
+vulnerable to Minerva timing attack (CVE-2024-23342, GHSA-wj6h-64fc-37mp)
 """
 
 import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from app.core.config import settings
 from app.database import get_supabase_client
@@ -54,27 +58,29 @@ def get_current_user(
             settings.supabase_jwt_secret, 
             algorithms=["HS256"],
             audience="authenticated",
-            issuer=f"{settings.supabase_url}/auth/v1"
+            issuer=f"{settings.supabase_url}/auth/v1",
+            options={"verify_signature": True}
         )
         user_id: str = payload.get("sub")
         if user_id is None:
             logger.error("Supabase JWT validation failed: no user ID in payload")
             raise credentials_exception
             
-    except JWTError as e:
+    except InvalidTokenError as e:
         logger.warning(f"Supabase JWT validation failed: {e}, trying server secret key")
         # If Supabase JWT fails, try with our own secret key
         try:
             payload = jwt.decode(
                 credentials.credentials, 
                 settings.secret_key, 
-                algorithms=[settings.algorithm]
+                algorithms=[settings.algorithm],
+                options={"verify_signature": True}
             )
             user_id: str = payload.get("sub")
             if user_id is None:
                 logger.error("Server JWT validation failed: no user ID in payload")
                 raise credentials_exception
-        except JWTError as e2:
+        except InvalidTokenError as e2:
             logger.error(f"Server JWT validation also failed: {e2}")
             raise credentials_exception
     
