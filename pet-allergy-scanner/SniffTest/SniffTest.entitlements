@@ -5,8 +5,6 @@
 	<key>aps-environment</key>
 	<string>development</string>
 	<!-- Change to "production" when deploying to App Store -->
-	<key>com.apple.developer.usernotifications.communication</key>
-	<true/>
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
 </dict>

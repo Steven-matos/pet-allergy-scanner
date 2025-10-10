@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 # Import advanced analytics services
 from .analytics_service import AdvancedAnalyticsService
@@ -61,9 +61,9 @@ async def get_analytics_overview(
         return analytics
         
     except Exception as e:
-        return create_error_response(
-            APIError.ANALYTICS_OVERVIEW_FAILED,
-            f"Failed to generate analytics overview: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate analytics overview: {str(e)}"
         )
 
 
@@ -100,9 +100,9 @@ async def get_nutrition_insights(
         return insights
         
     except Exception as e:
-        return create_error_response(
-            APIError.INSIGHTS_GENERATION_FAILED,
-            f"Failed to generate nutrition insights: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate nutrition insights: {str(e)}"
         )
 
 
@@ -139,9 +139,9 @@ async def get_nutrition_patterns(
         return patterns
         
     except Exception as e:
-        return create_error_response(
-            APIError.PATTERN_ANALYSIS_FAILED,
-            f"Failed to analyze nutrition patterns: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze nutrition patterns: {str(e)}"
         )
 
 
@@ -178,9 +178,9 @@ async def get_nutrition_trends(
         return trends
         
     except Exception as e:
-        return create_error_response(
-            APIError.TREND_ANALYSIS_FAILED,
-            f"Failed to analyze nutrition trends: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze nutrition trends: {str(e)}"
         )
 
 
@@ -238,7 +238,7 @@ async def get_advanced_recommendations(
         return recommendations
         
     except Exception as e:
-        return create_error_response(
-            APIError.RECOMMENDATIONS_GENERATION_FAILED,
-            f"Failed to generate advanced recommendations: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate advanced recommendations: {str(e)}"
         )

@@ -129,13 +129,21 @@ def main():
         logger.info(f"🎬 Starting uvicorn server on 0.0.0.0:{port}")
         logger.info("=" * 60)
         
+        # Determine if we should enable verbose logging
+        is_production = environment == "production"
+        
+        # Production: Minimal logging to avoid Railway 500 logs/sec limit
+        # Development: Full logging for debugging
+        if is_production:
+            logger.info("⚠️  Production mode: Access logs DISABLED to avoid Railway rate limits")
+            logger.info("   Only errors will be logged. Use external monitoring for metrics.")
+        
         uvicorn.run(
             "main:app",
             host="0.0.0.0",
             port=port,
-            log_level="info",
-            access_log=True,
-            # Don't use reload in production
+            log_level="error" if is_production else "info",
+            access_log=not is_production,  # Disable access logs in production
             reload=False,
             # Configure uvicorn to use proper logging
             log_config={
@@ -154,9 +162,18 @@ def main():
                     },
                 },
                 "loggers": {
-                    "uvicorn": {"handlers": ["default"], "level": "INFO"},
-                    "uvicorn.error": {"handlers": ["default"], "level": "INFO"},
-                    "uvicorn.access": {"handlers": ["default"], "level": "INFO"},
+                    "uvicorn": {
+                        "handlers": ["default"], 
+                        "level": "ERROR" if is_production else "INFO"
+                    },
+                    "uvicorn.error": {
+                        "handlers": ["default"], 
+                        "level": "ERROR" if is_production else "INFO"
+                    },
+                    "uvicorn.access": {
+                        "handlers": ["default"], 
+                        "level": "CRITICAL" if is_production else "INFO"  # Completely disable in prod
+                    },
                 },
             }
         )

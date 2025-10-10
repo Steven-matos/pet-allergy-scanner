@@ -16,7 +16,7 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 router = APIRouter(prefix="/requirements", tags=["nutrition-requirements"])
 
@@ -59,9 +59,9 @@ async def create_nutritional_requirements(
         
     except Exception as e:
         db.rollback()
-        return create_error_response(
-            APIError.NUTRITION_REQUIREMENTS_CREATE_FAILED,
-            f"Failed to create nutritional requirements: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create nutritional requirements: {str(e)}"
         )
 
 
@@ -105,7 +105,7 @@ async def get_nutritional_requirements(
         return NutritionalRequirementsResponse.from_orm(requirements)
         
     except Exception as e:
-        return create_error_response(
-            APIError.NUTRITION_REQUIREMENTS_GET_FAILED,
-            f"Failed to get nutritional requirements: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get nutritional requirements: {str(e)}"
         )

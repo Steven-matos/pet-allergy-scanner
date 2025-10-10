@@ -72,8 +72,10 @@ app = FastAPI(
 )
 
 # Add security middleware (order matters!)
+# Note: Audit middleware disabled in production to avoid Railway rate limits
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(AuditLogMiddleware)
+if settings.environment != "production":
+    app.add_middleware(AuditLogMiddleware)  # Only in dev/staging
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestSizeMiddleware)
 app.add_middleware(APIVersionMiddleware)

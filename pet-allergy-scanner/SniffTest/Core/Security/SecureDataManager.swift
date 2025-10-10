@@ -7,6 +7,7 @@
 
 import Foundation
 import Security
+import CryptoKit
 
 /// Secure data manager for handling sensitive information like backup codes and tokens
 @MainActor
@@ -73,36 +74,76 @@ class SecureDataManager: @unchecked Sendable {
     
     private var secureStorage: [String: SecureDataItem] = [:]
     private var cleanupTimers: [String: Timer] = [:]
+    private lazy var encryptionKey: SymmetricKey = {
+        return getOrCreateEncryptionKey()
+    }()
     
     private struct SecureDataItem {
         var data: Data
         let expirationDate: Date
     }
     
+    /// Encrypt string data using AES-256-GCM
+    /// - Parameter string: String to encrypt
+    /// - Returns: Encrypted data with authentication tag
     private func encryptData(_ string: String) -> Data {
-        // Simple XOR encryption for demo - in production, use proper encryption
         guard let data = string.data(using: .utf8) else { return Data() }
         
-        let key: UInt8 = 0x42 // Simple key
-        var encryptedData = Data()
-        
-        for byte in data {
-            encryptedData.append(byte ^ key)
+        do {
+            let sealedBox = try AES.GCM.seal(data, using: encryptionKey)
+            return sealedBox.combined ?? Data()
+        } catch {
+            print("Encryption error: \(error.localizedDescription)")
+            return Data()
         }
-        
-        return encryptedData
     }
     
+    /// Decrypt data using AES-256-GCM
+    /// - Parameter data: Encrypted data
+    /// - Returns: Decrypted string or nil on failure
     private func decryptData(_ data: Data) -> String? {
-        // Simple XOR decryption for demo - in production, use proper decryption
-        let key: UInt8 = 0x42 // Same key as encryption
+        do {
+            let sealedBox = try AES.GCM.SealedBox(combined: data)
+            let decryptedData = try AES.GCM.open(sealedBox, using: encryptionKey)
+            return String(data: decryptedData, encoding: .utf8)
+        } catch {
+            print("Decryption error: \(error.localizedDescription)")
+            return nil
+        }
+    }
+    
+    /// Get or create a persistent encryption key stored in Keychain
+    /// - Returns: Symmetric encryption key
+    private func getOrCreateEncryptionKey() -> SymmetricKey {
+        let keyTag = "com.snifftest.app.encryption.key"
         
-        var decryptedData = Data()
-        for byte in data {
-            decryptedData.append(byte ^ key)
+        // Try to retrieve existing key
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: keyTag,
+            kSecReturnData as String: true
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        if status == errSecSuccess, let keyData = result as? Data {
+            return SymmetricKey(data: keyData)
         }
         
-        return String(data: decryptedData, encoding: .utf8)
+        // Create new key if not found
+        let newKey = SymmetricKey(size: .bits256)
+        let keyData = newKey.withUnsafeBytes { Data($0) }
+        
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: keyTag,
+            kSecValueData as String: keyData,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        
+        SecItemAdd(addQuery as CFDictionary, nil)
+        return newKey
     }
     
     private func scheduleCleanup(forKey key: String, at date: Date) {

@@ -65,32 +65,51 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         return any(path.startswith(sensitive_path) for sensitive_path in sensitive_paths)
     
     def _should_log_request(self, path: str, method: str, status_code: int) -> bool:
-        """Determine if request should be logged based on path and status"""
+        """
+        Determine if request should be logged based on path and status
+        In production: Only log errors and critical operations to avoid Railway rate limits
+        """
+        # In production, be extremely selective
+        if settings.environment == "production":
+            # Only log server errors (500+) and auth failures (401, 403)
+            if status_code >= 500:
+                return True
+            if status_code in [401, 403]:
+                return True
+            # Only log critical data modifications (user creation, deletions)
+            if method in ["DELETE"] and "/users/" in path:
+                return True
+            return False
+        
+        # Development/staging: More verbose logging
         # Always log errors
         if status_code >= 400:
             return True
         
-        # Always log data modification operations
+        # Log data modification operations
         if method in ["POST", "PUT", "DELETE"]:
             return True
         
-        # Log sensitive endpoints less frequently for successful GET requests
-        if method == "GET" and status_code == 200:
-            # Skip frequent health checks and monitoring endpoints
-            skip_paths = ["/health", "/metrics", "/status"]
-            if any(path.endswith(skip_path) for skip_path in skip_paths):
-                return False
-            
-            # Log only every 10th successful GET request for sensitive endpoints
-            # This reduces noise while maintaining audit trail
-            return hash(path) % 10 == 0
+        # Skip frequent health checks and monitoring endpoints
+        skip_paths = ["/health", "/metrics", "/status", "/docs", "/redoc", "/openapi.json"]
+        if any(path.endswith(skip_path) for skip_path in skip_paths):
+            return False
         
-        return True
+        # Log only every 50th successful GET request to reduce noise
+        if method == "GET" and status_code == 200:
+            return hash(path) % 50 == 0
+        
+        return False
     
     def _log_audit_event(self, event_type: str, request: Request, response: Response, 
                         user_id: Optional[str] = None, details: Optional[Dict[str, Any]] = None):
-        """Log audit event"""
-        if not settings.enable_audit_logging:
+        """
+        Log audit event
+        In production: Disabled completely to avoid Railway rate limits
+        Use external monitoring services (e.g., Sentry, DataDog) instead
+        """
+        # Disable audit logging in production to avoid Railway rate limits
+        if not settings.enable_audit_logging or settings.environment == "production":
             return
         
         audit_data = {
@@ -106,6 +125,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
             "details": details or {}
         }
         
+        # Only log to file, not console
         self.audit_logger.info(json.dumps(audit_data))
     
     async def dispatch(self, request: Request, call_next):

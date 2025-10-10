@@ -17,7 +17,7 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 router = APIRouter(prefix="/feeding", tags=["nutrition-feeding"])
 
@@ -60,9 +60,9 @@ async def record_feeding(
         
     except Exception as e:
         db.rollback()
-        return create_error_response(
-            APIError.FEEDING_RECORD_CREATE_FAILED,
-            f"Failed to record feeding: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to record feeding: {str(e)}"
         )
 
 
@@ -100,9 +100,9 @@ async def get_feeding_records(
         return [FeedingRecordResponse.from_orm(record) for record in records]
         
     except Exception as e:
-        return create_error_response(
-            APIError.FEEDING_RECORDS_GET_FAILED,
-            f"Failed to get feeding records: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get feeding records: {str(e)}"
         )
 
 
@@ -137,9 +137,9 @@ async def get_daily_summaries(
         return summaries
         
     except Exception as e:
-        return create_error_response(
-            APIError.DAILY_SUMMARIES_GET_FAILED,
-            f"Failed to get daily summaries: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get daily summaries: {str(e)}"
         )
 
 
@@ -174,7 +174,7 @@ async def get_daily_summary(
         return summary
         
     except Exception as e:
-        return create_error_response(
-            APIError.DAILY_SUMMARY_GET_FAILED,
-            f"Failed to get daily summary: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get daily summary: {str(e)}"
         )

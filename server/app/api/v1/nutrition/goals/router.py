@@ -17,7 +17,7 @@ from app.models.calorie_goals import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 router = APIRouter(prefix="/goals", tags=["nutrition-goals"])
 
@@ -60,9 +60,9 @@ async def create_calorie_goal(
         
     except Exception as e:
         db.rollback()
-        return create_error_response(
-            APIError.CALORIE_GOAL_CREATE_FAILED,
-            f"Failed to create calorie goal: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create calorie goal: {str(e)}"
         )
 
 
@@ -93,9 +93,9 @@ async def get_calorie_goals(
         return [CalorieGoalResponse.from_orm(goal) for goal in goals]
         
     except Exception as e:
-        return create_error_response(
-            APIError.CALORIE_GOALS_GET_FAILED,
-            f"Failed to get calorie goals: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get calorie goals: {str(e)}"
         )
 
 
@@ -135,9 +135,9 @@ async def get_pet_calorie_goal(
         return None
         
     except Exception as e:
-        return create_error_response(
-            APIError.CALORIE_GOAL_GET_FAILED,
-            f"Failed to get calorie goal: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get calorie goal: {str(e)}"
         )
 
 
@@ -184,7 +184,7 @@ async def delete_calorie_goal(
         
     except Exception as e:
         db.rollback()
-        return create_error_response(
-            APIError.CALORIE_GOAL_DELETE_FAILED,
-            f"Failed to delete calorie goal: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete calorie goal: {str(e)}"
         )

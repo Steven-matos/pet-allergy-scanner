@@ -47,16 +47,20 @@ class CleanFormatter(logging.Formatter):
 def setup_logging(log_level: Optional[str] = None) -> None:
     """
     Set up centralized logging configuration with clean console output
+    Production: Only log ERROR and CRITICAL to reduce Railway rate limits
     
     Args:
         log_level: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
     # Determine log level - Use settings or parameter
     if log_level:
-        level = getattr(logging, log_level.upper(), logging.INFO)
+        level = getattr(logging, log_level.upper(), logging.ERROR)
     else:
-        # Use configured log level, with DEBUG only in development when verbose logging is enabled
-        if settings.verbose_logging and settings.environment == "development":
+        # Production: ERROR only to avoid Railway rate limits
+        # Development: INFO for debugging
+        if settings.environment == "production":
+            level = logging.ERROR
+        elif settings.verbose_logging and settings.environment == "development":
             level = logging.DEBUG
         else:
             level = getattr(logging, settings.log_level.upper(), logging.INFO)
@@ -97,31 +101,59 @@ def setup_logging(log_level: Optional[str] = None) -> None:
 
 
 def _suppress_noisy_loggers() -> None:
-    """Suppress noisy third-party loggers to reduce console clutter"""
-    noisy_loggers = {
-        "uvicorn.access": logging.WARNING,      # Only show access errors
-        "uvicorn.error": logging.INFO,          # Show uvicorn errors
-        "httpx": logging.WARNING,                # Only show HTTP client errors
-        "httpcore": logging.WARNING,             # Only show HTTP core errors
-        "supabase": logging.WARNING,            # Only show Supabase errors
-        "urllib3": logging.WARNING,              # Only show urllib3 errors
-        "asyncio": logging.WARNING,             # Only show asyncio errors
-        "multipart": logging.WARNING,           # Only show multipart errors
-    }
+    """
+    Suppress noisy third-party loggers to reduce console clutter
+    In production: Only log CRITICAL errors to avoid Railway rate limits
+    """
+    # In production, suppress almost all third-party logging
+    if settings.environment == "production":
+        noisy_loggers = {
+            "uvicorn.access": logging.CRITICAL,     # Disable access logs completely
+            "uvicorn.error": logging.ERROR,         # Only critical uvicorn errors
+            "httpx": logging.CRITICAL,              # Disable HTTP client logs
+            "httpcore": logging.CRITICAL,           # Disable HTTP core logs
+            "supabase": logging.ERROR,              # Only Supabase errors
+            "urllib3": logging.CRITICAL,            # Disable urllib3 logs
+            "asyncio": logging.CRITICAL,            # Disable asyncio logs
+            "multipart": logging.CRITICAL,          # Disable multipart logs
+            "fastapi": logging.ERROR,               # Only FastAPI errors
+            "starlette": logging.ERROR,             # Only Starlette errors
+        }
+    else:
+        # Development: Show warnings and above
+        noisy_loggers = {
+            "uvicorn.access": logging.WARNING,      # Only show access errors
+            "uvicorn.error": logging.INFO,          # Show uvicorn errors
+            "httpx": logging.WARNING,               # Only show HTTP client errors
+            "httpcore": logging.WARNING,            # Only show HTTP core errors
+            "supabase": logging.WARNING,            # Only show Supabase errors
+            "urllib3": logging.WARNING,             # Only show urllib3 errors
+            "asyncio": logging.WARNING,             # Only show asyncio errors
+            "multipart": logging.WARNING,           # Only show multipart errors
+        }
     
     for logger_name, level in noisy_loggers.items():
         logging.getLogger(logger_name).setLevel(level)
 
 
 def _setup_audit_logging() -> None:
-    """Set up separate audit logging for security events"""
+    """
+    Set up separate audit logging for security events
+    In production: Only log to file, not console, to avoid Railway rate limits
+    """
     import os
+    from app.core.config import settings
     
-    # Ensure logs directory exists
+    # Only enable audit logging if explicitly enabled and not in production
+    # In production, use external monitoring services instead
+    if not settings.enable_audit_logging or settings.environment == "production":
+        return
+    
+    # Ensure logs directory exists (development only)
     os.makedirs("logs", exist_ok=True)
     
     audit_logger = logging.getLogger("audit")
-    audit_logger.setLevel(logging.INFO)
+    audit_logger.setLevel(logging.WARNING)  # Only warnings and above
     audit_logger.propagate = False  # Don't propagate to root logger
     
     if not audit_logger.handlers:
@@ -148,13 +180,21 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def log_startup(logger: logging.Logger, service_name: str) -> None:
-    """Log service startup with clean formatting"""
-    logger.info(f"🚀 Starting {service_name}")
+    """
+    Log service startup with clean formatting
+    Only logs in development to reduce production noise
+    """
+    if settings.environment != "production":
+        logger.info(f"🚀 Starting {service_name}")
 
 
 def log_shutdown(logger: logging.Logger, service_name: str) -> None:
-    """Log service shutdown with clean formatting"""
-    logger.info(f"🛑 Shutting down {service_name}")
+    """
+    Log service shutdown with clean formatting
+    Only logs in development to reduce production noise
+    """
+    if settings.environment != "production":
+        logger.info(f"🛑 Shutting down {service_name}")
 
 
 def log_database_operation(logger: logging.Logger, operation: str, table: str, 

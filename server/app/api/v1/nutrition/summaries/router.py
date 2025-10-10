@@ -16,7 +16,7 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 router = APIRouter(prefix="/summaries", tags=["nutrition-summaries"])
 
@@ -71,9 +71,9 @@ async def get_multi_pet_insights(
         return MultiPetNutritionInsights(**insights)
         
     except Exception as e:
-        return create_error_response(
-            APIError.MULTI_PET_INSIGHTS_FAILED,
-            f"Failed to generate multi-pet insights: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate multi-pet insights: {str(e)}"
         )
 
 
@@ -110,7 +110,7 @@ async def get_daily_nutrition_summaries(
         return summaries
         
     except Exception as e:
-        return create_error_response(
-            APIError.DAILY_SUMMARIES_GET_FAILED,
-            f"Failed to get daily nutrition summaries: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get daily nutrition summaries: {str(e)}"
         )

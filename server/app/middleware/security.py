@@ -143,7 +143,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         
         # Check if limit exceeded
         if len(rate_queue) >= limit:
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}, Path: {request.url.path}")
+            # Only log rate limit errors in development to avoid Railway rate limits
+            if settings.environment != "production":
+                logger.warning(f"Rate limit exceeded for IP: {client_ip}, Path: {request.url.path}")
             return JSONResponse(
                 status_code=429,
                 content={

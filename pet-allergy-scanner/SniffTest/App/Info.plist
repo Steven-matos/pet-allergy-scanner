@@ -13,18 +13,14 @@
 	<string>https://snifftest-api-production.up.railway.app/api/v1</string>
 	<key>CFBundleDisplayName</key>
 	<string>SniffTest</string>
+	<key>CFBundleExecutable</key>
+	<string>SniffTest</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.snifftest.app</string>
 	<key>CFBundleName</key>
 	<string>SniffTest</string>
-	<key>CFBundleExecutable</key>
-	<string>SniffTest</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
+	<string>5.1</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -38,6 +34,10 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleVersion</key>
+	<string>6</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>MAX_UPLOAD_SIZE</key>
 	<integer>5242880</integer>
 	<key>NSCameraUsageDescription</key>
@@ -61,6 +61,8 @@
 		<string>processing</string>
 		<string>fetch</string>
 	</array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -74,7 +76,5 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UILaunchStoryboardName</key>
-	<string>LaunchScreen</string>
 </dict>
 </plist>

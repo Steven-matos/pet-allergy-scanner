@@ -18,7 +18,7 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.utils.error_handling import create_error_response, APIError
+# Removed unused imports: create_error_response, APIError
 
 router = APIRouter(prefix="/analysis", tags=["nutrition-analysis"])
 
@@ -61,9 +61,9 @@ async def analyze_food(
         
     except Exception as e:
         db.rollback()
-        return create_error_response(
-            APIError.FOOD_ANALYSIS_FAILED,
-            f"Failed to analyze food: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze food: {str(e)}"
         )
 
 
@@ -101,9 +101,9 @@ async def get_food_analyses(
         return [FoodAnalysisResponse.from_orm(analysis) for analysis in analyses]
         
     except Exception as e:
-        return create_error_response(
-            APIError.FOOD_ANALYSES_GET_FAILED,
-            f"Failed to get food analyses: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get food analyses: {str(e)}"
         )
 
 
@@ -144,9 +144,9 @@ async def assess_nutrition_compatibility(
         return NutritionCompatibilityResponse(**compatibility_result)
         
     except Exception as e:
-        return create_error_response(
-            APIError.COMPATIBILITY_ASSESSMENT_FAILED,
-            f"Failed to assess nutrition compatibility: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to assess nutrition compatibility: {str(e)}"
         )
 
 
@@ -186,7 +186,7 @@ async def get_food_analysis(
         return FoodAnalysisResponse.from_orm(analysis)
         
     except Exception as e:
-        return create_error_response(
-            APIError.FOOD_ANALYSIS_GET_FAILED,
-            f"Failed to get food analysis: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get food analysis: {str(e)}"
         )
