@@ -318,7 +318,12 @@ class ModernCameraViewController: UIViewController {
         }
     }
     
+    /// Sets up video data output for real-time barcode detection
+    /// - Note: Requires captureSession to be initialized first
     private func setupVideoDataOutput() {
+        // Guard against nil captureSession - can happen if called before viewDidLoad
+        guard captureSession != nil else { return }
+        
         // Initialize processing queue BEFORE assigning delegate to avoid nil queue crash
         videoDataOutputQueue = DispatchQueue(label: "VideoDataOutputQueue", qos: .userInitiated)
         
@@ -381,8 +386,13 @@ class ModernCameraViewController: UIViewController {
         ])
     }
     
+    /// Updates the camera configuration based on current settings
+    /// - Note: Safe to call before session is configured
     private func updateConfiguration() {
         scanOverlayView?.isHidden = !showScanOverlay
+        
+        // Only modify capture session outputs if session is configured
+        guard isSessionConfigured, captureSession != nil else { return }
         
         if enableRealTimeDetection && videoDataOutput == nil {
             setupVideoDataOutput()
