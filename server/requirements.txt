@@ -24,7 +24,7 @@ cryptography>=46.0.0  # Updated to latest
 pyotp>=2.9.0
 
 # HTTP & Networking
-httpx>=0.28.0  # Updated to latest
+# httpx pinned to 0.27.2 above for postgrest compatibility
 aiohttp>=3.13.0  # Updated to latest
 
 # File Upload & Processing
