@@ -1,6 +1,6 @@
 [build]
-builder = "NIXPACKS"
-buildCommand = "pip install --no-cache-dir -r requirements-lock.txt"
+builder = "RAILPACK"
+buildCommand = "pip install -r requirements-lock.txt"
 watchPaths = ["server/**/*.py", "server/**/*.txt"]
 
 
