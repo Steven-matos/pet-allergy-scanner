@@ -35,12 +35,15 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 ## Features
 
 ### Core Functionality
-- 📱 **Native iOS App**: Built with SwiftUI for iOS 17.0+
-- 🔍 **Camera Scanning**: Real-time OCR text extraction from pet food labels
+- 📱 **Native iOS App**: Built with SwiftUI for iOS 17.0+ (v5.1)
+- 🔍 **Camera Scanning**: Real-time OCR and barcode scanning for pet food labels
 - 🧠 **AI-Powered Analysis**: Intelligent ingredient safety assessment with species-specific logic
 - 🐕 **Pet Profiles**: Complete pet management with birthday tracking and age calculation
 - 📊 **Safety Reports**: Detailed ingredient analysis with personalized recommendations
 - 💾 **Offline Support**: Core scanning features work without internet connection
+- 🥗 **Nutrition Tracking**: Comprehensive feeding logs, calorie goals, and nutritional analysis
+- ⚖️ **Weight Management**: Track pet weight trends and set health goals
+- 📱 **Food Database**: Searchable database with barcode lookup and nutritional info
 
 ### User Experience & Onboarding
 - 🎯 **Guided Onboarding**: Step-by-step pet profile creation for new users
@@ -60,11 +63,25 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 
 ### Scanning & Analysis
 - 📷 **Camera Integration**: Real-time camera view with OCR text extraction
+- 📱 **Barcode Scanning**: Quick product lookup via barcode
 - 🔍 **Ingredient Analysis**: Species-specific safety assessment (dogs vs cats)
 - ⚠️ **Allergy Alerts**: Instant warnings for known pet sensitivities
 - 📋 **Scan History**: Complete history of all scans with search and filtering
 - ❤️ **Favorites**: Save safe products for quick reference
 - 📊 **Detailed Reports**: Comprehensive safety analysis with recommendations
+- 🥗 **Nutrition Facts**: Full nutritional breakdown with macros and calories
+
+### Nutrition & Health Tracking
+- 🍽️ **Feeding Logs**: Track daily meals with timestamps and portions
+- 📊 **Calorie Tracking**: Monitor daily calorie intake vs goals
+- 🎯 **Calorie Goals**: Set custom calorie targets for weight management
+- 📈 **Nutritional Trends**: Analyze nutrition patterns over time
+- ⚖️ **Weight Tracking**: Record and monitor pet weight changes
+- 🎯 **Weight Goals**: Set target weight with progress tracking
+- 🔄 **Food Comparisons**: Compare multiple foods side-by-side
+- 🧠 **Health Insights**: AI-powered health recommendations
+- 📱 **Daily Summaries**: View nutritional intake summaries by day
+- 🏆 **Multi-Pet Insights**: Track nutrition across all your pets
 
 ### Notifications & Engagement
 - 🔔 **Push Notifications**: Birthday reminders and important updates
@@ -103,92 +120,190 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 
 ### iOS App Architecture (MVVM + Combine)
 ```
-Views/
-├── AuthenticationView.swift        # Login/Register with MFA
-├── OnboardingView.swift           # Guided pet profile creation
-├── MainTabView.swift              # Main tab navigation
-├── ScanView.swift                 # Camera scanning interface
-├── ScanResultView.swift           # Analysis results display
-├── PetsView.swift                 # Pet management dashboard
-├── AddPetView.swift               # Pet creation form
-├── EditPetView.swift              # Pet profile editing
-├── PetSelectionView.swift         # Pet selection for scanning
-├── HistoryView.swift              # Scan history with filtering
-├── FavoritesView.swift            # Saved safe products
-├── ProfileSettingsView.swift      # User settings and preferences
-├── EditProfileView.swift          # Profile editing
-├── MFASetupView.swift             # Multi-factor authentication setup
-├── GDPRView.swift                 # Privacy and data management
-├── SubscriptionView.swift         # Premium subscription management
-├── NotificationSettingsView.swift # Push notification preferences
-├── BirthdayCelebrationView.swift  # Pet birthday celebrations
-├── HelpSupportView.swift          # Help and support
-└── CameraView.swift               # Camera interface component
+Features/
+├── Authentication/
+│   ├── Views/
+│   │   ├── AuthenticationView.swift      # Login/Register with MFA
+│   │   ├── ForgotPasswordView.swift      # Password recovery
+│   │   └── MFASetupView.swift            # Multi-factor authentication
+│   ├── Services/
+│   │   ├── AuthService.swift             # Authentication logic
+│   │   ├── CachedAuthService.swift       # Cached auth state
+│   │   ├── MFAService.swift              # MFA implementation
+│   │   └── KeychainHelper.swift          # Secure token storage
+│   └── Models/
+│       ├── User.swift                    # User data model
+│       └── MFAModels.swift               # MFA-related models
+├── Scanning/
+│   ├── Views/
+│   │   ├── ScanView.swift                # Main scanning interface
+│   │   ├── ModernCameraView.swift        # Camera implementation
+│   │   ├── CameraControlsView.swift      # Camera UI controls
+│   │   ├── ScanResultView.swift          # Analysis results
+│   │   ├── ScanOverlayView.swift         # Camera overlay UI
+│   │   └── ImagePickerView.swift         # Photo library picker
+│   ├── Services/
+│   │   ├── ScanService.swift             # Scan processing
+│   │   ├── OCRService.swift              # Text extraction
+│   │   ├── BarcodeService.swift          # Barcode scanning
+│   │   ├── HybridScanService.swift       # Combined OCR + barcode
+│   │   └── CameraPermissionService.swift # Camera permissions
+│   └── Models/
+│       ├── Scan.swift                    # Scan data model
+│       └── Ingredient.swift              # Ingredient model
+├── Nutrition/
+│   ├── Views/
+│   │   ├── NutritionDashboardView.swift  # Main nutrition view
+│   │   ├── AdvancedNutritionView.swift   # Advanced analytics
+│   │   ├── FeedingLogView.swift          # Feeding history
+│   │   ├── CalorieGoalsView.swift        # Calorie goal management
+│   │   ├── WeightManagementView.swift    # Weight tracking
+│   │   ├── NutritionalTrendsView.swift   # Trends and patterns
+│   │   ├── FoodComparisonView.swift      # Compare foods
+│   │   └── FoodSelectionView.swift       # Food picker
+│   ├── Services/
+│   │   ├── NutritionService.swift        # Nutrition API calls
+│   │   ├── FoodService.swift             # Food database access
+│   │   ├── FeedingLogService.swift       # Feeding logs
+│   │   ├── CalorieGoalsService.swift     # Calorie goals
+│   │   ├── WeightTrackingService.swift   # Weight tracking
+│   │   ├── FoodComparisonService.swift   # Food comparison
+│   │   └── NutritionalTrendsService.swift # Trend analysis
+│   ├── ViewModels/
+│   │   └── NutritionActivityViewModel.swift # Nutrition state
+│   └── Models/
+│       └── NutritionModels.swift         # Nutrition data models
+├── Pets/
+│   ├── Views/
+│   │   ├── PetsView.swift                # Pet list
+│   │   ├── AddPetView.swift              # Create pet
+│   │   ├── EditPetView.swift             # Edit pet
+│   │   ├── PetSelectionView.swift        # Pet picker
+│   │   └── PetImagePickerView.swift      # Pet photo picker
+│   ├── Services/
+│   │   ├── PetService.swift              # Pet API calls
+│   │   └── CachedPetService.swift        # Cached pet data
+│   └── Models/
+│       └── Pet.swift                     # Pet data model
+├── Profile/
+│   ├── Views/
+│   │   ├── ProfileSettingsView.swift     # User settings
+│   │   ├── EditProfileView.swift         # Profile editing
+│   │   └── BirthdayCelebrationView.swift # Birthday UI
+│   └── Services/
+│       └── StorageService.swift          # Image storage
+├── Notifications/
+│   ├── Views/
+│   │   ├── NotificationSettingsView.swift # Notification prefs
+│   │   └── NotificationTestView.swift    # Testing tools
+│   └── Services/
+│       ├── NotificationManager.swift     # Notification scheduling
+│       ├── NotificationService.swift     # Notification API
+│       ├── PushNotificationService.swift # APNs integration
+│       └── NotificationSettingsManager.swift # Settings persistence
+├── History/
+│   └── Views/
+│       └── HistoryView.swift             # Scan history
+├── Onboarding/
+│   └── Views/
+│       └── OnboardingView.swift          # First-time user flow
+├── Settings/
+│   └── Services/
+│       └── WeightUnitPreferenceService.swift # Unit preferences
+├── Subscription/
+│   └── Views/
+│       └── SubscriptionView.swift        # Premium features
+└── Help/
+    └── Views/
+        └── HelpSupportView.swift         # Support resources
 
-Models/
-├── Pet.swift                      # Pet data model with birthday tracking
-├── User.swift                     # User data model with onboarding
-├── Scan.swift                     # Scan data model
-├── Ingredient.swift               # Ingredient analysis model
-├── GDPRModels.swift               # GDPR compliance models
-├── MFAModels.swift                # MFA authentication models
-└── MonitoringModels.swift         # Analytics and monitoring
-
-Services/
-├── APIService.swift               # Backend communication
-├── AuthService.swift              # Authentication with MFA
-├── PetService.swift               # Pet management operations
-├── ScanService.swift              # Scan processing and analysis
-├── OCRService.swift               # Text extraction from images
-├── CachedScanService.swift        # Offline scan caching
-├── PushNotificationService.swift  # APNs integration
-├── NotificationManager.swift      # Notification scheduling
-├── NotificationSettingsManager.swift # Notification preferences
-├── CacheManager.swift             # Data caching and persistence
-├── GDPRService.swift              # Data export/deletion
-├── MFAService.swift               # Multi-factor authentication
-├── MonitoringService.swift        # Analytics and performance
-├── CameraPermissionService.swift  # Camera access management
-├── KeychainHelper.swift           # Secure data storage
-└── URLHandler.swift               # Deep linking and URL handling
-
-Utils/
-├── ModernDesignSystem.swift       # Trust & Nature design system
-├── AnalyticsManager.swift         # User behavior tracking
-├── SecurityManager.swift          # Security utilities
-├── SecureDataManager.swift        # Encrypted data management
-├── CertificatePinning.swift       # SSL certificate pinning
-├── HapticFeedback.swift           # Tactile feedback
-├── InputValidator.swift           # Form validation
-├── LocalizationHelper.swift       # Internationalization
-└── PerformanceOptimizer.swift     # Performance monitoring
+Shared/
+├── Models/
+│   ├── Pet.swift                      # Pet data model with birthday tracking
+│   ├── User.swift                     # User data model with onboarding
+│   ├── Scan.swift                     # Scan data model
+│   └── Ingredient.swift               # Ingredient analysis model
+├── Services/
+│   ├── APIService.swift               # Backend communication
+│   ├── CacheManager.swift             # Data caching and persistence
+│   ├── GDPRService.swift              # Data export/deletion
+│   ├── MonitoringService.swift        # Analytics and performance
+│   ├── ImageProcessingService.swift   # Image optimization
+│   ├── NetworkMonitor.swift           # Network connectivity
+│   ├── SupabaseService.swift          # Supabase integration
+│   └── URLHandler.swift               # Deep linking and URL handling
+├── Utils/
+│   ├── ModernDesignSystem.swift       # Trust & Nature design system
+│   ├── AnalyticsManager.swift         # User behavior tracking
+│   ├── SecurityManager.swift          # Security utilities
+│   ├── SecureDataManager.swift        # Encrypted data management
+│   ├── CertificatePinning.swift       # SSL certificate pinning
+│   ├── HapticFeedback.swift           # Tactile feedback
+│   ├── InputValidator.swift           # Form validation
+│   └── LocalizationHelper.swift       # Internationalization
+└── Views/
+    ├── CommonComponents.swift         # Reusable UI components
+    ├── LoadingView.swift              # Loading states
+    ├── EmptyStateView.swift           # Empty state UI
+    ├── ErrorView.swift                # Error displays
+    ├── ConfirmationDialog.swift       # Confirmation modals
+    └── ToastView.swift                # Toast notifications
 ```
 
 ### Backend Architecture
 ```
 app/
 ├── core/
-│   └── config.py              # Configuration and settings management
+│   ├── config.py              # Configuration and settings management
+│   ├── database/              # Database connection and pooling
+│   ├── security/              # Security utilities and JWT validation
+│   ├── middleware/            # Core middleware implementations
+│   └── validation/            # Request validation schemas
 ├── models/
 │   ├── user.py               # User data models with onboarding support
 │   ├── pet.py                # Pet data models with birthday tracking
 │   ├── ingredient.py         # Ingredient analysis and safety models
-│   └── scan.py               # Scan processing and result models
+│   ├── scan.py               # Scan processing and result models
+│   ├── nutrition.py          # Nutritional data models
+│   ├── advanced_nutrition.py # Weight tracking and analytics models
+│   ├── food_items.py         # Food database models
+│   └── calorie_goals.py      # Calorie goal tracking models
 ├── routers/
 │   ├── auth.py               # Authentication and user management
 │   ├── pets.py               # Pet CRUD operations and management
 │   ├── ingredients.py        # Ingredient analysis and safety data
 │   ├── scans.py              # Scan processing and analysis
+│   ├── nutritional_analysis.py # Nutritional analysis and calculations
+│   ├── food_management.py    # Food database management with barcode
+│   ├── advanced_nutrition.py # Weight tracking, trends, comparisons
 │   ├── mfa.py                # Multi-factor authentication
 │   ├── gdpr.py               # GDPR compliance and data management
 │   ├── monitoring.py         # Health monitoring and metrics
 │   ├── notifications.py      # Push notification management
 │   └── images.py             # Image processing and optimization
+├── api/v1/
+│   ├── nutrition/            # Structured nutrition API
+│   │   ├── analysis/         # Food analysis endpoints
+│   │   ├── feeding/          # Feeding log endpoints
+│   │   ├── goals/            # Calorie goal endpoints
+│   │   ├── requirements/     # Nutritional requirements
+│   │   ├── summaries/        # Daily nutrition summaries
+│   │   └── advanced/         # Advanced analytics and insights
+│   └── advanced_nutrition/   # Advanced nutrition features
+│       ├── weight/           # Weight tracking endpoints
+│       ├── trends/           # Nutritional trends
+│       ├── comparisons/      # Food comparison endpoints
+│       └── analytics/        # Health insights and patterns
 ├── services/
 │   ├── gdpr_service.py       # Data export and deletion services
 │   ├── mfa_service.py        # MFA implementation and management
 │   ├── push_notification_service.py # APNs integration
-│   └── monitoring.py         # Analytics and performance monitoring
+│   ├── monitoring.py         # Analytics and performance monitoring
+│   ├── nutritional_calculator.py # Nutritional calculations
+│   ├── nutritional_trends_service.py # Trend analysis
+│   ├── food_comparison_service.py # Food comparison logic
+│   ├── weight_tracking_service.py # Weight tracking service
+│   └── advanced_analytics_service.py # AI-powered insights
 ├── middleware/
 │   ├── security.py           # Security headers and protection
 │   ├── audit.py              # Comprehensive audit logging
@@ -471,7 +586,7 @@ The server includes comprehensive security features that are automatically enabl
 The security middleware is applied in the following order (order matters):
 
 1. **SecurityHeadersMiddleware** - Adds security headers
-2. **AuditLogMiddleware** - Logs security events
+2. **AuditLogMiddleware** - Logs security events (disabled in production to avoid Railway rate limits)
 3. **RateLimitMiddleware** - Enforces rate limits
 4. **RequestSizeMiddleware** - Validates request sizes
 5. **APIVersionMiddleware** - Handles API versioning
@@ -479,8 +594,40 @@ The security middleware is applied in the following order (order matters):
 7. **CORSMiddleware** - Handles CORS
 8. **TrustedHostMiddleware** - Validates trusted hosts
 
+### 6. Logging Configuration
+
+The server uses a centralized structured logging system:
+
+#### Logging Features
+- **Structured Logging**: JSON-formatted logs with timestamps and levels
+- **Request/Response Logging**: Automatic logging of API requests
+- **Error Tracking**: Comprehensive error logging with stack traces
+- **Security Event Logging**: Audit trail for security-related events
+- **Performance Monitoring**: Request duration tracking
+
+#### Log Levels
+Configure via `LOG_LEVEL` environment variable:
+- `DEBUG`: Detailed debugging information
+- `INFO`: General informational messages (default)
+- `WARNING`: Warning messages
+- `ERROR`: Error messages
+- `CRITICAL`: Critical failure messages
+
+#### Log Files
+- **Application Logs**: Console output (stdout/stderr)
+- **Audit Logs**: `logs/audit.log` (when audit middleware enabled)
+- **Rotation**: Automatic log rotation for production
+
+#### Configuration
+```env
+# Logging Configuration
+LOG_LEVEL=INFO
+VERBOSE_LOGGING=false
+ENABLE_AUDIT_LOGGING=true
+```
+
 #### Security Headers
-The server automatically adds the following security headers:
+The server automatically adds security headers:
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `X-XSS-Protection: 1; mode=block`
@@ -505,14 +652,22 @@ The server automatically adds the following security headers:
 
 2. **Update API Configuration**:
    - Open `Info.plist`
-   - Set `API_BASE_URL` to your server URL:
-     - Development: `http://localhost:8000/api/v1`
-     - Production: `https://snifftest-api-production.up.railway.app/api/v1`
+   - Current settings:
+     - **Bundle ID**: `com.snifftest.app`
+     - **Version**: `5.1` (Build 6)
+     - **API_BASE_URL**: `https://snifftest-api-production.up.railway.app/api/v1`
+     - **Supabase URL**: `https://oxjywpearruxtnysoyuf.supabase.co`
+   - For local development, change `API_BASE_URL` to `http://localhost:8000/api/v1`
 
 3. **Configure Signing**:
    - Select your development team
-   - Update bundle identifier
-   - Configure capabilities (Camera, Keychain)
+   - Bundle identifier: `com.snifftest.app`
+   - Configure capabilities:
+     - Camera access
+     - Photo library access
+     - Push notifications
+     - Keychain sharing
+     - Background modes (fetch, processing)
 
 ### 2. Build and Run
 
@@ -549,6 +704,9 @@ Complete API reference is available in [API_DOCS.md](API_DOCS.md).
 - **Authentication**: JWT-based with MFA support
 - **Pet Management**: CRUD operations for pet profiles
 - **Scan Processing**: Ingredient analysis and safety assessment
+- **Nutrition API**: Comprehensive nutrition tracking and analysis
+- **Food Management**: Searchable food database with barcode lookup
+- **Advanced Nutrition**: Weight tracking, trends, and food comparisons
 - **Push Notifications**: Birthday reminders and updates
 - **GDPR Compliance**: Data export and deletion
 - **Health Monitoring**: System status and metrics
@@ -576,6 +734,14 @@ Built on **Supabase (PostgreSQL)** with Row Level Security (RLS) for data protec
 | `scans` | Scan history | OCR text, analysis results, status tracking |
 | `ingredients` | Safety database | Species compatibility, allergen flags |
 | `favorites` | Saved products | User-curated safe products |
+| `food_items` | Food database | Barcode, nutrition facts, ingredients |
+| `food_analyses` | Nutrition analysis | Calorie/macro tracking per food |
+| `feeding_records` | Feeding logs | Meal tracking with timestamps |
+| `calorie_goals` | Calorie targets | Goal tracking with start/end dates |
+| `nutritional_requirements` | Pet requirements | Daily nutritional needs per pet |
+| `pet_weight_records` | Weight history | Weight measurements over time |
+| `pet_weight_goals` | Weight targets | Weight loss/gain goals |
+| `food_comparisons` | Product comparisons | Side-by-side food analysis |
 
 ### Key Features
 - **Row Level Security**: Users can only access their own data
@@ -691,6 +857,29 @@ SniffTest/
 
 ---
 
+## Version History
+
+### v5.1 (Current - Build 6)
+- Enhanced nutrition tracking with feeding logs
+- Calorie goals and weight management
+- Food database with barcode scanning
+- Advanced nutritional analytics and insights
+- Food comparison feature
+- Health trend analysis
+- Multi-pet nutrition insights
+- Improved camera and barcode scanning
+- Bug fixes and performance improvements
+
+### v5.0
+- Major nutrition feature release
+- Comprehensive food database integration
+- Advanced analytics dashboard
+- Weight tracking system
+
+---
+
 **Built with ❤️ for pet owners everywhere**
 
-*Last updated: October 2025*
+*Last updated: January 2025*
+*iOS App Version: 5.1 (Build 6)*
+*API Version: 1.0.0*

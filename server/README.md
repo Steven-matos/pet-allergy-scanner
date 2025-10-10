@@ -1,27 +1,58 @@
 # SniffTest Backend API 🐾
 
-FastAPI backend for the SniffTest pet food allergy scanner iOS app.
+FastAPI backend for the SniffTest pet food allergy scanner iOS app. Production-ready API with advanced nutrition analytics, food comparison, and comprehensive pet health tracking.
+
+## 🚀 Quick Reference
+
+```bash
+# Development
+python start.py                           # Start dev server
+python scripts/test_config.py            # Test configuration
+pytest                                    # Run tests
+
+# Deployment
+railway login                             # Login to Railway
+railway up                                # Deploy
+railway logs                              # View logs
+
+# Documentation
+open http://localhost:8000/docs          # API docs (local)
+open http://localhost:8000/redoc         # ReDoc (local)
+```
 
 ## 🏗️ Architecture
 
 - **Framework**: FastAPI (Python 3.11+)
 - **Database**: PostgreSQL via Supabase
-- **Authentication**: Supabase Auth + JWT
+- **Authentication**: Supabase Auth + JWT with MFA
 - **Push Notifications**: Apple Push Notification service (APNs)
 - **Storage**: Supabase Storage for images
+- **Deployment**: Railway with automated startup checks
 
 ## 📋 Features
 
+### Core Features
 - ✅ User authentication with MFA support
-- ✅ Pet profile management
-- ✅ Ingredient scanning and analysis
-- ✅ Nutritional analysis and tracking
-- ✅ Food item management with calorie tracking
-- ✅ Push notifications for iOS
+- ✅ Pet profile management with species-specific validation
+- ✅ Ingredient scanning and OCR analysis
+- ✅ Push notifications for iOS devices
+- ✅ Image optimization and storage
 - ✅ GDPR compliance (data export/deletion)
+
+### Nutrition & Analytics
+- ✅ Advanced nutritional analysis with species-specific standards
+- ✅ Food comparison engine
+- ✅ Calorie tracking and daily goals
+- ✅ Weight tracking with trend analysis
+- ✅ Nutritional trend monitoring
+- ✅ Ingredient allergen detection
+
+### Security & Compliance
 - ✅ Rate limiting and security middleware
-- ✅ Audit logging
-- ✅ Comprehensive API documentation
+- ✅ Audit logging with rotation
+- ✅ Request validation and sanitization
+- ✅ CORS and security headers
+- ✅ Comprehensive error handling
 
 ## 🚀 Quick Start (Local Development)
 
@@ -98,38 +129,89 @@ See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for comprehensive deploymen
 
 ```
 server/
-├── app/                   # Main application code
-│   ├── core/              # Configuration and settings
-│   ├── middleware/        # Security, rate limiting, audit logging
-│   ├── models/            # Pydantic models and schemas
-│   ├── routers/           # API endpoints
-│   ├── services/          # Business logic
-│   └── utils/             # Helper functions
-├── database_schemas/      # Database schema files
-├── importing/             # Data import scripts
-├── keys/                  # APNs certificates (gitignored)
-│   └── AuthKey_*.p8       # Apple Push Notification keys
-├── logs/                  # Application logs (gitignored)
-│   └── audit.log          # Security audit log
-├── migrations/            # Database migrations
-├── scripts/               # Utility and deployment scripts
-│   ├── railway_start.py   # Railway deployment startup
-│   ├── test_config.py     # Configuration testing
-│   ├── check-deployment-ready.py  # Pre-deployment checks
-│   └── generate-railway-vars.py   # Railway env generator
-├── standardizor/          # Data standardization utilities
-├── tests/                 # Unit and integration tests
-├── main.py                # FastAPI application entry point
-├── start.py               # Development server script
-├── requirements.txt       # Python dependencies
-├── requirements-lock.txt  # Locked dependencies
-├── Procfile               # Railway/Heroku process file
-├── railway.toml           # Railway configuration
-├── railway.json           # Railway metadata
-├── .env                   # Environment variables (gitignored)
-├── env.example            # Environment variables template
-├── .gitignore             # Git ignore patterns
-└── .railwayignore         # Railway ignore patterns
+├── app/                           # Main application code
+│   ├── api/v1/                    # API version 1 endpoints
+│   ├── core/                      # Configuration and core settings
+│   │   ├── config.py              # Environment configuration
+│   │   ├── database/              # Database connection pooling
+│   │   ├── middleware/            # Core middleware components
+│   │   ├── security/              # Auth, JWT, password hashing
+│   │   └── validation/            # Request validation utilities
+│   ├── middleware/                # Request/response middleware
+│   │   ├── audit.py               # Audit logging
+│   │   ├── request_limits.py     # Rate limiting
+│   │   └── security.py            # Security headers
+│   ├── models/                    # SQLAlchemy ORM models
+│   │   ├── user.py                # User and auth models
+│   │   ├── pet.py                 # Pet profiles
+│   │   ├── scan.py                # Ingredient scans
+│   │   ├── ingredient.py          # Ingredient database
+│   │   ├── nutrition.py           # Nutritional data
+│   │   ├── advanced_nutrition.py  # Advanced analytics
+│   │   ├── food_items.py          # Food logging
+│   │   └── calorie_goals.py       # Calorie tracking
+│   ├── routers/                   # API route handlers
+│   │   ├── auth.py                # Authentication
+│   │   ├── mfa.py                 # Multi-factor auth
+│   │   ├── pets.py                # Pet management
+│   │   ├── scans.py               # Scanning endpoints
+│   │   ├── ingredients.py         # Ingredient lookup
+│   │   ├── nutritional_analysis.py # Nutrition analysis
+│   │   ├── advanced_nutrition.py  # Advanced analytics
+│   │   ├── food_management.py     # Food logging
+│   │   ├── notifications.py       # Push notifications
+│   │   ├── gdpr.py                # GDPR compliance
+│   │   ├── images.py              # Image upload/processing
+│   │   └── monitoring.py          # Health checks & metrics
+│   ├── services/                  # Business logic layer
+│   │   ├── analytics/             # Analytics services
+│   │   ├── advanced_analytics_service.py
+│   │   ├── food_comparison_service.py
+│   │   ├── nutritional_calculator.py
+│   │   ├── nutritional_trends_service.py
+│   │   ├── weight_tracking_service.py
+│   │   ├── gdpr_service.py
+│   │   ├── image_optimizer.py
+│   │   ├── mfa_service.py
+│   │   ├── push_notification_service.py
+│   │   ├── storage_service.py
+│   │   └── monitoring.py
+│   ├── shared/                    # Shared utilities
+│   │   ├── repositories/          # Data access layer
+│   │   └── services/              # Shared services
+│   └── utils/                     # Helper functions
+│       ├── error_handling.py      # Error handlers
+│       └── logging_config.py      # Logging setup
+├── database_schemas/              # SQL schema files
+│   ├── 01_complete_database_schema.sql
+│   └── 02_storage_setup.sql
+├── importing/                     # Data import utilities
+│   └── FULL_IMPORT_GUIDE.md      # Import documentation
+├── keys/                          # APNs certificates (gitignored)
+│   └── AuthKey_*.p8              # Apple Push keys
+├── logs/                          # Application logs (gitignored)
+│   └── audit.log                 # Security audit log
+├── scripts/                       # Utility scripts
+│   ├── railway_start.py          # Railway startup
+│   ├── test_config.py            # Config testing
+│   ├── check-deployment-ready.py # Deployment checks
+│   └── generate-railway-vars.py  # Env generator
+├── standardizor/                  # Data standardization
+│   └── update_nutritional_info.py # Nutrition updates
+├── tests/                         # Test suite
+│   ├── database/                 # Database tests
+│   ├── integration/              # Integration tests
+│   ├── notifications/            # APNs tests
+│   ├── nutrition/                # Nutrition tests
+│   ├── security/                 # Security tests
+│   └── unit/                     # Unit tests
+├── main.py                        # FastAPI app entry
+├── start.py                       # Development server
+├── requirements.txt               # Dependencies
+├── requirements-lock.txt          # Locked versions
+├── Procfile                       # Railway process
+├── railway.toml                   # Railway config
+└── env.example                    # Environment template
 ```
 
 ## 🔐 Environment Variables
@@ -161,15 +243,23 @@ Required variables (see `env.example` for complete list):
 
 ## 🧪 Testing
 
+Run the comprehensive test suite:
+
 ```bash
-# Run all tests
+# All tests
 pytest
 
-# Run with coverage
-pytest --cov=app tests/
+# With coverage
+pytest --cov=app --cov-report=html tests/
 
-# Run specific test file
-pytest tests/test_auth.py
+# Specific test categories
+pytest tests/nutrition/           # Nutrition tests
+pytest tests/security/            # Security audit
+pytest tests/notifications/       # APNs tests
+pytest tests/database/            # Database policy tests
+
+# Run test utility
+python tests/run_tests.py
 ```
 
 ## 🛠️ Utility Scripts
@@ -202,38 +292,74 @@ python scripts/railway_start.py
 
 ## 📊 API Endpoints
 
-### Authentication
-- `POST /api/v1/auth/signup` - Create new user
+### Authentication & Security
+- `POST /api/v1/auth/signup` - Create new user account
 - `POST /api/v1/auth/login` - Login user
-- `POST /api/v1/auth/refresh` - Refresh token
-- `POST /api/v1/mfa/setup` - Setup MFA
+- `POST /api/v1/auth/refresh` - Refresh access token
+- `POST /api/v1/auth/logout` - Logout user
+- `POST /api/v1/mfa/setup` - Setup multi-factor authentication
 - `POST /api/v1/mfa/verify` - Verify MFA code
+- `POST /api/v1/mfa/disable` - Disable MFA
 
-### Pets
+### Pet Management
 - `GET /api/v1/pets` - List user's pets
 - `POST /api/v1/pets` - Create pet profile
 - `GET /api/v1/pets/{pet_id}` - Get pet details
-- `PUT /api/v1/pets/{pet_id}` - Update pet
+- `PUT /api/v1/pets/{pet_id}` - Update pet profile
 - `DELETE /api/v1/pets/{pet_id}` - Delete pet
+- `GET /api/v1/pets/{pet_id}/allergies` - Get pet allergies
 
-### Scanning
+### Ingredient Scanning
 - `POST /api/v1/scans` - Create new ingredient scan
 - `GET /api/v1/scans` - List user's scans
 - `GET /api/v1/scans/{scan_id}` - Get scan details
+- `POST /api/v1/scans/{scan_id}/analyze` - Analyze scanned ingredients
+- `GET /api/v1/ingredients/search` - Search ingredient database
 
-### Nutrition
-- `POST /api/v1/nutrition/analyze` - Analyze ingredients
-- `GET /api/v1/nutrition/recommendations` - Get recommendations
+### Nutritional Analysis
+- `POST /api/v1/nutrition/analyze` - Analyze ingredient nutrition
+- `GET /api/v1/nutrition/recommendations` - Get pet-specific recommendations
+- `GET /api/v1/nutrition/standards/{species}` - Get nutritional standards
+- `POST /api/v1/nutrition/compare` - Compare multiple products
+
+### Advanced Nutrition & Analytics
+- `GET /api/v1/advanced-nutrition/trends` - Get nutritional trends
+- `GET /api/v1/advanced-nutrition/insights` - Get nutritional insights
+- `POST /api/v1/advanced-nutrition/analysis` - Advanced nutritional analysis
+- `POST /api/v1/food-comparison` - Compare food products
+- `GET /api/v1/weight-tracking` - Get weight history
+- `POST /api/v1/weight-tracking` - Log weight entry
+- `GET /api/v1/weight-tracking/trends` - Get weight trends
+
+### Food & Calorie Management
 - `POST /api/v1/food-items` - Log food item
+- `GET /api/v1/food-items` - List logged food items
+- `PUT /api/v1/food-items/{item_id}` - Update food item
+- `DELETE /api/v1/food-items/{item_id}` - Delete food item
 - `GET /api/v1/calorie-goals` - Get calorie tracking goals
+- `POST /api/v1/calorie-goals` - Set calorie goals
+- `GET /api/v1/calorie-goals/progress` - Get daily progress
 
-### Notifications
-- `POST /api/v1/notifications/register` - Register device for push
-- `POST /api/v1/notifications/send` - Send notification (admin)
+### Push Notifications
+- `POST /api/v1/notifications/register` - Register device for push notifications
+- `PUT /api/v1/notifications/preferences` - Update notification preferences
+- `POST /api/v1/notifications/test` - Send test notification
+- `DELETE /api/v1/notifications/unregister` - Unregister device
 
-### GDPR
-- `GET /api/v1/gdpr/export` - Export user data
-- `DELETE /api/v1/gdpr/delete-account` - Delete account
+### Image Management
+- `POST /api/v1/images/upload` - Upload and optimize image
+- `GET /api/v1/images/{image_id}` - Get image
+- `DELETE /api/v1/images/{image_id}` - Delete image
+
+### GDPR & Privacy
+- `GET /api/v1/gdpr/export` - Export all user data (JSON)
+- `DELETE /api/v1/gdpr/delete-account` - Permanently delete account
+- `GET /api/v1/gdpr/data-summary` - Get data summary
+
+### Monitoring & Health
+- `GET /health` - Basic health check
+- `GET /api/v1/monitoring/metrics` - System metrics
+- `GET /api/v1/monitoring/status` - Detailed status check
 
 ## 🔍 Monitoring
 
@@ -265,48 +391,131 @@ railway logs
 - ✅ JWT token validation
 - ✅ Input validation (Pydantic)
 
+## 📥 Data Import
+
+The server includes utilities for importing pet food data:
+
+```bash
+cd importing/
+
+# Count products in JSONL file
+python count_products.py
+
+# Import data (skips duplicates)
+python import_no_duplicates.py
+
+# Analyze skipped products
+python analyze_skipped_products.py
+```
+
+See `importing/FULL_IMPORT_GUIDE.md` for detailed instructions.
+
+### Nutritional Data Standardization
+```bash
+cd standardizor/
+python update_nutritional_info.py
+```
+
 ## 🐛 Troubleshooting
 
 ### Database Connection Issues
-- Verify `DATABASE_URL` is correct
-- Check Supabase connection pooler settings
-- Ensure connection pool size is appropriate
+- Verify `DATABASE_URL` format: `postgresql://user:pass@host:port/db`
+- Check Supabase connection pooler settings (use transaction mode)
+- Ensure connection pool size: max 20 connections
+- Test connection: `python scripts/test_config.py`
 
 ### APNs Certificate Issues
-- Verify `.p8` file format
-- Check `APNS_KEY_ID` matches certificate
-- Ensure proper newlines in `APNS_PRIVATE_KEY`
+- Verify `.p8` file is in `keys/` directory
+- Check `APNS_KEY_ID` matches your Apple Developer certificate
+- Ensure `APNS_PRIVATE_KEY` has proper newlines (`\n`)
+- Test notifications: `python tests/notifications/simple_apn_test.py`
+- Use sandbox URL for development: `https://api.sandbox.push.apple.com`
 
 ### CORS Errors
 - Update `ALLOWED_ORIGINS_STR` with your frontend URL
 - Include protocol (http:// or https://)
 - Don't include trailing slashes
+- Example: `ALLOWED_ORIGINS_STR="https://app.example.com,http://localhost:3000"`
 
-### 500 Errors
-- Check Railway logs: `railway logs`
-- Verify all environment variables are set
-- Check database migrations are applied
+### Rate Limiting Issues
+- Default: 60 requests/minute, 5/minute for auth endpoints
+- Adjust in `app/middleware/request_limits.py`
+- Check `X-RateLimit-*` headers in responses
+
+### Image Upload Failures
+- Check Supabase Storage bucket permissions
+- Verify max file size (default: 10MB)
+- Ensure `SUPABASE_SERVICE_ROLE_KEY` is set
+- Check image MIME types (jpg, png, webp supported)
+
+### 500 Internal Server Errors
+- Check Railway logs: `railway logs --tail 100`
+- Verify all required environment variables are set
+- Check database schema is up to date
+- Review `logs/audit.log` for security events
+- Run deployment checks: `python scripts/check-deployment-ready.py`
+
+### Performance Issues
+- Monitor Railway dashboard for CPU/Memory usage
+- Check database query performance in Supabase
+- Review rate limiting settings
+- Consider connection pooling adjustments
+- Enable query logging for slow queries
+
+### Testing Issues
+- Install test dependencies: `pip install pytest pytest-asyncio`
+- Run specific test: `pytest tests/path/to/test.py -v`
+- Check test database connection
+- Review `tests/README.md` for test-specific setup
+
+## 📊 Analytics & Insights
+
+The API provides comprehensive analytics for pet nutrition:
+
+### Nutritional Trends
+- Track nutrition intake over time (daily, weekly, monthly)
+- Identify nutritional gaps and excesses
+- Compare against species-specific standards
+- Generate actionable recommendations
+
+### Weight Tracking
+- Log and monitor pet weight changes
+- Calculate trends and growth rates
+- Alert on concerning weight changes
+- Visualize weight history
+
+### Food Comparison
+- Compare multiple food products side-by-side
+- Analyze nutritional differences
+- Identify best options for specific dietary needs
+- Calculate cost-per-nutrient ratios
+
+### Advanced Analytics
+- Ingredient frequency analysis
+- Allergen exposure tracking
+- Nutritional diversity scoring
+- Custom nutrition reports
 
 ## 📚 Documentation
 
-- [API Documentation](./API_DOCS.md) - Detailed API reference
-- [Railway Deployment](./RAILWAY_DEPLOYMENT.md) - Deployment guide
+- [`API_DOCS.md`](../API_DOCS.md) - Comprehensive API reference
+- [`importing/FULL_IMPORT_GUIDE.md`](./importing/FULL_IMPORT_GUIDE.md) - Data import guide
+- [`standardizor/NUTRITIONAL_INFO_API_REFERENCE.md`](./standardizor/NUTRITIONAL_INFO_API_REFERENCE.md) - Nutrition standards
 - [FastAPI Docs](https://fastapi.tiangolo.com/) - Framework documentation
+- [Supabase Docs](https://supabase.com/docs) - Database & Auth
 
 ## 🤝 Contributing
 
-1. Create feature branch
-2. Make changes
-3. Run tests: `pytest`
-4. Submit pull request
+1. Create feature branch: `git checkout -b feature/your-feature`
+2. Follow SOLID, DRY, and KISS principles
+3. Keep files under 500 lines
+4. Add docstrings to all functions
+5. Run tests: `pytest`
+6. Submit pull request
 
 ## 📄 License
 
 Proprietary - All rights reserved
-
-## 📞 Support
-
-For issues or questions, contact the development team.
 
 ---
 

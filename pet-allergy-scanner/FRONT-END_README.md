@@ -22,7 +22,8 @@ SniffTest/                           # iOS App Root
 │   │   ├── Configuration.swift     # App-wide configuration
 │   │   └── CacheConfiguration.swift # Cache settings & policies
 │   ├── Performance/                # Performance optimization
-│   │   └── PerformanceOptimizer.swift # Memory & performance utilities
+│   │   ├── PerformanceOptimizer.swift # Memory & performance utilities
+│   │   └── GraphicsOptimizer.swift # Graphics rendering optimization
 │   └── Security/                   # Security infrastructure
 │       ├── SecurityManager.swift   # Security policy enforcement
 │       ├── SecureDataManager.swift # Secure data storage
@@ -64,22 +65,46 @@ SniffTest/                           # iOS App Root
 │   │   │   ├── ScanService.swift   # Core scanning operations
 │   │   │   ├── CachedScanService.swift # Cached scan operations
 │   │   │   ├── OCRService.swift    # Optical character recognition
-│   │   │   └── CameraPermissionService.swift # Camera access
+│   │   │   ├── CameraPermissionService.swift # Camera access
+│   │   │   ├── BarcodeService.swift # Barcode scanning
+│   │   │   └── HybridScanService.swift # Hybrid OCR/Barcode scanning
 │   │   └── Views/                  # Scanning UI
 │   │       ├── ScanView.swift      # Main scanning interface
 │   │       ├── CameraView.swift    # Camera capture
+│   │       ├── ModernCameraView.swift # Modern camera UI
+│   │       ├── CameraControlsView.swift # Camera controls
 │   │       ├── ScanResultView.swift # Scan results display
+│   │       ├── ScanOverlayView.swift # Scanning overlay UI
+│   │       ├── ScanComponents.swift # Reusable scan components
+│   │       ├── ScanAccessibility.swift # Accessibility helpers
 │   │       └── ImagePickerView.swift # Image selection
 │   │
 │   ├── Nutrition/                  # Nutritional analysis feature
 │   │   ├── Models/                 # Nutrition data models
 │   │   │   └── NutritionModels.swift # Nutrition & dietary data
 │   │   ├── Services/               # Nutrition business logic
-│   │   │   └── NutritionService.swift # Nutrition API integration
+│   │   │   ├── NutritionService.swift # Core nutrition API integration
+│   │   │   ├── CachedNutritionService.swift # Cached nutrition operations
+│   │   │   ├── WeightTrackingService.swift # Pet weight management
+│   │   │   ├── CachedWeightTrackingService.swift # Cached weight tracking
+│   │   │   ├── FoodService.swift # Food database operations
+│   │   │   ├── CachedFoodService.swift # Cached food operations
+│   │   │   ├── CalorieGoalsService.swift # Calorie goal management
+│   │   │   ├── FeedingLogService.swift # Feeding log tracking
+│   │   │   ├── FoodComparisonService.swift # Food comparison analytics
+│   │   │   ├── NutritionalTrendsService.swift # Nutrition trends analysis
+│   │   │   └── NutritionPetSelectionService.swift # Pet selection for nutrition
 │   │   ├── ViewModels/             # Nutrition view models
 │   │   │   └── NutritionActivityViewModel.swift # Activity tracking
 │   │   └── Views/                  # Nutrition UI
-│   │       └── NutritionDashboardView.swift # Nutrition overview
+│   │       ├── NutritionDashboardView.swift # Nutrition overview
+│   │       ├── AdvancedNutritionView.swift # Advanced nutrition analytics
+│   │       ├── WeightManagementView.swift # Weight tracking interface
+│   │       ├── CalorieGoalsView.swift # Calorie goal management
+│   │       ├── FeedingLogView.swift # Feeding log interface
+│   │       ├── FoodComparisonView.swift # Food comparison UI
+│   │       ├── FoodSelectionView.swift # Food selection interface
+│   │       └── NutritionalTrendsView.swift # Trends visualization
 │   │
 │   ├── Notifications/              # Push & local notifications
 │   │   ├── Services/               # Notification business logic
@@ -116,8 +141,9 @@ SniffTest/                           # iOS App Root
 │   │   └── Views/
 │   │       └── OnboardingView.swift # User onboarding flow
 │   │
-│   └── Favorites/                  # Favorites management
-│       └── Views/                  # (Empty - to be implemented)
+│   └── Settings/                   # App settings management
+│       └── Services/
+│           └── WeightUnitPreferenceService.swift # Weight unit preferences
 │
 ├── Shared/                         # Shared Components (Cross-feature)
 │   ├── Models/                     # Shared data models
@@ -141,12 +167,15 @@ SniffTest/                           # iOS App Root
 │   │   ├── HapticFeedback.swift    # Haptic feedback utilities
 │   │   ├── ImageLoader.swift       # Image loading utilities
 │   │   ├── ImageOptimizer.swift    # Image optimization
-│   │   └── SettingsManager.swift   # App settings management
+│   │   ├── SettingsManager.swift   # App settings management
+│   │   └── BundleExtension.swift   # Bundle utility extensions
 │   └── Views/                      # Shared UI components
 │       ├── MainTabView.swift       # Main tab navigation
 │       ├── EmptyPetsView.swift     # Empty state components
 │       ├── GDPRView.swift          # GDPR compliance UI
-│       └── APNTestView.swift       # Push notification testing
+│       ├── APNTestView.swift       # Push notification testing
+│       ├── LegalViews.swift        # Legal & terms views
+│       └── NutritionComponents.swift # Reusable nutrition components
 │
 ├── Assets.xcassets/                # App assets & resources
 │   ├── AppIcon.appiconset/         # App icons
@@ -294,17 +323,23 @@ Cross-feature components and utilities:
 
 ## File Organization Summary
 
-**Total: 86 files reorganized**
+**Total: 107 Swift files**
 
-### Key Movements:
-- **Authentication**: 9 files (models, services, views)
-- **Pets**: 8 files (models, services, views)
-- **Scanning**: 8 files (models, services, views)
-- **Nutrition**: 4 files (models, services, view models, views)
-- **Notifications**: 7 files (services, views)
-- **Profile**: 4 files (services, views)
-- **Core**: 7 files (security, configuration, analytics, performance)
-- **Shared**: 19 files (models, services, utilities, views)
+### Feature Breakdown:
+- **Authentication**: 9 files (2 models, 4 services, 3 views)
+- **Pets**: 8 files (1 model, 2 services, 5 views)
+- **Scanning**: 17 files (2 models, 6 services, 9 views)
+- **Nutrition**: 21 files (1 model, 11 services, 1 view model, 8 views)
+- **Notifications**: 7 files (4 services, 3 views)
+- **Profile**: 4 files (1 service, 3 views)
+- **History**: 1 file (1 view)
+- **Help**: 1 file (1 view)
+- **Subscription**: 1 file (1 view)
+- **Onboarding**: 1 file (1 view)
+- **Settings**: 1 file (1 service)
+- **Core**: 8 files (3 security, 2 configuration, 1 analytics, 2 performance)
+- **Shared**: 22 files (4 models, 8 services, 8 utilities, 6 views)
+- **App**: 2 files (main app, content view)
 - **Tests**: 6 files (unit tests)
 
 ## Benefits of This Structure
@@ -359,7 +394,19 @@ Cross-feature components and utilities:
 
 ---
 
-**Documentation Updated**: January 2025  
+## Documentation Status
+
+**Last Verified**: October 10, 2025  
 **Architecture**: Feature-based MVVM with SOLID principles  
-**Status**: Production-ready structure
+**Status**: ✅ Production-ready - Verified against codebase  
+**Total Files**: 107 Swift files across all features
+
+### Recent Updates (October 10, 2025)
+- ✅ Updated Scanning feature with 6 services and 9 views
+- ✅ Updated Nutrition feature with 11 services and 8 views
+- ✅ Added Settings feature with Services directory
+- ✅ Added missing files to Shared (BundleExtension, LegalViews, NutritionComponents)
+- ✅ Added GraphicsOptimizer to Core/Performance
+- ✅ Updated file count summary to 107 files
+- ✅ All directory structures verified against actual codebase
 

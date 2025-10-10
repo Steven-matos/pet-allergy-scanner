@@ -13,6 +13,9 @@ Complete API reference for the Pet Allergy Scanner backend service.
 - [Pet Management](#pet-management)
 - [Scan Processing](#scan-processing)
 - [Ingredient Analysis](#ingredient-analysis)
+- [Nutrition API](#nutrition-api)
+- [Food Management](#food-management)
+- [Advanced Nutrition](#advanced-nutrition)
 - [Multi-Factor Authentication](#multi-factor-authentication)
 - [Push Notifications](#push-notifications)
 - [GDPR Compliance](#gdpr-compliance)
@@ -454,6 +457,635 @@ Authorization: Bearer <jwt_token>
 
 ---
 
+## Nutrition API
+
+### Analyze Food
+
+Analyze food nutritional content and compatibility with pet.
+
+```http
+POST /api/v1/nutrition/analysis/analyze
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "food_item_id": "uuid-here",
+  "pet_id": "pet-uuid-here",
+  "serving_size_g": 100
+}
+```
+
+**Response:**
+```json
+{
+  "id": "analysis-uuid",
+  "food_item_id": "uuid-here",
+  "pet_id": "pet-uuid-here",
+  "calories": 350,
+  "protein_g": 25.0,
+  "fat_g": 15.0,
+  "carbohydrates_g": 30.0,
+  "fiber_g": 3.5,
+  "analysis_date": "2025-10-10T10:30:00Z",
+  "compatibility_score": 8.5,
+  "warnings": []
+}
+```
+
+### Get Food Analyses
+
+Retrieve food analysis history for a pet.
+
+```http
+GET /api/v1/nutrition/analysis/analyses/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Check Nutrition Compatibility
+
+Check if a food is compatible with pet's nutritional needs.
+
+```http
+POST /api/v1/nutrition/analysis/compatibility
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "food_item_id": "uuid-here",
+  "pet_id": "pet-uuid-here"
+}
+```
+
+### Get Nutritional Requirements
+
+Calculate and retrieve pet's nutritional requirements.
+
+```http
+GET /api/v1/nutrition/requirements/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "pet_id": "pet-uuid-here",
+  "daily_calories": 750,
+  "protein_g": 50.0,
+  "fat_g": 25.0,
+  "carbohydrates_g": 85.0,
+  "fiber_g": 5.0,
+  "calculated_at": "2025-10-10T10:30:00Z"
+}
+```
+
+### Create Nutritional Requirements
+
+Create custom nutritional requirements for a pet.
+
+```http
+POST /api/v1/nutrition/requirements/
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "daily_calories": 800,
+  "protein_g": 55.0,
+  "fat_g": 30.0
+}
+```
+
+### Log Feeding Record
+
+Log a feeding session for nutrition tracking.
+
+```http
+POST /api/v1/nutrition/feeding/
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "food_item_id": "uuid-here",
+  "amount_g": 150,
+  "meal_type": "breakfast",
+  "notes": "Regular morning meal"
+}
+```
+
+### Get Feeding History
+
+Retrieve feeding history for a pet.
+
+```http
+GET /api/v1/nutrition/feeding/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Daily Nutrition Summary
+
+Get aggregated daily nutrition summary for a pet.
+
+```http
+GET /api/v1/nutrition/feeding/daily-summary/{pet_id}?date=2025-10-10
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "pet_id": "pet-uuid-here",
+  "date": "2025-10-10",
+  "total_calories": 720,
+  "total_protein_g": 48.0,
+  "total_fat_g": 24.0,
+  "total_carbs_g": 82.0,
+  "meal_count": 3,
+  "target_calories": 750,
+  "calories_remaining": 30
+}
+```
+
+### Create Calorie Goal
+
+Set calorie goals for a pet.
+
+```http
+POST /api/v1/nutrition/goals/calorie-goals
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "target_calories": 800,
+  "goal_type": "weight_loss",
+  "start_date": "2025-10-10",
+  "end_date": "2025-12-10"
+}
+```
+
+### Get Calorie Goals
+
+Retrieve all calorie goals for user's pets.
+
+```http
+GET /api/v1/nutrition/goals/calorie-goals
+Authorization: Bearer <jwt_token>
+```
+
+### Get Pet's Active Calorie Goal
+
+Get the active calorie goal for a specific pet.
+
+```http
+GET /api/v1/nutrition/goals/calorie-goals/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Multi-Pet Nutrition Insights
+
+Get nutrition insights across multiple pets.
+
+```http
+GET /api/v1/nutrition/summaries/insights/multi-pet
+Authorization: Bearer <jwt_token>
+```
+
+### Advanced Nutrition Analytics
+
+Get comprehensive nutrition analytics.
+
+```http
+GET /api/v1/nutrition/advanced/analytics/overview?pet_id={pet_id}&date_from=2025-09-01&date_to=2025-10-10
+Authorization: Bearer <jwt_token>
+```
+
+### Nutrition Insights
+
+Get detailed nutrition insights for a pet.
+
+```http
+GET /api/v1/nutrition/advanced/insights/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Nutrition Patterns
+
+Analyze nutrition patterns and trends.
+
+```http
+GET /api/v1/nutrition/advanced/patterns/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Nutrition Trends
+
+Get nutrition trends over time.
+
+```http
+GET /api/v1/nutrition/advanced/trends/{pet_id}?period=30
+Authorization: Bearer <jwt_token>
+```
+
+### Nutrition Recommendations
+
+Get personalized nutrition recommendations.
+
+```http
+GET /api/v1/nutrition/advanced/recommendations/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+---
+
+## Food Management
+
+### Search Foods
+
+Search for food items in the database.
+
+```http
+GET /api/v1/food-management/search?query=chicken&limit=20&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": "food-uuid",
+      "name": "Chicken & Rice Dog Food",
+      "brand": "Premium Pet Foods",
+      "barcode": "123456789012",
+      "category": "dry_food",
+      "species": "dog",
+      "calories_per_100g": 350,
+      "protein_g": 25.0,
+      "fat_g": 12.0,
+      "ingredients": ["chicken", "rice", "vegetables"]
+    }
+  ],
+  "total": 45,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+### Get Food by Barcode
+
+Look up food item by barcode.
+
+```http
+GET /api/v1/food-management/barcode/{barcode}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Recent Foods
+
+Get recently accessed food items.
+
+```http
+GET /api/v1/food-management/recent?limit=10
+Authorization: Bearer <jwt_token>
+```
+
+### Get Food Item
+
+Get detailed information about a specific food item.
+
+```http
+GET /api/v1/food-management/{food_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Create Food Item
+
+Create a new food item in the database.
+
+```http
+POST /api/v1/food-management/
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "name": "Chicken & Rice Dog Food",
+  "brand": "Premium Pet Foods",
+  "barcode": "123456789012",
+  "category": "dry_food",
+  "species": "dog",
+  "calories_per_100g": 350,
+  "protein_g": 25.0,
+  "fat_g": 12.0,
+  "carbohydrates_g": 30.0,
+  "fiber_g": 3.5,
+  "ingredients": ["chicken", "rice", "vegetables"]
+}
+```
+
+### Update Food Item
+
+Update existing food item.
+
+```http
+PUT /api/v1/food-management/{food_id}
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "name": "Chicken & Rice Dog Food - Updated",
+  "calories_per_100g": 355
+}
+```
+
+### Delete Food Item
+
+Delete a food item.
+
+```http
+DELETE /api/v1/food-management/{food_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Food Categories
+
+Get list of available food categories.
+
+```http
+GET /api/v1/food-management/categories
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+[
+  "dry_food",
+  "wet_food",
+  "treats",
+  "supplements",
+  "raw_food"
+]
+```
+
+### Get Food Brands
+
+Get list of available food brands.
+
+```http
+GET /api/v1/food-management/brands
+Authorization: Bearer <jwt_token>
+```
+
+---
+
+## Advanced Nutrition
+
+### Record Pet Weight
+
+Record a weight measurement for a pet.
+
+```http
+POST /api/v1/advanced-nutrition/weight/record
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "weight_kg": 25.5,
+  "notes": "Post-vet checkup weight"
+}
+```
+
+### Get Weight History
+
+Retrieve weight history for a pet.
+
+```http
+GET /api/v1/advanced-nutrition/weight/history/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+[
+  {
+    "id": "record-uuid",
+    "pet_id": "pet-uuid-here",
+    "weight_kg": 25.5,
+    "recorded_at": "2025-10-10T10:30:00Z",
+    "notes": "Post-vet checkup weight"
+  }
+]
+```
+
+### Create Weight Goal
+
+Set a weight goal for a pet.
+
+```http
+POST /api/v1/advanced-nutrition/weight/goals
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "target_weight_kg": 23.0,
+  "goal_type": "weight_loss",
+  "start_date": "2025-10-10",
+  "target_date": "2025-12-10",
+  "notes": "Vet recommended weight loss plan"
+}
+```
+
+### Update Weight Goal
+
+Update an existing weight goal.
+
+```http
+PUT /api/v1/advanced-nutrition/weight/goals
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "goal_id": "goal-uuid",
+  "target_weight_kg": 22.5,
+  "progress_notes": "Good progress, adjusting target"
+}
+```
+
+### Get Active Weight Goal
+
+Get the active weight goal for a pet.
+
+```http
+GET /api/v1/advanced-nutrition/weight/goals/{pet_id}/active
+Authorization: Bearer <jwt_token>
+```
+
+### Get Weight Trend Analysis
+
+Analyze weight trends over time.
+
+```http
+GET /api/v1/advanced-nutrition/weight/trend/{pet_id}?days=30
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "pet_id": "pet-uuid-here",
+  "current_weight_kg": 25.5,
+  "average_weight_kg": 25.8,
+  "trend": "decreasing",
+  "change_kg": -0.5,
+  "change_percentage": -1.9,
+  "period_days": 30
+}
+```
+
+### Get Weight Management Dashboard
+
+Get comprehensive weight management dashboard.
+
+```http
+GET /api/v1/advanced-nutrition/weight/dashboard/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Nutritional Trends
+
+Get nutritional trends for a pet.
+
+```http
+GET /api/v1/advanced-nutrition/trends/{pet_id}?period=30
+Authorization: Bearer <jwt_token>
+```
+
+### Get Nutritional Trends Dashboard
+
+Get comprehensive nutritional trends dashboard.
+
+```http
+GET /api/v1/advanced-nutrition/trends/dashboard/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Create Food Comparison
+
+Compare multiple food items.
+
+```http
+POST /api/v1/advanced-nutrition/comparisons
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "food_item_ids": ["uuid1", "uuid2", "uuid3"],
+  "pet_id": "pet-uuid-here",
+  "comparison_notes": "Comparing options for weight loss"
+}
+```
+
+### Get Food Comparison
+
+Retrieve a specific food comparison.
+
+```http
+GET /api/v1/advanced-nutrition/comparisons/{comparison_id}
+Authorization: Bearer <jwt_token>
+```
+
+### List Food Comparisons
+
+List all food comparisons for user.
+
+```http
+GET /api/v1/advanced-nutrition/comparisons
+Authorization: Bearer <jwt_token>
+```
+
+### Get Comparison Dashboard
+
+Get detailed comparison dashboard with analytics.
+
+```http
+GET /api/v1/advanced-nutrition/comparisons/dashboard/{comparison_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Delete Food Comparison
+
+Delete a food comparison.
+
+```http
+DELETE /api/v1/advanced-nutrition/comparisons/{comparison_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Generate Nutritional Analytics
+
+Generate comprehensive nutritional analytics cache.
+
+```http
+POST /api/v1/advanced-nutrition/analytics/generate
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "date_from": "2025-09-01",
+  "date_to": "2025-10-10"
+}
+```
+
+### Get Health Insights
+
+Get AI-powered health insights for a pet.
+
+```http
+GET /api/v1/advanced-nutrition/analytics/health-insights/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "pet_id": "pet-uuid-here",
+  "overall_health_score": 8.5,
+  "insights": [
+    {
+      "category": "weight",
+      "status": "good",
+      "message": "Weight is within healthy range",
+      "recommendation": "Maintain current feeding routine"
+    }
+  ],
+  "alerts": [],
+  "generated_at": "2025-10-10T10:30:00Z"
+}
+```
+
+### Get Nutritional Patterns
+
+Analyze nutritional patterns for optimization.
+
+```http
+GET /api/v1/advanced-nutrition/analytics/patterns/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Advanced Nutrition Dashboard
+
+Get comprehensive advanced nutrition dashboard.
+
+```http
+GET /api/v1/advanced-nutrition/analytics/dashboard/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+---
+
 ## Multi-Factor Authentication
 
 ### Enable MFA
@@ -783,5 +1415,23 @@ class PetAllergyScannerAPI:
 
 ---
 
-*Last updated: October 2025*
+## API Version History
+
+### v1.0.0 (Current)
+- Complete authentication system with MFA
+- Pet management with birthday tracking
+- Ingredient scanning and analysis
+- **NEW**: Comprehensive nutrition tracking API
+- **NEW**: Food database with barcode scanning
+- **NEW**: Advanced nutrition (weight tracking, trends, comparisons)
+- **NEW**: Calorie goals and feeding logs
+- **NEW**: Health insights and analytics
+- Push notifications (APNs)
+- GDPR compliance features
+- Health monitoring and metrics
+
+---
+
+*Last updated: January 2025*
+*API Version: 1.0.0*
 *Production API: https://snifftest-api-production.up.railway.app*
