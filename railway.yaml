@@ -1,0 +1,9 @@
+build:
+  builder: nixpacks
+  nixpacksConfigPath: server/nixpacks.toml
+  
+deploy:
+  startCommand: python3 scripts/railway_start.py
+  restartPolicyType: on_failure
+  restartPolicyMaxRetries: 3
+
