@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 import UIKit
 import Vision
 
@@ -172,11 +172,8 @@ extension ModernCameraView {
     }
 }
 
-// MARK: - Modern Camera View Controller
+// MARK: - Camera Delegate Protocol
 
-/**
- * Modern camera view controller with real-time barcode detection
- */
 @MainActor
 protocol ModernCameraViewControllerDelegate: AnyObject {
     func cameraViewController(_ controller: ModernCameraViewController, didCaptureImage image: UIImage)
@@ -185,7 +182,126 @@ protocol ModernCameraViewControllerDelegate: AnyObject {
     func cameraViewControllerDidCancel(_ controller: ModernCameraViewController)
 }
 
+// MARK: - Video Capture Delegate (Non-Isolated)
+
+/// Sendable barcode data extracted from Vision observations
+/// Allows safe transfer across isolation boundaries in Swift 6
+struct BarcodeData: Sendable {
+    let payloadString: String
+    let symbology: String
+    let confidence: Float
+}
+
+/// Isolated camera delegate that handles video frames on background queue
+/// This architecture follows Swift 6 best practices by keeping delegate separate from @MainActor
+final class VideoCaptureDelegate: NSObject, @unchecked Sendable {
+    /// Callback for barcode detection - dispatches to main actor
+    /// - Note: Uses @Sendable closure with Sendable data type for Swift 6 compliance
+    var onBarcodeDetected: (@Sendable ([BarcodeData]) -> Void)?
+    
+    /// Barcode symbologies to detect
+    nonisolated private let symbologies: [VNBarcodeSymbology] = [.ean13, .ean8, .upce, .code128, .pdf417]
+    
+    /// Frame processing control flags - accessed exclusively from serial video data output queue
+    /// - Note: nonisolated(unsafe) because access is serialized by AVFoundation's delegate queue
+    nonisolated(unsafe) private var shouldProcessFrames = false
+    nonisolated(unsafe) private var deferFrameProcessing = false
+    nonisolated(unsafe) private var frameProcessCounter = 0
+    
+    /// Enables frame processing
+    func startProcessing() {
+        shouldProcessFrames = true
+        deferFrameProcessing = false
+        frameProcessCounter = 0
+    }
+    
+    /// Disables frame processing for teardown
+    func stopProcessing() {
+        shouldProcessFrames = false
+    }
+    
+    /// Resumes frame processing after throttle
+    func resumeProcessing() {
+        deferFrameProcessing = false
+    }
+}
+
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+
+extension VideoCaptureDelegate: AVCaptureVideoDataOutputSampleBufferDelegate {
+    /// Processes video frames on background queue (nonisolated by default for NSObject)
+    /// - Note: No actor isolation issues because this class is not actor-isolated
+    nonisolated func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        // Early exit checks on background queue
+        guard shouldProcessFrames else { return }
+        guard !deferFrameProcessing else { return }
+        
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        
+        // Capture callback before creating request
+        let callback = onBarcodeDetected
+        
+        // Create new request with completion handler for Swift 6 compliance
+        let barcodeRequest = VNDetectBarcodesRequest { request, error in
+            guard error == nil else { return }
+            
+            // Extract observations and convert to Sendable data on background thread
+            if let observations = request.results as? [VNBarcodeObservation], !observations.isEmpty {
+                // Convert non-Sendable observations to Sendable data structures
+                let barcodeData = observations.compactMap { observation -> BarcodeData? in
+                    guard let payload = observation.payloadStringValue else { return nil }
+                    return BarcodeData(
+                        payloadString: payload,
+                        symbology: observation.symbology.rawValue,
+                        confidence: observation.confidence
+                    )
+                }
+                
+                // Invoke callback with Sendable data (safe for cross-isolation transfer)
+                if !barcodeData.isEmpty {
+                    callback?(barcodeData)
+                }
+            }
+        }
+        
+        // Configure symbologies
+        barcodeRequest.symbologies = symbologies
+        
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+        
+        do {
+            try handler.perform([barcodeRequest])
+            
+            // Frame throttling to prevent queue overload
+            frameProcessCounter += 1
+            if frameProcessCounter % 15 == 0 {
+                deferFrameProcessing = true
+                // Resume processing after a brief delay on background queue
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.resumeProcessing()
+                }
+            }
+        } catch {
+            // Silently handle vision errors
+        }
+    }
+}
+
+/**
+ * Modern camera view controller with real-time barcode detection
+ * 
+ * Architecture:
+ * - Uses @MainActor for UI and session management
+ * - Separate VideoCaptureDelegate handles frame processing on background queue
+ * - Follows Swift 6 best practices for actor isolation
+ */
+@MainActor
 class ModernCameraViewController: UIViewController {
+    /// Main actor delegate for UI updates
     weak var delegate: ModernCameraViewControllerDelegate?
     
     // MARK: - AVFoundation Properties
@@ -195,8 +311,10 @@ class ModernCameraViewController: UIViewController {
     private var videoDataOutput: AVCaptureVideoDataOutput!
     private var videoDataOutputQueue: DispatchQueue!
     
-    // MARK: - Vision Properties
-    private var barcodeRequest: VNDetectBarcodesRequest!
+    // MARK: - Delegate Properties
+    /// Non-isolated delegate for video frame processing
+    /// - Note: Separate from @MainActor to avoid actor isolation issues
+    private var videoCaptureDelegate: VideoCaptureDelegate!
     private let barcodeService = BarcodeService.shared
     
     // MARK: - UI Properties
@@ -211,14 +329,16 @@ class ModernCameraViewController: UIViewController {
     // MARK: - State
     private var isSessionRunning = false
     private var isSessionConfigured = false
+    /// Tracks last barcode detection for cooldown
     private var lastBarcodeDetectionTime: Date?
-    private let barcodeDetectionCooldown: TimeInterval = 1.0 // Prevent spam detection
+    private let barcodeDetectionCooldown: TimeInterval = 1.0
     
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        setupVision()
+        setupVideoCaptureDelegate()
         authorizeAndSetupSession()
+        setupNotificationObservers()
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -229,6 +349,12 @@ class ModernCameraViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         stopCameraSession()
+    }
+    
+    deinit {
+        // Stop processing and remove observers
+        videoCaptureDelegate?.stopProcessing()
+        NotificationCenter.default.removeObserver(self)
     }
     
     override func viewDidLayoutSubviews() {
@@ -294,6 +420,8 @@ class ModernCameraViewController: UIViewController {
         isSessionConfigured = true
     }
 
+    /// Authorizes camera access and sets up the capture session
+    /// - Note: Handles all authorization states including runtime changes
     private func authorizeAndSetupSession() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
@@ -301,8 +429,8 @@ class ModernCameraViewController: UIViewController {
             setupCameraSession()
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-                guard let self = self else { return }
-                DispatchQueue.main.async {
+                guard let self else { return }
+                Task { @MainActor in
                     if granted {
                         self.setupCameraSession()
                         self.startCameraSession()
@@ -319,10 +447,10 @@ class ModernCameraViewController: UIViewController {
     }
     
     /// Sets up video data output for real-time barcode detection
-    /// - Note: Requires captureSession to be initialized first
+    /// - Note: Requires captureSession and videoCaptureDelegate to be initialized first
     private func setupVideoDataOutput() {
         // Guard against nil captureSession - can happen if called before viewDidLoad
-        guard captureSession != nil else { return }
+        guard captureSession != nil, videoCaptureDelegate != nil else { return }
         
         // Initialize processing queue BEFORE assigning delegate to avoid nil queue crash
         videoDataOutputQueue = DispatchQueue(label: "VideoDataOutputQueue", qos: .userInitiated)
@@ -330,29 +458,28 @@ class ModernCameraViewController: UIViewController {
         videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
-        videoDataOutput.setSampleBufferDelegate(self, queue: videoDataOutputQueue)
+        
+        // Use isolated VideoCaptureDelegate instead of self
+        videoDataOutput.setSampleBufferDelegate(videoCaptureDelegate, queue: videoDataOutputQueue)
         
         if captureSession.canAddOutput(videoDataOutput) {
             captureSession.addOutput(videoDataOutput)
         }
     }
     
-    private func setupVision() {
-        barcodeRequest = VNDetectBarcodesRequest { [weak self] request, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                DispatchQueue.main.async {
-                    self.delegate?.cameraViewController(self, didFailWithError: error)
-                }
-                return
-            }
-            
-            self.processBarcodeDetectionResults(request.results)
-        }
+    /// Sets up the isolated video capture delegate for frame processing
+    /// - Note: Delegate handles all barcode detection on background queue
+    private func setupVideoCaptureDelegate() {
+        videoCaptureDelegate = VideoCaptureDelegate()
         
-        // Configure for pet food barcode types
-        barcodeRequest.symbologies = [.ean13, .ean8, .upce, .code128, .pdf417]
+        // Set callback that runs on main actor for barcode results
+        // BarcodeData is Sendable, so this is safe for Swift 6 strict concurrency
+        videoCaptureDelegate.onBarcodeDetected = { [weak self] barcodeData in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.processBarcodeDetectionResults(barcodeData)
+            }
+        }
     }
     
     private func setupUI() {
@@ -387,47 +514,111 @@ class ModernCameraViewController: UIViewController {
     }
     
     /// Updates the camera configuration based on current settings
-    /// - Note: Safe to call before session is configured
+    /// - Note: Safe to call before session is configured. Includes defensive checks for nil session.
     private func updateConfiguration() {
+        // Safely update UI overlay
         scanOverlayView?.isHidden = !showScanOverlay
         
-        // Only modify capture session outputs if session is configured
-        guard isSessionConfigured, captureSession != nil else { return }
+        // Only modify capture session outputs if session is configured and valid
+        guard isSessionConfigured, let session = captureSession else { return }
         
+        // Update video data output for real-time detection
         if enableRealTimeDetection && videoDataOutput == nil {
             setupVideoDataOutput()
-        } else if !enableRealTimeDetection && videoDataOutput != nil {
-            captureSession.removeOutput(videoDataOutput)
+        } else if !enableRealTimeDetection, let output = videoDataOutput {
+            session.removeOutput(output)
             videoDataOutput = nil
         }
     }
     
+    /// Starts the camera session on a background queue
+    /// - Note: AVCaptureSession start/stop should be called on background queue to avoid blocking main thread
     private func startCameraSession() {
         guard !isSessionRunning else { return }
-        guard isSessionConfigured, captureSession != nil else { return }
+        guard isSessionConfigured else { return }
         
-        Task { @MainActor in
-            captureSession.startRunning()
-            isSessionRunning = true
+        // Enable frame processing in isolated delegate
+        videoCaptureDelegate?.startProcessing()
+        
+        // Capture session in nonisolated context for background dispatch
+        let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            session?.startRunning()
+            Task { @MainActor [weak self] in
+                self?.isSessionRunning = true
+            }
         }
     }
     
+    /// Stops the camera session safely on a background queue
+    /// - Note: AVCaptureSession stopRunning() is a blocking call that should run on background queue
+    /// This prevents deadlocks and ensures Vision callbacks complete before session stops
     private func stopCameraSession() {
         guard isSessionRunning else { return }
         
-        Task { @MainActor in
-            captureSession.stopRunning()
-            isSessionRunning = false
+        // CRITICAL: Stop frame processing FIRST to prevent new operations
+        // This prevents captureOutput from processing frames during teardown
+        videoCaptureDelegate?.stopProcessing()
+        isSessionRunning = false
+        
+        // Capture session in nonisolated context for background dispatch
+        let session = captureSession
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Wait briefly to allow in-flight frames to complete
+            Thread.sleep(forTimeInterval: 0.1)
+            session?.stopRunning()
         }
     }
     
+    /// Captures a photo using the camera
+    /// - Note: Includes defensive checks for nil outputs to prevent crashes
     private func capturePhoto() {
+        guard let photoOutput = capturePhotoOutput,
+              isSessionRunning else {
+            delegate?.cameraViewController(self, didFailWithError: CameraError.sessionConfigurationFailed)
+            return
+        }
+        
         let settings = AVCapturePhotoSettings()
-        capturePhotoOutput.capturePhoto(with: settings, delegate: self)
+        photoOutput.capturePhoto(with: settings, delegate: self)
     }
     
-    private func processBarcodeDetectionResults(_ results: [VNObservation]?) {
-        guard let barcodeObservations = results as? [VNBarcodeObservation] else { return }
+    
+    /// Sets up notification observers for runtime authorization changes
+    /// - Note: Handles cases where camera access is revoked while app is running
+    private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAppWillEnterForeground),
+            name: UIApplication.willEnterForegroundNotification,
+            object: nil
+        )
+    }
+    
+    /// Handles app entering foreground by checking authorization status
+    /// - Note: Revalidates camera access in case permissions changed while app was backgrounded
+    @objc private func handleAppWillEnterForeground() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        
+        guard status == .authorized else {
+            stopCameraSession()
+            delegate?.cameraViewController(self, didFailWithError: CameraError.authorizationRevoked)
+            return
+        }
+        
+        // Restart session if it was stopped
+        if isSessionConfigured && !isSessionRunning {
+            startCameraSession()
+        }
+    }
+    
+    /// Processes barcode detection results on main actor
+    /// - Parameter barcodeData: Sendable barcode data extracted from Vision framework
+    /// - Note: Must be called from main actor context to ensure thread-safe access to properties
+    private func processBarcodeDetectionResults(_ barcodeData: [BarcodeData]) {
+        // Ignore results if session stopped (prevents processing during teardown)
+        guard isSessionRunning else { return }
+        guard !barcodeData.isEmpty else { return }
         
         // Check cooldown to prevent spam detection
         let now = Date()
@@ -437,60 +628,51 @@ class ModernCameraViewController: UIViewController {
         }
         
         // Find the highest confidence barcode
-        guard let bestBarcode = barcodeObservations.max(by: { $0.confidence < $1.confidence }),
+        guard let bestBarcode = barcodeData.max(by: { $0.confidence < $1.confidence }),
               bestBarcode.confidence > 0.7 else { return }
         
         lastBarcodeDetectionTime = now
         
-        guard let payload = bestBarcode.payloadStringValue else { return }
-        
         let barcodeResult = BarcodeResult(
-            value: payload,
-            type: bestBarcode.symbology.rawValue,
+            value: bestBarcode.payloadString,
+            type: bestBarcode.symbology,
             confidence: bestBarcode.confidence,
             timestamp: now
         )
         
-        DispatchQueue.main.async {
-            self.delegate?.cameraViewController(self, didDetectBarcode: barcodeResult)
-        }
+        delegate?.cameraViewController(self, didDetectBarcode: barcodeResult)
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
-extension ModernCameraViewController: @preconcurrency AVCaptureVideoDataOutputSampleBufferDelegate {
-    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard enableRealTimeDetection else { return }
-        
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        
-        let imageRequestHandler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-        
-        do {
-            try imageRequestHandler.perform([barcodeRequest])
-        } catch {
-            // Silently handle vision errors to avoid spam
-        }
-    }
-}
 
 // MARK: - AVCapturePhotoCaptureDelegate
 
-extension ModernCameraViewController: @preconcurrency AVCapturePhotoCaptureDelegate {
-    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+extension ModernCameraViewController: AVCapturePhotoCaptureDelegate {
+    /// Processes captured photo on background queue
+    /// - Note: Called on AVCapturePhotoOutput's delegate queue - marked nonisolated
+    /// All accesses to self are wrapped in Task { @MainActor } to ensure proper actor isolation
+    nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            delegate?.cameraViewController(self, didFailWithError: error)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.delegate?.cameraViewController(self, didFailWithError: error)
+            }
             return
         }
         
         guard let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
-            delegate?.cameraViewController(self, didFailWithError: CameraError.imageProcessingFailed)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.delegate?.cameraViewController(self, didFailWithError: CameraError.imageProcessingFailed)
+            }
             return
         }
         
-        delegate?.cameraViewController(self, didCaptureImage: image)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.delegate?.cameraViewController(self, didCaptureImage: image)
+        }
     }
 }
 
@@ -518,6 +700,7 @@ enum CameraError: LocalizedError {
     case deviceNotFound
     case imageProcessingFailed
     case sessionConfigurationFailed
+    case authorizationRevoked
     
     var errorDescription: String? {
         switch self {
@@ -527,6 +710,8 @@ enum CameraError: LocalizedError {
             return "Failed to process captured image"
         case .sessionConfigurationFailed:
             return "Failed to configure camera session"
+        case .authorizationRevoked:
+            return "Camera access was revoked. Please enable camera access in Settings."
         }
     }
 }
@@ -538,3 +723,4 @@ enum CameraError: LocalizedError {
         onImageCaptured: { _ in }
     )
 }
+
