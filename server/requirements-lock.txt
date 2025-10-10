@@ -30,7 +30,7 @@ h2==4.3.0
 hpack==4.1.0
 httpcore==1.0.9
 httptools==0.7.1
-httpx==0.28.1
+httpx==0.27.2
 hyperframe==6.1.0
 idna==3.10
 iniconfig==2.1.0
@@ -51,7 +51,7 @@ pip-requirements-parser==32.0.1
 pip_audit==2.9.0
 platformdirs==4.5.0
 pluggy==1.6.0
-postgrest==2.22.0
+postgrest==0.17.2
 propcache==0.4.1
 psutil==7.1.0
 psycopg2-binary==2.9.11
@@ -84,7 +84,7 @@ SQLAlchemy==2.0.44
 starlette==0.48.0
 storage3==2.22.0
 StrEnum==0.4.15
-supabase==2.22.0
+supabase==2.21.1
 supabase-auth==2.22.0
 supabase-functions==2.22.0
 supafunc==0.10.2
