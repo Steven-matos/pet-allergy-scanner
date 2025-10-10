@@ -3,8 +3,10 @@ fastapi>=0.118.0  # Updated for latest features and security
 uvicorn[standard]>=0.37.0  # Updated for performance improvements
 python-dotenv>=1.1.0  # Updated
 
-# Database & Supabase
-supabase>=2.9.0,<2.22.0  # Stable version - 2.22.0 has breaking changes in postgrest
+# Database & Supabase (ALL pinned to avoid Railway cache issues)
+supabase==2.9.1  # Exact stable version - 2.22.0 has breaking changes
+postgrest==0.17.2  # Must be <0.18 for compatibility
+httpx==0.27.2  # Compatible with postgrest 0.17.2
 sqlalchemy>=2.0.44  # Updated for latest fixes
 asyncpg>=0.30.0  # Updated
 alembic>=1.16.0  # Updated

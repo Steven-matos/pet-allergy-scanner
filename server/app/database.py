@@ -50,18 +50,18 @@ async def init_db():
                 
             except Exception as e:
                 error_msg = str(e)
-                logger.warning(f"Database connection attempt {attempt + 1} failed: {error_msg}")
+                logger.error(f"Database connection attempt {attempt + 1} failed: {error_msg}")
                 
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2)  # Short delay before retry
                 else:
                     # Log helpful troubleshooting info on final failure
                     if "nodename nor servname provided" in error_msg or "DNS" in error_msg:
-                        logger.error("DNS resolution failed - check SUPABASE_URL")
+                        logger.error("CRITICAL: DNS resolution failed - check SUPABASE_URL")
                     elif "401" in error_msg or "403" in error_msg:
-                        logger.error("Authentication failed - check SUPABASE_KEY")
+                        logger.error("CRITICAL: Authentication failed - check SUPABASE_KEY")
                     else:
-                        logger.error(f"Connection failed: {error_msg}")
+                        logger.error(f"CRITICAL: Connection failed: {error_msg}")
         
         return False
         
