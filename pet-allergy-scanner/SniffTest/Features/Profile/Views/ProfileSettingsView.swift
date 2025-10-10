@@ -723,23 +723,6 @@ struct ProfileSettingsView: View {
                         .tint(ModernDesignSystem.Colors.primary)
                 }
                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Dark Mode
-                HStack {
-                    Image(systemName: "moon.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                    Text("Dark Mode")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text("System")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)

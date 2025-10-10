@@ -62,9 +62,3 @@ struct EmptyPetsView: View {
     }
 }
 
-#Preview("Dark Mode") {
-    EmptyPetsView {
-        print("Add pet tapped")
-    }
-    .preferredColorScheme(.dark)
-}

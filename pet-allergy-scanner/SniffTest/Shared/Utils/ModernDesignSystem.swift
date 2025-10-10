@@ -19,7 +19,6 @@ import SwiftUI
  * - Light Gray (#E0E0E0): Neutral color for secondary elements
  * 
  * Accessibility: All colors maintain 4.5:1 contrast ratio minimum
- * Dark Mode: Automatically adapts using system colors where appropriate
  */
 struct ModernDesignSystem {
     
@@ -59,12 +58,12 @@ struct ModernDesignSystem {
         static let unsafe = Color(hex: "#E74C3C") // Error
         static let unknown = textSecondary
         
-        // Background colors (with dark mode support)
-        static let background = Color(.systemBackground)
-        static let surface = Color(.secondarySystemBackground)
-        static let surfaceVariant = Color(.tertiarySystemBackground)
-        static let onBackground = Color(.label)
-        static let onSurface = Color(.label)
+        // Background colors (Trust & Nature fixed colors - no dark mode adaptation)
+        static let background = Color.white // Pure white background
+        static let surface = softCream // Soft Cream for card surfaces
+        static let surfaceVariant = Color(hex: "#FDFCF5") // Lighter variant of soft cream
+        static let onBackground = textPrimary // Charcoal Gray text on backgrounds
+        static let onSurface = textPrimary // Charcoal Gray text on surfaces
         static let onPrimary = Color.white
         static let onSecondary = textPrimary
         
