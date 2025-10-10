@@ -403,7 +403,7 @@ async def update_current_user(
         if user_update.username is not None:
             # Validate username if provided (but skip if empty string)
             if user_update.username:
-                validated_username = SecurityValidator.validate_username(user_update.username)
+                validated_username = InputValidator.validate_username(user_update.username)
                 update_data["username"] = validated_username
         if user_update.first_name is not None:
             # Basic length validation for first name (no aggressive sanitization for names)
