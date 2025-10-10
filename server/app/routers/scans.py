@@ -183,9 +183,9 @@ async def analyze_scan(
             overall_safety=overall_safety,
             confidence_score=confidence_score,
             analysis_details={
-                "total_ingredients": len(ingredients),
-                "unsafe_count": len(unsafe_ingredients),
-                "safe_count": len(safe_ingredients),
+                "total_ingredients": str(len(ingredients)),
+                "unsafe_count": str(len(unsafe_ingredients)),
+                "safe_count": str(len(safe_ingredients)),
                 "analysis_timestamp": str(pet["updated_at"])
             }
         )

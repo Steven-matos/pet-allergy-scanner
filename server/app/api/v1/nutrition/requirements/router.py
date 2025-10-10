@@ -7,9 +7,8 @@ Extracted from app.routers.nutrition for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import get_supabase_client
 from app.models.nutrition import (
     NutritionalRequirementsCreate,
     NutritionalRequirementsResponse
@@ -24,7 +23,6 @@ router = APIRouter(prefix="/requirements", tags=["nutrition-requirements"])
 @router.post("/", response_model=NutritionalRequirementsResponse)
 async def create_nutritional_requirements(
     requirements: NutritionalRequirementsCreate,
-    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -32,7 +30,6 @@ async def create_nutritional_requirements(
     
     Args:
         requirements: Nutritional requirements data
-        db: Database session
         current_user: Current authenticated user
         
     Returns:
@@ -42,6 +39,8 @@ async def create_nutritional_requirements(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        supabase = get_supabase_client()
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(requirements.pet_id, current_user.id)
@@ -50,15 +49,23 @@ async def create_nutritional_requirements(
         db_requirements = requirements.dict()
         db_requirements['user_id'] = current_user.id
         
-        db_requirements_obj = NutritionalRequirementsCreate(**db_requirements)
-        db.add(db_requirements_obj)
-        db.commit()
-        db.refresh(db_requirements_obj)
+        # Upsert to nutritional_requirements table
+        response = supabase.table("nutritional_requirements").upsert(
+            db_requirements,
+            on_conflict="pet_id,user_id"
+        ).execute()
         
-        return NutritionalRequirementsResponse.from_orm(db_requirements_obj)
+        if not response.data:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to create nutritional requirements"
+            )
         
+        return NutritionalRequirementsResponse(**response.data[0])
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create nutritional requirements: {str(e)}"
@@ -68,7 +75,6 @@ async def create_nutritional_requirements(
 @router.get("/{pet_id}", response_model=NutritionalRequirementsResponse)
 async def get_nutritional_requirements(
     pet_id: str,
-    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -76,7 +82,6 @@ async def get_nutritional_requirements(
     
     Args:
         pet_id: Pet ID
-        db: Database session
         current_user: Current authenticated user
         
     Returns:
@@ -86,24 +91,29 @@ async def get_nutritional_requirements(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        supabase = get_supabase_client()
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Get nutritional requirements
-        requirements = db.query(NutritionalRequirementsCreate).filter(
-            NutritionalRequirementsCreate.pet_id == pet_id,
-            NutritionalRequirementsCreate.user_id == current_user.id
-        ).first()
+        response = supabase.table("nutritional_requirements").select("*").eq(
+            "pet_id", pet_id
+        ).eq(
+            "user_id", current_user.id
+        ).execute()
         
-        if not requirements:
+        if not response.data:
             raise HTTPException(
                 status_code=404,
                 detail="Nutritional requirements not found"
             )
         
-        return NutritionalRequirementsResponse.from_orm(requirements)
+        return NutritionalRequirementsResponse(**response.data[0])
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
