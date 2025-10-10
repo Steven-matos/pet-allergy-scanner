@@ -100,6 +100,22 @@ def main():
             logger.error("   Application cannot start without required environment variables")
             sys.exit(1)
         
+        # Log installed package versions for debugging
+        logger.info("📦 Checking installed package versions...")
+        try:
+            import supabase
+            import postgrest
+            import httpx
+            import storage3
+            import supafunc
+            logger.info(f"   supabase: {supabase.__version__}")
+            logger.info(f"   postgrest: {postgrest.__version__}")
+            logger.info(f"   httpx: {httpx.__version__}")
+            logger.info(f"   storage3: {storage3.__version__}")
+            logger.info(f"   supafunc: {supafunc.__version__}")
+        except Exception as e:
+            logger.warning(f"   Could not check versions: {e}")
+        
         # Try to load settings to catch any Pydantic validation errors
         logger.info("⚙️  Loading application settings...")
         try:
