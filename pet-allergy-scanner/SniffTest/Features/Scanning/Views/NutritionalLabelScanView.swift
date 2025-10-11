@@ -115,7 +115,7 @@ struct NutritionalLabelScanView: View {
             }
         }
         .sheet(isPresented: $showingImagePicker) {
-            ImagePickerView(image: Binding(
+            ImagePickerView(selectedImage: Binding(
                 get: { nil },
                 set: { image in
                     if let image = image {
@@ -322,8 +322,9 @@ class CameraService: NSObject {
      * Start camera session
      */
     func startSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.startRunning()
+        guard let session = captureSession else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            session.startRunning()
         }
     }
     
@@ -331,8 +332,9 @@ class CameraService: NSObject {
      * Stop camera session
      */
     func stopSession() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            self?.captureSession?.stopRunning()
+        guard let session = captureSession else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            session.stopRunning()
         }
     }
     
