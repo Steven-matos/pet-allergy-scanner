@@ -326,7 +326,7 @@ class HybridScanService: @unchecked Sendable {
         return result
     }
     
-    private func performOCROnlyScan(from image: UIImage) async -> HybridScanResult {
+    func performOCROnlyScan(from image: UIImage) async -> HybridScanResult {
         isScanning = true
         scanProgress = .extractingText
         errorMessage = nil
