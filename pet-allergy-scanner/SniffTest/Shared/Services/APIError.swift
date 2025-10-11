@@ -14,6 +14,7 @@ enum APIError: Error, LocalizedError {
     case decodingError
     case encodingError
     case authenticationError
+    case notFound
     case serverError(Int)
     case serverMessage(String)
     case rateLimitExceeded
@@ -38,6 +39,8 @@ enum APIError: Error, LocalizedError {
             return "Failed to encode request"
         case .authenticationError:
             return "Invalid email or password"
+        case .notFound:
+            return "Resource not found"
         case .serverError(let code):
             return "Server error: \(code)"
         case .serverMessage(let message):

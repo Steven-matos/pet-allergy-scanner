@@ -6,23 +6,25 @@ Handles food database, barcode scanning, and food item management
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy.orm import Session
 import uuid
 
-from ..database import get_db
+from ..database import get_supabase_client
 from ..models.food_items import (
     FoodItemCreate,
     FoodItemResponse,
     FoodItemUpdate,
     FoodSearchRequest,
     FoodSearchResponse,
-    FoodAnalysisResponse
+    FoodAnalysisResponse,
+    NutritionalInfoBase
 )
 from ..models.user import UserResponse
 from ..core.security.jwt_handler import get_current_user
 from ..utils.error_handling import create_error_response, APIError
+from ..utils.logging_config import get_logger
 
 router = APIRouter(prefix="/foods", tags=["food-management"])
+logger = get_logger(__name__)
 
 
 @router.get("/recent", response_model=List[FoodItemResponse])
@@ -118,28 +120,63 @@ async def search_foods(
 @router.get("/barcode/{barcode}", response_model=Optional[FoodItemResponse])
 async def get_food_by_barcode(
     barcode: str,
-    db: Session = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get food item by barcode
     
+    Searches the food_items database for a product with the given barcode.
+    Returns product details with nutritional information if found.
+    
     Args:
-        barcode: Barcode/UPC code
-        db: Database session
+        barcode: Barcode/UPC code (e.g., EAN-13, UPC-A)
         current_user: Current authenticated user
         
     Returns:
-        Food item or None if not found
+        Food item with full details or None if not found
     """
     try:
-        food_item = db.query(FoodItemResponse).filter(
-            FoodItemResponse.barcode == barcode
-        ).first()
+        from ..database import get_supabase_client
+        from ..utils.logging_config import get_logger
         
-        return food_item
+        logger = get_logger(__name__)
+        supabase = get_supabase_client()
+        
+        # Query food_items table by barcode
+        response = supabase.table("food_items").select("*").eq("barcode", barcode).limit(1).execute()
+        
+        if not response.data or len(response.data) == 0:
+            logger.info(f"No product found for barcode: {barcode}")
+            return None
+        
+        food_item = response.data[0]
+        logger.info(f"Found product for barcode {barcode}: {food_item.get('name', 'Unknown')}")
+        
+        # Parse nutritional_info JSONB field
+        nutritional_info = None
+        if food_item.get("nutritional_info"):
+            try:
+                nutritional_info = NutritionalInfoBase(**food_item["nutritional_info"])
+            except Exception as e:
+                logger.warning(f"Failed to parse nutritional_info: {e}")
+                nutritional_info = None
+        
+        return FoodItemResponse(
+            id=food_item["id"],
+            name=food_item["name"],
+            brand=food_item.get("brand"),
+            barcode=food_item.get("barcode"),
+            nutritional_info=nutritional_info,
+            category=food_item.get("category"),
+            description=None,  # Build description from available data
+            created_at=food_item["created_at"],
+            updated_at=food_item["updated_at"]
+        )
         
     except Exception as e:
+        from ..utils.logging_config import get_logger
+        logger = get_logger(__name__)
+        logger.error(f"Error fetching food by barcode {barcode}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 

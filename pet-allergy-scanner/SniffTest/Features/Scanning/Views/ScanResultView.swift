@@ -272,7 +272,7 @@ struct NutritionalAnalysisSection: View {
             
             // Minerals
             if hasMineralData() {
-                MineralsCard(nutritionalAnalysis: nutritionalAnalysis)
+                NutritionalMineralsCard(nutritionalAnalysis: nutritionalAnalysis)
             }
         }
         .modernCard()
@@ -389,7 +389,7 @@ struct MacronutrientsCard: View {
     }
 }
 
-struct MineralsCard: View {
+struct NutritionalMineralsCard: View {
     let nutritionalAnalysis: NutritionalAnalysis
     
     var body: some View {
