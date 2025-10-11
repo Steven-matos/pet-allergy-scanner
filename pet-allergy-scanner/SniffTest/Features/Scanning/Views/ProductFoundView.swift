@@ -192,7 +192,7 @@ struct ProductFoundView: View {
  * Card displaying nutritional macros
  */
 struct NutritionalMacrosCard: View {
-    let nutritionalInfo: NutritionalInfo
+    let nutritionalInfo: FoodProduct.NutritionalInfo
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -439,7 +439,7 @@ struct FlowLayout: Layout {
  * Data quality indicator card (Issue #20)
  */
 struct DataQualityCard: View {
-    let nutritionalInfo: NutritionalInfo
+    let nutritionalInfo: FoodProduct.NutritionalInfo
     
     var body: some View {
         HStack(spacing: ModernDesignSystem.Spacing.md) {
@@ -501,7 +501,7 @@ struct DataQualityCard: View {
  * Extended nutrition card (Issue #20: carbs, sugars, saturated fat, sodium)
  */
 struct ExtendedNutritionCard: View {
-    let nutritionalInfo: NutritionalInfo
+    let nutritionalInfo: FoodProduct.NutritionalInfo
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -701,7 +701,7 @@ struct MineralsCard: View {
  * Source attribution card (Issue #20)
  */
 struct SourceAttributionCard: View {
-    let nutritionalInfo: NutritionalInfo
+    let nutritionalInfo: FoodProduct.NutritionalInfo
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
@@ -739,7 +739,7 @@ struct SourceAttributionCard: View {
             name: "Premium Dog Food",
             brand: "Pet Nutrition Co",
             barcode: "1234567890123",
-            nutritionalInfo: NutritionalInfo(
+            nutritionalInfo: FoodProduct.NutritionalInfo(
                 caloriesPer100g: 350,
                 proteinPercentage: 26.0,
                 fatPercentage: 15.0,

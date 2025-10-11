@@ -8,15 +8,22 @@
 import Foundation
 
 /**
- * Nutritional information model matching backend API (22 fields)
+ * Food product model from database
  *
- * Comprehensive nutritional data structure from PR #19 / Issue #20
- * - 10 nutritional values (calories, protein, fat, fiber, moisture, ash, carbs, sugars, saturated fat, sodium)
- * - 5 array fields (ingredients, allergens, additives, vitamins, minerals)
- * - 4 metadata fields (source, external_id, data_quality_score, last_updated)
- * - 3 object fields (nutrient_levels, packaging_info, manufacturing_info)
+ * Represents a pet food product with complete nutritional information,
+ * retrieved from the food_items database table (Issue #20)
  */
-struct NutritionalInfo: Codable, Equatable, Hashable {
+struct FoodProduct: Codable, Equatable, Identifiable, Hashable {
+    /**
+     * Nutritional information model matching backend API (22 fields)
+     *
+     * Comprehensive nutritional data structure from PR #19 / Issue #20
+     * - 10 nutritional values (calories, protein, fat, fiber, moisture, ash, carbs, sugars, saturated fat, sodium)
+     * - 5 array fields (ingredients, allergens, additives, vitamins, minerals)
+     * - 4 metadata fields (source, external_id, data_quality_score, last_updated)
+     * - 3 object fields (nutrient_levels, packaging_info, manufacturing_info)
+     */
+    struct NutritionalInfo: Codable, Equatable, Hashable {
     // MARK: - Nutritional Values (10 fields) - numbers or null
     
     /// Calories per 100g of product
@@ -115,15 +122,10 @@ struct NutritionalInfo: Codable, Equatable, Hashable {
         case packagingInfo = "packaging_info"
         case manufacturingInfo = "manufacturing_info"
     }
-}
-
-/**
- * Food product model from database
- *
- * Represents a pet food product with complete nutritional information,
- * retrieved from the food_items database table
- */
-struct FoodProduct: Codable, Equatable, Identifiable, Hashable {
+    } // End of NutritionalInfo
+    
+    // MARK: - FoodProduct Properties
+    
     let id: String
     let name: String
     let brand: String?
@@ -176,7 +178,7 @@ struct FoodProduct: Codable, Equatable, Identifiable, Hashable {
         }
         return ingredients.joined(separator: ", ")
     }
-}
+} // End of FoodProduct
 
 /**
  * Helper type for decoding arbitrary JSON values
@@ -240,7 +242,7 @@ struct AnyCodable: Codable, Equatable, Hashable {
 
 // MARK: - NutritionalInfo Extensions (Issue #20)
 
-extension NutritionalInfo {
+extension FoodProduct.NutritionalInfo {
     /**
      * Check if basic macronutrients are available
      */

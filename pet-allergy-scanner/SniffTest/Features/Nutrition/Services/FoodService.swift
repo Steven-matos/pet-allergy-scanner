@@ -8,9 +8,8 @@
 import Foundation
 import Combine
 
-// Note: Using the NutritionalInfo from NutritionModels.swift (legacy 8-field structure)
-// for FoodService internal operations. The comprehensive 22-field structure from
-// FoodProduct.swift is used in the scanning feature.
+// Note: This service uses NutritionalInfo from NutritionModels.swift (8-field structure)
+// The scanning feature uses FoodProduct.NutritionalInfo (22-field structure from Issue #20)
 
 /**
  * Food Service
@@ -237,7 +236,7 @@ struct FoodItem: Codable, Identifiable {
     let name: String
     let brand: String?
     let barcode: String?
-    let nutritionalInfo: NutritionModels.NutritionalInfo?
+    let nutritionalInfo: NutritionalInfo?
     let createdAt: Date
     let updatedAt: Date
     
@@ -260,7 +259,7 @@ struct FoodItemRequest: Codable {
     let name: String
     let brand: String?
     let barcode: String?
-    let nutritionalInfo: NutritionModels.NutritionalInfo?
+    let nutritionalInfo: NutritionalInfo?
     
     enum CodingKeys: String, CodingKey {
         case name
