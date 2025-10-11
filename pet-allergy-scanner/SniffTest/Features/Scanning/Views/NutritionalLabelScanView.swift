@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 
 /**
  * Dedicated view for scanning nutritional labels
