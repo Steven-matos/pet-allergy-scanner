@@ -221,7 +221,7 @@ struct PetCardView: View {
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             .textCase(.uppercase)
                         
-                        FlowLayout(spacing: ModernDesignSystem.Spacing.sm) {
+                        PetTagFlowLayout(spacing: ModernDesignSystem.Spacing.sm) {
                             ForEach(pet.knownSensitivities, id: \.self) { sensitivity in
                                 Text(sensitivity)
                                     .font(ModernDesignSystem.Typography.caption)
@@ -343,7 +343,7 @@ struct InfoPillView: View {
 }
 
 /// Flow layout for wrapping allergy tags
-struct FlowLayout: Layout {
+struct PetTagFlowLayout: Layout {
     var spacing: CGFloat
     
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
