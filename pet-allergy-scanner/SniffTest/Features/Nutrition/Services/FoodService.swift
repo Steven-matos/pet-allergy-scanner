@@ -8,9 +8,9 @@
 import Foundation
 import Combine
 
-// Use the comprehensive 22-field NutritionalInfo from FoodProduct (Issue #20)
-// This avoids naming conflict with the legacy NutritionalInfo in NutritionModels
-typealias FoodNutritionalInfo = NutritionalInfo
+// Note: Using the NutritionalInfo from NutritionModels.swift (legacy 8-field structure)
+// for FoodService internal operations. The comprehensive 22-field structure from
+// FoodProduct.swift is used in the scanning feature.
 
 /**
  * Food Service
@@ -237,7 +237,7 @@ struct FoodItem: Codable, Identifiable {
     let name: String
     let brand: String?
     let barcode: String?
-    let nutritionalInfo: FoodNutritionalInfo?
+    let nutritionalInfo: NutritionModels.NutritionalInfo?
     let createdAt: Date
     let updatedAt: Date
     
@@ -260,7 +260,7 @@ struct FoodItemRequest: Codable {
     let name: String
     let brand: String?
     let barcode: String?
-    let nutritionalInfo: FoodNutritionalInfo?
+    let nutritionalInfo: NutritionModels.NutritionalInfo?
     
     enum CodingKeys: String, CodingKey {
         case name
