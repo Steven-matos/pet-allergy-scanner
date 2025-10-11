@@ -27,6 +27,12 @@ struct ScanView: View {
     @State private var detectedBarcode: BarcodeResult?
     @State private var showingBarcodeOverlay = false
     
+    // New states for enhanced workflow
+    @State private var showingProductFound = false
+    @State private var showingProductNotFound = false
+    @State private var showingNutritionalLabelScan = false
+    @State private var foundProduct: FoodProduct?
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -148,6 +154,51 @@ struct ScanView: View {
         .sheet(isPresented: $showingHistory) {
             HistoryView()
         }
+        .sheet(isPresented: $showingProductFound) {
+            if let product = foundProduct {
+                ProductFoundView(
+                    product: product,
+                    onAnalyzeForPet: {
+                        showingProductFound = false
+                        // Convert product to scan result for analysis
+                        analyzeProductForPet(product)
+                    },
+                    onCancel: {
+                        showingProductFound = false
+                        foundProduct = nil
+                    }
+                )
+            }
+        }
+        .sheet(isPresented: $showingProductNotFound) {
+            ProductNotFoundView(
+                barcode: detectedBarcode?.value ?? "",
+                onScanNutritionalLabel: {
+                    showingProductNotFound = false
+                    showingNutritionalLabelScan = true
+                },
+                onRetry: {
+                    showingProductNotFound = false
+                    retryScan()
+                },
+                onCancel: {
+                    showingProductNotFound = false
+                    detectedBarcode = nil
+                }
+            )
+        }
+        .fullScreenCover(isPresented: $showingNutritionalLabelScan) {
+            NutritionalLabelScanView(
+                barcode: detectedBarcode?.value,
+                onImageCaptured: { image in
+                    showingNutritionalLabelScan = false
+                    processNutritionalLabelImage(image)
+                },
+                onCancel: {
+                    showingNutritionalLabelScan = false
+                }
+            )
+        }
         .alert("Camera Permission Required", isPresented: $showingPermissionAlert) {
             Button("Settings") {
                 if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
@@ -212,20 +263,29 @@ struct ScanView: View {
     
     private func analyzeDetectedBarcode(_ barcode: BarcodeResult) {
         Task {
-            // Create a simple result from the detected barcode
-            let result = HybridScanResult(
-                barcode: barcode,
-                productInfo: nil,
-                ocrText: "",
-                ocrAnalysis: nil,
-                scanMethod: .barcodeOnly,
-                confidence: barcode.confidence,
-                processingTime: 0.0,
-                lastCapturedImage: nil
-            )
-            await MainActor.run {
-                hybridScanResult = result
-                detectedBarcode = nil // Clear the detection card
+            // Look up product in database
+            do {
+                let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
+                
+                await MainActor.run {
+                    if let product = product {
+                        // Product found in database
+                        foundProduct = product
+                        showingProductFound = true
+                        detectedBarcode = nil
+                    } else {
+                        // Product not found - prompt for nutritional label scan
+                        showingProductNotFound = true
+                        detectedBarcode = nil
+                    }
+                }
+            } catch {
+                // Error looking up product
+                print("Error looking up product: \(error.localizedDescription)")
+                await MainActor.run {
+                    showingProductNotFound = true
+                    detectedBarcode = nil
+                }
             }
         }
     }
@@ -292,6 +352,64 @@ struct ScanView: View {
         withAnimation(.easeInOut(duration: 0.3)) {
             hybridScanResult = nil
             detectedBarcode = nil
+            showingProductFound = false
+            showingProductNotFound = false
+            foundProduct = nil
+        }
+    }
+    
+    /**
+     * Process nutritional label image captured manually
+     */
+    private func processNutritionalLabelImage(_ image: UIImage) {
+        Task {
+            // Use OCR-only scan for nutritional label
+            let result = await hybridScanService.performOCROnlyScan(from: image)
+            await MainActor.run {
+                hybridScanResult = result
+            }
+        }
+    }
+    
+    /**
+     * Analyze product from database for pet safety
+     */
+    private func analyzeProductForPet(_ product: FoodProduct) {
+        // Select pet first
+        if petService.pets.count == 1 {
+            selectedPet = petService.pets.first
+            analyzeProductIngredients(product)
+        } else if petService.pets.count > 1 {
+            showingPetSelection = true
+        } else {
+            showingAddPet = true
+        }
+    }
+    
+    /**
+     * Analyze product ingredients for selected pet
+     */
+    private func analyzeProductIngredients(_ product: FoodProduct) {
+        guard let pet = selectedPet else { return }
+        
+        // Get ingredients from product
+        let ingredientsText = product.nutritionalInfo?.ingredients.joined(separator: ", ") ?? ""
+        
+        // Create analysis request with product info
+        let analysisRequest = ScanAnalysisRequest(
+            petId: pet.id,
+            extractedText: ingredientsText,
+            productName: product.name,
+            scanMethod: .barcode,  // Product from barcode scan
+            imageData: nil  // No image needed for database products
+        )
+        
+        scanService.analyzeScan(analysisRequest) { scan in
+            Task { @MainActor in
+                scanResult = scan
+                showingResults = true
+                foundProduct = nil
+            }
         }
     }
 }
