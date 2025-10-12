@@ -7,7 +7,8 @@ Extracted from app.routers.nutrition for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from sqlalchemy.orm import Session
+import uuid
+from datetime import datetime
 
 from app.database import get_db
 from app.models.nutrition import (
@@ -18,15 +19,16 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-# Removed unused imports: create_error_response, APIError
+from app.utils.logging_config import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/analysis", tags=["nutrition-analysis"])
 
 
 @router.post("/analyze", response_model=FoodAnalysisResponse)
 async def analyze_food(
     analysis_request: NutritionAnalysisRequest,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -34,7 +36,7 @@ async def analyze_food(
     
     Args:
         analysis_request: Food analysis request data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -51,16 +53,21 @@ async def analyze_food(
         # Create food analysis
         analysis_data = analysis_request.dict()
         analysis_data['user_id'] = current_user.id
+        analysis_data['id'] = str(uuid.uuid4())
         
-        db_analysis = FoodAnalysisCreate(**analysis_data)
-        db.add(db_analysis)
-        db.commit()
-        db.refresh(db_analysis)
+        # Insert into database
+        response = supabase.table("food_analyses").insert(analysis_data).execute()
         
-        return FoodAnalysisResponse.from_orm(db_analysis)
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create food analysis")
         
+        created_analysis = response.data[0]
+        return FoodAnalysisResponse(**created_analysis)
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to analyze food: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze food: {str(e)}"
@@ -70,7 +77,7 @@ async def analyze_food(
 @router.get("/analyses/{pet_id}", response_model=List[FoodAnalysisResponse])
 async def get_food_analyses(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -78,7 +85,7 @@ async def get_food_analyses(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -93,14 +100,17 @@ async def get_food_analyses(
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Get food analyses
-        analyses = db.query(FoodAnalysisCreate).filter(
-            FoodAnalysisCreate.pet_id == pet_id,
-            FoodAnalysisCreate.user_id == current_user.id
-        ).all()
+        response = supabase.table("food_analyses").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).execute()
         
-        return [FoodAnalysisResponse.from_orm(analysis) for analysis in analyses]
+        if not response.data:
+            return []
         
+        return [FoodAnalysisResponse(**analysis) for analysis in response.data]
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get food analyses: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get food analyses: {str(e)}"
@@ -110,7 +120,7 @@ async def get_food_analyses(
 @router.post("/compatibility", response_model=NutritionCompatibilityResponse)
 async def assess_nutrition_compatibility(
     compatibility_request: dict,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -118,7 +128,7 @@ async def assess_nutrition_compatibility(
     
     Args:
         compatibility_request: Compatibility assessment data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -143,7 +153,10 @@ async def assess_nutrition_compatibility(
         
         return NutritionCompatibilityResponse(**compatibility_result)
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to assess nutrition compatibility: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to assess nutrition compatibility: {str(e)}"
@@ -153,7 +166,7 @@ async def assess_nutrition_compatibility(
 @router.get("/food-analysis/{food_analysis_id}", response_model=FoodAnalysisResponse)
 async def get_food_analysis(
     food_analysis_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -161,7 +174,7 @@ async def get_food_analysis(
     
     Args:
         food_analysis_id: Food analysis ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -172,20 +185,20 @@ async def get_food_analysis(
     """
     try:
         # Get food analysis
-        analysis = db.query(FoodAnalysisCreate).filter(
-            FoodAnalysisCreate.id == food_analysis_id,
-            FoodAnalysisCreate.user_id == current_user.id
-        ).first()
+        response = supabase.table("food_analyses").select("*").eq("id", food_analysis_id).eq("user_id", current_user.id).limit(1).execute()
         
-        if not analysis:
+        if not response.data:
             raise HTTPException(
                 status_code=404,
                 detail="Food analysis not found"
             )
         
-        return FoodAnalysisResponse.from_orm(analysis)
+        return FoodAnalysisResponse(**response.data[0])
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get food analysis: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get food analysis: {str(e)}"

@@ -7,7 +7,6 @@ Future-ready service for AI-powered nutrition analysis.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,14 +23,14 @@ class NutritionInsightsService:
     - Predictive insights
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, supabase):
         """
         Initialize insights service
         
         Args:
-            db: Database session
+            supabase: Supabase client
         """
-        self.db = db
+        self.supabase = supabase
     
     async def generate_insights(self, pet_id: str, insight_type: str = "all") -> Dict[str, Any]:
         """

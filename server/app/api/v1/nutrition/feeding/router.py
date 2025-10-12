@@ -7,7 +7,8 @@ Extracted from app.routers.nutrition for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
-from sqlalchemy.orm import Session
+import uuid
+from datetime import datetime
 
 from app.database import get_db
 from app.models.nutrition import (
@@ -17,15 +18,16 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-# Removed unused imports: create_error_response, APIError
+from app.utils.logging_config import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/feeding", tags=["nutrition-feeding"])
 
 
 @router.post("/", response_model=FeedingRecordResponse)
 async def record_feeding(
     feeding_record: FeedingRecordCreate,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -33,7 +35,7 @@ async def record_feeding(
     
     Args:
         feeding_record: Feeding record data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -50,16 +52,21 @@ async def record_feeding(
         # Create feeding record
         record_data = feeding_record.dict()
         record_data['user_id'] = current_user.id
+        record_data['id'] = str(uuid.uuid4())
         
-        db_record = FeedingRecordCreate(**record_data)
-        db.add(db_record)
-        db.commit()
-        db.refresh(db_record)
+        # Insert into database
+        response = supabase.table("feeding_records").insert(record_data).execute()
         
-        return FeedingRecordResponse.from_orm(db_record)
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create feeding record")
         
+        created_record = response.data[0]
+        return FeedingRecordResponse(**created_record)
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to record feeding: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to record feeding: {str(e)}"
@@ -69,7 +76,7 @@ async def record_feeding(
 @router.get("/{pet_id}", response_model=List[FeedingRecordResponse])
 async def get_feeding_records(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -77,7 +84,7 @@ async def get_feeding_records(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -92,14 +99,17 @@ async def get_feeding_records(
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Get feeding records
-        records = db.query(FeedingRecordCreate).filter(
-            FeedingRecordCreate.pet_id == pet_id,
-            FeedingRecordCreate.user_id == current_user.id
-        ).order_by(FeedingRecordCreate.created_at.desc()).all()
+        response = supabase.table("feeding_records").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).order("created_at", desc=True).execute()
         
-        return [FeedingRecordResponse.from_orm(record) for record in records]
+        if not response.data:
+            return []
         
+        return [FeedingRecordResponse(**record) for record in response.data]
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get feeding records: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get feeding records: {str(e)}"
@@ -109,7 +119,7 @@ async def get_feeding_records(
 @router.get("/summaries/{pet_id}", response_model=List[DailyNutritionSummaryResponse])
 async def get_daily_summaries(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -117,7 +127,7 @@ async def get_daily_summaries(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -136,7 +146,10 @@ async def get_daily_summaries(
         
         return summaries
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get daily summaries: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get daily summaries: {str(e)}"
@@ -146,7 +159,7 @@ async def get_daily_summaries(
 @router.get("/daily-summary/{pet_id}", response_model=Optional[DailyNutritionSummaryResponse])
 async def get_daily_summary(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -154,7 +167,7 @@ async def get_daily_summary(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -173,7 +186,10 @@ async def get_daily_summary(
         
         return summary
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get daily summary: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get daily summary: {str(e)}"

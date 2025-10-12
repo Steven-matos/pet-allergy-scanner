@@ -7,7 +7,6 @@ Future-ready service for trend analysis and forecasting.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,14 +23,14 @@ class NutritionTrendsService:
     - Seasonal trends
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, supabase):
         """
         Initialize trends service
         
         Args:
-            db: Database session
+            supabase: Supabase client
         """
-        self.db = db
+        self.supabase = supabase
     
     async def analyze_trends(self, pet_id: str, trend_period: str = "monthly") -> Dict[str, Any]:
         """

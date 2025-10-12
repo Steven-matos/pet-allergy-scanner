@@ -7,7 +7,6 @@ Future-ready service for sophisticated nutrition analysis.
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,14 +23,14 @@ class AdvancedAnalyticsService:
     - Comparative analytics
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, supabase):
         """
         Initialize analytics service
         
         Args:
-            db: Database session
+            supabase: Supabase client
         """
-        self.db = db
+        self.supabase = supabase
     
     async def get_pet_analytics(self, pet_id: str, days: int = 30) -> Dict[str, Any]:
         """

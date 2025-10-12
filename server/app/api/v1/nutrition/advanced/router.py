@@ -8,12 +8,11 @@ Future-ready module for sophisticated nutrition analysis.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-# Removed unused imports: create_error_response, APIError
+from app.utils.logging_config import get_logger
 
 # Import advanced analytics services
 from .analytics_service import AdvancedAnalyticsService
@@ -21,6 +20,7 @@ from .insights_service import NutritionInsightsService
 from .patterns_service import NutritionPatternsService
 from .trends_service import NutritionTrendsService
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/advanced", tags=["nutrition-advanced"])
 
 
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/advanced", tags=["nutrition-advanced"])
 async def get_analytics_overview(
     pet_id: Optional[str] = Query(None, description="Pet ID for specific analytics"),
     days: int = Query(30, description="Number of days to analyze"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -37,7 +37,7 @@ async def get_analytics_overview(
     Args:
         pet_id: Optional pet ID for specific pet analytics
         days: Number of days to analyze (default: 30)
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -47,7 +47,7 @@ async def get_analytics_overview(
         HTTPException: If analytics generation fails
     """
     try:
-        analytics_service = AdvancedAnalyticsService(db)
+        analytics_service = AdvancedAnalyticsService(supabase)
         
         if pet_id:
             # Verify pet ownership
@@ -60,7 +60,10 @@ async def get_analytics_overview(
         
         return analytics
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to generate analytics overview: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate analytics overview: {str(e)}"
@@ -71,7 +74,7 @@ async def get_analytics_overview(
 async def get_nutrition_insights(
     pet_id: str,
     insight_type: str = Query("all", description="Type of insights to generate"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -80,7 +83,7 @@ async def get_nutrition_insights(
     Args:
         pet_id: Pet ID
         insight_type: Type of insights (all, health, behavior, trends)
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -94,12 +97,15 @@ async def get_nutrition_insights(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id)
         
-        insights_service = NutritionInsightsService(db)
+        insights_service = NutritionInsightsService(supabase)
         insights = await insights_service.generate_insights(pet_id, insight_type)
         
         return insights
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to generate nutrition insights: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate nutrition insights: {str(e)}"
@@ -110,7 +116,7 @@ async def get_nutrition_insights(
 async def get_nutrition_patterns(
     pet_id: str,
     pattern_type: str = Query("feeding", description="Type of patterns to analyze"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -119,7 +125,7 @@ async def get_nutrition_patterns(
     Args:
         pet_id: Pet ID
         pattern_type: Type of patterns (feeding, preferences, health)
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -133,12 +139,15 @@ async def get_nutrition_patterns(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id)
         
-        patterns_service = NutritionPatternsService(db)
+        patterns_service = NutritionPatternsService(supabase)
         patterns = await patterns_service.analyze_patterns(pet_id, pattern_type)
         
         return patterns
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to analyze nutrition patterns: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze nutrition patterns: {str(e)}"
@@ -149,7 +158,7 @@ async def get_nutrition_patterns(
 async def get_nutrition_trends(
     pet_id: str,
     trend_period: str = Query("monthly", description="Trend period (weekly, monthly, yearly)"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -158,7 +167,7 @@ async def get_nutrition_trends(
     Args:
         pet_id: Pet ID
         trend_period: Trend analysis period
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -172,12 +181,15 @@ async def get_nutrition_trends(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id)
         
-        trends_service = NutritionTrendsService(db)
+        trends_service = NutritionTrendsService(supabase)
         trends = await trends_service.analyze_trends(pet_id, trend_period)
         
         return trends
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to analyze nutrition trends: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to analyze nutrition trends: {str(e)}"
@@ -188,7 +200,7 @@ async def get_nutrition_trends(
 async def get_advanced_recommendations(
     pet_id: str,
     recommendation_type: str = Query("all", description="Type of recommendations"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -197,7 +209,7 @@ async def get_advanced_recommendations(
     Args:
         pet_id: Pet ID
         recommendation_type: Type of recommendations (diet, supplements, schedule)
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -212,9 +224,9 @@ async def get_advanced_recommendations(
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Combine insights from all services for comprehensive recommendations
-        insights_service = NutritionInsightsService(db)
-        patterns_service = NutritionPatternsService(db)
-        trends_service = NutritionTrendsService(db)
+        insights_service = NutritionInsightsService(supabase)
+        patterns_service = NutritionPatternsService(supabase)
+        trends_service = NutritionTrendsService(supabase)
         
         insights = await insights_service.generate_insights(pet_id, "all")
         patterns = await patterns_service.analyze_patterns(pet_id, "all")
@@ -237,7 +249,10 @@ async def get_advanced_recommendations(
         
         return recommendations
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to generate advanced recommendations: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate advanced recommendations: {str(e)}"

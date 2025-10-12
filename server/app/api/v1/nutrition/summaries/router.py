@@ -7,7 +7,6 @@ Extracted from app.routers.nutrition for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.nutrition import (
@@ -16,21 +15,22 @@ from app.models.nutrition import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-# Removed unused imports: create_error_response, APIError
+from app.utils.logging_config import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/summaries", tags=["nutrition-summaries"])
 
 
 @router.get("/insights/multi-pet", response_model=MultiPetNutritionInsights)
 async def get_multi_pet_insights(
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get multi-pet nutrition insights for the current user
     
     Args:
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -41,10 +41,9 @@ async def get_multi_pet_insights(
     """
     try:
         # Get user's pets
-        from app.models.pet import PetResponse
-        pets = db.query(PetResponse).filter(
-            PetResponse.user_id == current_user.id
-        ).all()
+        pets_response = supabase.table("pets").select("*").eq("user_id", current_user.id).execute()
+        
+        pets = pets_response.data if pets_response.data else []
         
         if not pets:
             return MultiPetNutritionInsights(
@@ -71,6 +70,7 @@ async def get_multi_pet_insights(
         return MultiPetNutritionInsights(**insights)
         
     except Exception as e:
+        logger.error(f"Failed to generate multi-pet insights: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate multi-pet insights: {str(e)}"
@@ -81,7 +81,7 @@ async def get_multi_pet_insights(
 async def get_daily_nutrition_summaries(
     pet_id: str,
     days: int = 7,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -90,7 +90,7 @@ async def get_daily_nutrition_summaries(
     Args:
         pet_id: Pet ID
         days: Number of days to include (default: 7)
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -109,7 +109,10 @@ async def get_daily_nutrition_summaries(
         
         return summaries
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get daily nutrition summaries: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get daily nutrition summaries: {str(e)}"

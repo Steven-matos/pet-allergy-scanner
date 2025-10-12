@@ -7,7 +7,7 @@ Extracted from app.routers.nutrition for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
-from sqlalchemy.orm import Session
+import uuid
 
 from app.database import get_db
 from app.models.calorie_goals import (
@@ -17,15 +17,16 @@ from app.models.calorie_goals import (
 )
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-# Removed unused imports: create_error_response, APIError
+from app.utils.logging_config import get_logger
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/goals", tags=["nutrition-goals"])
 
 
 @router.post("/calorie-goals", response_model=CalorieGoalResponse)
 async def create_calorie_goal(
     goal: CalorieGoalCreate,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -33,7 +34,7 @@ async def create_calorie_goal(
     
     Args:
         goal: Calorie goal data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -50,16 +51,21 @@ async def create_calorie_goal(
         # Create calorie goal
         goal_data = goal.dict()
         goal_data['user_id'] = current_user.id
+        goal_data['id'] = str(uuid.uuid4())
         
-        db_goal = CalorieGoalCreate(**goal_data)
-        db.add(db_goal)
-        db.commit()
-        db.refresh(db_goal)
+        # Insert into database
+        response = supabase.table("calorie_goals").insert(goal_data).execute()
         
-        return CalorieGoalResponse.from_orm(db_goal)
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create calorie goal")
         
+        created_goal = response.data[0]
+        return CalorieGoalResponse(**created_goal)
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to create calorie goal: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to create calorie goal: {str(e)}"
@@ -68,14 +74,14 @@ async def create_calorie_goal(
 
 @router.get("/calorie-goals", response_model=List[CalorieGoalResponse])
 async def get_calorie_goals(
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get all calorie goals for the current user
     
     Args:
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -86,13 +92,15 @@ async def get_calorie_goals(
     """
     try:
         # Get calorie goals
-        goals = db.query(CalorieGoalCreate).filter(
-            CalorieGoalCreate.user_id == current_user.id
-        ).all()
+        response = supabase.table("calorie_goals").select("*").eq("user_id", current_user.id).execute()
         
-        return [CalorieGoalResponse.from_orm(goal) for goal in goals]
+        if not response.data:
+            return []
+        
+        return [CalorieGoalResponse(**goal) for goal in response.data]
         
     except Exception as e:
+        logger.error(f"Failed to get calorie goals: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get calorie goals: {str(e)}"
@@ -102,7 +110,7 @@ async def get_calorie_goals(
 @router.get("/calorie-goals/{pet_id}", response_model=Optional[CalorieGoalResponse])
 async def get_pet_calorie_goal(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -110,7 +118,7 @@ async def get_pet_calorie_goal(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -125,16 +133,16 @@ async def get_pet_calorie_goal(
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Get calorie goal
-        goal = db.query(CalorieGoalCreate).filter(
-            CalorieGoalCreate.pet_id == pet_id,
-            CalorieGoalCreate.user_id == current_user.id
-        ).first()
+        response = supabase.table("calorie_goals").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()
         
-        if goal:
-            return CalorieGoalResponse.from_orm(goal)
+        if response.data:
+            return CalorieGoalResponse(**response.data[0])
         return None
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to get calorie goal: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to get calorie goal: {str(e)}"
@@ -144,7 +152,7 @@ async def get_pet_calorie_goal(
 @router.delete("/calorie-goals/{pet_id}")
 async def delete_calorie_goal(
     pet_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -152,7 +160,7 @@ async def delete_calorie_goal(
     
     Args:
         pet_id: Pet ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -166,24 +174,24 @@ async def delete_calorie_goal(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id)
         
-        # Delete calorie goal
-        goal = db.query(CalorieGoalCreate).filter(
-            CalorieGoalCreate.pet_id == pet_id,
-            CalorieGoalCreate.user_id == current_user.id
-        ).first()
+        # Check if calorie goal exists
+        check_response = supabase.table("calorie_goals").select("id").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()
         
-        if goal:
-            db.delete(goal)
-            db.commit()
-            return {"message": "Calorie goal deleted successfully"}
-        else:
+        if not check_response.data:
             raise HTTPException(
                 status_code=404,
                 detail="Calorie goal not found"
             )
         
+        # Delete calorie goal
+        supabase.table("calorie_goals").delete().eq("pet_id", pet_id).eq("user_id", current_user.id).execute()
+        
+        return {"message": "Calorie goal deleted successfully"}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to delete calorie goal: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete calorie goal: {str(e)}"
