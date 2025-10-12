@@ -5,7 +5,6 @@ Handles device token registration, notification sending, and management
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.security import HTTPBearer
-from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 import json
 import asyncio
@@ -30,7 +29,7 @@ push_service = PushNotificationService()
 async def register_device_token(
     device_token: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Register device token for push notifications
@@ -38,20 +37,26 @@ async def register_device_token(
     Args:
         device_token: The device token from APNs
         current_user: Current authenticated user
-        db: Database session
+        supabase: Supabase client
         
     Returns:
         Success message
     """
     try:
         # Update user's device token
-        current_user.device_token = device_token
-        current_user.updated_at = datetime.utcnow()
-        db.commit()
+        response = supabase.table("users").update({
+            "device_token": device_token,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", current_user.id).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update device token")
         
         return {"message": "Device token registered successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
-        db.rollback()
+        logger.error(f"Failed to register device token: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to register device token: {str(e)}")
 
 
@@ -99,14 +104,14 @@ async def send_push_notification(
 @router.post("/cancel-all")
 async def cancel_all_notifications(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Cancel all pending notifications for the current user
     
     Args:
         current_user: Current authenticated user
-        db: Database session
+        supabase: Supabase client
         
     Returns:
         Success message
@@ -117,6 +122,7 @@ async def cancel_all_notifications(
         
         return {"message": "All notifications cancelled successfully"}
     except Exception as e:
+        logger.error(f"Failed to cancel notifications: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cancel notifications: {str(e)}")
 
 

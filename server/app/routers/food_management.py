@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from ..database import get_supabase_client
+from ..database import get_supabase_client, get_db
 from ..models.food_items import (
     FoodItemCreate,
     FoodItemResponse,
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 @router.get("/recent", response_model=List[FoodItemResponse])
 async def get_recent_foods(
     limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -38,24 +38,45 @@ async def get_recent_foods(
     
     Args:
         limit: Maximum number of results
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         List of recent food items
     """
     try:
-        # Get recent food items based on feeding records
-        # This would typically join with feeding_records table
-        # For now, return a simple query of food items
+        # Get recent food items ordered by creation date
+        response = supabase.table("food_items").select("*").order("created_at", desc=True).limit(limit).execute()
         
-        recent_foods = db.query(FoodItemResponse).order_by(
-            FoodItemResponse.created_at.desc()
-        ).limit(limit).all()
+        if not response.data:
+            return []
+        
+        # Parse response into FoodItemResponse models
+        recent_foods = []
+        for item in response.data:
+            nutritional_info = None
+            if item.get("nutritional_info"):
+                try:
+                    nutritional_info = NutritionalInfoBase(**item["nutritional_info"])
+                except Exception as e:
+                    logger.warning(f"Failed to parse nutritional_info: {e}")
+            
+            recent_foods.append(FoodItemResponse(
+                id=item["id"],
+                name=item["name"],
+                brand=item.get("brand"),
+                barcode=item.get("barcode"),
+                nutritional_info=nutritional_info,
+                category=item.get("category"),
+                description=item.get("description"),
+                created_at=item["created_at"],
+                updated_at=item["updated_at"]
+            ))
         
         return recent_foods
         
     except Exception as e:
+        logger.error(f"Error fetching recent foods: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -66,7 +87,7 @@ async def search_foods(
     category: Optional[str] = Query(None, description="Category filter"),
     limit: int = Query(20, ge=1, le=100, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Results offset"),
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -78,34 +99,52 @@ async def search_foods(
         category: Category filter
         limit: Maximum results
         offset: Results offset
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         Search results with pagination
     """
     try:
-        # Build query
-        query = db.query(FoodItemResponse)
+        # Build query with filters
+        query = supabase.table("food_items").select("*", count="exact")
         
         if q:
-            query = query.filter(
-                FoodItemResponse.name.ilike(f"%{q}%") |
-                FoodItemResponse.brand.ilike(f"%{q}%") |
-                FoodItemResponse.description.ilike(f"%{q}%")
-            )
+            # Search in name, brand, and description
+            query = query.or_(f"name.ilike.%{q}%,brand.ilike.%{q}%,description.ilike.%{q}%")
         
         if brand:
-            query = query.filter(FoodItemResponse.brand.ilike(f"%{brand}%"))
+            query = query.ilike("brand", f"%{brand}%")
         
         if category:
-            query = query.filter(FoodItemResponse.category == category)
+            query = query.eq("category", category)
         
-        # Get total count
-        total_count = query.count()
+        # Execute with pagination
+        response = query.range(offset, offset + limit - 1).execute()
         
-        # Get paginated results
-        items = query.offset(offset).limit(limit).all()
+        # Parse results
+        items = []
+        for item in response.data:
+            nutritional_info = None
+            if item.get("nutritional_info"):
+                try:
+                    nutritional_info = NutritionalInfoBase(**item["nutritional_info"])
+                except Exception as e:
+                    logger.warning(f"Failed to parse nutritional_info: {e}")
+            
+            items.append(FoodItemResponse(
+                id=item["id"],
+                name=item["name"],
+                brand=item.get("brand"),
+                barcode=item.get("barcode"),
+                nutritional_info=nutritional_info,
+                category=item.get("category"),
+                description=item.get("description"),
+                created_at=item["created_at"],
+                updated_at=item["updated_at"]
+            ))
+        
+        total_count = response.count if response.count else 0
         
         return FoodSearchResponse(
             items=items,
@@ -114,6 +153,7 @@ async def search_foods(
         )
         
     except Exception as e:
+        logger.error(f"Error searching foods: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -183,7 +223,7 @@ async def get_food_by_barcode(
 @router.post("/", response_model=FoodItemResponse)
 async def create_food_item(
     food_item: FoodItemCreate,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -191,7 +231,7 @@ async def create_food_item(
     
     Args:
         food_item: Food item data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
@@ -199,32 +239,54 @@ async def create_food_item(
     """
     try:
         # Check if food item with same name and brand already exists
-        existing_item = db.query(FoodItemResponse).filter(
-            FoodItemResponse.name == food_item.name,
-            FoodItemResponse.brand == food_item.brand
-        ).first()
+        existing_response = supabase.table("food_items").select("id").eq("name", food_item.name).eq("brand", food_item.brand).limit(1).execute()
         
-        if existing_item:
+        if existing_response.data:
             raise HTTPException(
                 status_code=400, 
                 detail="Food item with this name and brand already exists"
             )
         
-        # Create new food item
-        new_food_item = FoodItemResponse(
-            id=str(uuid.uuid4()),
-            **food_item.dict(),
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+        # Prepare data for insertion
+        item_data = food_item.dict()
+        item_data["id"] = str(uuid.uuid4())
+        
+        # Convert nutritional_info to dict if it's a Pydantic model
+        if item_data.get("nutritional_info") and hasattr(item_data["nutritional_info"], "dict"):
+            item_data["nutritional_info"] = item_data["nutritional_info"].dict()
+        
+        # Insert new food item
+        response = supabase.table("food_items").insert(item_data).execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create food item")
+        
+        created_item = response.data[0]
+        
+        # Parse and return response
+        nutritional_info = None
+        if created_item.get("nutritional_info"):
+            try:
+                nutritional_info = NutritionalInfoBase(**created_item["nutritional_info"])
+            except Exception as e:
+                logger.warning(f"Failed to parse nutritional_info: {e}")
+        
+        return FoodItemResponse(
+            id=created_item["id"],
+            name=created_item["name"],
+            brand=created_item.get("brand"),
+            barcode=created_item.get("barcode"),
+            nutritional_info=nutritional_info,
+            category=created_item.get("category"),
+            description=created_item.get("description"),
+            created_at=created_item["created_at"],
+            updated_at=created_item["updated_at"]
         )
         
-        db.add(new_food_item)
-        db.commit()
-        db.refresh(new_food_item)
-        
-        return new_food_item
-        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error creating food item: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -232,7 +294,7 @@ async def create_food_item(
 async def update_food_item(
     food_id: str,
     food_update: FoodItemUpdate,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -241,41 +303,65 @@ async def update_food_item(
     Args:
         food_id: Food item ID
         food_update: Updated food item data
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         Updated food item
     """
     try:
-        # Get existing food item
-        food_item = db.query(FoodItemResponse).filter(
-            FoodItemResponse.id == food_id
-        ).first()
+        # Check if food item exists
+        existing_response = supabase.table("food_items").select("id").eq("id", food_id).limit(1).execute()
         
-        if not food_item:
+        if not existing_response.data:
             raise HTTPException(status_code=404, detail="Food item not found")
         
-        # Update fields
+        # Prepare update data
         update_data = food_update.dict(exclude_unset=True)
-        for field, value in update_data.items():
-            setattr(food_item, field, value)
         
-        food_item.updated_at = datetime.utcnow()
+        # Convert nutritional_info to dict if it's a Pydantic model
+        if update_data.get("nutritional_info") and hasattr(update_data["nutritional_info"], "dict"):
+            update_data["nutritional_info"] = update_data["nutritional_info"].dict()
         
-        db.commit()
-        db.refresh(food_item)
+        # Update food item
+        response = supabase.table("food_items").update(update_data).eq("id", food_id).execute()
         
-        return food_item
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to update food item")
         
+        updated_item = response.data[0]
+        
+        # Parse and return response
+        nutritional_info = None
+        if updated_item.get("nutritional_info"):
+            try:
+                nutritional_info = NutritionalInfoBase(**updated_item["nutritional_info"])
+            except Exception as e:
+                logger.warning(f"Failed to parse nutritional_info: {e}")
+        
+        return FoodItemResponse(
+            id=updated_item["id"],
+            name=updated_item["name"],
+            brand=updated_item.get("brand"),
+            barcode=updated_item.get("barcode"),
+            nutritional_info=nutritional_info,
+            category=updated_item.get("category"),
+            description=updated_item.get("description"),
+            created_at=updated_item["created_at"],
+            updated_at=updated_item["updated_at"]
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error updating food item: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.delete("/{food_id}")
 async def delete_food_item(
     food_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -283,38 +369,35 @@ async def delete_food_item(
     
     Args:
         food_id: Food item ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         Success message
     """
     try:
-        # Get existing food item
-        food_item = db.query(FoodItemResponse).filter(
-            FoodItemResponse.id == food_id
-        ).first()
+        # Check if food item exists
+        existing_response = supabase.table("food_items").select("id").eq("id", food_id).limit(1).execute()
         
-        if not food_item:
+        if not existing_response.data:
             raise HTTPException(status_code=404, detail="Food item not found")
         
-        # Check if food item is being used in feeding records
-        # This would typically check feeding_records table
-        # For now, we'll allow deletion
-        
-        db.delete(food_item)
-        db.commit()
+        # Delete food item
+        response = supabase.table("food_items").delete().eq("id", food_id).execute()
         
         return {"message": "Food item deleted successfully"}
         
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error deleting food item: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/{food_id}", response_model=FoodItemResponse)
 async def get_food_item(
     food_id: str,
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
@@ -322,77 +405,112 @@ async def get_food_item(
     
     Args:
         food_id: Food item ID
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         Food item details
     """
     try:
-        food_item = db.query(FoodItemResponse).filter(
-            FoodItemResponse.id == food_id
-        ).first()
+        response = supabase.table("food_items").select("*").eq("id", food_id).limit(1).execute()
         
-        if not food_item:
+        if not response.data:
             raise HTTPException(status_code=404, detail="Food item not found")
         
-        return food_item
+        item = response.data[0]
         
+        # Parse nutritional info
+        nutritional_info = None
+        if item.get("nutritional_info"):
+            try:
+                nutritional_info = NutritionalInfoBase(**item["nutritional_info"])
+            except Exception as e:
+                logger.warning(f"Failed to parse nutritional_info: {e}")
+        
+        return FoodItemResponse(
+            id=item["id"],
+            name=item["name"],
+            brand=item.get("brand"),
+            barcode=item.get("barcode"),
+            nutritional_info=nutritional_info,
+            category=item.get("category"),
+            description=item.get("description"),
+            created_at=item["created_at"],
+            updated_at=item["updated_at"]
+        )
+        
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error fetching food item: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/categories", response_model=List[str])
 async def get_food_categories(
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get list of available food categories
     
     Args:
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         List of food categories
     """
     try:
-        # Get distinct categories
-        categories = db.query(FoodItemResponse.category).distinct().all()
+        # Get all unique categories
+        response = supabase.table("food_items").select("category").execute()
         
-        # Filter out None values and return as list
-        category_list = [cat[0] for cat in categories if cat[0] is not None]
+        if not response.data:
+            return []
         
-        return sorted(category_list)
+        # Extract unique categories and filter out None values
+        categories = set()
+        for item in response.data:
+            if item.get("category"):
+                categories.add(item["category"])
+        
+        return sorted(list(categories))
         
     except Exception as e:
+        logger.error(f"Error fetching food categories: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/brands", response_model=List[str])
 async def get_food_brands(
-    db: Session = Depends(get_db),
+    supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get list of available food brands
     
     Args:
-        db: Database session
+        supabase: Supabase client
         current_user: Current authenticated user
         
     Returns:
         List of food brands
     """
     try:
-        # Get distinct brands
-        brands = db.query(FoodItemResponse.brand).distinct().all()
+        # Get all unique brands
+        response = supabase.table("food_items").select("brand").execute()
         
-        # Filter out None values and return as list
-        brand_list = [brand[0] for brand in brands if brand[0] is not None]
+        if not response.data:
+            return []
         
-        return sorted(brand_list)
+        # Extract unique brands and filter out None values
+        brands = set()
+        for item in response.data:
+            if item.get("brand"):
+                brands.add(item["brand"])
+        
+        return sorted(list(brands))
         
     except Exception as e:
+        logger.error(f"Error fetching food brands: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
