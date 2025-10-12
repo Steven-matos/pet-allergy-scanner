@@ -9,8 +9,16 @@ import SwiftUI
 
 struct ScanResultView: View {
     let scan: Scan
+    let barcode: String?  // Optional barcode from scan
+    
     @Environment(\.dismiss) private var dismiss
     @State private var settingsManager = SettingsManager.shared
+    @State private var showingAddToDatabase = false
+    
+    init(scan: Scan, barcode: String? = nil) {
+        self.scan = scan
+        self.barcode = barcode
+    }
     
     var body: some View {
         NavigationStack {
@@ -34,6 +42,11 @@ struct ScanResultView: View {
                         if settingsManager.shouldShowDetailedAnalysis && !result.analysisDetails.isEmpty {
                             AnalysisDetailsSection(details: result.analysisDetails)
                         }
+                        
+                        // Add to Database Card
+                        AddToDatabasePromptCard(
+                            onTap: { showingAddToDatabase = true }
+                        )
                     } else {
                         // Loading state
                         LoadingStateView()
@@ -55,6 +68,18 @@ struct ScanResultView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingAddToDatabase) {
+            if let result = scan.result {
+                AddProductToDatabaseView(
+                    scan: scan,
+                    scanResult: result,
+                    onSuccess: {
+                        showingAddToDatabase = false
+                    },
+                    scannedBarcode: barcode
+                )
+            }
+        }
     }
 }
 
@@ -64,6 +89,32 @@ struct SafetyResultCard: View {
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Product and brand info (if available)
+            if result.brand != nil || result.productName != nil {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    if let brand = result.brand {
+                        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                            Image(systemName: "tag.fill")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
+                            
+                            Text(brand)
+                                .font(ModernDesignSystem.Typography.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        }
+                    }
+                    
+                    if let productName = result.productName {
+                        Text(productName)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, ModernDesignSystem.Spacing.sm)
+            }
+            
             HStack {
                 Image(systemName: iconForSafety(result.overallSafety))
                     .font(.system(size: 40))
@@ -482,6 +533,102 @@ struct LoadingStateView: View {
         }
         .padding(ModernDesignSystem.Spacing.xl)
         .modernCard()
+    }
+}
+
+/**
+ * Prompt card to encourage users to add product to database
+ */
+struct AddToDatabasePromptCard: View {
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Icon and title
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "square.and.arrow.up.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                    
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Help the Community")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text("Add this product to the database")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                // Benefits
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    BenefitRow(
+                        icon: "checkmark.circle.fill",
+                        text: "Help other pet owners find safe products"
+                    )
+                    
+                    BenefitRow(
+                        icon: "magnifyingglass.circle.fill",
+                        text: "Make product searchable by barcode"
+                    )
+                    
+                    BenefitRow(
+                        icon: "chart.bar.fill",
+                        text: "Contribute to nutritional database"
+                    )
+                }
+                .padding(.top, ModernDesignSystem.Spacing.xs)
+            }
+            .padding(ModernDesignSystem.Spacing.md)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        ModernDesignSystem.Colors.goldenYellow.opacity(0.1),
+                        ModernDesignSystem.Colors.primary.opacity(0.05)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium))
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.goldenYellow.opacity(0.3), lineWidth: 2)
+            )
+            .shadow(color: ModernDesignSystem.Colors.goldenYellow.opacity(0.1), radius: 8, x: 0, y: 4)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+/**
+ * Single benefit row for the add to database card
+ */
+struct BenefitRow: View {
+    let icon: String
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            Image(systemName: icon)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.safe)
+            
+            Text(text)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            Spacer()
+        }
     }
 }
 

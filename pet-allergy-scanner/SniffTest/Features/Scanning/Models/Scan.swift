@@ -230,6 +230,7 @@ struct ScanAnalysisRequest: Codable {
     let petId: String
     let extractedText: String
     let productName: String?
+    let barcode: String?  // Product barcode for linking to database
     let scanMethod: ScanMethod
     let imageData: String?  // Base64 encoded image for OCR scans
     
@@ -238,12 +239,14 @@ struct ScanAnalysisRequest: Codable {
         petId: String,
         extractedText: String,
         productName: String? = nil,
+        barcode: String? = nil,
         scanMethod: ScanMethod = .ocr,
         imageData: String? = nil
     ) {
         self.petId = petId
         self.extractedText = extractedText
         self.productName = productName
+        self.barcode = barcode
         self.scanMethod = scanMethod
         self.imageData = imageData
     }
@@ -277,6 +280,7 @@ struct ScanAnalysisRequest: Codable {
         case petId = "pet_id"
         case extractedText = "extracted_text"
         case productName = "product_name"
+        case barcode = "barcode"
         case scanMethod = "scan_method"
         case imageData = "image_data"
     }
