@@ -93,9 +93,17 @@ struct AuthenticationView: View {
     private var headerSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
             // App Logo with proper styling
-            Image(systemName: "pawprint.circle.fill")
-                .font(.system(size: 80))
-                .foregroundColor(ModernDesignSystem.Colors.primary)
+            Image("Branding/app-logo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 100, height: 100)
+                .cornerRadius(ModernDesignSystem.CornerRadius.large)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
                 .accessibilityLabel("SniffTest app logo")
             
             // App Title with design system typography

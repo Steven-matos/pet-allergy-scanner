@@ -17,15 +17,8 @@ struct ContentView: View {
         Group {
             switch authService.authState {
             case .initializing, .loading:
-                // Show loading state while initializing or loading user data
-                VStack(spacing: 20) {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                    Text("Loading...")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Show custom launch screen while initializing or loading user data
+                LaunchScreenView()
                 
             case .authenticated(let user):
                 // User is authenticated with complete data
