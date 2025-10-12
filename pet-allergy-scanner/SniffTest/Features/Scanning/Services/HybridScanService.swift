@@ -214,22 +214,22 @@ class HybridScanService: @unchecked Sendable {
     }
     
     private func extractText(from image: UIImage) async -> (text: String, analysis: NutritionalAnalysis?) {
-        return await withCheckedContinuation { continuation in
-            ocrService.extractText(from: image)
-            
-            // Wait for OCR to complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                while self.ocrService.isProcessing {
-                    // Wait for processing to complete
-                }
-                
-                let result = (
-                    text: self.ocrService.extractedText,
-                    analysis: self.ocrService.nutritionalAnalysis
-                )
-                continuation.resume(returning: result)
-            }
+        // Store initial state
+        let wasProcessing = ocrService.isProcessing
+        
+        // Start OCR processing
+        ocrService.extractText(from: image)
+        
+        // Wait for OCR to complete using proper async/await
+        while ocrService.isProcessing {
+            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
         }
+        
+        // Return results
+        return (
+            text: ocrService.extractedText,
+            analysis: ocrService.nutritionalAnalysis
+        )
     }
     
     private func combineScanResults(
