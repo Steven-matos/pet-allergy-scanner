@@ -303,14 +303,15 @@ class CameraService: NSObject {
     private func setupCamera() async {
         // Check camera permission
         let status = AVCaptureDevice.authorizationStatus(for: .video)
-        guard status == .authorized else {
-            if status == .notDetermined {
-                let granted = await AVCaptureDevice.requestAccess(for: .video)
-                if !granted { return }
-            } else {
-                return
-            }
+        
+        // Handle permission
+        var hasPermission = status == .authorized
+        
+        if status == .notDetermined {
+            hasPermission = await AVCaptureDevice.requestAccess(for: .video)
         }
+        
+        guard hasPermission else { return }
         
         let session = AVCaptureSession()
         session.sessionPreset = .photo
