@@ -475,6 +475,8 @@ struct EmptyHistoryView: View {
 struct ScanDetailView: View {
     let scan: Scan
     @Environment(\.dismiss) private var dismiss
+    @State private var showingAddToDatabase = false
+    @State private var showingSaveSuccess = false
     
     var body: some View {
         NavigationStack {
@@ -482,6 +484,11 @@ struct ScanDetailView: View {
                 VStack(spacing: ModernDesignSystem.Spacing.lg) {
                     // Scan Header
                     ScanDetailHeader(scan: scan)
+                    
+                    // Raw extracted text (if available)
+                    if let rawText = scan.rawText, !rawText.isEmpty {
+                        ExtractedTextCard(text: rawText)
+                    }
                     
                     // Safety Summary
                     if let result = scan.result {
@@ -492,6 +499,11 @@ struct ScanDetailView: View {
                         
                         // Recommendations
                         ScanRecommendationsCard(result: result)
+                    }
+                    
+                    // Add to Database section (if barcode is available and not already in database)
+                    if canAddToDatabase {
+                        AddToDatabaseCard(onTap: { showingAddToDatabase = true })
                     }
                 }
                 .padding(ModernDesignSystem.Spacing.md)
@@ -506,7 +518,54 @@ struct ScanDetailView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingAddToDatabase) {
+                if let result = scan.result {
+                    AddProductToDatabaseView(
+                        scan: scan,
+                        scanResult: result,
+                        onSuccess: {
+                            showingAddToDatabase = false
+                            showingSaveSuccess = true
+                        },
+                        scannedBarcode: extractBarcodeFromRawText()
+                    )
+                }
+            }
+            .alert("Product Saved", isPresented: $showingSaveSuccess) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("This product has been added to the database and will be available for other users.")
+            }
         }
+    }
+    
+    /// Check if this scan can be added to database
+    /// Only allow if we have meaningful data to contribute
+    private var canAddToDatabase: Bool {
+        guard let result = scan.result else { return false }
+        // Can add if we have ingredients or nutritional analysis
+        return !result.ingredientsFound.isEmpty || scan.nutritionalAnalysis != nil
+    }
+    
+    /// Extract barcode from raw text if available
+    /// Looks for common barcode patterns in the OCR text
+    private func extractBarcodeFromRawText() -> String? {
+        guard let rawText = scan.rawText else { return nil }
+        
+        // Common barcode patterns (EAN-13, UPC-A, etc.)
+        let barcodePatterns = [
+            #"\b\d{13}\b"#,  // EAN-13 (13 digits)
+            #"\b\d{12}\b"#,  // UPC-A (12 digits)
+            #"\b\d{8}\b"#    // EAN-8 (8 digits)
+        ]
+        
+        for pattern in barcodePatterns {
+            if let range = rawText.range(of: pattern, options: .regularExpression) {
+                return String(rawText[range])
+            }
+        }
+        
+        return nil
     }
 }
 
@@ -719,6 +778,758 @@ struct ScanRecommendationsCard: View {
             return "✅ This product appears safe for your pet. All ingredients are within safe parameters."
         default:
             return "❓ Unable to determine safety status. Please consult with your veterinarian."
+        }
+    }
+}
+
+/**
+ * Extracted Text Card - Shows the raw OCR text
+ */
+struct ExtractedTextCard: View {
+    let text: String
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Image(systemName: "text.viewfinder")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Extracted Text")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Button(action: { isExpanded.toggle() }) {
+                    Text(isExpanded ? "Show Less" : "Show More")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            
+            Text(text)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .lineLimit(isExpanded ? nil : 5)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+    }
+}
+
+/**
+ * Add to Database Card - Prompts user to contribute scan data
+ */
+struct AddToDatabaseCard: View {
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                        .font(ModernDesignSystem.Typography.title2)
+                        .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                    
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Add to Database")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text("Help other pet owners by sharing this product data")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        ModernDesignSystem.Colors.primary.opacity(0.05),
+                        ModernDesignSystem.Colors.goldenYellow.opacity(0.05)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                ModernDesignSystem.Colors.primary,
+                                ModernDesignSystem.Colors.goldenYellow
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+/**
+ * Add Product to Database View - Form for contributing scan data
+ */
+struct AddProductToDatabaseView: View {
+    let scan: Scan
+    let scanResult: ScanResult
+    let onSuccess: () -> Void
+    let scannedBarcode: String?  // Optional barcode from scan
+    
+    @Environment(\.dismiss) private var dismiss
+    @State private var productName: String = ""
+    @State private var brand: String = ""
+    @State private var category: String = "Dog Food"
+    @State private var species: String = "Dog"  // Dog or Cat
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var showNutritionalFields = false
+    @State private var showIngredientsFields = false
+    
+    // Editable ingredients list - pre-populated from scan
+    @State private var ingredients: [String] = []
+    @State private var ingredientsText: String = ""
+    
+    // Editable nutritional fields - pre-populated from scan
+    @State private var caloriesPer100g: String = ""
+    @State private var proteinPercent: String = ""
+    @State private var fatPercent: String = ""
+    @State private var fiberPercent: String = ""
+    @State private var moisturePercent: String = ""
+    @State private var ashPercent: String = ""
+    
+    // Default metadata
+    let language = "en"
+    let country = "en:united-states"  // Format: language:country
+    let externalSource = "snifftest"
+    
+    let categories = ["Dog Food", "Cat Food", "Dog Treats", "Cat Treats", "Supplements", "Other"]
+    let speciesOptions = ["Dog", "Cat"]
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // Info banner
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        HStack {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
+                            
+                            Text("Help the Community")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        }
+                        
+                        Text("By adding this product to the database, you're helping other pet owners make informed decisions.")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    
+                    // Form fields
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
+                        // Product Name
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Product Name *")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            TextField("e.g., Premium Adult Dog Food", text: $productName)
+                                .textFieldStyle(ModernTextFieldStyle())
+                        }
+                        
+                        // Brand
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Brand")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            TextField("e.g., Blue Buffalo", text: $brand)
+                                .textFieldStyle(ModernTextFieldStyle())
+                        }
+                        
+                        // Barcode (if available from scan)
+                        if let barcode = scannedBarcode {
+                            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                                HStack {
+                                    Text("Barcode")
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    
+                                    Image(systemName: "barcode.viewfinder")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                                }
+                                
+                                // Read-only barcode display
+                                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                    Text(barcode)
+                                        .font(ModernDesignSystem.Typography.body)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                        .padding(ModernDesignSystem.Spacing.md)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(ModernDesignSystem.Colors.primary.opacity(0.05))
+                                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                                        )
+                                    
+                                    // Copy button
+                                    Button(action: {
+                                        UIPasteboard.general.string = barcode
+                                    }) {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                                            .padding(ModernDesignSystem.Spacing.sm)
+                                    }
+                                }
+                                
+                                Text("Scanned from product label")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                        }
+                        
+                        // Category
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Category")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Picker("Category", selection: $category) {
+                                ForEach(categories, id: \.self) { cat in
+                                    Text(cat).tag(cat)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            .padding(ModernDesignSystem.Spacing.md)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .onChange(of: category) { oldValue, newValue in
+                                // Auto-update species based on category
+                                if newValue.contains("Dog") {
+                                    species = "Dog"
+                                } else if newValue.contains("Cat") {
+                                    species = "Cat"
+                                }
+                            }
+                        }
+                        
+                        // Species Field
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            HStack {
+                                Text("Species")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                
+                                Spacer()
+                                
+                                Text("Auto-selected based on category")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary.opacity(0.7))
+                                    .italic()
+                            }
+                            
+                            Picker("Species", selection: $species) {
+                                ForEach(speciesOptions, id: \.self) { speciesOption in
+                                    Text(speciesOption).tag(speciesOption)
+                                }
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                            .padding(ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        }
+                        
+                        // Ingredients Section (Expandable)
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                            Button(action: { showIngredientsFields.toggle() }) {
+                                HStack {
+                                    Image(systemName: "list.bullet")
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                    
+                                    Text("Ingredients List")
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    
+                                    Spacer()
+                                    
+                                    Text("\(ingredients.count) items - Verify & Edit")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    
+                                    Image(systemName: showIngredientsFields ? "chevron.up" : "chevron.down")
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            if showIngredientsFields {
+                                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                                    // Info message
+                                    HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                                        Image(systemName: "info.circle.fill")
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                                        
+                                        Text("These ingredients were auto-extracted from the label. Review carefully and edit if needed. Separate with commas.")
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    }
+                                    .padding(ModernDesignSystem.Spacing.sm)
+                                    .background(ModernDesignSystem.Colors.goldenYellow.opacity(0.1))
+                                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                                    
+                                    // Editable ingredients text area
+                                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                                        Text("Ingredients (comma-separated)")
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        
+                                        TextEditor(text: $ingredientsText)
+                                            .font(ModernDesignSystem.Typography.body)
+                                            .frame(minHeight: 100)
+                                            .padding(ModernDesignSystem.Spacing.sm)
+                                            .background(Color.white)
+                                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 2)
+                                            )
+                                            .onChange(of: ingredientsText) { _, newValue in
+                                                // Update ingredients array when text changes
+                                                updateIngredientsFromText(newValue)
+                                            }
+                                    }
+                                    
+                                    // Quick actions
+                                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                        Text("\(ingredients.count) ingredients")
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        
+                                        Spacer()
+                                        
+                                        Button(action: {
+                                            // Reset to original parsed ingredients
+                                            ingredients = scanResult.ingredientsFound
+                                            ingredientsText = ingredients.joined(separator: ", ")
+                                        }) {
+                                            HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                                                Image(systemName: "arrow.counterclockwise")
+                                                Text("Reset")
+                                            }
+                                            .font(ModernDesignSystem.Typography.caption)
+                                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                                        }
+                                    }
+                                }
+                                .padding(.top, ModernDesignSystem.Spacing.sm)
+                            }
+                        }
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                        
+                        // Nutritional Data Section (Expandable)
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                            Button(action: { showNutritionalFields.toggle() }) {
+                                HStack {
+                                    Image(systemName: "chart.bar.fill")
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                    
+                                    Text("Nutritional Data")
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    
+                                    Spacer()
+                                    
+                                    Text(hasNutritionalData ? "Verify & Edit" : "Add (Optional)")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    
+                                    Image(systemName: showNutritionalFields ? "chevron.up" : "chevron.down")
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            
+                            if showNutritionalFields {
+                                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                                    // Info message about auto-parsed data
+                                    if hasNutritionalData {
+                                        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                                            Image(systemName: "info.circle.fill")
+                                                .font(ModernDesignSystem.Typography.caption)
+                                                .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                                            
+                                            Text("These values were automatically extracted from the label. Please verify and correct if needed.")
+                                                .font(ModernDesignSystem.Typography.caption)
+                                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        }
+                                        .padding(ModernDesignSystem.Spacing.sm)
+                                        .background(ModernDesignSystem.Colors.goldenYellow.opacity(0.1))
+                                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                                    }
+                                    
+                                    // Nutritional fields
+                                    NutrientField(label: "Calories (per 100g)", value: $caloriesPer100g, unit: "kcal")
+                                    NutrientField(label: "Protein", value: $proteinPercent, unit: "%")
+                                    NutrientField(label: "Fat", value: $fatPercent, unit: "%")
+                                    NutrientField(label: "Fiber", value: $fiberPercent, unit: "%")
+                                    NutrientField(label: "Moisture", value: $moisturePercent, unit: "%")
+                                    NutrientField(label: "Ash", value: $ashPercent, unit: "%")
+                                }
+                                .padding(.top, ModernDesignSystem.Spacing.sm)
+                            }
+                        }
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                        
+                        // Data Preview Summary
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                            Text("Data to be saved:")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            if let barcode = scannedBarcode {
+                                DataPreviewRow(label: "Barcode", value: barcode)
+                            }
+                            DataPreviewRow(label: "Ingredients", value: "\(ingredients.count) items")
+                            DataPreviewRow(label: "Nutritional Fields", value: nutritionalFieldCount)
+                            
+                            if let rawText = scan.rawText, !rawText.isEmpty {
+                                DataPreviewRow(label: "Raw OCR Text", value: "Included")
+                            }
+                        }
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.primary.opacity(0.05))
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                    }
+                    .padding(ModernDesignSystem.Spacing.md)
+                    
+                    // Error message
+                    if let errorMessage = errorMessage {
+                        Text(errorMessage)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                            .padding(ModernDesignSystem.Spacing.md)
+                            .background(ModernDesignSystem.Colors.error.opacity(0.1))
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                    }
+                    
+                    // Save button
+                    Button(action: saveProduct) {
+                        HStack {
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            }
+                            
+                            Text(isLoading ? "Saving..." : "Save to Database")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(
+                            productName.isEmpty ? ModernDesignSystem.Colors.textSecondary :
+                            ModernDesignSystem.Colors.primary
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    }
+                    .disabled(productName.isEmpty || isLoading)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                }
+                .padding(ModernDesignSystem.Spacing.md)
+            }
+            .background(ModernDesignSystem.Colors.softCream)
+            .navigationTitle("Add Product")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Pre-fill product name if available
+            if let productName = scanResult.productName, !productName.isEmpty {
+                self.productName = productName
+            }
+            
+            // Pre-fill brand if available
+            if let brand = scanResult.brand, !brand.isEmpty {
+                self.brand = brand
+            }
+            
+            // Pre-fill ingredients from scan
+            self.ingredients = scanResult.ingredientsFound
+            self.ingredientsText = scanResult.ingredientsFound.joined(separator: ", ")
+            
+            // Auto-expand ingredients if we have them
+            if !scanResult.ingredientsFound.isEmpty {
+                self.showIngredientsFields = true
+            }
+            
+            // Pre-fill nutritional data from OCR parsing
+            if let analysis = scan.nutritionalAnalysis {
+                if let calories = analysis.caloriesPer100G {
+                    self.caloriesPer100g = String(format: "%.1f", calories)
+                }
+                if let protein = analysis.proteinPercent {
+                    self.proteinPercent = String(format: "%.1f", protein)
+                }
+                if let fat = analysis.fatPercent {
+                    self.fatPercent = String(format: "%.1f", fat)
+                }
+                if let fiber = analysis.fiberPercent {
+                    self.fiberPercent = String(format: "%.1f", fiber)
+                }
+                if let moisture = analysis.moisturePercent {
+                    self.moisturePercent = String(format: "%.1f", moisture)
+                }
+                if let ash = analysis.ashPercent {
+                    self.ashPercent = String(format: "%.1f", ash)
+                }
+                
+                // Auto-expand if we have nutritional data
+                if hasNutritionalData {
+                    self.showNutritionalFields = true
+                }
+            }
+        }
+    }
+    
+    /// Check if we have any nutritional data from OCR
+    private var hasNutritionalData: Bool {
+        return scan.nutritionalAnalysis != nil
+    }
+    
+    /// Count how many nutritional fields will be saved
+    private var nutritionalFieldCount: String {
+        var count = 0
+        if !caloriesPer100g.isEmpty, Double(caloriesPer100g) != nil { count += 1 }
+        if !proteinPercent.isEmpty, Double(proteinPercent) != nil { count += 1 }
+        if !fatPercent.isEmpty, Double(fatPercent) != nil { count += 1 }
+        if !fiberPercent.isEmpty, Double(fiberPercent) != nil { count += 1 }
+        if !moisturePercent.isEmpty, Double(moisturePercent) != nil { count += 1 }
+        if !ashPercent.isEmpty, Double(ashPercent) != nil { count += 1 }
+        
+        return count > 0 ? "\(count) field\(count == 1 ? "" : "s")" : "None"
+    }
+    
+    /**
+     * Update ingredients array from comma-separated text
+     * 
+     * Parses the text and cleans up ingredient names
+     */
+    private func updateIngredientsFromText(_ text: String) {
+        // Split by commas and clean up each ingredient
+        let parsed = text.components(separatedBy: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        
+        self.ingredients = parsed
+    }
+    
+    /// Save product to database
+    private func saveProduct() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                // Create nutritional info from scan data (matches database format)
+                var nutritionalInfo: [String: Any] = [
+                    "source": externalSource,  // "snifftest"
+                    "external_id": scannedBarcode ?? scan.id,  // Use barcode or scan ID
+                    "ingredients": ingredients  // User-verified ingredients
+                ]
+                
+                // Add nutritional data from user-verified fields
+                if !caloriesPer100g.isEmpty, let calories = Double(caloriesPer100g) {
+                    nutritionalInfo["calories_per_100g"] = calories
+                }
+                if !proteinPercent.isEmpty, let protein = Double(proteinPercent) {
+                    nutritionalInfo["protein_percentage"] = protein
+                }
+                if !fatPercent.isEmpty, let fat = Double(fatPercent) {
+                    nutritionalInfo["fat_percentage"] = fat
+                }
+                if !fiberPercent.isEmpty, let fiber = Double(fiberPercent) {
+                    nutritionalInfo["fiber_percentage"] = fiber
+                }
+                if !moisturePercent.isEmpty, let moisture = Double(moisturePercent) {
+                    nutritionalInfo["moisture_percentage"] = moisture
+                }
+                if !ashPercent.isEmpty, let ash = Double(ashPercent) {
+                    nutritionalInfo["ash_percentage"] = ash
+                }
+                
+                // Add data quality score (user-verified data gets high score)
+                nutritionalInfo["data_quality_score"] = 0.9
+                
+                // Create food item with all metadata
+                let success = try await APIService.shared.createFoodItem(
+                    name: productName,
+                    brand: brand.isEmpty ? nil : brand,
+                    barcode: scannedBarcode,  // Include scanned barcode
+                    category: category,
+                    species: species,  // Dog or Cat
+                    language: language,  // "en"
+                    country: country,  // "United States"
+                    externalSource: externalSource,  // "snifftest"
+                    nutritionalInfo: nutritionalInfo
+                )
+                
+                await MainActor.run {
+                    isLoading = false
+                    if success {
+                        onSuccess()
+                    } else {
+                        errorMessage = "Failed to save product. Please try again."
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Data Preview Row - Shows a key-value pair
+ */
+struct DataPreviewRow: View {
+    let label: String
+    let value: String
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            Spacer()
+            
+            Text(value)
+                .font(ModernDesignSystem.Typography.caption)
+                .fontWeight(.medium)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+        }
+    }
+}
+
+/**
+ * Modern Text Field Style
+ */
+struct ModernTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(ModernDesignSystem.Spacing.md)
+            .background(ModernDesignSystem.Colors.softCream)
+            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+    }
+}
+
+/**
+ * Nutrient Field - Editable nutritional value field with unit display
+ * 
+ * Allows users to verify and edit auto-parsed nutritional data
+ */
+struct NutrientField: View {
+    let label: String
+    @Binding var value: String
+    let unit: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+            Text(label)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                TextField("Optional", text: $value)
+                    .keyboardType(.decimalPad)
+                    .font(ModernDesignSystem.Typography.body)
+                    .padding(ModernDesignSystem.Spacing.sm)
+                    .background(Color.white)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .stroke(
+                                value.isEmpty ? ModernDesignSystem.Colors.borderPrimary : 
+                                ModernDesignSystem.Colors.primary,
+                                lineWidth: value.isEmpty ? 1 : 2
+                            )
+                    )
+                
+                Text(unit)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .frame(width: 40, alignment: .leading)
+            }
         }
     }
 }

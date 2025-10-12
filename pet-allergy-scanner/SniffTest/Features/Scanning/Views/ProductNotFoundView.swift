@@ -49,21 +49,33 @@ struct ProductNotFoundView: View {
                     .fontWeight(.bold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
-                // Barcode info
-                Text("Barcode: \(barcode)")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
-                    .background(ModernDesignSystem.Colors.softCream)
-                    .clipShape(Capsule())
+                // Barcode info with checkmark to show it's captured
+                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(ModernDesignSystem.Colors.safe)
+                    
+                    Text("Barcode Saved: \(barcode)")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                .background(ModernDesignSystem.Colors.safe.opacity(0.1))
+                .clipShape(Capsule())
                 
                 // Explanation text
-                Text("This product isn't in our database yet. Please scan the nutritional information label to analyze the ingredients.")
-                    .font(ModernDesignSystem.Typography.body)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("This product isn't in our database yet.")
+                        .font(ModernDesignSystem.Typography.body)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Text("The barcode has been saved. Now scan the nutritional information label, and we'll link it to this barcode automatically.")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             }
             
             // Instructions card with Trust & Nature design
