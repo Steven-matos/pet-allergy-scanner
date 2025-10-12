@@ -56,20 +56,43 @@ class OCRService: @unchecked Sendable {
             return
         }
         
-        let request = VNRecognizeTextRequest { [weak self] request, error in
-            // Process results on main actor
-            Task { @MainActor in
-                guard let self = self else { return }
+        // Perform OCR asynchronously
+        Task {
+            do {
+                let extractedText = try await performOCR(on: cgImage)
                 
-                self.isProcessing = false
-                
-                if let error = error {
+                await MainActor.run {
+                    self.isProcessing = false
+                    
+                    if extractedText.isEmpty {
+                        self.errorMessage = LocalizationKeys.noTextFound.localized
+                    } else {
+                        self.extractedText = extractedText
+                        self.errorMessage = nil
+                        // Extract nutritional information from the text
+                        self.nutritionalAnalysis = self.extractNutritionalInfo(from: extractedText)
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isProcessing = false
                     self.errorMessage = LocalizationKeys.ocrFailed.localized(error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    /// Perform OCR on CGImage asynchronously (nonisolated)
+    private nonisolated func performOCR(on cgImage: CGImage) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let request = VNRecognizeTextRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
                     return
                 }
                 
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    self.errorMessage = LocalizationKeys.noTextFound.localized
+                    continuation.resume(returning: "")
                     return
                 }
                 
@@ -80,36 +103,24 @@ class OCRService: @unchecked Sendable {
                     return candidates.first { $0.confidence > 0.5 }?.string
                 }.joined(separator: "\n")
                 
-                if extractedText.isEmpty {
-                    self.errorMessage = LocalizationKeys.noTextFound.localized
-                } else {
-                    self.extractedText = extractedText
-                    self.errorMessage = nil
-                    // Extract nutritional information from the text
-                    self.nutritionalAnalysis = self.extractNutritionalInfo(from: extractedText)
-                }
+                continuation.resume(returning: extractedText)
             }
-        }
-        
-        // Optimize for ingredient label scanning
-        request.recognitionLevel = .accurate
-        request.usesLanguageCorrection = true
-        request.minimumTextHeight = 0.03 // Minimum text height for better accuracy
-        request.customWords = ["ingredients", "chicken", "beef", "salmon", "rice", "wheat", "corn", "soy"] // Common pet food terms
-        
-        // Enhanced image processing options
-        let options: [VNImageOption: Any] = [:]
-        
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: options)
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            do {
-                try handler.perform([request])
-            } catch {
-                Task { @MainActor in
-                    guard let self = self else { return }
-                    self.isProcessing = false
-                    self.errorMessage = LocalizationKeys.ocrProcessingFailed.localized(error.localizedDescription)
+            
+            // Optimize for ingredient label scanning
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.minimumTextHeight = 0.03 // Minimum text height for better accuracy
+            request.customWords = ["ingredients", "chicken", "beef", "salmon", "rice", "wheat", "corn", "soy"] // Common pet food terms
+            
+            // Enhanced image processing options
+            let options: [VNImageOption: Any] = [:]
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: options)
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    continuation.resume(throwing: error)
                 }
             }
         }
