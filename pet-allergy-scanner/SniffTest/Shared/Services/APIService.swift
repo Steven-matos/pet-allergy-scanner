@@ -893,7 +893,7 @@ extension APIService {
      * - Returns: FoodProduct if found in database, nil otherwise
      */
     func lookupProductByBarcode(_ barcode: String) async throws -> FoodProduct? {
-        guard let url = URL(string: "\(baseURL)/foods/barcode/\(barcode)") else {
+        guard let url = URL(string: "\(baseURL)/api/v1/foods/barcode/\(barcode)") else {
             throw APIError.invalidURL
         }
         
@@ -907,6 +907,126 @@ extension APIService {
         } catch {
             throw error
         }
+    }
+    
+    /**
+     * Create a new food item in the database
+     * 
+     * - Parameters:
+     *   - name: Product name (required)
+     *   - brand: Brand name (optional)
+     *   - barcode: Barcode/UPC (optional)
+     *   - category: Product category (optional)
+     *   - species: Target species: "dog" or "cat" (optional)
+     *   - language: Language code (optional)
+     *   - country: Country code (optional)
+     *   - externalSource: External data source (optional)
+     *   - nutritionalInfo: Nutritional information dictionary (optional)
+     * 
+     * - Returns: True if successfully created
+     * - Throws: APIError if request fails
+     */
+    func createFoodItem(
+        name: String,
+        brand: String?,
+        barcode: String?,
+        category: String?,
+        species: String?,
+        language: String?,
+        country: String?,
+        externalSource: String?,
+        nutritionalInfo: [String: Any]?
+    ) async throws -> Bool {
+        guard let url = URL(string: "\(baseURL)/api/v1/foods") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = await createRequest(url: url, method: "POST")
+        
+        // Build request body
+        var foodData: [String: Any] = [
+            "name": name
+        ]
+        
+        if let brand = brand {
+            foodData["brand"] = brand
+        }
+        
+        if let barcode = barcode {
+            foodData["barcode"] = barcode
+        }
+        
+        if let category = category {
+            foodData["category"] = category
+        }
+        
+        if let species = species {
+            foodData["species"] = species.lowercased()
+        }
+        
+        if let language = language {
+            foodData["language"] = language
+        }
+        
+        if let country = country {
+            foodData["country"] = country
+        }
+        
+        if let externalSource = externalSource {
+            foodData["external_source"] = externalSource
+        }
+        
+        // Generate keywords from brand and product name for searchability
+        var keywords: [String] = []
+        
+        // Add brand words as keywords
+        if let brand = brand, !brand.isEmpty {
+            let brandWords = brand.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty && $0.count > 1 }
+            keywords.append(contentsOf: brandWords)
+        }
+        
+        // Add product name words as keywords
+        let nameWords = name.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty && $0.count > 1 }
+        keywords.append(contentsOf: nameWords)
+        
+        // Remove duplicates and common stop words
+        let stopWords = Set(["the", "and", "for", "with", "dog", "cat", "pet", "food"])
+        keywords = Array(Set(keywords)).filter { !stopWords.contains($0) }
+        
+        if !keywords.isEmpty {
+            foodData["keywords"] = keywords
+        }
+        
+        if let nutritionalInfo = nutritionalInfo {
+            foodData["nutritional_info"] = nutritionalInfo
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: foodData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        // Perform request
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        
+        guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
+            if let errorMessage = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let detail = errorMessage["detail"] as? String {
+                throw APIError.serverMessage(detail)
+            }
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+        
+        return true
     }
 }
 

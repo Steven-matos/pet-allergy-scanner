@@ -55,8 +55,12 @@ class FoodItemBase(BaseModel):
 
 
 class FoodItemCreate(FoodItemBase):
-    """Food item creation model"""
-    pass
+    """Food item creation model with user-contributed metadata"""
+    species: Optional[str] = Field(None, max_length=20, description="Target species (dog, cat)")
+    language: Optional[str] = Field(None, max_length=10, description="Language code (e.g., 'en')")
+    country: Optional[str] = Field(None, max_length=50, description="Country code (e.g., 'en:united-states')")
+    external_source: Optional[str] = Field(None, max_length=50, description="External data source (e.g., 'snifftest')")
+    keywords: Optional[List[str]] = Field(None, description="Keywords for searchability")
 
 
 class FoodItemUpdate(BaseModel):
