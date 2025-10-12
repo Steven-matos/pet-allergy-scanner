@@ -67,6 +67,7 @@ class HybridScanService: @unchecked Sendable {
         let barcodeResult = await detectBarcode(from: image)
         
         var productInfo: ProductInfo?
+        var foodProduct: FoodProduct?
         var barcodeData: BarcodeResult?
         
         if let barcode = barcodeResult {
@@ -74,17 +75,39 @@ class HybridScanService: @unchecked Sendable {
             scanProgress = .lookingUpProduct
             
             // Phase 2: Product Lookup (if barcode found)
-            productInfo = await lookupProduct(by: barcode.value)
+            // Try to find product in database
+            do {
+                foodProduct = try await apiService.lookupProductByBarcode(barcode.value)
+                if foodProduct != nil {
+                    // Build productInfo from found product
+                    productInfo = ProductInfo(
+                        barcode: barcode.value,
+                        countryCode: "",
+                        manufacturerCode: foodProduct?.brand ?? "",
+                        productCode: foodProduct?.name ?? "",
+                        checksum: String(barcode.value.suffix(1))
+                    )
+                }
+            } catch {
+                // Product not found in database - this is okay
+                print("Product not found in database: \(error.localizedDescription)")
+            }
             
-            // If we have reliable product data from barcode, we might skip OCR
-            if productInfo != nil && barcode.confidence > 0.9 {
+            // If no product found in database, extract basic info from barcode
+            if productInfo == nil {
+                productInfo = barcodeService.extractProductInfo(from: barcode.value)
+            }
+            
+            // If we have product from database with nutritional info, we can skip OCR
+            if let product = foodProduct, product.hasCompleteNutritionalInfo && barcode.confidence > 0.9 {
                 scanProgress = .completed
                 let result = HybridScanResult(
                     barcode: barcode,
                     productInfo: productInfo,
-                    ocrText: "",
+                    foodProduct: product,
+                    ocrText: product.ingredientsText,
                     ocrAnalysis: nil,
-                    scanMethod: .barcodeOnly,
+                    scanMethod: .barcodeWithProduct,
                     confidence: barcode.confidence,
                     processingTime: Date().timeIntervalSince(startTime),
                     lastCapturedImage: image
@@ -104,6 +127,7 @@ class HybridScanService: @unchecked Sendable {
         let finalResult = await combineScanResults(
             barcode: barcodeData,
             productInfo: productInfo,
+            foodProduct: foodProduct,
             ocrText: ocrResult.text,
             ocrAnalysis: ocrResult.analysis,
             processingTime: Date().timeIntervalSince(startTime),
@@ -168,33 +192,47 @@ class HybridScanService: @unchecked Sendable {
     }
     
     private func lookupProduct(by barcode: String) async -> ProductInfo? {
-        // In a real implementation, this would query a product database
-        // For now, return basic product info from barcode
+        // Query the food_items database via API
+        do {
+            if let foodProduct = try await apiService.lookupProductByBarcode(barcode) {
+                // Convert FoodProduct to ProductInfo
+                return ProductInfo(
+                    barcode: barcode,
+                    countryCode: "", // Not available from food_items
+                    manufacturerCode: foodProduct.brand ?? "",
+                    productCode: foodProduct.name,
+                    checksum: String(barcode.suffix(1))
+                )
+            }
+        } catch {
+            // Log error but don't fail the scan
+            print("Product lookup error: \(error.localizedDescription)")
+        }
+        
+        // Fallback to basic barcode parsing
         return barcodeService.extractProductInfo(from: barcode)
     }
     
     private func extractText(from image: UIImage) async -> (text: String, analysis: NutritionalAnalysis?) {
-        return await withCheckedContinuation { continuation in
-            ocrService.extractText(from: image)
-            
-            // Wait for OCR to complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                while self.ocrService.isProcessing {
-                    // Wait for processing to complete
-                }
-                
-                let result = (
-                    text: self.ocrService.extractedText,
-                    analysis: self.ocrService.nutritionalAnalysis
-                )
-                continuation.resume(returning: result)
-            }
+        // Start OCR processing
+        ocrService.extractText(from: image)
+        
+        // Wait for OCR to complete using proper async/await
+        while ocrService.isProcessing {
+            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
         }
+        
+        // Return results
+        return (
+            text: ocrService.extractedText,
+            analysis: ocrService.nutritionalAnalysis
+        )
     }
     
     private func combineScanResults(
         barcode: BarcodeResult?,
         productInfo: ProductInfo?,
+        foodProduct: FoodProduct?,
         ocrText: String,
         ocrAnalysis: NutritionalAnalysis?,
         processingTime: TimeInterval,
@@ -204,14 +242,18 @@ class HybridScanService: @unchecked Sendable {
         let scanMethod: ScanDetectionMethod
         let confidence: Float
         
-        if let barcode = barcode, let _ = productInfo {
-            // Both barcode and product info available
+        if let barcode = barcode, let _ = foodProduct {
+            // Both barcode and product found in database
             scanMethod = .barcodeWithProduct
             confidence = barcode.confidence
+        } else if let barcode = barcode, let _ = productInfo {
+            // Barcode found with basic product info (not in database)
+            scanMethod = .barcodeOnly
+            confidence = barcode.confidence * 0.9
         } else if let barcode = barcode {
             // Barcode found but no product info
             scanMethod = .barcodeOnly
-            confidence = barcode.confidence * 0.8 // Slightly lower confidence without product info
+            confidence = barcode.confidence * 0.8
         } else if !ocrText.isEmpty {
             // OCR only
             scanMethod = .ocrOnly
@@ -225,6 +267,7 @@ class HybridScanService: @unchecked Sendable {
         return HybridScanResult(
             barcode: barcode,
             productInfo: productInfo,
+            foodProduct: foodProduct,
             ocrText: ocrText,
             ocrAnalysis: ocrAnalysis,
             scanMethod: scanMethod,
@@ -242,11 +285,32 @@ class HybridScanService: @unchecked Sendable {
         let startTime = Date()
         
         let barcodeResult = await detectBarcode(from: image)
-        let productInfo = barcodeResult != nil ? await lookupProduct(by: barcodeResult!.value) : nil
+        var productInfo: ProductInfo? = nil
+        var foodProduct: FoodProduct? = nil
+        
+        if let barcode = barcodeResult {
+            // Try to find product in database
+            do {
+                foodProduct = try await apiService.lookupProductByBarcode(barcode.value)
+                if foodProduct != nil {
+                    productInfo = ProductInfo(
+                        barcode: barcode.value,
+                        countryCode: "",
+                        manufacturerCode: foodProduct?.brand ?? "",
+                        productCode: foodProduct?.name ?? "",
+                        checksum: String(barcode.value.suffix(1))
+                    )
+                }
+            } catch {
+                // Product not found in database
+                productInfo = await lookupProduct(by: barcode.value)
+            }
+        }
         
         let result = HybridScanResult(
             barcode: barcodeResult,
             productInfo: productInfo,
+            foodProduct: foodProduct,
             ocrText: "",
             ocrAnalysis: nil,
             scanMethod: barcodeResult != nil ? .barcodeOnly : .failed,
@@ -259,7 +323,7 @@ class HybridScanService: @unchecked Sendable {
         return result
     }
     
-    private func performOCROnlyScan(from image: UIImage) async -> HybridScanResult {
+    func performOCROnlyScan(from image: UIImage) async -> HybridScanResult {
         isScanning = true
         scanProgress = .extractingText
         errorMessage = nil
@@ -271,6 +335,7 @@ class HybridScanService: @unchecked Sendable {
         let result = HybridScanResult(
             barcode: nil,
             productInfo: nil,
+            foodProduct: nil,
             ocrText: ocrResult.text,
             ocrAnalysis: ocrResult.analysis,
             scanMethod: ocrResult.text.isEmpty ? .failed : .ocrOnly,
@@ -309,6 +374,7 @@ class HybridScanService: @unchecked Sendable {
 struct HybridScanResult: Codable {
     let barcode: BarcodeResult?
     let productInfo: ProductInfo?
+    let foodProduct: FoodProduct?  // Product found in database
     let ocrText: String
     let ocrAnalysis: NutritionalAnalysis?
     let scanMethod: ScanDetectionMethod
@@ -320,6 +386,7 @@ struct HybridScanResult: Codable {
     init(
         barcode: BarcodeResult?,
         productInfo: ProductInfo?,
+        foodProduct: FoodProduct? = nil,
         ocrText: String,
         ocrAnalysis: NutritionalAnalysis?,
         scanMethod: ScanDetectionMethod,
@@ -330,6 +397,7 @@ struct HybridScanResult: Codable {
     ) {
         self.barcode = barcode
         self.productInfo = productInfo
+        self.foodProduct = foodProduct
         self.ocrText = ocrText
         self.ocrAnalysis = ocrAnalysis
         self.scanMethod = scanMethod
@@ -341,13 +409,14 @@ struct HybridScanResult: Codable {
     
     // MARK: - Codable Conformance
     private enum CodingKeys: String, CodingKey {
-        case barcode, productInfo, ocrText, ocrAnalysis, scanMethod, confidence, processingTime
+        case barcode, productInfo, foodProduct, ocrText, ocrAnalysis, scanMethod, confidence, processingTime
     }
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         barcode = try container.decodeIfPresent(BarcodeResult.self, forKey: .barcode)
         productInfo = try container.decodeIfPresent(ProductInfo.self, forKey: .productInfo)
+        foodProduct = try container.decodeIfPresent(FoodProduct.self, forKey: .foodProduct)
         ocrText = try container.decode(String.self, forKey: .ocrText)
         ocrAnalysis = try container.decodeIfPresent(NutritionalAnalysis.self, forKey: .ocrAnalysis)
         scanMethod = try container.decode(ScanDetectionMethod.self, forKey: .scanMethod)
@@ -361,6 +430,7 @@ struct HybridScanResult: Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(barcode, forKey: .barcode)
         try container.encodeIfPresent(productInfo, forKey: .productInfo)
+        try container.encodeIfPresent(foodProduct, forKey: .foodProduct)
         try container.encode(ocrText, forKey: .ocrText)
         try container.encodeIfPresent(ocrAnalysis, forKey: .ocrAnalysis)
         try container.encode(scanMethod, forKey: .scanMethod)

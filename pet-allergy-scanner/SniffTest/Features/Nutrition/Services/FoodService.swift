@@ -8,6 +8,9 @@
 import Foundation
 import Combine
 
+// Note: This service uses NutritionalInfo from NutritionModels.swift (8-field structure)
+// The scanning feature uses FoodProduct.NutritionalInfo (22-field structure from Issue #20)
+
 /**
  * Food Service
  * 

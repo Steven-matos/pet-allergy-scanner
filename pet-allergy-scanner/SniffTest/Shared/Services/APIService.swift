@@ -884,3 +884,29 @@ extension APIService {
     }
 }
 
+// MARK: - Food Management Endpoints
+
+extension APIService {
+    /**
+     * Look up food product by barcode
+     * - Parameter barcode: The barcode value (e.g., EAN-13, UPC-A)
+     * - Returns: FoodProduct if found in database, nil otherwise
+     */
+    func lookupProductByBarcode(_ barcode: String) async throws -> FoodProduct? {
+        guard let url = URL(string: "\(baseURL)/foods/barcode/\(barcode)") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = await createRequest(url: url)
+        
+        do {
+            return try await performRequest(request, responseType: FoodProduct.self)
+        } catch APIError.notFound {
+            // Product not found in database - this is expected, not an error
+            return nil
+        } catch {
+            throw error
+        }
+    }
+}
+

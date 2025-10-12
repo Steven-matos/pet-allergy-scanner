@@ -27,21 +27,32 @@ class CameraPermissionService: @unchecked Sendable {
         authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
     }
     
-    /// Request camera permission from the user
+    /// Request camera permission from the user (modern async/await)
+    /// - Returns: The authorization status after request
+    func requestCameraPermission() async -> AVAuthorizationStatus {
+        _ = await AVCaptureDevice.requestAccess(for: .video)
+        
+        // Update status on main actor
+        await MainActor.run {
+            updateAuthorizationStatus()
+            
+            // Provide haptic feedback based on permission result
+            if authorizationStatus == .authorized {
+                HapticFeedback.success()
+            } else {
+                HapticFeedback.warning()
+            }
+        }
+        
+        return authorizationStatus
+    }
+    
+    /// Request camera permission from the user (legacy completion handler)
     /// - Parameter completion: Completion handler with the authorization status
     func requestCameraPermission(completion: @escaping @Sendable (AVAuthorizationStatus) -> Void) {
-        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
-            DispatchQueue.main.async {
-                self?.updateAuthorizationStatus()
-                let status = self?.authorizationStatus ?? .denied
-                
-                // Provide haptic feedback based on permission result
-                if status == .authorized {
-                    HapticFeedback.success()
-                } else {
-                    HapticFeedback.warning()
-                }
-                
+        Task {
+            let status = await requestCameraPermission()
+            await MainActor.run {
                 completion(status)
             }
         }

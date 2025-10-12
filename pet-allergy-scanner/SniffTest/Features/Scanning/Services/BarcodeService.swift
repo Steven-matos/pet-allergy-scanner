@@ -62,16 +62,18 @@ class BarcodeService: @unchecked Sendable {
         scanConfidence = 0.0
         
         let request = VNDetectBarcodesRequest { [weak self] request, error in
-            DispatchQueue.main.async {
-                self?.isScanning = false
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                self.isScanning = false
                 
                 if let error = error {
-                    self?.errorMessage = "Barcode detection failed: \(error.localizedDescription)"
+                    self.errorMessage = "Barcode detection failed: \(error.localizedDescription)"
                     return
                 }
                 
                 guard let observations = request.results as? [VNBarcodeObservation] else {
-                    self?.errorMessage = "No barcodes detected in image"
+                    self.errorMessage = "No barcodes detected in image"
                     return
                 }
                 
@@ -79,12 +81,12 @@ class BarcodeService: @unchecked Sendable {
                 let bestBarcode = observations.max { $0.confidence < $1.confidence }
                 
                 if let barcode = bestBarcode, barcode.confidence > 0.7 {
-                    self?.detectedBarcode = barcode.payloadStringValue
-                    self?.barcodeType = barcode.symbology.rawValue
-                    self?.scanConfidence = barcode.confidence
-                    self?.errorMessage = nil
+                    self.detectedBarcode = barcode.payloadStringValue
+                    self.barcodeType = barcode.symbology.rawValue
+                    self.scanConfidence = barcode.confidence
+                    self.errorMessage = nil
                 } else {
-                    self?.errorMessage = "No reliable barcodes found (confidence too low)"
+                    self.errorMessage = "No reliable barcodes found (confidence too low)"
                 }
             }
         }
@@ -98,9 +100,10 @@ class BarcodeService: @unchecked Sendable {
             do {
                 try handler.perform([request])
             } catch {
-                DispatchQueue.main.async {
-                    self?.isScanning = false
-                    self?.errorMessage = "Barcode processing failed: \(error.localizedDescription)"
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    self.isScanning = false
+                    self.errorMessage = "Barcode processing failed: \(error.localizedDescription)"
                 }
             }
         }
