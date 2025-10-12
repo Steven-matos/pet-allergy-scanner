@@ -49,7 +49,7 @@ class OCRService: @unchecked Sendable {
         guard let optimizedImage = PerformanceOptimizer.optimizeImageForOCR(image),
               let preprocessedImage = PerformanceOptimizer.preprocessImageForOCR(optimizedImage),
               let cgImage = preprocessedImage.cgImage else {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isProcessing = false
                 self.errorMessage = LocalizationKeys.invalidImage.localized
             }
@@ -57,16 +57,19 @@ class OCRService: @unchecked Sendable {
         }
         
         let request = VNRecognizeTextRequest { [weak self] request, error in
-            DispatchQueue.main.async {
-                self?.isProcessing = false
+            // Process results on main actor
+            Task { @MainActor in
+                guard let self = self else { return }
+                
+                self.isProcessing = false
                 
                 if let error = error {
-                    self?.errorMessage = LocalizationKeys.ocrFailed.localized(error.localizedDescription)
+                    self.errorMessage = LocalizationKeys.ocrFailed.localized(error.localizedDescription)
                     return
                 }
                 
                 guard let observations = request.results as? [VNRecognizedTextObservation] else {
-                    self?.errorMessage = LocalizationKeys.noTextFound.localized
+                    self.errorMessage = LocalizationKeys.noTextFound.localized
                     return
                 }
                 
@@ -78,12 +81,12 @@ class OCRService: @unchecked Sendable {
                 }.joined(separator: "\n")
                 
                 if extractedText.isEmpty {
-                    self?.errorMessage = LocalizationKeys.noTextFound.localized
+                    self.errorMessage = LocalizationKeys.noTextFound.localized
                 } else {
-                    self?.extractedText = extractedText
-                    self?.errorMessage = nil
+                    self.extractedText = extractedText
+                    self.errorMessage = nil
                     // Extract nutritional information from the text
-                    self?.nutritionalAnalysis = self?.extractNutritionalInfo(from: extractedText)
+                    self.nutritionalAnalysis = self.extractNutritionalInfo(from: extractedText)
                 }
             }
         }
@@ -99,11 +102,12 @@ class OCRService: @unchecked Sendable {
         
         let handler = VNImageRequestHandler(cgImage: cgImage, options: options)
         
-        DispatchQueue.global(qos: .userInitiated).async { @Sendable in
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 try handler.perform([request])
             } catch {
-                DispatchQueue.main.async {
+                Task { @MainActor in
+                    guard let self = self else { return }
                     self.isProcessing = false
                     self.errorMessage = LocalizationKeys.ocrProcessingFailed.localized(error.localizedDescription)
                 }
@@ -114,7 +118,7 @@ class OCRService: @unchecked Sendable {
     /// Extract text from image data
     func extractText(from imageData: Data) {
         guard let image = UIImage(data: imageData) else {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isProcessing = false
                 self.errorMessage = LocalizationKeys.invalidImageData.localized
             }
