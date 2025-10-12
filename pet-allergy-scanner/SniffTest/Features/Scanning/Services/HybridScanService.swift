@@ -214,9 +214,6 @@ class HybridScanService: @unchecked Sendable {
     }
     
     private func extractText(from image: UIImage) async -> (text: String, analysis: NutritionalAnalysis?) {
-        // Store initial state
-        let wasProcessing = ocrService.isProcessing
-        
         // Start OCR processing
         ocrService.extractText(from: image)
         

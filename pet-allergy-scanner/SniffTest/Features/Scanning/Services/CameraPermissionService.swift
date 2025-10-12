@@ -30,7 +30,7 @@ class CameraPermissionService: @unchecked Sendable {
     /// Request camera permission from the user (modern async/await)
     /// - Returns: The authorization status after request
     func requestCameraPermission() async -> AVAuthorizationStatus {
-        let granted = await AVCaptureDevice.requestAccess(for: .video)
+        _ = await AVCaptureDevice.requestAccess(for: .video)
         
         // Update status on main actor
         await MainActor.run {
