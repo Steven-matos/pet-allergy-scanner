@@ -29,6 +29,7 @@ struct NutritionalLabelScanView: View {
             // Camera preview
             CameraPreviewView(cameraService: cameraService)
                 .ignoresSafeArea()
+                .id(cameraService.captureSession != nil)
             
             // Overlay with scanning guide
             VStack {
@@ -124,7 +125,11 @@ struct NutritionalLabelScanView: View {
                 }
             ))
         }
-        .onAppear {
+        .task {
+            // Wait for camera to be ready
+            while cameraService.captureSession == nil {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            }
             cameraService.startSession()
         }
         .onDisappear {
@@ -281,48 +286,64 @@ struct ScanningTipsCard: View {
 @Observable
 @MainActor
 class CameraService: NSObject {
-    private var captureSession: AVCaptureSession?
+    var captureSession: AVCaptureSession?
     private var photoOutput: AVCapturePhotoOutput?
     private var completionHandler: ((Result<UIImage, Error>) -> Void)?
     
-    var previewLayer: AVCaptureVideoPreviewLayer?
-    
     override init() {
         super.init()
-        setupCamera()
+        Task {
+            await setupCamera()
+        }
     }
     
     /**
      * Setup camera capture session
      */
-    private func setupCamera() {
-        captureSession = AVCaptureSession()
-        captureSession?.sessionPreset = .photo
+    private func setupCamera() async {
+        // Check camera permission
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        guard status == .authorized else {
+            if status == .notDetermined {
+                let granted = await AVCaptureDevice.requestAccess(for: .video)
+                if !granted { return }
+            } else {
+                return
+            }
+        }
         
-        guard let captureSession = captureSession,
-              let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        let session = AVCaptureSession()
+        session.sessionPreset = .photo
+        
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: camera) else {
             return
         }
         
-        if captureSession.canAddInput(input) {
-            captureSession.addInput(input)
+        session.beginConfiguration()
+        
+        if session.canAddInput(input) {
+            session.addInput(input)
         }
         
-        photoOutput = AVCapturePhotoOutput()
-        if let photoOutput = photoOutput, captureSession.canAddOutput(photoOutput) {
-            captureSession.addOutput(photoOutput)
+        let output = AVCapturePhotoOutput()
+        if session.canAddOutput(output) {
+            session.addOutput(output)
         }
         
-        previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        previewLayer?.videoGravity = .resizeAspectFill
+        session.commitConfiguration()
+        
+        await MainActor.run {
+            self.captureSession = session
+            self.photoOutput = output
+        }
     }
     
     /**
      * Start camera session
      */
     func startSession() {
-        guard let session = captureSession else { return }
+        guard let session = captureSession, !session.isRunning else { return }
         DispatchQueue.global(qos: .userInitiated).async {
             session.startRunning()
         }
@@ -332,7 +353,7 @@ class CameraService: NSObject {
      * Stop camera session
      */
     func stopSession() {
-        guard let session = captureSession else { return }
+        guard let session = captureSession, session.isRunning else { return }
         DispatchQueue.global(qos: .userInitiated).async {
             session.stopRunning()
         }
@@ -380,22 +401,52 @@ extension CameraService: AVCapturePhotoCaptureDelegate {
  * Camera preview view
  */
 struct CameraPreviewView: UIViewRepresentable {
-    let cameraService: CameraService
+    var cameraService: CameraService
     
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
+    func makeUIView(context: Context) -> PreviewView {
+        let view = PreviewView()
         
-        if let previewLayer = cameraService.previewLayer {
-            previewLayer.frame = view.bounds
-            view.layer.addSublayer(previewLayer)
+        // Set session if available
+        if let session = cameraService.captureSession {
+            view.videoPreviewLayer.session = session
         }
         
         return view
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let previewLayer = cameraService.previewLayer {
-            previewLayer.frame = uiView.bounds
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        // Update session if it changed
+        if let session = cameraService.captureSession {
+            if uiView.videoPreviewLayer.session !== session {
+                uiView.videoPreviewLayer.session = session
+            }
+        }
+    }
+    
+    /**
+     * Custom UIView with preview layer
+     */
+    class PreviewView: UIView {
+        override class var layerClass: AnyClass {
+            return AVCaptureVideoPreviewLayer.self
+        }
+        
+        var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+            return layer as! AVCaptureVideoPreviewLayer
+        }
+        
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            videoPreviewLayer.videoGravity = .resizeAspectFill
+        }
+        
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+        
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            videoPreviewLayer.frame = bounds
         }
     }
 }
