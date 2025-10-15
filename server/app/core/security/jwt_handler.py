@@ -99,38 +99,50 @@ def get_current_user(
     try:
         supabase = get_supabase_client()
         logger.info(f"Looking up user with ID: {user_id}")
+        logger.info(f"Supabase client created successfully")
+        
         response = supabase.table("users").select("*").eq("id", user_id).execute()
+        logger.info(f"Database query response: {response}")
+        logger.info(f"Response data: {response.data}")
+        logger.info(f"Response count: {response.count if hasattr(response, 'count') else 'N/A'}")
         
         if not response.data:
-            logger.warning(f"User not found in database with ID: {user_id}, attempting to create user")
-            # Try to create the user in the database
+            logger.warning(f"User not found in database with ID: {user_id}")
+            # Let's check if there are any users in the database at all
             try:
-                # Get user data from Supabase Auth
-                auth_user = supabase.auth.get_user()
-                if auth_user.user:
-                    user_metadata = auth_user.user.user_metadata or {}
-                    create_data = {
-                        "id": user_id,
-                        "email": auth_user.user.email,
-                        "username": user_metadata.get("username"),
-                        "first_name": user_metadata.get("first_name"),
-                        "last_name": user_metadata.get("last_name"),
-                        "role": user_metadata.get("role", "free"),
-                        "onboarded": False
-                    }
-                    
-                    logger.info(f"Creating user with data: {create_data}")
-                    create_response = supabase.table("users").insert(create_data).execute()
-                    
-                    if create_response.data:
-                        logger.info(f"Successfully created user: {user_id}")
-                        user_data = create_response.data[0]
-                        return User(**user_data)
-                    else:
-                        logger.error(f"Failed to create user: {create_response}")
-                        raise credentials_exception
+                all_users_response = supabase.table("users").select("id, email").limit(5).execute()
+                logger.info(f"Sample users in database: {all_users_response.data}")
+            except Exception as e:
+                logger.error(f"Failed to query all users: {e}")
+            
+            logger.warning(f"Attempting to create user with ID: {user_id}")
+            # Try to create the user in the database using JWT payload data
+            try:
+                # Extract user data from the JWT payload we already decoded
+                user_metadata = payload.get("user_metadata", {})
+                create_data = {
+                    "id": user_id,
+                    "email": payload.get("email"),
+                    "username": user_metadata.get("username"),
+                    "first_name": user_metadata.get("first_name"),
+                    "last_name": user_metadata.get("last_name"),
+                    "role": user_metadata.get("role", "free"),
+                    "onboarded": False
+                }
+                
+                logger.info(f"Creating user with data: {create_data}")
+                create_response = supabase.table("users").insert(create_data).execute()
+                
+                logger.info(f"Create response: {create_response}")
+                logger.info(f"Create response data: {create_response.data}")
+                logger.info(f"Create response error: {getattr(create_response, 'error', None)}")
+                
+                if create_response.data:
+                    logger.info(f"Successfully created user: {user_id}")
+                    user_data = create_response.data[0]
+                    return User(**user_data)
                 else:
-                    logger.error("Could not get user data from Supabase Auth")
+                    logger.error(f"Failed to create user: {create_response}")
                     raise credentials_exception
             except Exception as create_error:
                 logger.error(f"Failed to create user: {create_error}")
