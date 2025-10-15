@@ -164,6 +164,24 @@ async def debug_headers(request: Request):
         "url": str(request.url)
     }
 
+@app.get("/debug/auth-test")
+async def debug_auth_test(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Debug endpoint to test authentication dependency
+    """
+    return {
+        "credentials_received": credentials is not None,
+        "credentials_type": type(credentials).__name__ if credentials else None,
+        "credentials_scheme": credentials.scheme if credentials else None,
+        "token_length": len(credentials.credentials) if credentials else 0,
+        "headers": dict(request.headers),
+        "method": request.method,
+        "url": str(request.url)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

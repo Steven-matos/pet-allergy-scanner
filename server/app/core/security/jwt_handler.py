@@ -54,6 +54,12 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Additional debug logging
+    logger.info(f"🔍 DEBUG: JWT Handler received credentials: {credentials}")
+    logger.info(f"🔍 DEBUG: Credentials type: {type(credentials)}")
+    logger.info(f"🔍 DEBUG: Credentials scheme: {credentials.scheme}")
+    logger.info(f"🔍 DEBUG: Credentials token length: {len(credentials.credentials)}")
+    
     logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
     
     credentials_exception = HTTPException(
