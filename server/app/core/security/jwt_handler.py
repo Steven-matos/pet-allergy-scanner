@@ -102,8 +102,39 @@ def get_current_user(
         response = supabase.table("users").select("*").eq("id", user_id).execute()
         
         if not response.data:
-            logger.error(f"User not found in database with ID: {user_id}")
-            raise credentials_exception
+            logger.warning(f"User not found in database with ID: {user_id}, attempting to create user")
+            # Try to create the user in the database
+            try:
+                # Get user data from Supabase Auth
+                auth_user = supabase.auth.get_user()
+                if auth_user.user:
+                    user_metadata = auth_user.user.user_metadata or {}
+                    create_data = {
+                        "id": user_id,
+                        "email": auth_user.user.email,
+                        "username": user_metadata.get("username"),
+                        "first_name": user_metadata.get("first_name"),
+                        "last_name": user_metadata.get("last_name"),
+                        "role": user_metadata.get("role", "free"),
+                        "onboarded": False
+                    }
+                    
+                    logger.info(f"Creating user with data: {create_data}")
+                    create_response = supabase.table("users").insert(create_data).execute()
+                    
+                    if create_response.data:
+                        logger.info(f"Successfully created user: {user_id}")
+                        user_data = create_response.data[0]
+                        return User(**user_data)
+                    else:
+                        logger.error(f"Failed to create user: {create_response}")
+                        raise credentials_exception
+                else:
+                    logger.error("Could not get user data from Supabase Auth")
+                    raise credentials_exception
+            except Exception as create_error:
+                logger.error(f"Failed to create user: {create_error}")
+                raise credentials_exception
         
         user_data = response.data[0]
         logger.info(f"User found: {user_data.get('email', 'unknown')}")
