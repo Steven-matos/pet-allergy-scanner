@@ -68,13 +68,18 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    # Try multiple validation strategies in order of preference
+    payload = None
+    user_id = None
+    validation_method = None
+    
     try:
-        # Debug: Log the JWT secret being used
-        logger.info(f"🔍 Starting JWT validation for user: {credentials.credentials[:50]}...")
-        logger.info(f"Using JWT secret: {settings.supabase_jwt_secret[:20]}...")
-        logger.info(f"Expected issuer: {settings.supabase_url}/auth/v1")
+        # Strategy 1: Full Supabase validation (strict)
+        logger.info(f"🔍 Strategy 1: Full Supabase validation")
+        logger.info(f"   Token preview: {credentials.credentials[:50]}...")
+        logger.info(f"   Secret preview: {settings.supabase_jwt_secret[:20]}...")
+        logger.info(f"   Expected issuer: {settings.supabase_url}/auth/v1")
         
-        # First try to decode as Supabase JWT token with more lenient options
         payload = jwt.decode(
             credentials.credentials, 
             settings.supabase_jwt_secret, 
@@ -88,72 +93,101 @@ def get_current_user(
                 "verify_iss": True
             }
         )
-        user_id: str = payload.get("sub")
-        logger.info(f"✅ Supabase JWT validation successful. Payload: {payload}")
-        if user_id is None:
-            logger.error("Supabase JWT validation failed: no user ID in payload")
-            raise credentials_exception
-            
-    except InvalidTokenError as e:
-        logger.warning(f"⚠️ Supabase JWT validation failed: {e}")
-        logger.info(f"🔍 Trying alternative validation approaches...")
+        user_id = payload.get("sub")
+        validation_method = "supabase_strict"
+        logger.info(f"✅ Strategy 1 successful: {validation_method}")
         
-        # Try with more lenient validation
+    except InvalidTokenError as e1:
+        logger.warning(f"⚠️ Strategy 1 failed: {e1}")
+        
         try:
+            # Strategy 2: Supabase validation with signature only (lenient)
+            logger.info(f"🔍 Strategy 2: Supabase signature validation only")
+            
             payload = jwt.decode(
                 credentials.credentials, 
                 settings.supabase_jwt_secret, 
                 algorithms=["HS256"],
                 options={
                     "verify_signature": True,
-                    "verify_exp": False,  # Don't verify expiration for testing
+                    "verify_exp": False,  # Allow expired tokens for now
                     "verify_aud": False,  # Don't verify audience
                     "verify_iss": False   # Don't verify issuer
                 }
             )
-            user_id: str = payload.get("sub")
-            logger.info(f"✅ Supabase JWT validation successful (lenient mode). Payload: {payload}")
-            if user_id is None:
-                logger.error("Supabase JWT validation failed: no user ID in payload")
-                raise credentials_exception
-                
-        except InvalidTokenError as e2:
-            logger.warning(f"⚠️ Lenient Supabase JWT validation failed: {e2}, trying server secret key")
+            user_id = payload.get("sub")
+            validation_method = "supabase_lenient"
+            logger.info(f"✅ Strategy 2 successful: {validation_method}")
             
-            # If Supabase JWT fails, try with our own secret key
+        except InvalidTokenError as e2:
+            logger.warning(f"⚠️ Strategy 2 failed: {e2}")
+            
             try:
+                # Strategy 3: Server secret validation
+                logger.info(f"🔍 Strategy 3: Server secret validation")
+                
                 payload = jwt.decode(
                     credentials.credentials, 
                     settings.secret_key, 
                     algorithms=[settings.algorithm],
                     options={"verify_signature": True}
                 )
-                user_id: str = payload.get("sub")
-                logger.info(f"✅ Server JWT validation successful. Payload: {payload}")
-                if user_id is None:
-                    logger.error("Server JWT validation failed: no user ID in payload")
-                    raise credentials_exception
+                user_id = payload.get("sub")
+                validation_method = "server_secret"
+                logger.info(f"✅ Strategy 3 successful: {validation_method}")
+                
             except InvalidTokenError as e3:
-                logger.error(f"❌ All JWT validation attempts failed:")
-                logger.error(f"   Supabase strict: {e}")
-                logger.error(f"   Supabase lenient: {e2}")
-                logger.error(f"   Server secret: {e3}")
+                logger.error(f"❌ All validation strategies failed:")
+                logger.error(f"   Strategy 1 (Supabase strict): {e1}")
+                logger.error(f"   Strategy 2 (Supabase lenient): {e2}")
+                logger.error(f"   Strategy 3 (Server secret): {e3}")
                 
-                # Log detailed error information for debugging
-                logger.error(f"🔍 Debug Info:")
-                logger.error(f"   Supabase JWT Secret (first 10 chars): {settings.supabase_jwt_secret[:10]}...")
+                # Log comprehensive debug information
+                logger.error(f"🔍 Comprehensive Debug Info:")
                 logger.error(f"   Supabase URL: {settings.supabase_url}")
+                logger.error(f"   JWT Secret length: {len(settings.supabase_jwt_secret)}")
+                logger.error(f"   JWT Secret preview: {settings.supabase_jwt_secret[:20]}...")
                 logger.error(f"   Expected issuer: {settings.supabase_url}/auth/v1")
-                logger.error(f"   Token (first 50 chars): {credentials.credentials[:50]}...")
+                logger.error(f"   Token length: {len(credentials.credentials)}")
+                logger.error(f"   Token preview: {credentials.credentials[:50]}...")
                 
-                # Try to decode without verification to see the payload structure
+                # Try to decode without verification to analyze the token
                 try:
                     unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
                     logger.error(f"   Unverified payload: {unverified_payload}")
+                    
+                    # Check if token is expired
+                    exp = unverified_payload.get("exp")
+                    if exp:
+                        import time
+                        current_time = int(time.time())
+                        if exp < current_time:
+                            logger.error(f"   ⚠️ Token is expired! Exp: {exp}, Current: {current_time}")
+                        else:
+                            logger.error(f"   ✅ Token is not expired. Exp: {exp}, Current: {current_time}")
+                    
+                    # Check issuer
+                    iss = unverified_payload.get("iss")
+                    expected_iss = f"{settings.supabase_url}/auth/v1"
+                    if iss != expected_iss:
+                        logger.error(f"   ⚠️ Issuer mismatch! Expected: {expected_iss}, Got: {iss}")
+                    else:
+                        logger.error(f"   ✅ Issuer matches: {iss}")
+                        
                 except Exception as decode_error:
-                    logger.error(f"   Failed to decode unverified payload: {decode_error}")
+                    logger.error(f"   ❌ Failed to decode unverified payload: {decode_error}")
                 
                 raise credentials_exception
+    
+    # Validate that we have a user ID
+    if user_id is None:
+        logger.error(f"❌ No user ID found in payload after successful validation with {validation_method}")
+        logger.error(f"   Payload: {payload}")
+        raise credentials_exception
+    
+    logger.info(f"✅ JWT validation successful using {validation_method}")
+    logger.info(f"   User ID: {user_id}")
+    logger.info(f"   Payload keys: {list(payload.keys()) if payload else 'None'}")
     
     # Get user from database
     try:
