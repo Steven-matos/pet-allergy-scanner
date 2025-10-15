@@ -97,9 +97,14 @@ def get_current_user(
     
     # Get user from database
     try:
-        supabase = get_supabase_client()
+        # Use service role client to bypass RLS policies
+        from supabase import create_client
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key
+        )
         logger.info(f"Looking up user with ID: {user_id}")
-        logger.info(f"Supabase client created successfully")
+        logger.info(f"Supabase service client created successfully")
         
         response = supabase.table("users").select("*").eq("id", user_id).execute()
         logger.info(f"Database query response: {response}")
