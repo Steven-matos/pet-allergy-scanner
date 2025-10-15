@@ -228,9 +228,11 @@ async def register_user(user_data: UserCreate):
                     )
                 }
             else:
-                # Email already confirmed - return tokens
+                # Email already confirmed - return tokens with refresh token
                 return {
                     "access_token": response.session.access_token,
+                    "refresh_token": response.session.refresh_token,
+                    "expires_in": response.session.expires_in,
                     "token_type": "bearer",
                     "user": UserResponse(
                         id=response.user.id,
@@ -312,6 +314,8 @@ async def login_user(login_data: UserLogin):
         
         return {
             "access_token": response.session.access_token,
+            "refresh_token": response.session.refresh_token,
+            "expires_in": response.session.expires_in,
             "token_type": "bearer",
             "user": user_data
         }
@@ -576,6 +580,72 @@ async def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to update user"
+        )
+
+@router.post("/refresh")
+async def refresh_token(refresh_data: dict):
+    """
+    Refresh authentication token using refresh token
+    
+    Exchanges a valid refresh token for a new access token and refresh token pair.
+    This allows users to stay authenticated for extended periods without re-login.
+    """
+    try:
+        refresh_token = refresh_data.get("refresh_token")
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Refresh token is required"
+            )
+        
+        supabase = get_supabase_client()
+        
+        # Refresh the session using Supabase
+        response = supabase.auth.refresh_session(refresh_token)
+        
+        if not response.session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token"
+            )
+        
+        if not response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        # Create auth metadata dict for the helper function
+        auth_metadata = {
+            "email": response.user.email,
+            "username": response.user.user_metadata.get("username"),
+            "first_name": response.user.user_metadata.get("first_name"),
+            "last_name": response.user.user_metadata.get("last_name"),
+            "role": response.user.user_metadata.get("role", "free"),
+            "created_at": response.user.created_at,
+            "updated_at": response.user.updated_at
+        }
+        
+        # Get merged user data
+        user_data = await get_merged_user_data(response.user.id, auth_metadata)
+        
+        logger.info(f"Token refreshed successfully for user: {response.user.id}")
+        
+        return {
+            "access_token": response.session.access_token,
+            "refresh_token": response.session.refresh_token,
+            "expires_in": response.session.expires_in,
+            "token_type": "bearer",
+            "user": user_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Failed to refresh authentication token"
         )
 
 @router.post("/reset-password")

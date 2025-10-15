@@ -18,8 +18,14 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     private let baseURL = Configuration.apiBaseURL
     private let authTokenKey = "authToken"
+    private let refreshTokenKey = "refreshToken"
+    private let tokenExpiryKey = "tokenExpiry"
     private var _authToken: String?
+    private var _refreshToken: String?
+    private var _tokenExpiry: Date?
     private let authTokenQueue = DispatchQueue(label: "authToken", qos: .userInitiated)
+    private var isRefreshing = false
+    private var refreshTask: Task<Void, Error>?
     
     /// Get authentication token asynchronously
     private var authToken: String? {
@@ -31,6 +37,30 @@ class APIService: ObservableObject, @unchecked Sendable {
         }
     }
     
+    /// Get refresh token asynchronously
+    private var refreshToken: String? {
+        get async {
+            if let token = _refreshToken {
+                return token
+            }
+            return await KeychainHelper.read(forKey: refreshTokenKey)
+        }
+    }
+    
+    /// Get token expiry date
+    private var tokenExpiry: Date? {
+        get async {
+            if let expiry = _tokenExpiry {
+                return expiry
+            }
+            if let expiryString = await KeychainHelper.read(forKey: tokenExpiryKey),
+               let expiryTimestamp = Double(expiryString) {
+                return Date(timeIntervalSince1970: expiryTimestamp)
+            }
+            return nil
+        }
+    }
+    
     /// Set authentication token asynchronously
     private func setAuthTokenInternal(_ token: String?) async {
         _authToken = token
@@ -38,6 +68,27 @@ class APIService: ObservableObject, @unchecked Sendable {
             await KeychainHelper.save(token, forKey: authTokenKey)
         } else {
             await KeychainHelper.delete(forKey: authTokenKey)
+        }
+    }
+    
+    /// Set refresh token asynchronously
+    private func setRefreshTokenInternal(_ token: String?) async {
+        _refreshToken = token
+        if let token = token {
+            await KeychainHelper.save(token, forKey: refreshTokenKey)
+        } else {
+            await KeychainHelper.delete(forKey: refreshTokenKey)
+        }
+    }
+    
+    /// Set token expiry date
+    private func setTokenExpiryInternal(_ expiry: Date?) async {
+        _tokenExpiry = expiry
+        if let expiry = expiry {
+            let expiryString = String(expiry.timeIntervalSince1970)
+            await KeychainHelper.save(expiryString, forKey: tokenExpiryKey)
+        } else {
+            await KeychainHelper.delete(forKey: tokenExpiryKey)
         }
     }
     
@@ -52,13 +103,101 @@ class APIService: ObservableObject, @unchecked Sendable {
     private init() {}
     
     /// Set authentication token for API requests
-    func setAuthToken(_ token: String) async {
+    func setAuthToken(_ token: String, refreshToken: String? = nil, expiresIn: Int? = nil) async {
         await setAuthTokenInternal(token)
+        
+        if let refreshToken = refreshToken {
+            await setRefreshTokenInternal(refreshToken)
+        }
+        
+        if let expiresIn = expiresIn {
+            // Set expiry to expiresIn seconds from now
+            let expiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+            await setTokenExpiryInternal(expiry)
+        } else {
+            // Default to 30 days if no expiry provided
+            let expiry = Date().addingTimeInterval(30 * 24 * 60 * 60)
+            await setTokenExpiryInternal(expiry)
+        }
     }
     
     /// Clear authentication token
     func clearAuthToken() async {
         await setAuthTokenInternal(nil)
+        await setRefreshTokenInternal(nil)
+        await setTokenExpiryInternal(nil)
+        refreshTask?.cancel()
+        refreshTask = nil
+        isRefreshing = false
+    }
+    
+    /// Check if token needs refresh (refresh 5 minutes before expiry)
+    private func shouldRefreshToken() async -> Bool {
+        guard let expiry = await tokenExpiry else {
+            return false
+        }
+        
+        // Refresh if token expires in less than 5 minutes
+        let refreshThreshold = Date().addingTimeInterval(5 * 60)
+        return expiry < refreshThreshold
+    }
+    
+    /// Refresh authentication token
+    private func refreshAuthToken() async throws {
+        // Prevent multiple simultaneous refresh attempts
+        if isRefreshing {
+            // Wait for existing refresh to complete
+            try await refreshTask?.value
+            return
+        }
+        
+        isRefreshing = true
+        
+        let task = Task<Void, Error> {
+            guard let refreshToken = await self.refreshToken else {
+                throw APIError.authenticationError
+            }
+            
+            guard let url = URL(string: "\(baseURL)/auth/refresh") else {
+                throw APIError.invalidURL
+            }
+            
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            let refreshData = ["refresh_token": refreshToken]
+            request.httpBody = try JSONSerialization.data(withJSONObject: refreshData)
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                // Refresh token is invalid or expired
+                await self.clearAuthToken()
+                throw APIError.authenticationError
+            }
+            
+            // Parse response
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let authResponse = try decoder.decode(AuthResponse.self, from: data)
+            
+            // Store new tokens
+            await self.setAuthToken(
+                authResponse.accessToken,
+                refreshToken: authResponse.refreshToken,
+                expiresIn: authResponse.expiresIn
+            )
+            
+            self.isRefreshing = false
+        }
+        
+        refreshTask = task
+        try await task.value
     }
     
     // MARK: - Push Notification Methods
@@ -308,6 +447,16 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Create URL request with authentication headers and security features
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) async -> URLRequest {
+        // Check if token needs refresh before making the request
+        if await shouldRefreshToken() {
+            do {
+                try await refreshAuthToken()
+            } catch {
+                print("⚠️ Failed to refresh token: \(error)")
+                // Continue with existing token, let the request fail if needed
+            }
+        }
+        
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

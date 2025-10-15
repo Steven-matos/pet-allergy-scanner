@@ -51,7 +51,7 @@ struct LaunchScreenView: View {
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         .opacity(opacity)
                     
-                    Text("Trust Nature, Feed Better")
+                    Text("Sniff Out What's Safe")
                         .font(ModernDesignSystem.Typography.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .opacity(opacity)
@@ -110,7 +110,7 @@ struct StaticLaunchScreen: View {
                         .font(.system(size: 34, weight: .bold, design: .default))
                         .foregroundColor(Color(hex: "#2C3E50"))
                     
-                    Text("Trust Nature, Feed Better")
+                    Text("Sniff Out What's Safe")
                         .font(.system(size: 16, weight: .regular, design: .default))
                         .foregroundColor(Color(hex: "#BDC3C7"))
                 }

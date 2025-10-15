@@ -239,7 +239,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
             }
         } else if let accessToken = registrationResponse.accessToken {
             // Email already verified - proceed with login flow
-            await apiService.setAuthToken(accessToken)
+            await apiService.setAuthToken(
+                accessToken,
+                refreshToken: registrationResponse.refreshToken,
+                expiresIn: registrationResponse.expiresIn
+            )
             
             await MainActor.run {
                 errorMessage = nil
@@ -282,8 +286,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
     
     /// Handle authentication response
     private func handleAuthResponse(_ authResponse: AuthResponse) async {
-        // Store the access token in the API service for future requests
-        await apiService.setAuthToken(authResponse.accessToken)
+        // Store the access token and refresh token in the API service for future requests
+        await apiService.setAuthToken(
+            authResponse.accessToken,
+            refreshToken: authResponse.refreshToken,
+            expiresIn: authResponse.expiresIn
+        )
         
         await MainActor.run {
             errorMessage = nil
@@ -319,7 +327,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
         
         Task {
             // Store the tokens
-            await apiService.setAuthToken(accessToken)
+            await apiService.setAuthToken(accessToken, refreshToken: refreshToken)
             
             await MainActor.run {
                 authState = .loading

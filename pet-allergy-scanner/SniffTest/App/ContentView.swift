@@ -37,6 +37,11 @@ struct ContentView: View {
                         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                             // Handle app becoming active
                             notificationManager.handleAppBecameActive()
+                            
+                            // Refresh user session to ensure token is valid
+                            Task {
+                                await authService.refreshCurrentUser()
+                            }
                         }
                 } else {
                     OnboardingView(onSkip: {

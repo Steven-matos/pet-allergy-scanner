@@ -45,14 +45,15 @@ class FoodComparisonService: ObservableObject {
      * Compare multiple foods
      * - Parameter foodIds: Array of food IDs to compare
      * - Parameter comparisonName: Name for the comparison
+     * - Parameter pet: Optional pet to check for allergies/sensitivities
      * - Returns: Comparison results
      */
-    func compareFoods(foodIds: [String], comparisonName: String) async throws -> FoodComparisonResults {
+    func compareFoods(foodIds: [String], comparisonName: String, pet: Pet? = nil) async throws -> FoodComparisonResults {
         guard foodIds.count >= 2 else {
             throw ComparisonError.insufficientFoods
         }
         
-        guard foodIds.count <= 10 else {
+        guard foodIds.count <= 3 else {
             throw ComparisonError.tooManyFoods
         }
         
@@ -61,13 +62,18 @@ class FoodComparisonService: ObservableObject {
         
         do {
             // Load food details
-            let foods = try await loadFoodDetails(foodIds: foodIds)
+            var foods = try await loadFoodDetails(foodIds: foodIds)
+            
+            // Check for pet allergies if pet is provided
+            if let pet = pet {
+                foods = checkPetAllergies(foods: foods, pet: pet)
+            }
             
             // Generate comparison metrics
             let metrics = generateComparisonMetrics(foods: foods)
             
             // Generate recommendations
-            let recommendations = generateRecommendations(metrics: metrics, foods: foods)
+            let recommendations = generateRecommendations(metrics: metrics, foods: foods, pet: pet)
             
             // Determine best options
             let bestOptions = determineBestOptions(metrics: metrics, foods: foods)
@@ -83,7 +89,9 @@ class FoodComparisonService: ObservableObject {
                 costPerCalorie: metrics.costPerCalorie,
                 nutritionalDensity: metrics.nutritionalDensity,
                 compatibilityScores: metrics.compatibilityScores,
-                recommendations: recommendations
+                recommendations: recommendations,
+                petAllergiesChecked: pet != nil,
+                petName: pet?.name
             )
             
             // Save to recent comparisons
@@ -102,17 +110,109 @@ class FoodComparisonService: ObservableObject {
     }
     
     /**
-     * Load a saved comparison
+     * Load a saved comparison from backend
      * - Parameter comparisonId: ID of the comparison to load
      * - Returns: Comparison results
      */
     func loadComparison(comparisonId: String) async throws -> FoodComparisonResults {
-        // Implementation would load from backend
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        isLoading = true
+        error = nil
         
-        // This would load from the backend API
-        throw ComparisonError.notImplemented
+        do {
+            // Fetch comparison from backend
+            struct ComparisonResponse: Codable {
+                let id: String
+                let comparisonName: String
+                let foodIds: [String]
+                let comparisonData: ComparisonData
+                
+                struct ComparisonData: Codable {
+                    let foods: [FoodData]
+                    
+                    struct FoodData: Codable {
+                        let id: String
+                        let name: String
+                        let brand: String?
+                        let caloriesPer100g: Double
+                        let proteinPercentage: Double
+                        let fatPercentage: Double
+                        let fiberPercentage: Double
+                        let moisturePercentage: Double
+                        let ingredients: [String]
+                        let allergens: [String]
+                        
+                        enum CodingKeys: String, CodingKey {
+                            case id, name, brand, ingredients, allergens
+                            case caloriesPer100g = "calories_per_100g"
+                            case proteinPercentage = "protein_percentage"
+                            case fatPercentage = "fat_percentage"
+                            case fiberPercentage = "fiber_percentage"
+                            case moisturePercentage = "moisture_percentage"
+                        }
+                    }
+                }
+                
+                enum CodingKeys: String, CodingKey {
+                    case id
+                    case comparisonName = "comparison_name"
+                    case foodIds = "food_ids"
+                    case comparisonData = "comparison_data"
+                }
+            }
+            
+            let response = try await apiService.get(
+                endpoint: "/advanced-nutrition/comparisons/\(comparisonId)",
+                responseType: ComparisonResponse.self
+            )
+            
+            // Convert to FoodAnalysis objects
+            let foods = response.comparisonData.foods.map { food in
+                FoodAnalysis(
+                    id: food.id,
+                    petId: "",
+                    foodName: food.name,
+                    brand: food.brand,
+                    caloriesPer100g: food.caloriesPer100g,
+                    proteinPercentage: food.proteinPercentage,
+                    fatPercentage: food.fatPercentage,
+                    fiberPercentage: food.fiberPercentage,
+                    moisturePercentage: food.moisturePercentage,
+                    ingredients: food.ingredients,
+                    allergens: food.allergens,
+                    analyzedAt: Date()
+                )
+            }
+            
+            // Generate metrics and recommendations
+            let metrics = generateComparisonMetrics(foods: foods)
+            let recommendations = generateRecommendations(metrics: metrics, foods: foods, pet: nil)
+            let bestOptions = determineBestOptions(metrics: metrics, foods: foods)
+            
+            let results = FoodComparisonResults(
+                id: response.id,
+                comparisonName: response.comparisonName,
+                foods: foods,
+                bestOverall: bestOptions.overall,
+                bestValue: bestOptions.value,
+                bestNutrition: bestOptions.nutrition,
+                costPerCalorie: metrics.costPerCalorie,
+                nutritionalDensity: metrics.nutritionalDensity,
+                compatibilityScores: metrics.compatibilityScores,
+                recommendations: recommendations,
+                petAllergiesChecked: false,
+                petName: nil
+            )
+            
+            currentComparison = results
+            isLoading = false
+            
+            return results
+            
+        } catch {
+            self.error = error
+            isLoading = false
+            throw error
+        }
     }
     
     /**
@@ -120,11 +220,18 @@ class FoodComparisonService: ObservableObject {
      * - Parameter comparisonId: ID of the comparison to delete
      */
     func deleteComparison(comparisonId: String) async throws {
-        // Remove from local storage
-        recentComparisons.removeAll { $0.id == comparisonId }
-        
-        // Delete from backend
-        try await apiService.deleteComparison(comparisonId: comparisonId)
+        do {
+            // Delete from backend
+            try await apiService.delete(
+                endpoint: "/advanced-nutrition/comparisons/\(comparisonId)"
+            )
+            
+            // Remove from local storage
+            recentComparisons.removeAll { $0.id == comparisonId }
+            
+        } catch {
+            throw error
+        }
     }
     
     /**
@@ -137,27 +244,45 @@ class FoodComparisonService: ObservableObject {
     
     // MARK: - Private Methods
     
+    /**
+     * Load food details from backend
+     * - Parameter foodIds: Array of food IDs to load
+     * - Returns: Array of food analysis objects
+     */
     private func loadFoodDetails(foodIds: [String]) async throws -> [FoodAnalysis] {
-        // Implementation would call the backend API
-        // For now, return mock data
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay
+        var foodAnalyses: [FoodAnalysis] = []
         
-        return foodIds.enumerated().map { index, foodId in
-            FoodAnalysis(
-                id: foodId,
-                petId: "mock-pet-id",
-                foodName: "Sample Food \(index + 1)",
-                brand: "Brand \(index + 1)",
-                caloriesPer100g: 300.0 + Double.random(in: -100...100),
-                proteinPercentage: 20.0 + Double.random(in: -10...10),
-                fatPercentage: 10.0 + Double.random(in: -5...5),
-                fiberPercentage: 4.0 + Double.random(in: -2...2),
-                moisturePercentage: 10.0 + Double.random(in: -5...5),
-                ingredients: ["Chicken", "Rice", "Vegetables"],
-                allergens: index % 2 == 0 ? ["Chicken"] : [],
-                analyzedAt: Date().addingTimeInterval(-Double.random(in: 0...86400))
-            )
+        // Load each food item
+        for foodId in foodIds {
+            do {
+                let foodItem = try await apiService.get(
+                    endpoint: "/foods/\(foodId)",
+                    responseType: FoodItem.self
+                )
+                
+                // Convert FoodItem to FoodAnalysis
+                let analysis = FoodAnalysis(
+                    id: foodItem.id,
+                    petId: "", // Not pet-specific for comparison
+                    foodName: foodItem.name,
+                    brand: foodItem.brand,
+                    caloriesPer100g: foodItem.nutritionalInfo?.caloriesPer100g ?? 0,
+                    proteinPercentage: foodItem.nutritionalInfo?.proteinPercentage ?? 0,
+                    fatPercentage: foodItem.nutritionalInfo?.fatPercentage ?? 0,
+                    fiberPercentage: foodItem.nutritionalInfo?.fiberPercentage ?? 0,
+                    moisturePercentage: foodItem.nutritionalInfo?.moisturePercentage ?? 0,
+                    ingredients: foodItem.nutritionalInfo?.ingredients ?? [],
+                    allergens: foodItem.nutritionalInfo?.allergens ?? [],
+                    analyzedAt: foodItem.updatedAt
+                )
+                
+                foodAnalyses.append(analysis)
+            } catch {
+                throw ComparisonError.foodNotFound(foodId)
+            }
         }
+        
+        return foodAnalyses
     }
     
     private func generateComparisonMetrics(foods: [FoodAnalysis]) -> ComparisonMetrics {
@@ -184,8 +309,62 @@ class FoodComparisonService: ObservableObject {
         )
     }
     
-    private func generateRecommendations(metrics: ComparisonMetrics, foods: [FoodAnalysis]) -> [String] {
+    /**
+     * Check foods against pet's known allergies and sensitivities
+     * Updates each food with allergy warnings
+     */
+    private func checkPetAllergies(foods: [FoodAnalysis], pet: Pet) -> [FoodAnalysis] {
+        return foods.map { food in
+            var updatedFood = food
+            var matchedAllergens: [String] = []
+            
+            // Check each ingredient against pet's known sensitivities
+            let petSensitivities = Set(pet.knownSensitivities.map { $0.lowercased().trimmingCharacters(in: .whitespaces) })
+            
+            for ingredient in food.ingredients {
+                let normalizedIngredient = ingredient.lowercased().trimmingCharacters(in: .whitespaces)
+                
+                // Check for exact matches
+                if petSensitivities.contains(normalizedIngredient) {
+                    matchedAllergens.append(ingredient)
+                    continue
+                }
+                
+                // Check for partial matches (e.g., "chicken meal" matches "chicken")
+                for sensitivity in petSensitivities {
+                    if normalizedIngredient.contains(sensitivity) || sensitivity.contains(normalizedIngredient) {
+                        matchedAllergens.append(ingredient)
+                        break
+                    }
+                }
+            }
+            
+            updatedFood.petAllergyWarnings = matchedAllergens
+            updatedFood.hasPetAllergyWarning = !matchedAllergens.isEmpty
+            
+            return updatedFood
+        }
+    }
+    
+    private func generateRecommendations(metrics: ComparisonMetrics, foods: [FoodAnalysis], pet: Pet?) -> [String] {
         var recommendations: [String] = []
+        
+        // Pet allergy warnings (MOST IMPORTANT - show first)
+        if let pet = pet {
+            let foodsWithAllergens = foods.filter { $0.hasPetAllergyWarning }
+            if !foodsWithAllergens.isEmpty {
+                recommendations.append("⚠️ WARNING: \(foodsWithAllergens.count) food(s) contain ingredients that \(pet.name) is sensitive to")
+                
+                // List specific foods with allergens
+                for food in foodsWithAllergens {
+                    if let allergens = food.petAllergyWarnings, !allergens.isEmpty {
+                        recommendations.append("• \(food.foodName): Contains \(allergens.joined(separator: ", "))")
+                    }
+                }
+            } else {
+                recommendations.append("✓ All foods are safe for \(pet.name)'s known sensitivities")
+            }
+        }
         
         // Protein analysis
         let proteinValues = foods.map { $0.proteinPercentage }
@@ -203,28 +382,25 @@ class FoodComparisonService: ObservableObject {
             }
         }
         
-        // Cost analysis
-        let costValues = Array(metrics.costPerCalorie.values)
-        if let maxCost = costValues.max(), let minCost = costValues.min() {
-            if maxCost / minCost > 2 {
-                recommendations.append("Significant cost variation - consider value for money")
-            }
-        }
-        
-        // Compatibility analysis
-        let compatibilityValues = Array(metrics.compatibilityScores.values)
-        if let maxCompatibility = compatibilityValues.max(), let minCompatibility = compatibilityValues.min() {
-            if maxCompatibility - minCompatibility > 30 {
-                recommendations.append("Nutritional compatibility varies significantly")
-            }
-        }
-        
         return recommendations
     }
     
     private func determineBestOptions(metrics: ComparisonMetrics, foods: [FoodAnalysis]) -> BestOptions {
-        // Best overall (highest composite score)
-        let overallScores = foods.map { food in
+        // CRITICAL: Filter out foods with pet sensitivities first!
+        // Never recommend a food that clashes with pet's known sensitivities
+        let safeFoods = foods.filter { !$0.hasPetAllergyWarning }
+        
+        // If all foods have sensitivities, return warning message
+        guard !safeFoods.isEmpty else {
+            return BestOptions(
+                overall: "⚠️ All foods contain pet sensitivities",
+                value: "⚠️ All foods contain pet sensitivities",
+                nutrition: "⚠️ All foods contain pet sensitivities"
+            )
+        }
+        
+        // Best overall (highest composite score) - only from safe foods
+        let overallScores = safeFoods.map { food in
             let calorieScore = min(100, max(0, 100 - abs(food.caloriesPer100g - 350) / 3.5))
             let proteinScore = min(100, food.proteinPercentage * 2)
             let fatScore = min(100, food.fatPercentage * 4)
@@ -237,14 +413,14 @@ class FoodComparisonService: ObservableObject {
         
         let bestOverall = overallScores.max { $0.1 < $1.1 }?.0.foodName ?? "Unknown"
         
-        // Best value (lowest cost per calorie)
-        let bestValue = foods.min { 
+        // Best value (lowest cost per calorie) - only from safe foods
+        let bestValue = safeFoods.min { 
             (metrics.costPerCalorie[$0.id] ?? Double.infinity) < (metrics.costPerCalorie[$1.id] ?? Double.infinity) 
         }?.foodName ?? "Unknown"
         
-        // Best nutrition (highest nutritional density)
-        let bestNutrition = foods.max { 
-            (metrics.nutritionalDensity[$0.id] ?? 0) < (metrics.nutritionalDensity[$1.id] ?? 0) 
+        // Best nutrition (highest protein) - only from safe foods
+        let bestNutrition = safeFoods.max { 
+            $0.proteinPercentage < $1.proteinPercentage
         }?.foodName ?? "Unknown"
         
         return BestOptions(
@@ -254,48 +430,130 @@ class FoodComparisonService: ObservableObject {
         )
     }
     
+    /**
+     * Save comparison to backend
+     * - Parameter results: Comparison results to save
+     */
     private func saveComparison(_ results: FoodComparisonResults) async {
-        let savedComparison = SavedComparison(
-            id: results.id,
-            name: results.comparisonName,
-            foodCount: results.foods.count,
-            createdAt: Date()
-        )
-        
-        recentComparisons.insert(savedComparison, at: 0)
-        
-        // Keep only last 20 comparisons
-        if recentComparisons.count > 20 {
-            recentComparisons = Array(recentComparisons.prefix(20))
+        do {
+            // Create comparison request
+            struct ComparisonRequest: Codable {
+                let comparisonName: String
+                let foodIds: [String]
+                
+                enum CodingKeys: String, CodingKey {
+                    case comparisonName = "comparison_name"
+                    case foodIds = "food_ids"
+                }
+            }
+            
+            struct ComparisonResponse: Codable {
+                let id: String
+                let comparisonName: String
+                let createdAt: String
+                
+                enum CodingKeys: String, CodingKey {
+                    case id
+                    case comparisonName = "comparison_name"
+                    case createdAt = "created_at"
+                }
+            }
+            
+            let request = ComparisonRequest(
+                comparisonName: results.comparisonName,
+                foodIds: results.foods.map { $0.id }
+            )
+            
+            let response = try await apiService.post(
+                endpoint: "/advanced-nutrition/comparisons",
+                body: request,
+                responseType: ComparisonResponse.self
+            )
+            
+            // Add to recent comparisons
+            let savedComparison = SavedComparison(
+                id: response.id,
+                name: response.comparisonName,
+                foodCount: results.foods.count,
+                createdAt: Date()
+            )
+            
+            recentComparisons.insert(savedComparison, at: 0)
+            
+            // Keep only last 20 comparisons
+            if recentComparisons.count > 20 {
+                recentComparisons = Array(recentComparisons.prefix(20))
+            }
+            
+        } catch {
+            print("Failed to save comparison to backend: \(error)")
+            // Still add to local cache even if backend save fails
+            let savedComparison = SavedComparison(
+                id: results.id,
+                name: results.comparisonName,
+                foodCount: results.foods.count,
+                createdAt: Date()
+            )
+            
+            recentComparisons.insert(savedComparison, at: 0)
+            if recentComparisons.count > 20 {
+                recentComparisons = Array(recentComparisons.prefix(20))
+            }
         }
-        
-        // Save to backend
-        try? await apiService.saveComparison(savedComparison)
     }
     
+    /**
+     * Load recent comparisons from backend
+     */
     private func loadRecentComparisons() {
-        // Load from local storage or backend
-        // For now, use mock data
-        recentComparisons = [
-            SavedComparison(
-                id: "1",
-                name: "Premium Food Comparison",
-                foodCount: 3,
-                createdAt: Date().addingTimeInterval(-86400)
-            ),
-            SavedComparison(
-                id: "2",
-                name: "Budget Options",
-                foodCount: 4,
-                createdAt: Date().addingTimeInterval(-172800)
-            ),
-            SavedComparison(
-                id: "3",
-                name: "Grain-Free Analysis",
-                foodCount: 2,
-                createdAt: Date().addingTimeInterval(-259200)
-            )
-        ]
+        Task {
+            do {
+                struct ComparisonListItem: Codable {
+                    let id: String
+                    let comparisonName: String
+                    let foodIds: [String]
+                    let createdAt: String
+                    
+                    enum CodingKeys: String, CodingKey {
+                        case id
+                        case comparisonName = "comparison_name"
+                        case foodIds = "food_ids"
+                        case createdAt = "created_at"
+                    }
+                }
+                
+                let response = try await apiService.get(
+                    endpoint: "/advanced-nutrition/comparisons?limit=20",
+                    responseType: [ComparisonListItem].self
+                )
+                
+                let comparisons = response.compactMap { item -> SavedComparison? in
+                    // Parse ISO8601 date
+                    let formatter = ISO8601DateFormatter()
+                    guard let date = formatter.date(from: item.createdAt) else {
+                        return nil
+                    }
+                    
+                    return SavedComparison(
+                        id: item.id,
+                        name: item.comparisonName,
+                        foodCount: item.foodIds.count,
+                        createdAt: date
+                    )
+                }
+                
+                await MainActor.run {
+                    recentComparisons = comparisons
+                }
+                
+            } catch {
+                print("Failed to load recent comparisons: \(error)")
+                // Use empty array if load fails
+                await MainActor.run {
+                    recentComparisons = []
+                }
+            }
+        }
     }
 }
 
@@ -312,6 +570,8 @@ struct FoodComparisonResults {
     let nutritionalDensity: [String: Double]
     let compatibilityScores: [String: Double]
     let recommendations: [String]
+    let petAllergiesChecked: Bool
+    let petName: String?
 }
 
 struct ComparisonMetrics {
@@ -339,6 +599,8 @@ struct FoodAnalysis: Identifiable {
     let ingredients: [String]
     let allergens: [String]
     let analyzedAt: Date
+    var hasPetAllergyWarning: Bool = false
+    var petAllergyWarnings: [String]? = nil
 }
 
 // MARK: - Errors
@@ -346,6 +608,7 @@ struct FoodAnalysis: Identifiable {
 enum ComparisonError: Error, LocalizedError {
     case insufficientFoods
     case tooManyFoods
+    case foodNotFound(String)
     case notImplemented
     
     var errorDescription: String? {
@@ -353,7 +616,9 @@ enum ComparisonError: Error, LocalizedError {
         case .insufficientFoods:
             return "At least 2 foods are required for comparison"
         case .tooManyFoods:
-            return "Maximum 10 foods allowed for comparison"
+            return "Maximum 3 foods allowed for comparison"
+        case .foodNotFound(let foodId):
+            return "Food with ID \(foodId) not found"
         case .notImplemented:
             return "Feature not yet implemented"
         }
@@ -361,17 +626,4 @@ enum ComparisonError: Error, LocalizedError {
 }
 
 // MARK: - API Service Extensions
-
-extension APIService {
-    func saveComparison(_ comparison: SavedComparison) async throws {
-        // Implementation would call the backend API
-        // For now, simulate API call
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-    }
-    
-    func deleteComparison(comparisonId: String) async throws {
-        // Implementation would call the backend API
-        // For now, simulate API call
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 second delay
-    }
-}
+// Removed placeholder methods - now using real API endpoints

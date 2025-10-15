@@ -51,53 +51,68 @@ class FoodService: ObservableObject {
         
         do {
             let response = try await apiService.get(
-                endpoint: "/nutrition/foods/recent",
+                endpoint: "/foods/recent?limit=20",
                 responseType: [FoodItem].self
             )
             
             recentFoods = response
+            isLoading = false
             
         } catch {
             self.error = error
+            isLoading = false
             throw error
         }
-        
-        isLoading = false
     }
     
     /**
      * Search for food items by name or barcode
      * - Parameter query: Search query
+     * - Returns: Array of matching food items
      */
     func searchFoods(query: String) async throws -> [FoodItem] {
         isLoading = true
         error = nil
         
         do {
+            // Use the food management search endpoint
+            struct SearchResponse: Codable {
+                let items: [FoodItem]
+                let totalCount: Int
+                let hasMore: Bool
+                
+                enum CodingKeys: String, CodingKey {
+                    case items
+                    case totalCount = "total_count"
+                    case hasMore = "has_more"
+                }
+            }
+            
             let response = try await apiService.get(
-                endpoint: "/nutrition/foods/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")",
-                responseType: [FoodItem].self
+                endpoint: "/foods/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&limit=50",
+                responseType: SearchResponse.self
             )
             
-            foodDatabase = response
+            foodDatabase = response.items
+            isLoading = false
+            return response.items
             
         } catch {
             self.error = error
+            isLoading = false
             throw error
         }
-        
-        isLoading = false
-        return foodDatabase
     }
     
     /**
      * Get food item by barcode
      * - Parameter barcode: The barcode to search for
+     * - Returns: Food item if found, nil otherwise
      */
     func getFoodByBarcode(_ barcode: String) async throws -> FoodItem? {
         do {
             let response = try await apiService.get(
-                endpoint: "/nutrition/foods/barcode/\(barcode)",
+                endpoint: "/foods/barcode/\(barcode)",
                 responseType: FoodItem.self
             )
             
@@ -123,6 +138,7 @@ class FoodService: ObservableObject {
     /**
      * Create a new food item (for manual entry)
      * - Parameter foodItem: The food item to create
+     * - Returns: The created food item
      */
     func createFoodItem(_ foodItem: FoodItemRequest) async throws -> FoodItem {
         isLoading = true
@@ -130,18 +146,20 @@ class FoodService: ObservableObject {
         
         do {
             let response = try await apiService.post(
-                endpoint: "/nutrition/foods",
+                endpoint: "/foods",
                 body: foodItem,
                 responseType: FoodItem.self
             )
             
             // Add to recent foods
             recentFoods.insert(response, at: 0)
+            isLoading = false
             
             return response
             
         } catch {
             self.error = error
+            isLoading = false
             throw error
         }
     }
@@ -302,9 +320,22 @@ extension FoodService {
      * - Parameter query: Search query
      * - Parameter brand: Brand filter
      * - Parameter category: Category filter
+     * - Returns: Array of matching food items
      */
     func searchFoodsWithFilters(query: String, brand: String? = nil, category: String? = nil) async throws -> [FoodItem] {
-        var endpoint = "/nutrition/foods/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        struct SearchResponse: Codable {
+            let items: [FoodItem]
+            let totalCount: Int
+            let hasMore: Bool
+            
+            enum CodingKeys: String, CodingKey {
+                case items
+                case totalCount = "total_count"
+                case hasMore = "has_more"
+            }
+        }
+        
+        var endpoint = "/foods/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")&limit=50"
         
         if let brand = brand {
             endpoint += "&brand=\(brand.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
@@ -314,9 +345,11 @@ extension FoodService {
             endpoint += "&category=\(category.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
         }
         
-        return try await apiService.get(
+        let response = try await apiService.get(
             endpoint: endpoint,
-            responseType: [FoodItem].self
+            responseType: SearchResponse.self
         )
+        
+        return response.items
     }
 }

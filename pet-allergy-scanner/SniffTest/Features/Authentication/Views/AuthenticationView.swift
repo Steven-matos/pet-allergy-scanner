@@ -246,6 +246,10 @@ struct AuthenticationView: View {
                 TextField("Username", text: $username)
                     .modernInputField()
                     .autocapitalization(.none)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        // Move focus to first name field
+                    }
                     .onChange(of: username) { _, newUsername in
                         isUsernameValid = InputValidator.isValidUsername(newUsername)
                     }
@@ -262,9 +266,17 @@ struct AuthenticationView: View {
             HStack(spacing: ModernDesignSystem.Spacing.md) {
                 TextField("First Name", text: $firstName)
                     .modernInputField()
+                    .submitLabel(.next)
+                    .onSubmit {
+                        // Move focus to last name field
+                    }
                 
                 TextField("Last Name", text: $lastName)
                     .modernInputField()
+                    .submitLabel(.next)
+                    .onSubmit {
+                        // Move focus to email field
+                    }
             }
         }
     }
@@ -277,6 +289,13 @@ struct AuthenticationView: View {
                 .modernInputField()
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
+                .submitLabel(.next)
+                .onSubmit {
+                    // Move focus to password field or submit if login mode
+                    if isLoginMode && isFormValid {
+                        handleSubmit()
+                    }
+                }
                 .onChange(of: email) { _, newEmail in
                     isEmailValid = InputValidator.isValidEmail(newEmail)
                     doEmailsMatch = newEmail == confirmEmail && !newEmail.isEmpty
@@ -300,6 +319,10 @@ struct AuthenticationView: View {
                     .modernInputField()
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
+                    .submitLabel(.next)
+                    .onSubmit {
+                        // Move focus to password field
+                    }
                     .onChange(of: confirmEmail) { _, newConfirmEmail in
                         doEmailsMatch = email == newConfirmEmail && !newConfirmEmail.isEmpty && !email.isEmpty
                     }
@@ -322,9 +345,23 @@ struct AuthenticationView: View {
                 if isPasswordVisible {
                     TextField("Password", text: $password)
                         .modernInputField()
+                        .submitLabel(isLoginMode ? .done : .next)
+                        .onSubmit {
+                            // Submit form if valid
+                            if isFormValid {
+                                handleSubmit()
+                            }
+                        }
                 } else {
                     SecureField("Password", text: $password)
                         .modernInputField()
+                        .submitLabel(isLoginMode ? .done : .next)
+                        .onSubmit {
+                            // Submit form if valid
+                            if isFormValid {
+                                handleSubmit()
+                            }
+                        }
                 }
                 
                 Button(action: {
