@@ -404,7 +404,8 @@ struct HybridScanResult: Codable {
         self.confidence = confidence
         self.processingTime = processingTime
         self.error = error
-        self.lastCapturedImage = lastCapturedImage
+        // MEMORY OPTIMIZATION: Create thumbnail instead of storing full image
+        self.lastCapturedImage = lastCapturedImage?.createThumbnail(size: 200)
     }
     
     // MARK: - Codable Conformance

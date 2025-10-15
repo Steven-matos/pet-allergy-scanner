@@ -197,7 +197,6 @@ class ScanOverlayView: UIView {
 class ScanningFrameView: UIView {
     
     private var frameLayer: CAShapeLayer!
-    private var scanningLineLayer: CAShapeLayer!
     private var cornerLayers: [CAShapeLayer] = []
     
     private let frameColor = UIColor(red: 0.176, green: 0.314, blue: 0.086, alpha: 1.0) // Trust & Nature primary
@@ -231,13 +230,6 @@ class ScanningFrameView: UIView {
         frameLayer.lineJoin = .round
         layer.addSublayer(frameLayer)
         
-        // Setup scanning line layer
-        scanningLineLayer = CAShapeLayer()
-        scanningLineLayer.strokeColor = UIColor.white.cgColor
-        scanningLineLayer.fillColor = UIColor.clear.cgColor
-        scanningLineLayer.lineWidth = 2
-        scanningLineLayer.lineCap = .round
-        layer.addSublayer(scanningLineLayer)
         
         // Setup corner layers
         for _ in 0..<4 {
@@ -297,34 +289,20 @@ class ScanningFrameView: UIView {
     }
     
     func startScanning() {
-        // Create scanning line animation
-        let bounds = self.bounds
-        let scanningPath = UIBezierPath()
-        scanningPath.move(to: CGPoint(x: bounds.width * 0.1, y: bounds.height * 0.5))
-        scanningPath.addLine(to: CGPoint(x: bounds.width * 0.9, y: bounds.height * 0.5))
-        scanningLineLayer.path = scanningPath.cgPath
+        // Start pulsing animation for the frame
+        let pulseAnimation = CABasicAnimation(keyPath: "transform.scale")
+        pulseAnimation.fromValue = 1.0
+        pulseAnimation.toValue = 1.05
+        pulseAnimation.duration = 2.0
+        pulseAnimation.repeatCount = .infinity
+        pulseAnimation.autoreverses = true
+        pulseAnimation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         
-        // Animate scanning line
-        let animation = CABasicAnimation(keyPath: "strokeEnd")
-        animation.fromValue = 0.0
-        animation.toValue = 1.0
-        animation.duration = 2.0
-        animation.repeatCount = .infinity
-        animation.autoreverses = true
-        animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        
-        scanningLineLayer.add(animation, forKey: "scanningAnimation")
-        
-        // Add glow effect
-        scanningLineLayer.shadowColor = UIColor.white.cgColor
-        scanningLineLayer.shadowOffset = CGSize.zero
-        scanningLineLayer.shadowOpacity = 0.8
-        scanningLineLayer.shadowRadius = 4
+        layer.add(pulseAnimation, forKey: "pulseAnimation")
     }
     
     func stopScanning() {
-        scanningLineLayer.removeAllAnimations()
-        scanningLineLayer.shadowOpacity = 0
+        layer.removeAllAnimations()
     }
     
     func showError() {

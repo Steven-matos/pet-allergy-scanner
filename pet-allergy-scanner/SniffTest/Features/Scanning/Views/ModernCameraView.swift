@@ -61,6 +61,13 @@ struct ModernCameraView: UIViewControllerRepresentable {
         }
     }
     
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        // MEMORY OPTIMIZATION: Properly clean up camera resources when view is dismantled
+        if let cameraVC = uiViewController as? ModernCameraViewController {
+            cameraVC.cleanupResources()
+        }
+    }
+    
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
@@ -218,6 +225,8 @@ final class VideoCaptureDelegate: NSObject, @unchecked Sendable {
     /// Disables frame processing for teardown
     func stopProcessing() {
         shouldProcessFrames = false
+        deferFrameProcessing = false
+        frameProcessCounter = 0
     }
     
     /// Resumes frame processing after throttle
@@ -305,21 +314,21 @@ class ModernCameraViewController: UIViewController {
     weak var delegate: ModernCameraViewControllerDelegate?
     
     // MARK: - AVFoundation Properties
-    private var captureSession: AVCaptureSession!
-    private var videoPreviewLayer: AVCaptureVideoPreviewLayer!
-    private var capturePhotoOutput: AVCapturePhotoOutput!
-    private var videoDataOutput: AVCaptureVideoDataOutput!
-    private var videoDataOutputQueue: DispatchQueue!
+    nonisolated(unsafe) private var captureSession: AVCaptureSession!
+    nonisolated(unsafe) private var videoPreviewLayer: AVCaptureVideoPreviewLayer!
+    nonisolated(unsafe) private var capturePhotoOutput: AVCapturePhotoOutput!
+    nonisolated(unsafe) private var videoDataOutput: AVCaptureVideoDataOutput!
+    nonisolated(unsafe) private var videoDataOutputQueue: DispatchQueue!
     
     // MARK: - Delegate Properties
     /// Non-isolated delegate for video frame processing
     /// - Note: Separate from @MainActor to avoid actor isolation issues
-    private var videoCaptureDelegate: VideoCaptureDelegate!
+    nonisolated(unsafe) private var videoCaptureDelegate: VideoCaptureDelegate!
     private let barcodeService = BarcodeService.shared
     
     // MARK: - UI Properties
-    private var scanOverlayView: ScanOverlayView!
-    private var controlsView: CameraControlsView!
+    nonisolated(unsafe) private var scanOverlayView: ScanOverlayView!
+    nonisolated(unsafe) private var controlsView: CameraControlsView!
     
     // MARK: - Configuration
     private var enableRealTimeDetection = true
@@ -352,8 +361,40 @@ class ModernCameraViewController: UIViewController {
     }
     
     deinit {
-        // Stop processing and remove observers
+        // MEMORY OPTIMIZATION: Properly clean up camera resources
+        cleanupResourcesNonIsolated()
+    }
+    
+    /// Clean up all camera resources and stop processing
+    /// Called when view is dismantled or deallocated
+    func cleanupResources() {
+        stopCameraSession()
         videoCaptureDelegate?.stopProcessing()
+        videoCaptureDelegate = nil
+        captureSession = nil
+        videoPreviewLayer = nil
+        capturePhotoOutput = nil
+        videoDataOutput = nil
+        videoDataOutputQueue = nil
+        scanOverlayView = nil
+        controlsView = nil
+        NotificationCenter.default.removeObserver(self)
+        isSessionRunning = false
+        isSessionConfigured = false
+    }
+    
+    /// Non-isolated version of cleanup for deinit
+    nonisolated private func cleanupResourcesNonIsolated() {
+        stopCameraSession()
+        videoCaptureDelegate?.stopProcessing()
+        videoCaptureDelegate = nil
+        captureSession = nil
+        videoPreviewLayer = nil
+        capturePhotoOutput = nil
+        videoDataOutput = nil
+        videoDataOutputQueue = nil
+        scanOverlayView = nil
+        controlsView = nil
         NotificationCenter.default.removeObserver(self)
     }
     
@@ -553,20 +594,23 @@ class ModernCameraViewController: UIViewController {
     /// Stops the camera session safely on a background queue
     /// - Note: AVCaptureSession stopRunning() is a blocking call that should run on background queue
     /// This prevents deadlocks and ensures Vision callbacks complete before session stops
-    private func stopCameraSession() {
-        guard isSessionRunning else { return }
-        
-        // CRITICAL: Stop frame processing FIRST to prevent new operations
-        // This prevents captureOutput from processing frames during teardown
-        videoCaptureDelegate?.stopProcessing()
-        isSessionRunning = false
-        
-        // Capture session in nonisolated context for background dispatch
+    nonisolated private func stopCameraSession() {
+        // Capture properties in nonisolated context for background dispatch
         let session = captureSession
+        let delegate = videoCaptureDelegate
+        
+        // Stop frame processing FIRST to prevent new operations
+        delegate?.stopProcessing()
+        
         DispatchQueue.global(qos: .userInitiated).async {
             // Wait briefly to allow in-flight frames to complete
             Thread.sleep(forTimeInterval: 0.1)
             session?.stopRunning()
+            
+            // Update session state on main thread
+            Task { @MainActor in
+                // This will be handled by the calling context
+            }
         }
     }
     

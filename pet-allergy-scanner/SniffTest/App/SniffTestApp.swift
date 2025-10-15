@@ -12,9 +12,17 @@ import UserNotifications
 struct SniffTestApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    // MEMORY OPTIMIZATION: Create shared service instances once
+    private let authService = AuthService.shared
+    private let petService = PetService.shared
+    private let notificationManager = NotificationManager.shared
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(authService)
+                .environmentObject(petService)
+                .environmentObject(notificationManager)
         }
     }
 }

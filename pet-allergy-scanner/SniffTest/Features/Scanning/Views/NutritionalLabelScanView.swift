@@ -193,25 +193,6 @@ struct NutritionalLabelFrameOverlay: View {
                     value: isAnimating
                 )
             
-            // Corner guides
-            VStack {
-                HStack {
-                    FrameCornerGuide()
-                    Spacer()
-                    FrameCornerGuide()
-                        .rotationEffect(.degrees(90))
-                }
-                Spacer()
-                HStack {
-                    FrameCornerGuide()
-                        .rotationEffect(.degrees(-90))
-                    Spacer()
-                    FrameCornerGuide()
-                        .rotationEffect(.degrees(180))
-                }
-            }
-            .frame(width: 300, height: 400)
-            
             // Label text at top of frame
             VStack {
                 Text("Position Nutritional Label")
@@ -231,21 +212,6 @@ struct NutritionalLabelFrameOverlay: View {
         .onAppear {
             isAnimating = true
         }
-    }
-}
-
-/**
- * Corner guide indicator for frame
- */
-struct FrameCornerGuide: View {
-    var body: some View {
-        Path { path in
-            path.move(to: CGPoint(x: 25, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: 0))
-            path.addLine(to: CGPoint(x: 0, y: 25))
-        }
-        .stroke(ModernDesignSystem.Colors.primary, lineWidth: 4)
-        .frame(width: 25, height: 25)
     }
 }
 

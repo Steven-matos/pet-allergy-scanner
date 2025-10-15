@@ -10,10 +10,11 @@ import AVFoundation
 
 struct ScanView: View {
     @EnvironmentObject var petService: PetService
-    @State private var hybridScanService = HybridScanService.shared
-    @State private var scanService = ScanService.shared
-    @State private var cameraPermissionService = CameraPermissionService.shared
-    @State private var settingsManager = SettingsManager.shared
+    // MEMORY OPTIMIZATION: Use shared service instances instead of @State
+    private let hybridScanService = HybridScanService.shared
+    private let scanService = ScanService.shared
+    private let cameraPermissionService = CameraPermissionService.shared
+    private let settingsManager = SettingsManager.shared
     @State private var showingPetSelection = false
     @State private var selectedPet: Pet?
     @State private var showingResults = false
@@ -22,7 +23,6 @@ struct ScanView: View {
     @State private var cameraError: String?
     @State private var showingAddPet = false
     @State private var hybridScanResult: HybridScanResult?
-    @State private var showingScanOptions = false
     @State private var showingHistory = false
     @State private var detectedBarcode: BarcodeResult?
     @State private var showingBarcodeOverlay = false
@@ -48,34 +48,26 @@ struct ScanView: View {
                 
                 // Top controls with Trust & Nature styling
                 VStack {
-                    HStack {
-                        // Title with Trust & Nature typography
+                    ZStack {
+                        // Centered app name
                         Text("Sniff Test")
                             .font(ModernDesignSystem.Typography.title2)
                             .fontWeight(.semibold)
                             .foregroundColor(.white)
                             .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
                         
-                        Spacer()
-                        
-                        // History button with Trust & Nature styling
-                        Button(action: { showingHistory = true }) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(ModernDesignSystem.Typography.title3)
-                                .foregroundColor(.white)
-                                .padding(ModernDesignSystem.Spacing.md)
-                                .background(Color.black.opacity(0.3))
-                                .clipShape(Circle())
-                        }
-                        
-                        // Options button with Trust & Nature styling
-                        Button(action: { showingScanOptions = true }) {
-                            Image(systemName: "gearshape.fill")
-                                .font(ModernDesignSystem.Typography.title3)
-                                .foregroundColor(.white)
-                                .padding(ModernDesignSystem.Spacing.md)
-                                .background(Color.black.opacity(0.3))
-                                .clipShape(Circle())
+                        // History button positioned on the right
+                        HStack {
+                            Spacer()
+                            
+                            Button(action: { showingHistory = true }) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .font(ModernDesignSystem.Typography.title3)
+                                    .foregroundColor(.white)
+                                    .padding(ModernDesignSystem.Spacing.md)
+                                    .background(Color.black.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
                         }
                     }
                     .padding(.horizontal, ModernDesignSystem.Spacing.lg)
@@ -218,6 +210,10 @@ struct ScanView: View {
         .onAppear {
             checkCameraPermission()
         }
+        .onDisappear {
+            // MEMORY OPTIMIZATION: Clear scan results when view disappears to prevent memory leaks
+            clearScanState()
+        }
     }
     
     // MARK: - Camera Permission
@@ -230,6 +226,29 @@ struct ScanView: View {
                 }
             }
         }
+    }
+    
+    // MARK: - Memory Management
+    
+    /**
+     * Clear scan state when view disappears to prevent memory leaks
+     * This helps prevent freezing when navigating between tabs
+     */
+    private func clearScanState() {
+        // Clear scan results
+        hybridScanResult = nil
+        scanResult = nil
+        detectedBarcode = nil
+        foundProduct = nil
+        
+        // Clear service states
+        hybridScanService.clearResults()
+        
+        // Reset UI states
+        showingProductFound = false
+        showingProductNotFound = false
+        showingNutritionalLabelScan = false
+        showingBarcodeOverlay = false
     }
     
     // MARK: - Image Processing
@@ -420,18 +439,21 @@ struct ScanningFrameOverlay: View {
     @State private var isAnimating = false
     
     var body: some View {
-        ZStack {
-            // Dark overlay with transparent scanning area
-            Rectangle()
-                .fill(Color.black.opacity(0.6))
-                .mask(
-                    Rectangle()
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
-                                .frame(width: 280, height: 280)
-                                .blendMode(.destinationOut)
-                        )
-                )
+        GeometryReader { geometry in
+            ZStack {
+                // Dark overlay with transparent scanning area - covers entire screen
+                Rectangle()
+                    .fill(Color.black.opacity(0.6))
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .mask(
+                        Rectangle()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
+                                    .frame(width: 280, height: 280)
+                                    .blendMode(.destinationOut)
+                            )
+                    )
             
             // Scanning frame with Trust & Nature colors
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
@@ -453,37 +475,12 @@ struct ScanningFrameOverlay: View {
                     .easeInOut(duration: 2.0).repeatForever(autoreverses: true),
                     value: isAnimating
                 )
-            
-            // Corner indicators with Trust & Nature primary color
-            VStack {
-                HStack {
-                    CornerIndicator()
-                    Spacer()
-                    CornerIndicator()
-                        .rotationEffect(.degrees(90))
-                }
-                Spacer()
-                HStack {
-                    CornerIndicator()
-                        .rotationEffect(.degrees(-90))
-                    Spacer()
-                    CornerIndicator()
-                        .rotationEffect(.degrees(180))
-                }
             }
-            .frame(width: 280, height: 280)
         }
+        .ignoresSafeArea(.all)
         .onAppear {
             isAnimating = true
         }
-    }
-}
-
-struct CornerIndicator: View {
-    var body: some View {
-        Rectangle()
-            .fill(ModernDesignSystem.Colors.primary)
-            .frame(width: 20, height: 3)
     }
 }
 

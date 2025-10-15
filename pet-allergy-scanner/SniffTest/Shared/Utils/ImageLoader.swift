@@ -9,7 +9,7 @@ import SwiftUI
 import UIKit
 
 /// Utility for loading images from both local file paths and remote URLs
-/// Handles caching and async loading for remote images
+/// Handles caching and async loading for remote images with memory optimization
 @MainActor
 class ImageLoader: ObservableObject {
     @Published var image: UIImage?
@@ -18,6 +18,7 @@ class ImageLoader: ObservableObject {
     
     private let url: String
     private var task: Task<Void, Never>?
+    private let imageCache = MemoryEfficientImageCache.shared
     
     init(url: String) {
         self.url = url
@@ -28,9 +29,16 @@ class ImageLoader: ObservableObject {
         task?.cancel()
     }
     
-    /// Load image from URL (local or remote)
+    /// Load image from URL (local or remote) with memory optimization
     func loadImage() {
         print("🔍 ImageLoader: Loading image from URL: \(url)")
+        
+        // Check cache first
+        if let cachedImage = imageCache.image(forKey: url) {
+            self.image = cachedImage
+            return
+        }
+        
         // Check if it's a remote URL
         if url.hasPrefix("http://") || url.hasPrefix("https://") {
             print("🔍 ImageLoader: Loading remote image")
@@ -41,13 +49,19 @@ class ImageLoader: ObservableObject {
         }
     }
     
-    /// Load image from local file path
+    /// Load image from local file path with memory optimization
     private func loadLocalImage() {
         guard let localImage = UIImage(contentsOfFile: url) else {
             errorMessage = "Failed to load local image"
             return
         }
-        self.image = localImage
+        
+        // MEMORY OPTIMIZATION: Optimize image for memory usage
+        let optimizedImage = localImage.optimizeForMemory(maxMemoryUsage: 2_097_152) // 2MB limit
+        self.image = optimizedImage
+        
+        // Cache the optimized image
+        imageCache.setImage(optimizedImage, forKey: url)
     }
     
     /// Load image from remote URL with caching
@@ -83,9 +97,15 @@ class ImageLoader: ObservableObject {
                     return
                 }
                 
+                // MEMORY OPTIMIZATION: Optimize image for memory usage
+                let optimizedImage = loadedImage.optimizeForMemory(maxMemoryUsage: 2_097_152) // 2MB limit
+                
                 await MainActor.run {
-                    self.image = loadedImage
+                    self.image = optimizedImage
                     self.isLoading = false
+                    
+                    // Cache the optimized image
+                    self.imageCache.setImage(optimizedImage, forKey: self.url)
                 }
             } catch {
                 await MainActor.run {
