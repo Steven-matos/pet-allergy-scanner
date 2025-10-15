@@ -62,6 +62,7 @@ def get_current_user(
             options={"verify_signature": True}
         )
         user_id: str = payload.get("sub")
+        logger.info(f"Supabase JWT payload: {payload}")
         if user_id is None:
             logger.error("Supabase JWT validation failed: no user ID in payload")
             raise credentials_exception
@@ -77,6 +78,7 @@ def get_current_user(
                 options={"verify_signature": True}
             )
             user_id: str = payload.get("sub")
+            logger.info(f"Server JWT payload: {payload}")
             if user_id is None:
                 logger.error("Server JWT validation failed: no user ID in payload")
                 raise credentials_exception
@@ -87,12 +89,15 @@ def get_current_user(
     # Get user from database
     try:
         supabase = get_supabase_client()
+        logger.info(f"Looking up user with ID: {user_id}")
         response = supabase.table("users").select("*").eq("id", user_id).execute()
         
         if not response.data:
+            logger.error(f"User not found in database with ID: {user_id}")
             raise credentials_exception
         
         user_data = response.data[0]
+        logger.info(f"User found: {user_data.get('email', 'unknown')}")
         return User(**user_data)
         
     except Exception as e:
