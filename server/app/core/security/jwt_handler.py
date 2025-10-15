@@ -52,6 +52,10 @@ def get_current_user(
     )
     
     try:
+        # Debug: Log the JWT secret being used
+        logger.info(f"Using JWT secret: {settings.supabase_jwt_secret[:20]}...")
+        logger.info(f"Expected issuer: {settings.supabase_url}/auth/v1")
+        
         # First try to decode as Supabase JWT token
         payload = jwt.decode(
             credentials.credentials, 
@@ -84,6 +88,11 @@ def get_current_user(
                 raise credentials_exception
         except InvalidTokenError as e2:
             logger.error(f"Server JWT validation also failed: {e2}")
+            # Log detailed error information for debugging
+            logger.error(f"Supabase JWT Secret (first 10 chars): {settings.supabase_jwt_secret[:10]}...")
+            logger.error(f"Supabase URL: {settings.supabase_url}")
+            logger.error(f"Expected issuer: {settings.supabase_url}/auth/v1")
+            logger.error(f"Token (first 50 chars): {credentials.credentials[:50]}...")
             raise credentials_exception
     
     # Get user from database
