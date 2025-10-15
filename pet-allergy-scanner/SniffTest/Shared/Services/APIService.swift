@@ -473,8 +473,19 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
+        // Add authorization header with debug logging
         if let token = await authToken {
+            print("🔍 DEBUG: Setting Authorization header in createRequest")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            
+            // Verify it was set
+            if let authHeader = request.value(forHTTPHeaderField: "Authorization") {
+                print("✅ DEBUG: Authorization header confirmed: \(authHeader.prefix(30))...")
+            } else {
+                print("❌ DEBUG: Failed to set Authorization header!")
+            }
+        } else {
+            print("⚠️ DEBUG: No auth token available in createRequest")
         }
         
         if let body = body {
@@ -1223,8 +1234,21 @@ extension APIService {
             throw APIError.encodingError
         }
         
-        // Perform request
+        // Debug: Print all request headers
         print("🔍 DEBUG: Sending food item creation request to: \(url)")
+        print("🔍 DEBUG: Request headers:")
+        if let headers = request.allHTTPHeaderFields {
+            for (key, value) in headers {
+                if key.lowercased() == "authorization" {
+                    print("   \(key): \(value.prefix(30))...")
+                } else {
+                    print("   \(key): \(value)")
+                }
+            }
+        } else {
+            print("   No headers found!")
+        }
+        
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {

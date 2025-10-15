@@ -11,7 +11,7 @@ struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var notificationManager: NotificationManager
     @StateObject private var petService = PetService.shared
-    @State private var selectedTab = 0 {
+    @State private var selectedTab = 2 {
         didSet {
             print("🔍 MainTabView: selectedTab changed from \(oldValue) to \(selectedTab)")
             // Add stack trace to see what's causing the change
@@ -22,14 +22,6 @@ struct MainTabView: View {
     var body: some View {
         let _ = print("🔍 MainTabView: body called with selectedTab = \(selectedTab)")
         TabView(selection: $selectedTab) {
-            // Home/Scan Tab
-            ScanView()
-                .environmentObject(authService)
-                .tabItem {
-                    Image(systemName: "camera.viewfinder")
-                    Text("Scan")
-                }
-            
             // Pets Tab
             PetsView()
                 .environmentObject(authService)
@@ -37,23 +29,34 @@ struct MainTabView: View {
                     Image(systemName: "pawprint")
                     Text("Pets")
                 }
-            
-            // History Tab
-            HistoryView()
-                .environmentObject(authService)
-                .environmentObject(notificationManager)
-                .tabItem {
-                    Image(systemName: "clock.arrow.circlepath")
-                    Text("History")
-                }
+                .tag(0)
             
             // Nutrition Tab
-                        AdvancedNutritionView()
+            AdvancedNutritionView()
                 .environmentObject(authService)
                 .tabItem {
                     Image(systemName: "leaf.fill")
                     Text("Nutrition")
                 }
+                .tag(1)
+            
+            // Scan Tab (Middle position)
+            ScanView()
+                .environmentObject(authService)
+                .tabItem {
+                    Image(systemName: "camera.viewfinder")
+                    Text("Scan")
+                }
+                .tag(2)
+            
+            // Trackers Tab (Replaces History)
+            TrackersView()
+                .environmentObject(authService)
+                .tabItem {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Trackers")
+                }
+                .tag(3)
             
             // Profile & Settings Tab
             ProfileSettingsView()
@@ -62,6 +65,7 @@ struct MainTabView: View {
                     Image(systemName: "person.circle")
                     Text("Profile")
                 }
+                .tag(4)
         }
         .environmentObject(petService)
         .onAppear {
@@ -70,8 +74,8 @@ struct MainTabView: View {
         .onChange(of: notificationManager.navigateToScan) { oldValue, newValue in
             print("🔍 MainTabView: navigateToScan changed from \(oldValue) to \(newValue)")
             if newValue && !oldValue {
-                print("🔍 MainTabView: Navigating to scan tab (selectedTab = 0)")
-                selectedTab = 0 // Navigate to scan tab
+                print("🔍 MainTabView: Navigating to scan tab (selectedTab = 2)")
+                selectedTab = 2 // Navigate to scan tab (now in middle position)
             }
         }
         .accentColor(ModernDesignSystem.Colors.tabBarActive)

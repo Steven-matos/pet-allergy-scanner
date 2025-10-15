@@ -9,7 +9,7 @@ vulnerable to Minerva timing attack (CVE-2024-23342, GHSA-wj6h-64fc-37mp)
 """
 
 import logging
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -19,13 +19,13 @@ from app.database import get_supabase_client
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)  # Don't auto-raise on missing header
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request = None
 ) -> User:
-    logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
     """
     Get current authenticated user from JWT token
     
@@ -34,6 +34,7 @@ def get_current_user(
     
     Args:
         credentials: HTTP Bearer token credentials
+        request: FastAPI request object
         
     Returns:
         Current authenticated user
@@ -46,6 +47,21 @@ def get_current_user(
         >>> async def protected_route(current_user: User = Depends(get_current_user)):
         >>>     return {"user_id": current_user.id}
     """
+    # Debug: Log all request headers
+    if request:
+        logger.info(f"🔍 Request headers: {dict(request.headers)}")
+    
+    # Check if credentials were provided
+    if credentials is None:
+        logger.error("❌ No Authorization header found in request")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
