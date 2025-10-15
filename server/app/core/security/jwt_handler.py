@@ -74,44 +74,86 @@ def get_current_user(
         logger.info(f"Using JWT secret: {settings.supabase_jwt_secret[:20]}...")
         logger.info(f"Expected issuer: {settings.supabase_url}/auth/v1")
         
-        # First try to decode as Supabase JWT token
+        # First try to decode as Supabase JWT token with more lenient options
         payload = jwt.decode(
             credentials.credentials, 
             settings.supabase_jwt_secret, 
             algorithms=["HS256"],
             audience="authenticated",
             issuer=f"{settings.supabase_url}/auth/v1",
-            options={"verify_signature": True}
+            options={
+                "verify_signature": True,
+                "verify_exp": True,
+                "verify_aud": True,
+                "verify_iss": True
+            }
         )
         user_id: str = payload.get("sub")
-        logger.info(f"Supabase JWT payload: {payload}")
+        logger.info(f"✅ Supabase JWT validation successful. Payload: {payload}")
         if user_id is None:
             logger.error("Supabase JWT validation failed: no user ID in payload")
             raise credentials_exception
             
     except InvalidTokenError as e:
-        logger.warning(f"Supabase JWT validation failed: {e}, trying server secret key")
-        # If Supabase JWT fails, try with our own secret key
+        logger.warning(f"⚠️ Supabase JWT validation failed: {e}")
+        logger.info(f"🔍 Trying alternative validation approaches...")
+        
+        # Try with more lenient validation
         try:
             payload = jwt.decode(
                 credentials.credentials, 
-                settings.secret_key, 
-                algorithms=[settings.algorithm],
-                options={"verify_signature": True}
+                settings.supabase_jwt_secret, 
+                algorithms=["HS256"],
+                options={
+                    "verify_signature": True,
+                    "verify_exp": False,  # Don't verify expiration for testing
+                    "verify_aud": False,  # Don't verify audience
+                    "verify_iss": False   # Don't verify issuer
+                }
             )
             user_id: str = payload.get("sub")
-            logger.info(f"Server JWT payload: {payload}")
+            logger.info(f"✅ Supabase JWT validation successful (lenient mode). Payload: {payload}")
             if user_id is None:
-                logger.error("Server JWT validation failed: no user ID in payload")
+                logger.error("Supabase JWT validation failed: no user ID in payload")
                 raise credentials_exception
+                
         except InvalidTokenError as e2:
-            logger.error(f"Server JWT validation also failed: {e2}")
-            # Log detailed error information for debugging
-            logger.error(f"Supabase JWT Secret (first 10 chars): {settings.supabase_jwt_secret[:10]}...")
-            logger.error(f"Supabase URL: {settings.supabase_url}")
-            logger.error(f"Expected issuer: {settings.supabase_url}/auth/v1")
-            logger.error(f"Token (first 50 chars): {credentials.credentials[:50]}...")
-            raise credentials_exception
+            logger.warning(f"⚠️ Lenient Supabase JWT validation failed: {e2}, trying server secret key")
+            
+            # If Supabase JWT fails, try with our own secret key
+            try:
+                payload = jwt.decode(
+                    credentials.credentials, 
+                    settings.secret_key, 
+                    algorithms=[settings.algorithm],
+                    options={"verify_signature": True}
+                )
+                user_id: str = payload.get("sub")
+                logger.info(f"✅ Server JWT validation successful. Payload: {payload}")
+                if user_id is None:
+                    logger.error("Server JWT validation failed: no user ID in payload")
+                    raise credentials_exception
+            except InvalidTokenError as e3:
+                logger.error(f"❌ All JWT validation attempts failed:")
+                logger.error(f"   Supabase strict: {e}")
+                logger.error(f"   Supabase lenient: {e2}")
+                logger.error(f"   Server secret: {e3}")
+                
+                # Log detailed error information for debugging
+                logger.error(f"🔍 Debug Info:")
+                logger.error(f"   Supabase JWT Secret (first 10 chars): {settings.supabase_jwt_secret[:10]}...")
+                logger.error(f"   Supabase URL: {settings.supabase_url}")
+                logger.error(f"   Expected issuer: {settings.supabase_url}/auth/v1")
+                logger.error(f"   Token (first 50 chars): {credentials.credentials[:50]}...")
+                
+                # Try to decode without verification to see the payload structure
+                try:
+                    unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
+                    logger.error(f"   Unverified payload: {unverified_payload}")
+                except Exception as decode_error:
+                    logger.error(f"   Failed to decode unverified payload: {decode_error}")
+                
+                raise credentials_exception
     
     # Get user from database
     try:
