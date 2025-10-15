@@ -182,6 +182,47 @@ async def debug_auth_test(
         "url": str(request.url)
     }
 
+@app.get("/debug/config")
+async def debug_config():
+    """
+    Debug endpoint to check server configuration
+    """
+    from app.core.config import settings
+    import jwt
+    
+    # Try to decode a test token to see what happens
+    test_token = "eyJhbGciOiJIUzI1NiIsImt5cCI6IkpXVCIsImtpZCI6InFQVkhBY1JuRnhjYnVYbkUifQ.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzYwNTczMDQ0LCJpYXQiOjE3NjA1Njk0NDQsImlzcyI6Imh0dHBzOi8vb3hqeXdwZWFycnV4dG55c295dWYuc3VwYWJhc2UuY28vYXV0aC92MSIsInN1YiI6IjdhNDgxMDMwLWU2ZmUtNDBlYS1hODFlLTM2MTZmMWI3ODI2NiIsImVtYWlsIjoidGVzdEBleGFtcGxlLmNvbSIsInBob25lIjoiIiwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2MDU2OTQ0NH1dLCJzZXNzaW9uX2lkIjoiYTA5M2U2NWQtNGM3NS00MWZlLWJmZGItMmY0YjE1NTk5ZWEyIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.example"
+    
+    try:
+        # Try to decode without verification first
+        unverified_payload = jwt.decode(test_token, options={"verify_signature": False})
+        
+        # Try with Supabase secret
+        try:
+            verified_payload = jwt.decode(
+                test_token, 
+                settings.supabase_jwt_secret, 
+                algorithms=["HS256"],
+                options={"verify_signature": False}  # Don't verify for debugging
+            )
+            supabase_validation = "success"
+        except Exception as e:
+            supabase_validation = f"failed: {str(e)}"
+            
+    except Exception as e:
+        unverified_payload = f"failed to decode: {str(e)}"
+        supabase_validation = "not tested"
+    
+    return {
+        "supabase_url": settings.supabase_url,
+        "supabase_jwt_secret_length": len(settings.supabase_jwt_secret),
+        "supabase_jwt_secret_preview": settings.supabase_jwt_secret[:20] + "...",
+        "expected_issuer": f"{settings.supabase_url}/auth/v1",
+        "test_token_unverified": unverified_payload,
+        "test_token_supabase_validation": supabase_validation,
+        "environment": settings.environment
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
