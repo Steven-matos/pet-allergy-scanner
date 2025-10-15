@@ -355,9 +355,23 @@ class ModernCameraViewController: UIViewController {
         startCameraSession()
     }
     
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Validate and recover camera session state when view becomes visible
+        validateAndRecoverSession()
+    }
+    
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         stopCameraSession()
+    }
+    
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Ensure session is stopped when view is no longer visible
+        if isSessionRunning {
+            stopCameraSession()
+        }
     }
     
     deinit {
@@ -577,14 +591,22 @@ class ModernCameraViewController: UIViewController {
     private func startCameraSession() {
         guard !isSessionRunning else { return }
         guard isSessionConfigured else { return }
+        guard let session = captureSession else { return }
         
         // Enable frame processing in isolated delegate
         videoCaptureDelegate?.startProcessing()
         
         // Capture session in nonisolated context for background dispatch
-        let session = captureSession
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            session?.startRunning()
+            // Check if session is already running to prevent duplicate starts
+            guard !session.isRunning else {
+                Task { @MainActor [weak self] in
+                    self?.isSessionRunning = true
+                }
+                return
+            }
+            
+            session.startRunning()
             Task { @MainActor [weak self] in
                 self?.isSessionRunning = true
             }
@@ -605,7 +627,11 @@ class ModernCameraViewController: UIViewController {
         DispatchQueue.global(qos: .userInitiated).async {
             // Wait briefly to allow in-flight frames to complete
             Thread.sleep(forTimeInterval: 0.1)
-            session?.stopRunning()
+            
+            // Only stop if session is actually running
+            if let session = session, session.isRunning {
+                session.stopRunning()
+            }
             
             // Update session state on main thread
             Task { @MainActor in
@@ -653,6 +679,23 @@ class ModernCameraViewController: UIViewController {
         // Restart session if it was stopped
         if isSessionConfigured && !isSessionRunning {
             startCameraSession()
+        }
+    }
+    
+    /// Validates and recovers camera session state
+    /// - Note: Called when returning to the camera view to ensure session is properly running
+    private func validateAndRecoverSession() {
+        guard isSessionConfigured else { return }
+        guard let session = captureSession else { return }
+        
+        // Check if session is in an inconsistent state
+        if !session.isRunning && isSessionRunning {
+            // Session should be running but isn't - restart it
+            isSessionRunning = false
+            startCameraSession()
+        } else if session.isRunning && !isSessionRunning {
+            // Session is running but our state is wrong - update state
+            isSessionRunning = true
         }
     }
     

@@ -23,11 +23,13 @@ import SwiftUI
 struct HistoryView: View {
     @StateObject private var scanService = ScanService.shared
     @EnvironmentObject var notificationManager: NotificationManager
+    @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var selectedFilter: ScanFilter = .all
     @State private var showingFilters = false
     @State private var selectedScan: Scan?
     @State private var showingScanDetail = false
+    @State private var showingClearHistoryAlert = false
     
     enum ScanFilter: String, CaseIterable {
         case all = "All"
@@ -78,6 +80,7 @@ struct HistoryView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if scanService.recentScans.isEmpty {
                     EmptyHistoryView(onStartScanning: {
+                        dismiss()
                         notificationManager.handleNavigateToScan()
                     })
                 } else {
@@ -116,6 +119,16 @@ struct HistoryView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar {
+                if !scanService.recentScans.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Clear All") {
+                            showingClearHistoryAlert = true
+                        }
+                        .foregroundColor(ModernDesignSystem.Colors.error)
+                    }
+                }
+            }
             .onAppear {
                 scanService.loadRecentScans()
             }
@@ -123,6 +136,35 @@ struct HistoryView: View {
         .sheet(isPresented: $showingScanDetail) {
             if let scan = selectedScan {
                 ScanDetailView(scan: scan)
+            }
+        }
+        .alert("Clear Scan History", isPresented: $showingClearHistoryAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Clear All", role: .destructive) {
+                clearScanHistory()
+            }
+        } message: {
+            Text("This will permanently delete all your scan history from the server. This action cannot be undone.")
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    /**
+     * Clear all scan history from server and local storage
+     */
+    private func clearScanHistory() {
+        Task {
+            do {
+                try await scanService.clearAllScans()
+                await MainActor.run {
+                    scanService.recentScans = []
+                }
+            } catch {
+                await MainActor.run {
+                    // Handle error - could show an alert here
+                    print("Failed to clear scan history: \(error.localizedDescription)")
+                }
             }
         }
     }

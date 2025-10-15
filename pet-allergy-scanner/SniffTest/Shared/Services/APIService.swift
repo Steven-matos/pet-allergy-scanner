@@ -831,6 +831,38 @@ extension APIService {
         let request = await createRequest(url: url)
         return try await performRequest(request, responseType: Scan.self)
     }
+    
+    /// Clear all scans for the current user
+    func clearAllScans() async throws {
+        guard let url = URL(string: "\(baseURL)/scans/clear") else {
+            throw APIError.invalidURL
+        }
+        
+        let request = await createRequest(url: url, method: "DELETE")
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                switch httpResponse.statusCode {
+                case 200...299:
+                    return // Success
+                case 401:
+                    throw APIError.authenticationError
+                case 400...499:
+                    throw APIError.serverError(httpResponse.statusCode)
+                case 500...599:
+                    throw APIError.serverError(httpResponse.statusCode)
+                default:
+                    throw APIError.unknownError
+                }
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(error.localizedDescription)
+        }
+    }
 }
 
 // MARK: - Ingredient Endpoints

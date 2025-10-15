@@ -192,6 +192,21 @@ class ScanService: ObservableObject, @unchecked Sendable {
         }
     }
     
+    /// Clear all scans from server and local storage
+    func clearAllScans() async throws {
+        // Clear from server
+        try await apiService.clearAllScans()
+        
+        // Clear local storage
+        await MainActor.run {
+            recentScans = []
+            errorMessage = nil
+            isLoading = false
+            isAnalyzing = false
+            currentAnalysisTask?.cancel()
+        }
+    }
+    
     /// Manually save a scan to the server
     /// Used when auto-save is disabled but user wants to save a specific scan
     /// - Parameter scan: The scan to save
