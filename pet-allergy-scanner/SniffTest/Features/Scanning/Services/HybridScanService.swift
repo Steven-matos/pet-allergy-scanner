@@ -145,12 +145,7 @@ class HybridScanService: @unchecked Sendable {
      * Use for real-time scanning in camera preview
      */
     func quickBarcodeScan(from image: UIImage) async -> BarcodeResult? {
-        return await withCheckedContinuation { continuation in
-            Task {
-                let result = barcodeService.scanBarcode(from: image)
-                continuation.resume(returning: result)
-            }
-        }
+        return await barcodeService.scanBarcode(from: image)
     }
     
     /**
@@ -180,15 +175,32 @@ class HybridScanService: @unchecked Sendable {
         ocrService.clearResults()
     }
     
+    /**
+     * Pause scanning to prevent background processing during popups
+     * This stops barcode detection and OCR processing
+     */
+    func pauseScanning() {
+        isScanning = false
+        scanProgress = .idle
+        // Clear any pending operations
+        barcodeService.clearResults()
+        ocrService.clearResults()
+    }
+    
+    /**
+     * Resume scanning after popups are dismissed
+     * This restores normal scanning functionality
+     */
+    func resumeScanning() {
+        // Reset to idle state - scanning will resume when user interacts with camera
+        scanProgress = .idle
+        isScanning = false
+    }
+    
     // MARK: - Private Methods
     
     private func detectBarcode(from image: UIImage) async -> BarcodeResult? {
-        return await withCheckedContinuation { continuation in
-            Task {
-                let result = barcodeService.scanBarcode(from: image)
-                continuation.resume(returning: result)
-            }
-        }
+        return await barcodeService.scanBarcode(from: image)
     }
     
     private func lookupProduct(by barcode: String) async -> ProductInfo? {
@@ -325,21 +337,60 @@ class HybridScanService: @unchecked Sendable {
     
     func performOCROnlyScan(from image: UIImage) async -> HybridScanResult {
         isScanning = true
-        scanProgress = .extractingText
+        scanProgress = .detectingBarcode
         errorMessage = nil
         
         let startTime = Date()
         
+        // First try to detect barcode even in OCR-only mode
+        // This ensures we capture barcode info for nutritional label scanning
+        let barcodeResult = await detectBarcode(from: image)
+        var productInfo: ProductInfo? = nil
+        var foodProduct: FoodProduct? = nil
+        
+        if let barcode = barcodeResult {
+            // Try to find product in database
+            do {
+                foodProduct = try await apiService.lookupProductByBarcode(barcode.value)
+                if foodProduct != nil {
+                    productInfo = ProductInfo(
+                        barcode: barcode.value,
+                        countryCode: "",
+                        manufacturerCode: foodProduct?.brand ?? "",
+                        productCode: foodProduct?.name ?? "",
+                        checksum: String(barcode.value.suffix(1))
+                    )
+                }
+            } catch {
+                // Product not found in database - extract basic info from barcode
+                productInfo = barcodeService.extractProductInfo(from: barcode.value)
+            }
+        }
+        
+        // Then extract text via OCR
+        scanProgress = .extractingText
         let ocrResult = await extractText(from: image)
         
+        // Determine scan method based on what was found
+        let scanMethod: ScanDetectionMethod
+        if barcodeResult != nil && !ocrResult.text.isEmpty {
+            scanMethod = .hybrid  // Both barcode and OCR found
+        } else if barcodeResult != nil {
+            scanMethod = .barcodeOnly  // Only barcode found
+        } else if !ocrResult.text.isEmpty {
+            scanMethod = .ocrOnly  // Only OCR found
+        } else {
+            scanMethod = .failed  // Nothing found
+        }
+        
         let result = HybridScanResult(
-            barcode: nil,
-            productInfo: nil,
-            foodProduct: nil,
+            barcode: barcodeResult,
+            productInfo: productInfo,
+            foodProduct: foodProduct,
             ocrText: ocrResult.text,
             ocrAnalysis: ocrResult.analysis,
-            scanMethod: ocrResult.text.isEmpty ? .failed : .ocrOnly,
-            confidence: ocrResult.text.isEmpty ? 0.0 : 0.6,
+            scanMethod: scanMethod,
+            confidence: barcodeResult?.confidence ?? (ocrResult.text.isEmpty ? 0.0 : 0.6),
             processingTime: Date().timeIntervalSince(startTime),
             lastCapturedImage: image
         )

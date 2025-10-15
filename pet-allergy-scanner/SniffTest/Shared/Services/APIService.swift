@@ -205,25 +205,31 @@ class APIService: ObservableObject, @unchecked Sendable {
     /// Register device token with the server for push notifications
     /// - Parameter deviceToken: The device token to register
     func registerDeviceToken(_ deviceToken: String) async throws {
-        let url = URL(string: "\(baseURL)/notifications/register-device")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        if let token = await authToken {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        guard let url = URL(string: "\(baseURL)/notifications/register-device") else {
+            throw APIError.invalidURL
         }
         
         let payload = ["device_token": deviceToken]
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        let requestData = try JSONSerialization.data(withJSONObject: payload)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let request = await createRequest(url: url, method: "POST", body: requestData)
+        
+        print("🔍 DEBUG: Registering device token at URL: \(url)")
+        print("🔍 DEBUG: Device token: \(String(deviceToken.prefix(20)))...")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ DEBUG: Invalid response type")
             throw APIError.invalidResponse
         }
         
-        guard httpResponse.statusCode == 200 else {
+        print("🔍 DEBUG: Device token registration response: \(httpResponse.statusCode)")
+        
+        if httpResponse.statusCode != 200 {
+            if let responseData = String(data: data, encoding: .utf8) {
+                print("❌ DEBUG: Error response: \(responseData)")
+            }
             throw APIError.serverError(httpResponse.statusCode)
         }
     }
@@ -1074,7 +1080,7 @@ extension APIService {
      * - Returns: FoodProduct if found in database, nil otherwise
      */
     func lookupProductByBarcode(_ barcode: String) async throws -> FoodProduct? {
-        guard let url = URL(string: "\(baseURL)/api/v1/foods/barcode/\(barcode)") else {
+        guard let url = URL(string: "\(baseURL)/foods/barcode/\(barcode)") else {
             throw APIError.invalidURL
         }
         
@@ -1118,11 +1124,36 @@ extension APIService {
         externalSource: String?,
         nutritionalInfo: [String: Any]?
     ) async throws -> Bool {
-        guard let url = URL(string: "\(baseURL)/api/v1/foods") else {
+        guard let url = URL(string: "\(baseURL)/foods") else {
             throw APIError.invalidURL
         }
         
         var request = await createRequest(url: url, method: "POST")
+        
+        // Debug authentication
+        if let token = await authToken {
+            print("🔍 DEBUG: Creating food item with auth token: \(String(token.prefix(20)))...")
+            
+            // Decode JWT token to see its contents (for debugging)
+            let components = token.components(separatedBy: ".")
+            if components.count == 3 {
+                // Decode header
+                if let headerData = Data(base64Encoded: components[0] + "==") {
+                    if let header = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any] {
+                        print("🔍 DEBUG: JWT Header: \(header)")
+                    }
+                }
+                
+                // Decode payload
+                if let payloadData = Data(base64Encoded: components[1] + "==") {
+                    if let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] {
+                        print("🔍 DEBUG: JWT Payload: \(payload)")
+                    }
+                }
+            }
+        } else {
+            print("⚠️ DEBUG: No auth token available for food item creation")
+        }
         
         // Build request body
         var foodData: [String: Any] = [
@@ -1193,13 +1224,20 @@ extension APIService {
         }
         
         // Perform request
+        print("🔍 DEBUG: Sending food item creation request to: \(url)")
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ DEBUG: Invalid response type")
             throw APIError.invalidResponse
         }
         
+        print("🔍 DEBUG: Food item creation response: \(httpResponse.statusCode)")
+        
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
+            if let responseData = String(data: data, encoding: .utf8) {
+                print("❌ DEBUG: Error response: \(responseData)")
+            }
             if let errorMessage = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let detail = errorMessage["detail"] as? String {
                 throw APIError.serverMessage(detail)

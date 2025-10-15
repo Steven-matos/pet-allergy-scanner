@@ -144,10 +144,28 @@ struct NutritionalLabelScanView: View {
         cameraService.capturePhoto { result in
             switch result {
             case .success(let image):
-                onImageCaptured(image)
+                // Process the image to extract barcode information before passing to callback
+                Task {
+                    await processImageWithBarcodeDetection(image)
+                }
             case .failure(let error):
                 print("Camera capture error: \(error.localizedDescription)")
             }
+        }
+    }
+    
+    /**
+     * Process captured image to extract barcode information
+     * This ensures barcode data is available for nutritional label scanning
+     */
+    private func processImageWithBarcodeDetection(_ image: UIImage) async {
+        // Use the hybrid scan service to detect both barcode and OCR
+        // The result is processed internally by the service
+        _ = await HybridScanService.shared.performHybridScan(from: image)
+        
+        await MainActor.run {
+            // Pass the processed image with barcode information
+            onImageCaptured(image)
         }
     }
 }

@@ -49,76 +49,91 @@ class BarcodeService: @unchecked Sendable {
      * - Parameter image: The UIImage to scan for barcodes
      * - Returns: Barcode result with product identification data
      */
-    func scanBarcode(from image: UIImage) -> BarcodeResult? {
+    nonisolated func scanBarcode(from image: UIImage) async -> BarcodeResult? {
         guard let cgImage = image.cgImage else {
-            errorMessage = "Invalid image for barcode scanning"
+            await MainActor.run {
+                self.errorMessage = "Invalid image for barcode scanning"
+            }
             return nil
         }
         
-        isScanning = true
-        errorMessage = nil
-        detectedBarcode = nil
-        barcodeType = nil
-        scanConfidence = 0.0
+        await MainActor.run {
+            self.isScanning = true
+            self.errorMessage = nil
+            self.detectedBarcode = nil
+            self.barcodeType = nil
+            self.scanConfidence = 0.0
+        }
         
-        let request = VNDetectBarcodesRequest { [weak self] request, error in
-            Task { @MainActor in
-                guard let self = self else { return }
-                
-                self.isScanning = false
-                
-                if let error = error {
-                    self.errorMessage = "Barcode detection failed: \(error.localizedDescription)"
-                    return
+        return await withCheckedContinuation { continuation in
+            let request = VNDetectBarcodesRequest { request, error in
+                // Handle the result - no actor isolation needed in completion handler
+                Task {
+                    if let error = error {
+                        await MainActor.run {
+                            self.isScanning = false
+                            self.errorMessage = "Barcode detection failed: \(error.localizedDescription)"
+                        }
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    
+                    guard let observations = request.results as? [VNBarcodeObservation] else {
+                        await MainActor.run {
+                            self.isScanning = false
+                            self.errorMessage = "No barcodes detected in image"
+                        }
+                        continuation.resume(returning: nil)
+                        return
+                    }
+                    
+                    // Find the highest confidence barcode
+                    let bestBarcode = observations.max { $0.confidence < $1.confidence }
+                    
+                    if let barcode = bestBarcode, barcode.confidence > 0.7 {
+                        await MainActor.run {
+                            self.isScanning = false
+                            self.detectedBarcode = barcode.payloadStringValue
+                            self.barcodeType = barcode.symbology.rawValue
+                            self.scanConfidence = barcode.confidence
+                            self.errorMessage = nil
+                        }
+                        
+                        let result = BarcodeResult(
+                            value: barcode.payloadStringValue ?? "",
+                            type: barcode.symbology.rawValue,
+                            confidence: barcode.confidence,
+                            timestamp: Date()
+                        )
+                        continuation.resume(returning: result)
+                    } else {
+                        await MainActor.run {
+                            self.isScanning = false
+                            self.errorMessage = "No reliable barcodes found (confidence too low)"
+                        }
+                        continuation.resume(returning: nil)
+                    }
                 }
-                
-                guard let observations = request.results as? [VNBarcodeObservation] else {
-                    self.errorMessage = "No barcodes detected in image"
-                    return
-                }
-                
-                // Find the highest confidence barcode
-                let bestBarcode = observations.max { $0.confidence < $1.confidence }
-                
-                if let barcode = bestBarcode, barcode.confidence > 0.7 {
-                    self.detectedBarcode = barcode.payloadStringValue
-                    self.barcodeType = barcode.symbology.rawValue
-                    self.scanConfidence = barcode.confidence
-                    self.errorMessage = nil
-                } else {
-                    self.errorMessage = "No reliable barcodes found (confidence too low)"
+            }
+            
+            // Configure for pet food product barcodes
+            request.symbologies = self.supportedBarcodeTypes
+            
+            let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+            
+            // Perform the request on a background queue
+            Task.detached(priority: .userInitiated) {
+                do {
+                    try handler.perform([request])
+                } catch {
+                    await MainActor.run {
+                        self.isScanning = false
+                        self.errorMessage = "Barcode processing failed: \(error.localizedDescription)"
+                    }
+                    continuation.resume(returning: nil)
                 }
             }
         }
-        
-        // Configure for pet food product barcodes
-        request.symbologies = supportedBarcodeTypes
-        
-        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            do {
-                try handler.perform([request])
-            } catch {
-                Task { @MainActor in
-                    guard let self = self else { return }
-                    self.isScanning = false
-                    self.errorMessage = "Barcode processing failed: \(error.localizedDescription)"
-                }
-            }
-        }
-        
-        // Return result if barcode was detected
-        if let barcode = detectedBarcode, let type = barcodeType {
-            return BarcodeResult(
-                value: barcode,
-                type: type,
-                confidence: scanConfidence,
-                timestamp: Date()
-            )
-        }
-        
-        return nil
     }
     
     /**

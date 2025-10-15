@@ -49,14 +49,22 @@ struct ProductNotFoundView: View {
                     .fontWeight(.bold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
-                // Barcode info
-                Text("Barcode: \(barcode)")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
-                    .background(ModernDesignSystem.Colors.softCream)
-                    .clipShape(Capsule())
+                // Barcode preview with visual representation
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    // Visual barcode representation
+                    BarcodePreviewView(barcode: barcode)
+                        .frame(height: 60)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    
+                    // Barcode text info
+                    Text("Barcode: \(barcode)")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .clipShape(Capsule())
+                }
                 
                 // Explanation text
                 Text("This product isn't in our database yet. Please scan the nutritional information label to analyze the ingredients.")
@@ -221,6 +229,91 @@ struct InstructionRow: View {
                 .fixedSize(horizontal: false, vertical: true)
             
             Spacer(minLength: 0)
+        }
+    }
+}
+
+/**
+ * Visual barcode preview component
+ * Creates a simple barcode representation using bars
+ */
+struct BarcodePreviewView: View {
+    let barcode: String
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            // Barcode bars representation
+            HStack(spacing: 1) {
+                // Start guard bars
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+                
+                // Main barcode digits
+                ForEach(0..<barcode.count, id: \.self) { index in
+                    let digit = String(barcode[barcode.index(barcode.startIndex, offsetBy: index)])
+                    let barWidth = barWidthForDigit(digit)
+                    
+                    Rectangle()
+                        .fill(ModernDesignSystem.Colors.textPrimary)
+                        .frame(width: barWidth, height: 40)
+                }
+                
+                // End guard bars
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+                Rectangle()
+                    .fill(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 1, height: 40)
+            }
+            
+            // Barcode value below
+            Text(barcode)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .fill(ModernDesignSystem.Colors.softCream)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+        )
+    }
+    
+    /**
+     * Generate bar width based on digit (simplified barcode pattern)
+     * Creates a more realistic barcode appearance
+     */
+    private func barWidthForDigit(_ digit: String) -> CGFloat {
+        let digitValue = Int(digit) ?? 0
+        
+        // Create a more realistic barcode pattern
+        switch digitValue {
+        case 0: return 1  // Thin bar
+        case 1: return 3  // Medium bar
+        case 2: return 2  // Thin-medium bar
+        case 3: return 4  // Thick bar
+        case 4: return 1  // Thin bar
+        case 5: return 3  // Medium bar
+        case 6: return 2  // Thin-medium bar
+        case 7: return 4  // Thick bar
+        case 8: return 1  // Thin bar
+        case 9: return 3  // Medium bar
+        default: return 2 // Default medium bar
         }
     }
 }
