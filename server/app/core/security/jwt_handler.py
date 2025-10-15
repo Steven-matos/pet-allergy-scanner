@@ -25,6 +25,7 @@ security = HTTPBearer()
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> User:
+    logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
     """
     Get current authenticated user from JWT token
     
@@ -53,6 +54,7 @@ def get_current_user(
     
     try:
         # Debug: Log the JWT secret being used
+        logger.info(f"🔍 Starting JWT validation for user: {credentials.credentials[:50]}...")
         logger.info(f"Using JWT secret: {settings.supabase_jwt_secret[:20]}...")
         logger.info(f"Expected issuer: {settings.supabase_url}/auth/v1")
         
