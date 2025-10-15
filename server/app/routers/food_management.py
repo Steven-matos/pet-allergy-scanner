@@ -237,6 +237,7 @@ async def create_food_item(
     Returns:
         Created food item
     """
+    logger.info(f"✅ create_food_item called successfully for user: {current_user.email if current_user else 'Unknown'}")
     try:
         # Check if food item with same name and brand already exists
         existing_response = supabase.table("food_items").select("id").eq("name", food_item.name).eq("brand", food_item.brand).limit(1).execute()

@@ -23,8 +23,7 @@ security = HTTPBearer(auto_error=False)  # Don't auto-raise on missing header
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    request: Request = None
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> User:
     """
     Get current authenticated user from JWT token
@@ -34,7 +33,6 @@ def get_current_user(
     
     Args:
         credentials: HTTP Bearer token credentials
-        request: FastAPI request object
         
     Returns:
         Current authenticated user
@@ -47,10 +45,6 @@ def get_current_user(
         >>> async def protected_route(current_user: User = Depends(get_current_user)):
         >>>     return {"user_id": current_user.id}
     """
-    # Debug: Log all request headers
-    if request:
-        logger.info(f"🔍 Request headers: {dict(request.headers)}")
-    
     # Check if credentials were provided
     if credentials is None:
         logger.error("❌ No Authorization header found in request")

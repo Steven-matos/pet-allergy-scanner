@@ -144,6 +144,26 @@ async def health_check():
         "service": "SniffTest API"
     }
 
+@app.get("/debug/headers")
+async def debug_headers(request: Request):
+    """
+    Debug endpoint to check what headers are being received
+    Helps diagnose Authorization header issues
+    """
+    headers = dict(request.headers)
+    
+    # Mask sensitive values but show if they exist
+    if 'authorization' in headers:
+        auth_value = headers['authorization']
+        headers['authorization'] = f"{auth_value[:20]}..." if len(auth_value) > 20 else "present"
+    
+    return {
+        "headers": headers,
+        "has_authorization": 'authorization' in headers,
+        "method": request.method,
+        "url": str(request.url)
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
