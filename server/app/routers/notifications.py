@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 import json
 import asyncio
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import User
@@ -25,9 +26,14 @@ security = HTTPBearer()
 push_service = PushNotificationService()
 
 
+class DeviceTokenRequest(BaseModel):
+    """Request model for device token registration"""
+    device_token: str
+
+
 @router.post("/register-device")
 async def register_device_token(
-    device_token: str,
+    request: DeviceTokenRequest,
     current_user: User = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
@@ -35,7 +41,7 @@ async def register_device_token(
     Register device token for push notifications
     
     Args:
-        device_token: The device token from APNs
+        request: DeviceTokenRequest containing device_token
         current_user: Current authenticated user
         supabase: Supabase client
         
@@ -43,6 +49,9 @@ async def register_device_token(
         Success message
     """
     try:
+        # Extract device token from request
+        device_token = request.device_token
+        
         # Update user's device token
         response = supabase.table("users").update({
             "device_token": device_token,
