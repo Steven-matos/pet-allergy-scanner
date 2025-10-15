@@ -54,12 +54,6 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Additional debug logging
-    logger.info(f"🔍 DEBUG: JWT Handler received credentials: {credentials}")
-    logger.info(f"🔍 DEBUG: Credentials type: {type(credentials)}")
-    logger.info(f"🔍 DEBUG: Credentials scheme: {credentials.scheme}")
-    logger.info(f"🔍 DEBUG: Credentials token length: {len(credentials.credentials)}")
-    
     logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
     
     credentials_exception = HTTPException(
@@ -68,126 +62,84 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    # Try multiple validation strategies in order of preference
-    payload = None
-    user_id = None
-    validation_method = None
-    
     try:
-        # Strategy 1: Full Supabase validation (strict)
-        logger.info(f"🔍 Strategy 1: Full Supabase validation")
-        logger.info(f"   Token preview: {credentials.credentials[:50]}...")
-        logger.info(f"   Secret preview: {settings.supabase_jwt_secret[:20]}...")
-        logger.info(f"   Expected issuer: {settings.supabase_url}/auth/v1")
+        # First, try Supabase JWT validation with signature verification only
+        # This is more lenient and should work with valid Supabase tokens
+        logger.info(f"🔍 Validating Supabase JWT token: {credentials.credentials[:50]}...")
         
         payload = jwt.decode(
             credentials.credentials, 
             settings.supabase_jwt_secret, 
             algorithms=["HS256"],
-            audience="authenticated",
-            issuer=f"{settings.supabase_url}/auth/v1",
             options={
                 "verify_signature": True,
-                "verify_exp": True,
-                "verify_aud": True,
-                "verify_iss": True
+                "verify_exp": False,  # Allow expired tokens temporarily
+                "verify_aud": False,  # Don't verify audience
+                "verify_iss": False   # Don't verify issuer
             }
         )
-        user_id = payload.get("sub")
-        validation_method = "supabase_strict"
-        logger.info(f"✅ Strategy 1 successful: {validation_method}")
+        user_id: str = payload.get("sub")
         
-    except InvalidTokenError as e1:
-        logger.warning(f"⚠️ Strategy 1 failed: {e1}")
+        if user_id is None:
+            logger.error("❌ No user ID found in JWT payload")
+            raise credentials_exception
+            
+        logger.info(f"✅ Supabase JWT validation successful. User ID: {user_id}")
         
+    except InvalidTokenError as e:
+        logger.warning(f"⚠️ Supabase JWT validation failed: {e}")
+        
+        # Fallback to server secret validation
         try:
-            # Strategy 2: Supabase validation with signature only (lenient)
-            logger.info(f"🔍 Strategy 2: Supabase signature validation only")
+            logger.info(f"🔍 Trying server secret validation...")
             
             payload = jwt.decode(
                 credentials.credentials, 
-                settings.supabase_jwt_secret, 
-                algorithms=["HS256"],
-                options={
-                    "verify_signature": True,
-                    "verify_exp": False,  # Allow expired tokens for now
-                    "verify_aud": False,  # Don't verify audience
-                    "verify_iss": False   # Don't verify issuer
-                }
+                settings.secret_key, 
+                algorithms=[settings.algorithm],
+                options={"verify_signature": True}
             )
-            user_id = payload.get("sub")
-            validation_method = "supabase_lenient"
-            logger.info(f"✅ Strategy 2 successful: {validation_method}")
+            user_id: str = payload.get("sub")
+            
+            if user_id is None:
+                logger.error("❌ No user ID found in server JWT payload")
+                raise credentials_exception
+                
+            logger.info(f"✅ Server JWT validation successful. User ID: {user_id}")
             
         except InvalidTokenError as e2:
-            logger.warning(f"⚠️ Strategy 2 failed: {e2}")
+            logger.error(f"❌ All JWT validation attempts failed:")
+            logger.error(f"   Supabase validation: {e}")
+            logger.error(f"   Server validation: {e2}")
             
+            # Log token analysis for debugging
             try:
-                # Strategy 3: Server secret validation
-                logger.info(f"🔍 Strategy 3: Server secret validation")
+                unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
+                logger.error(f"🔍 Token analysis:")
+                logger.error(f"   Payload: {unverified_payload}")
                 
-                payload = jwt.decode(
-                    credentials.credentials, 
-                    settings.secret_key, 
-                    algorithms=[settings.algorithm],
-                    options={"verify_signature": True}
-                )
-                user_id = payload.get("sub")
-                validation_method = "server_secret"
-                logger.info(f"✅ Strategy 3 successful: {validation_method}")
-                
-            except InvalidTokenError as e3:
-                logger.error(f"❌ All validation strategies failed:")
-                logger.error(f"   Strategy 1 (Supabase strict): {e1}")
-                logger.error(f"   Strategy 2 (Supabase lenient): {e2}")
-                logger.error(f"   Strategy 3 (Server secret): {e3}")
-                
-                # Log comprehensive debug information
-                logger.error(f"🔍 Comprehensive Debug Info:")
-                logger.error(f"   Supabase URL: {settings.supabase_url}")
-                logger.error(f"   JWT Secret length: {len(settings.supabase_jwt_secret)}")
-                logger.error(f"   JWT Secret preview: {settings.supabase_jwt_secret[:20]}...")
-                logger.error(f"   Expected issuer: {settings.supabase_url}/auth/v1")
-                logger.error(f"   Token length: {len(credentials.credentials)}")
-                logger.error(f"   Token preview: {credentials.credentials[:50]}...")
-                
-                # Try to decode without verification to analyze the token
-                try:
-                    unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
-                    logger.error(f"   Unverified payload: {unverified_payload}")
-                    
-                    # Check if token is expired
-                    exp = unverified_payload.get("exp")
-                    if exp:
-                        import time
-                        current_time = int(time.time())
-                        if exp < current_time:
-                            logger.error(f"   ⚠️ Token is expired! Exp: {exp}, Current: {current_time}")
-                        else:
-                            logger.error(f"   ✅ Token is not expired. Exp: {exp}, Current: {current_time}")
-                    
-                    # Check issuer
-                    iss = unverified_payload.get("iss")
-                    expected_iss = f"{settings.supabase_url}/auth/v1"
-                    if iss != expected_iss:
-                        logger.error(f"   ⚠️ Issuer mismatch! Expected: {expected_iss}, Got: {iss}")
+                # Check expiration
+                exp = unverified_payload.get("exp")
+                if exp:
+                    import time
+                    current_time = int(time.time())
+                    if exp < current_time:
+                        logger.error(f"   ⚠️ Token expired {current_time - exp} seconds ago")
                     else:
-                        logger.error(f"   ✅ Issuer matches: {iss}")
-                        
-                except Exception as decode_error:
-                    logger.error(f"   ❌ Failed to decode unverified payload: {decode_error}")
+                        logger.error(f"   ✅ Token expires in {exp - current_time} seconds")
                 
-                raise credentials_exception
-    
-    # Validate that we have a user ID
-    if user_id is None:
-        logger.error(f"❌ No user ID found in payload after successful validation with {validation_method}")
-        logger.error(f"   Payload: {payload}")
-        raise credentials_exception
-    
-    logger.info(f"✅ JWT validation successful using {validation_method}")
-    logger.info(f"   User ID: {user_id}")
-    logger.info(f"   Payload keys: {list(payload.keys()) if payload else 'None'}")
+                # Check issuer
+                iss = unverified_payload.get("iss")
+                expected_iss = f"{settings.supabase_url}/auth/v1"
+                if iss != expected_iss:
+                    logger.error(f"   ⚠️ Issuer mismatch - Expected: {expected_iss}, Got: {iss}")
+                else:
+                    logger.error(f"   ✅ Issuer matches: {iss}")
+                    
+            except Exception as decode_error:
+                logger.error(f"   ❌ Failed to analyze token: {decode_error}")
+            
+            raise credentials_exception
     
     # Get user from database
     try:
