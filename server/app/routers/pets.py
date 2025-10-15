@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from app.models.pet import PetCreate, PetResponse, PetUpdate
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user, security
 from app.database import get_supabase_client
 from supabase import Client
@@ -17,7 +18,7 @@ logger = get_logger(__name__)
 @router.post("/", response_model=PetResponse)
 async def create_pet(
     pet_data: PetCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
@@ -101,7 +102,7 @@ async def create_pet(
         )
 
 @router.get("/", response_model=List[PetResponse])
-async def get_user_pets(current_user: dict = Depends(get_current_user)):
+async def get_user_pets(current_user: UserResponse = Depends(get_current_user)):
     """
     Get all pets for the current user
     
@@ -142,7 +143,7 @@ async def get_user_pets(current_user: dict = Depends(get_current_user)):
 @router.get("/{pet_id}", response_model=PetResponse)
 async def get_pet(
     pet_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get a specific pet profile
@@ -191,7 +192,7 @@ async def get_pet(
 async def update_pet(
     pet_id: str,
     pet_update: PetUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Update a pet profile
@@ -280,7 +281,7 @@ async def update_pet(
 @router.delete("/{pet_id}")
 async def delete_pet(
     pet_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Delete a pet profile
