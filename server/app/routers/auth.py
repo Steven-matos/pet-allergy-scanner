@@ -201,8 +201,16 @@ async def register_user(user_data: UserCreate):
                     "role": response.user.user_metadata.get("role", "free")
                 }
                 
-                # Insert into public.users table
-                supabase.table("users").insert(user_insert_data).execute()
+                # Insert into public.users table using service role client to bypass RLS
+                from app.core.config import settings
+                from supabase import create_client
+                
+                service_supabase = create_client(
+                    settings.supabase_url,
+                    settings.supabase_service_role_key
+                )
+                
+                service_supabase.table("users").insert(user_insert_data).execute()
                 logger.info(f"User {response.user.id} registered successfully")
                 
             except Exception as insert_error:
