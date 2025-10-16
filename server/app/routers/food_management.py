@@ -220,6 +220,7 @@ async def get_food_by_barcode(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+@router.post("", response_model=FoodItemResponse)
 @router.post("/", response_model=FoodItemResponse)
 async def create_food_item(
     food_item: FoodItemCreate,
