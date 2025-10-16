@@ -23,19 +23,17 @@ import SwiftUI
 struct TrackersView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var petService = PetService.shared
-    @State private var selectedTracker: TrackerType = .weight
+    @StateObject private var healthEventService = HealthEventService.shared
+    @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false
+    @State private var showingHealthEvents = false
     
     enum TrackerType: String, CaseIterable {
-        case weight = "Weight"
-        case feeding = "Feeding"
-        case health = "Health"
+        case health = "Health Events"
         case activity = "Activity"
         
         var icon: String {
             switch self {
-            case .weight: return "scalemass"
-            case .feeding: return "fork.knife"
             case .health: return "heart.fill"
             case .activity: return "figure.walk"
             }
@@ -43,8 +41,6 @@ struct TrackersView: View {
         
         var color: Color {
             switch self {
-            case .weight: return ModernDesignSystem.Colors.primary
-            case .feeding: return ModernDesignSystem.Colors.success
             case .health: return ModernDesignSystem.Colors.warning
             case .activity: return ModernDesignSystem.Colors.info
             }
@@ -77,6 +73,11 @@ struct TrackersView: View {
         .sheet(isPresented: $showingAddTracker) {
             AddTrackerSheet()
         }
+        .sheet(isPresented: $showingHealthEvents) {
+            if let selectedPet = petService.pets.first {
+                HealthEventListView(pet: selectedPet)
+            }
+        }
     }
     
     // MARK: - Header Section
@@ -88,7 +89,7 @@ struct TrackersView: View {
                 .fontWeight(.bold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            Text("Monitor weight, feeding, health, and activity patterns to keep your pet healthy and happy.")
+            Text("Monitor health events and activity patterns to keep your pet healthy and happy.")
                 .font(ModernDesignSystem.Typography.body)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.leading)
@@ -121,7 +122,11 @@ struct TrackersView: View {
                     color: tracker.color
                 ) {
                     selectedTracker = tracker
-                    showingAddTracker = true
+                    if tracker == .health {
+                        showingHealthEvents = true
+                    } else {
+                        showingAddTracker = true
+                    }
                 }
             }
         }
