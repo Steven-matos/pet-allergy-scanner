@@ -102,8 +102,13 @@ async def create_pet(
             detail="Failed to create pet profile"
         )
 
+@router.get("", response_model=List[PetResponse])
+async def get_user_pets_no_slash(current_user: UserResponse = Depends(get_current_user)):
+    """Get all pets for the current user (without trailing slash)"""
+    return await get_user_pets_with_slash(current_user)
+
 @router.get("/", response_model=List[PetResponse])
-async def get_user_pets(current_user: UserResponse = Depends(get_current_user)):
+async def get_user_pets_with_slash(current_user: UserResponse = Depends(get_current_user)):
     """
     Get all pets for the current user
     
