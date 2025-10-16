@@ -106,7 +106,7 @@ struct HealthEventListView: View {
                 }
             }
             .sheet(isPresented: $showingAddEvent) {
-                AddHealthEventView(pet: pet)
+                AddHealthEventView()
             }
             .task {
                 await loadHealthEvents()

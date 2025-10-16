@@ -16,10 +16,11 @@ import SwiftUI
  * Follows KISS by keeping the form simple and uncluttered
  */
 struct AddHealthEventView: View {
-    let pet: Pet
     @Environment(\.dismiss) private var dismiss
     @StateObject private var healthEventService = HealthEventService.shared
+    @StateObject private var petService = PetService.shared
     
+    @State private var selectedPet: Pet?
     @State private var selectedEventType: HealthEventType = .vomiting
     @State private var title = ""
     @State private var notes = ""
@@ -79,19 +80,12 @@ struct AddHealthEventView: View {
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             HStack {
-                AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: pet.species.icon)
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
+                Image(systemName: "heart.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(.title2)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Logging for \(pet.name)")
+                    Text("Add Health Event")
                         .font(ModernDesignSystem.Typography.title3)
                         .fontWeight(.semibold)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -121,6 +115,9 @@ struct AddHealthEventView: View {
     
     private var formSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Pet Selection
+            petSelectionSection
+            
             // Event Type Selection
             eventTypeSection
             
@@ -140,6 +137,55 @@ struct AddHealthEventView: View {
             
             // Notes
             notesSection
+        }
+    }
+    
+    // MARK: - Pet Selection Section
+    
+    private var petSelectionSection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            Text("Select Pet")
+                .font(ModernDesignSystem.Typography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            if petService.pets.isEmpty {
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "pawprint.fill")
+                        .font(.title)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Text("No pets added yet")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Text("Add a pet first to log health events")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(ModernDesignSystem.Spacing.lg)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .fill(ModernDesignSystem.Colors.background)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+            } else {
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: ModernDesignSystem.Spacing.md) {
+                    ForEach(petService.pets) { pet in
+                        HealthEventPetSelectionCard(
+                            pet: pet,
+                            isSelected: selectedPet?.id == pet.id
+                        ) {
+                            selectedPet = pet
+                        }
+                    }
+                }
+            }
         }
     }
     
@@ -275,7 +321,7 @@ struct AddHealthEventView: View {
     // MARK: - Computed Properties
     
     private var isFormValid: Bool {
-        return !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
+        return selectedPet != nil && !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
     }
     
     private var severityDescription: String {
@@ -315,7 +361,7 @@ struct AddHealthEventView: View {
     }
     
     private func saveHealthEvent() {
-        guard isFormValid else { return }
+        guard isFormValid, let pet = selectedPet else { return }
         
         isSubmitting = true
         
@@ -385,6 +431,57 @@ struct EventTypeButton: View {
     }
 }
 
+// MARK: - Health Event Pet Selection Card
+
+struct HealthEventPetSelectionCard: View {
+    let pet: Pet
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Image(systemName: pet.species.icon)
+                        .foregroundColor(isSelected ? .white : ModernDesignSystem.Colors.primary)
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
+                
+                Text(pet.name)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(isSelected ? .white : ModernDesignSystem.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                
+                Text(pet.species.rawValue.capitalized)
+                    .font(ModernDesignSystem.Typography.caption2)
+                    .foregroundColor(isSelected ? .white.opacity(0.8) : ModernDesignSystem.Colors.textSecondary)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 100)
+            .padding(ModernDesignSystem.Spacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .fill(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.background)
+                    .stroke(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.borderPrimary, lineWidth: isSelected ? 2 : 1)
+                    .shadow(
+                        color: ModernDesignSystem.Shadows.small.color,
+                        radius: ModernDesignSystem.Shadows.small.radius,
+                        x: ModernDesignSystem.Shadows.small.x,
+                        y: ModernDesignSystem.Shadows.small.y
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 // MARK: - Modern Text Field Style
 
 struct ModernTextFieldStyle: TextFieldStyle {
@@ -400,20 +497,5 @@ struct ModernTextFieldStyle: TextFieldStyle {
 }
 
 #Preview {
-    AddHealthEventView(pet: Pet(
-        id: "preview-pet",
-        userId: "preview-user",
-        name: "Buddy",
-        species: .dog,
-        breed: "Golden Retriever",
-        birthday: Date(),
-        weightKg: 25.0,
-        activityLevel: .moderate,
-        imageUrl: nil,
-        knownSensitivities: [],
-        vetName: nil,
-        vetPhone: nil,
-        createdAt: Date(),
-        updatedAt: Date()
-    ))
+    AddHealthEventView()
 }
