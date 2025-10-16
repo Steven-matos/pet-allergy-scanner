@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from app.database import init_db
 from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, advanced_nutrition, food_management
 from app.api.v1.nutrition import router as nutrition_router
+from app.api.v1.data_quality import router as data_quality_router
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
@@ -124,6 +125,7 @@ app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutriti
 app.include_router(nutrition_router, prefix="/api/v1", tags=["nutrition"])
 app.include_router(advanced_nutrition.router, prefix="/api/v1", tags=["advanced-nutrition"])
 app.include_router(food_management.router, prefix="/api/v1", tags=["food-management"])
+app.include_router(data_quality_router, prefix="/api/v1/data-quality", tags=["data-quality"])
 
 @app.get("/")
 async def root():

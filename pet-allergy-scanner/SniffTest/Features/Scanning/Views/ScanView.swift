@@ -95,6 +95,14 @@ struct ScanView: View {
                         .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                         .padding(.bottom, ModernDesignSystem.Spacing.md)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear {
+                            // Auto-close barcode detection card after 8 seconds if user doesn't interact
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    detectedBarcode = nil
+                                }
+                            }
+                        }
                     }
                     
                     // Processing indicator with Trust & Nature colors
@@ -115,6 +123,17 @@ struct ScanView: View {
                         .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                         .padding(.bottom, ModernDesignSystem.Spacing.lg)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear {
+                            // Auto-close scan complete popup after 5 seconds if user doesn't interact
+                            if result.scanMethod != .failed {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        hybridScanResult = nil
+                                        detectedBarcode = nil
+                                    }
+                                }
+                            }
+                        }
                     }
                     
                     // Quick tips with Trust & Nature design
@@ -205,7 +224,9 @@ struct ScanView: View {
                 ProductFoundView(
                     product: product,
                     onAnalyzeForPet: {
-                        showingProductFound = false
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingProductFound = false
+                        }
                         // Convert product to scan result for analysis
                         analyzeProductForPet(product)
                     },
@@ -226,16 +247,22 @@ struct ScanView: View {
             ProductNotFoundView(
                 barcode: detectedBarcode?.value ?? "",
                 onScanNutritionalLabel: {
-                    showingProductNotFound = false
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showingProductNotFound = false
+                    }
                     showingNutritionalLabelScan = true
                 },
                 onRetry: {
-                    showingProductNotFound = false
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showingProductNotFound = false
+                    }
                     retryScan()
                 },
                 onCancel: {
-                    showingProductNotFound = false
-                    detectedBarcode = nil
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showingProductNotFound = false
+                        detectedBarcode = nil
+                    }
                 }
             )
             .onAppear {
@@ -269,11 +296,15 @@ struct ScanView: View {
                 NutritionalLabelResultView(
                     result: result,
                     onAnalyzeForPet: {
-                        showingOCRResults = false
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingOCRResults = false
+                        }
                         analyzeHybridResult()
                     },
                     onUploadToDatabase: { productName, brand, ingredients, nutrition in
-                        showingOCRResults = false
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingOCRResults = false
+                        }
                         uploadNutritionalDataToDatabase(
                             productName: productName,
                             brand: brand,
@@ -282,7 +313,9 @@ struct ScanView: View {
                         )
                     },
                     onRetry: {
-                        showingOCRResults = false
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            showingOCRResults = false
+                        }
                         showingNutritionalLabelScan = true
                         hybridScanResult = nil
                     }
@@ -387,6 +420,12 @@ struct ScanView: View {
     
     private func analyzeDetectedBarcode(_ barcode: BarcodeResult) {
         print("🔍 Analyzing barcode: \(barcode.value)")
+        
+        // Clear barcode detection card when analysis starts
+        withAnimation(.easeInOut(duration: 0.3)) {
+            detectedBarcode = nil
+        }
+        
         Task {
             // Look up product in database
             do {
@@ -403,6 +442,7 @@ struct ScanView: View {
                         // Product not found - prompt for nutritional label scan
                         print("🔍 Product not found - showing ProductNotFoundView with barcode: \(barcode.value)")
                         // Keep detectedBarcode so it can be used for nutritional label scan
+                        detectedBarcode = barcode // Restore barcode for nutritional label scan
                         showingProductNotFound = true
                     }
                 }
@@ -411,6 +451,7 @@ struct ScanView: View {
                 print("Error looking up product: \(error.localizedDescription)")
                 await MainActor.run {
                     print("🔍 Error case - showing ProductNotFoundView with barcode: \(barcode.value)")
+                    detectedBarcode = barcode // Restore barcode for nutritional label scan
                     showingProductNotFound = true
                     // Keep the barcode even if lookup failed - user can still scan nutritional label
                 }
@@ -468,6 +509,15 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
+                // Clear all popups when analysis completes
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingProductFound = false
+                    showingProductNotFound = false
+                    showingOCRResults = false
+                    detectedBarcode = nil
+                    foundProduct = nil
+                }
+                
                 scanResult = scan
                 showingResults = true
             }
@@ -720,6 +770,15 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
+                // Clear all popups when analysis completes
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingProductFound = false
+                    showingProductNotFound = false
+                    showingOCRResults = false
+                    detectedBarcode = nil
+                    foundProduct = nil
+                }
+                
                 scanResult = scan
                 showingResults = true
                 print("✅ Analysis complete for \(pet.name)!")
@@ -902,32 +961,32 @@ struct ScanView: View {
     }
     
     /**
-     * Calculate data quality score based on available nutritional data
-     * Returns a score from 0.0 to 1.0 based on completeness
+     * Calculate data quality score using enhanced DataQualityService
+     * Returns a score from 0.0 to 1.0 based on ingredients and nutritional completeness
      */
     private func calculateDataQualityScore(_ nutrition: ParsedNutrition) -> Double {
-        var score = 0.0
-        let totalFields = 10.0 // Total nutritional fields we can parse
+        // Convert ParsedNutrition to dictionary format for quality assessment
+        var nutritionalData: [String: Any] = [:]
         
-        // Check each nutritional field
-        if nutrition.calories != nil { score += 1.0 }
-        if nutrition.protein != nil { score += 1.0 }
-        if nutrition.fat != nil { score += 1.0 }
-        if nutrition.fiber != nil { score += 1.0 }
-        if nutrition.moisture != nil { score += 1.0 }
-        if nutrition.ash != nil { score += 1.0 }
-        if nutrition.carbohydrates != nil { score += 1.0 }
-        if nutrition.sodium != nil { score += 1.0 }
-        if nutrition.calcium != nil { score += 1.0 }
-        if nutrition.phosphorus != nil { score += 1.0 }
+        if let calories = nutrition.calories { nutritionalData["calories_per_100g"] = calories }
+        if let protein = nutrition.protein { nutritionalData["protein_percentage"] = protein }
+        if let fat = nutrition.fat { nutritionalData["fat_percentage"] = fat }
+        if let fiber = nutrition.fiber { nutritionalData["fiber_percentage"] = fiber }
+        if let moisture = nutrition.moisture { nutritionalData["moisture_percentage"] = moisture }
+        if let ash = nutrition.ash { nutritionalData["ash_percentage"] = ash }
+        if let carbs = nutrition.carbohydrates { nutritionalData["carbohydrates_percentage"] = carbs }
+        if let sodium = nutrition.sodium { nutritionalData["sodium_percentage"] = sodium }
         
-        // Bonus for ingredients (important field)
-        if !nutrition.ingredients.isEmpty { score += 0.5 }
+        // Calculate nutritional score using the enhanced service
+        let nutritionalResult = DataQualityService.calculateNutritionalScore(nutritionalData)
         
-        // Bonus for both calorie values
-        if nutrition.calories != nil && nutrition.caloriesPerTreat != nil { score += 0.5 }
+        // Calculate ingredients score
+        let ingredientsResult = DataQualityService.calculateIngredientsScore(nutrition.ingredients)
         
-        return min(score / totalFields, 1.0)
+        // Weighted overall score (nutritional: 70%, ingredients: 30%)
+        let overallScore = (nutritionalResult.score * 0.7) + (ingredientsResult.score * 0.3)
+        
+        return min(overallScore, 1.0)
     }
     
     /**
@@ -1001,9 +1060,17 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
+                // Clear all popups when analysis completes
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingProductFound = false
+                    showingProductNotFound = false
+                    showingOCRResults = false
+                    detectedBarcode = nil
+                    foundProduct = nil
+                }
+                
                 scanResult = scan
                 showingResults = true
-                foundProduct = nil
             }
         }
     }

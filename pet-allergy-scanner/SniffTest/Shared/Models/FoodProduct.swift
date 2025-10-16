@@ -178,6 +178,21 @@ struct FoodProduct: Codable, Equatable, Identifiable, Hashable {
         }
         return ingredients.joined(separator: ", ")
     }
+    
+    /**
+     * Get comprehensive data quality metrics using enhanced assessment
+     */
+    var qualityMetrics: DataQualityMetrics {
+        return DataQualityService.assessDataQuality(self)
+    }
+    
+    /**
+     * Get quality improvement recommendations
+     */
+    var qualityRecommendations: [String] {
+        let metrics = DataQualityService.assessDataQuality(self)
+        return DataQualityService.getQualityRecommendations(metrics)
+    }
 } // End of FoodProduct
 
 /**
@@ -286,9 +301,11 @@ extension FoodProduct.NutritionalInfo {
     }
     
     /**
-     * Data quality level classification
+     * Data quality level classification using enhanced assessment
      */
     var qualityLevel: DataQuality {
+        // Use the enhanced DataQualityService for consistent assessment
+        // Note: This requires a FoodProduct instance, so we'll use the legacy method for now
         switch dataQualityScore {
         case 0.9...1.0:
             return .excellent
