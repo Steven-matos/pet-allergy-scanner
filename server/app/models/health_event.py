@@ -3,15 +3,10 @@ Health Event Model
 Pet health event tracking for vomiting, shedding, vaccinations, etc.
 """
 
-from sqlalchemy import Column, String, Text, Integer, DateTime, ForeignKey, CheckConstraint
-from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
-import uuid
 from pydantic import BaseModel, Field, validator
 from typing import Optional, List
 from enum import Enum
-
-from app.database import Base
 
 
 class HealthEventCategory(str, Enum):
@@ -35,31 +30,6 @@ class HealthEventType(str, Enum):
     OTHER = "other"
 
 
-class HealthEvent(Base):
-    """Health event database model"""
-    __tablename__ = "health_events"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    pet_id = Column(UUID(as_uuid=True), ForeignKey("pets.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    event_type = Column(String(100), nullable=False)
-    event_category = Column(String(50), nullable=False)
-    title = Column(String(200), nullable=False)
-    notes = Column(Text)
-    severity_level = Column(Integer, default=1)
-    event_date = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
-    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # Add check constraints
-    __table_args__ = (
-        CheckConstraint('event_category IN (\'digestive\', \'physical\', \'medical\', \'behavioral\')', name='check_event_category'),
-        CheckConstraint('severity_level BETWEEN 1 AND 5', name='check_severity_level'),
-        CheckConstraint('LENGTH(title) > 0 AND LENGTH(title) <= 200', name='check_title_length'),
-    )
-
-
-# Pydantic schemas for API
 class HealthEventBase(BaseModel):
     """Base health event schema"""
     event_type: HealthEventType
@@ -90,12 +60,21 @@ class HealthEventBase(BaseModel):
         return category_mapping.get(self.event_type, HealthEventCategory.PHYSICAL)
 
 
+class HealthEvent(HealthEventBase):
+    """Main HealthEvent model for database operations"""
+    id: str
+    pet_id: str
+    user_id: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class HealthEventCreate(HealthEventBase):
     """Schema for creating health events"""
     pet_id: str = Field(..., description="Pet ID for the health event")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "pet_id": "123e4567-e89b-12d3-a456-426614174000",
                 "event_type": "vomiting",
@@ -115,7 +94,7 @@ class HealthEventUpdate(BaseModel):
     event_date: Optional[datetime] = None
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "title": "Updated vomiting episode",
                 "notes": "Added more details about the incident",
@@ -130,13 +109,12 @@ class HealthEventResponse(HealthEventBase):
     id: str
     pet_id: str
     user_id: str
-    event_category: HealthEventCategory
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "pet_id": "123e4567-e89b-12d3-a456-426614174001",
@@ -161,7 +139,7 @@ class HealthEventListResponse(BaseModel):
     offset: int
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "events": [
                     {
