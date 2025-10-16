@@ -5,10 +5,8 @@ API endpoints for data quality assessment and analysis
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Dict, Any, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 
-from app.core.database import get_db
+from app.database import get_db
 from app.services.data_quality_service import DataQualityService, DataQualityMetrics
 from app.models.food_items import FoodItemResponse
 import logging
@@ -21,7 +19,7 @@ router = APIRouter()
 @router.get("/assess/{food_item_id}", response_model=Dict[str, Any])
 async def assess_food_item_quality(
     food_item_id: str,
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Assess data quality for a specific food item
@@ -34,38 +32,25 @@ async def assess_food_item_quality(
         Comprehensive data quality assessment
     """
     try:
-        # Fetch food item data
-        query = text("""
-            SELECT 
-                fi.id,
-                fi.name,
-                fi.brand,
-                fi.barcode,
-                fi.category,
-                fi.nutritional_info,
-                fi.data_completeness,
-                fi.created_at,
-                fi.updated_at
-            FROM food_items fi
-            WHERE fi.id = :food_item_id
-        """)
+        # Fetch food item data using Supabase
+        response = db.table('food_items').select('*').eq('id', food_item_id).execute()
         
-        result = db.execute(query, {"food_item_id": food_item_id}).fetchone()
-        
-        if not result:
+        if not response.data:
             raise HTTPException(status_code=404, detail="Food item not found")
             
+        result = response.data[0]
+        
         # Convert to dictionary format
         food_item_data = {
-            'id': str(result.id),
-            'name': result.name,
-            'brand': result.brand,
-            'barcode': result.barcode,
-            'category': result.category,
-            'nutritional_info': result.nutritional_info or {},
-            'data_completeness': result.data_completeness,
-            'created_at': result.created_at,
-            'updated_at': result.updated_at
+            'id': str(result['id']),
+            'name': result['name'],
+            'brand': result['brand'],
+            'barcode': result['barcode'],
+            'category': result['category'],
+            'nutritional_info': result['nutritional_info'] or {},
+            'data_completeness': result['data_completeness'],
+            'created_at': result['created_at'],
+            'updated_at': result['updated_at']
         }
         
         # Assess data quality
@@ -84,7 +69,7 @@ async def assess_food_item_quality(
 @router.post("/assess/batch", response_model=List[Dict[str, Any]])
 async def assess_multiple_food_items_quality(
     food_item_ids: List[str],
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Assess data quality for multiple food items
@@ -100,43 +85,26 @@ async def assess_multiple_food_items_quality(
         if len(food_item_ids) > 50:
             raise HTTPException(status_code=400, detail="Maximum 50 items allowed per batch")
             
-        # Fetch food items data
-        placeholders = ','.join([f':id_{i}' for i in range(len(food_item_ids))])
-        query = text(f"""
-            SELECT 
-                fi.id,
-                fi.name,
-                fi.brand,
-                fi.barcode,
-                fi.category,
-                fi.nutritional_info,
-                fi.data_completeness,
-                fi.created_at,
-                fi.updated_at
-            FROM food_items fi
-            WHERE fi.id IN ({placeholders})
-        """)
+        # Fetch food items data using Supabase
+        response = db.table('food_items').select('*').in_('id', food_item_ids).execute()
         
-        params = {f'id_{i}': food_item_id for i, food_item_id in enumerate(food_item_ids)}
-        results = db.execute(query, params).fetchall()
-        
-        if not results:
+        if not response.data:
             raise HTTPException(status_code=404, detail="No food items found")
             
         assessments = []
         
-        for result in results:
+        for result in response.data:
             # Convert to dictionary format
             food_item_data = {
-                'id': str(result.id),
-                'name': result.name,
-                'brand': result.brand,
-                'barcode': result.barcode,
-                'category': result.category,
-                'nutritional_info': result.nutritional_info or {},
-                'data_completeness': result.data_completeness,
-                'created_at': result.created_at,
-                'updated_at': result.updated_at
+                'id': str(result['id']),
+                'name': result['name'],
+                'brand': result['brand'],
+                'barcode': result['barcode'],
+                'category': result['category'],
+                'nutritional_info': result['nutritional_info'] or {},
+                'data_completeness': result['data_completeness'],
+                'created_at': result['created_at'],
+                'updated_at': result['updated_at']
             }
             
             # Assess data quality
@@ -144,9 +112,9 @@ async def assess_multiple_food_items_quality(
             
             # Format response with item info
             assessment = DataQualityService.format_quality_summary(metrics)
-            assessment['food_item_id'] = str(result.id)
-            assessment['food_name'] = result.name
-            assessment['brand'] = result.brand
+            assessment['food_item_id'] = str(result['id'])
+            assessment['food_name'] = result['name']
+            assessment['brand'] = result['brand']
             
             assessments.append(assessment)
             
@@ -162,7 +130,7 @@ async def assess_multiple_food_items_quality(
 @router.get("/stats/overview", response_model=Dict[str, Any])
 async def get_quality_statistics_overview(
     limit: int = Query(1000, ge=1, le=5000, description="Number of items to analyze"),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Get overall data quality statistics
@@ -175,21 +143,10 @@ async def get_quality_statistics_overview(
         Overall quality statistics
     """
     try:
-        # Fetch sample of food items
-        query = text("""
-            SELECT 
-                fi.id,
-                fi.name,
-                fi.brand,
-                fi.barcode,
-                fi.nutritional_info,
-                fi.data_completeness
-            FROM food_items fi
-            ORDER BY fi.updated_at DESC
-            LIMIT :limit
-        """)
+        # Fetch sample of food items using Supabase
+        response = db.table('food_items').select('id, name, brand, barcode, nutritional_info, data_completeness').order('updated_at', desc=True).limit(limit).execute()
         
-        results = db.execute(query, {"limit": limit}).fetchall()
+        results = response.data
         
         if not results:
             return {
@@ -209,11 +166,11 @@ async def get_quality_statistics_overview(
         
         for result in results:
             food_item_data = {
-                'id': str(result.id),
-                'name': result.name,
-                'brand': result.brand,
-                'barcode': result.barcode,
-                'nutritional_info': result.nutritional_info or {}
+                'id': str(result['id']),
+                'name': result['name'],
+                'brand': result['brand'],
+                'barcode': result['barcode'],
+                'nutritional_info': result['nutritional_info'] or {}
             }
             
             metrics = DataQualityService.assess_data_quality(food_item_data)
@@ -245,7 +202,7 @@ async def get_quality_statistics_overview(
 @router.get("/recommendations/{food_item_id}", response_model=Dict[str, Any])
 async def get_quality_recommendations(
     food_item_id: str,
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Get quality improvement recommendations for a food item
@@ -284,7 +241,7 @@ async def get_quality_recommendations(
 async def get_low_quality_items(
     threshold: float = Query(0.5, ge=0.0, le=1.0, description="Quality threshold"),
     limit: int = Query(50, ge=1, le=200, description="Maximum results"),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     """
     Get food items with quality scores below threshold
@@ -298,23 +255,10 @@ async def get_low_quality_items(
         List of low-quality food items with assessments
     """
     try:
-        # Fetch food items with low data completeness
-        query = text("""
-            SELECT 
-                fi.id,
-                fi.name,
-                fi.brand,
-                fi.barcode,
-                fi.category,
-                fi.nutritional_info,
-                fi.data_completeness
-            FROM food_items fi
-            WHERE fi.data_completeness < :threshold
-            ORDER BY fi.data_completeness ASC
-            LIMIT :limit
-        """)
+        # Fetch food items with low data completeness using Supabase
+        response = db.table('food_items').select('id, name, brand, barcode, category, nutritional_info, data_completeness').lt('data_completeness', threshold).order('data_completeness', desc=False).limit(limit).execute()
         
-        results = db.execute(query, {"threshold": threshold, "limit": limit}).fetchall()
+        results = response.data
         
         if not results:
             return []
@@ -323,12 +267,12 @@ async def get_low_quality_items(
         
         for result in results:
             food_item_data = {
-                'id': str(result.id),
-                'name': result.name,
-                'brand': result.brand,
-                'barcode': result.barcode,
-                'category': result.category,
-                'nutritional_info': result.nutritional_info or {}
+                'id': str(result['id']),
+                'name': result['name'],
+                'brand': result['brand'],
+                'barcode': result['barcode'],
+                'category': result['category'],
+                'nutritional_info': result['nutritional_info'] or {}
             }
             
             metrics = DataQualityService.assess_data_quality(food_item_data)
@@ -336,10 +280,10 @@ async def get_low_quality_items(
             # Only include if still below threshold with new calculation
             if metrics.overall_score < threshold:
                 assessment = DataQualityService.format_quality_summary(metrics)
-                assessment['food_item_id'] = str(result.id)
-                assessment['food_name'] = result.name
-                assessment['brand'] = result.brand
-                assessment['legacy_completeness'] = result.data_completeness
+                assessment['food_item_id'] = str(result['id'])
+                assessment['food_name'] = result['name']
+                assessment['brand'] = result['brand']
+                assessment['legacy_completeness'] = result['data_completeness']
                 
                 low_quality_items.append(assessment)
         
