@@ -49,19 +49,24 @@ struct AddHealthEventView: View {
                     .padding(ModernDesignSystem.Spacing.lg)
                 }
             }
-            .navigationTitle("Add Health Event")
+            .navigationTitle(headerTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button(isSubmitting ? "Saving..." : "Save") {
                         saveHealthEvent()
                     }
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                     .disabled(!isFormValid || isSubmitting)
                 }
             }
@@ -91,12 +96,12 @@ struct AddHealthEventView: View {
                     .font(.title2)
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Health Event")
+                    Text(headerTitle)
                         .font(ModernDesignSystem.Typography.title3)
                         .fontWeight(.semibold)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text("Track health events and patterns")
+                    Text(headerSubtitle)
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
@@ -237,7 +242,7 @@ struct AddHealthEventView: View {
     
     private var eventTypeSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Event Type")
+            Text("What happened to \(currentPetName)?")
                 .font(ModernDesignSystem.Typography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -263,12 +268,12 @@ struct AddHealthEventView: View {
     
     private var customEventNameSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-            Text("Custom Event Name")
+            Text("What happened to \(currentPetName)?")
                 .font(ModernDesignSystem.Typography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            TextField("Enter event name", text: $customEventName)
+            TextField("Describe what happened to \(currentPetName)", text: $customEventName)
                 .textFieldStyle(ModernTextFieldStyle())
                 .onChange(of: customEventName) {
                     updateTitle()
@@ -285,7 +290,7 @@ struct AddHealthEventView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            TextField("Event title", text: $title)
+            TextField("Brief description for \(currentPetName)", text: $title)
                 .textFieldStyle(ModernTextFieldStyle())
         }
     }
@@ -295,7 +300,7 @@ struct AddHealthEventView: View {
     private var severitySection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
             HStack {
-                Text("Severity Level")
+                Text("How severe was this for \(currentPetName)?")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -333,7 +338,7 @@ struct AddHealthEventView: View {
     
     private var dateTimeSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-            Text("When did this happen?")
+            Text("When did this happen to \(currentPetName)?")
                 .font(ModernDesignSystem.Typography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -351,12 +356,12 @@ struct AddHealthEventView: View {
     
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-            Text("Notes (Optional)")
+            Text("Additional details about \(currentPetName)")
                 .font(ModernDesignSystem.Typography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            TextField("Add any additional details...", text: $notes, axis: .vertical)
+            TextField("Add any additional details about what happened to \(currentPetName)...", text: $notes, axis: .vertical)
                 .textFieldStyle(ModernTextFieldStyle())
                 .lineLimit(3...6)
         }
@@ -368,6 +373,32 @@ struct AddHealthEventView: View {
         // For single pet users, selectedPet will be auto-selected
         let hasValidPet = selectedPet != nil || (petService.pets.count == 1 && petService.pets.first != nil)
         return hasValidPet && !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
+    }
+    
+    private var currentPetName: String {
+        if let selectedPet = selectedPet {
+            return selectedPet.name
+        } else if petService.pets.count == 1, let singlePet = petService.pets.first {
+            return singlePet.name
+        } else {
+            return "your pet"
+        }
+    }
+    
+    private var headerTitle: String {
+        if petService.pets.count == 1 {
+            return "Add Health Event for \(currentPetName)"
+        } else {
+            return "Add Health Event"
+        }
+    }
+    
+    private var headerSubtitle: String {
+        if petService.pets.count == 1 {
+            return "Track \(currentPetName)'s health events and patterns"
+        } else {
+            return "Track health events and patterns"
+        }
     }
     
     private var severityDescription: String {
@@ -383,12 +414,12 @@ struct AddHealthEventView: View {
     
     private var severityColor: Color {
         switch severityLevel {
-        case 1: return Color.green
-        case 2: return Color.yellow
-        case 3: return Color.orange
-        case 4: return Color.red
-        case 5: return Color.purple
-        default: return Color.gray
+        case 1: return ModernDesignSystem.Colors.safe
+        case 2: return ModernDesignSystem.Colors.goldenYellow
+        case 3: return ModernDesignSystem.Colors.warmCoral
+        case 4: return ModernDesignSystem.Colors.error
+        case 5: return ModernDesignSystem.Colors.error
+        default: return ModernDesignSystem.Colors.textSecondary
         }
     }
     
