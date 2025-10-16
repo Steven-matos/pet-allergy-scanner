@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
 from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus, ScanMethod
 from app.models.ingredient import IngredientAnalysis
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.routers.ingredients import analyze_ingredients
 from app.database import get_supabase_client
@@ -21,7 +22,7 @@ logger = get_logger(__name__)
 @router.post("/", response_model=ScanResponse)
 async def create_scan(
     scan_data: ScanCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Create a new scan record
@@ -83,7 +84,7 @@ async def create_scan(
 @router.post("/analyze", response_model=ScanResponse)
 async def analyze_scan(
     analysis_request: ScanAnalysisRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Analyze extracted text from a scan
@@ -239,10 +240,11 @@ async def analyze_scan(
             detail="Failed to analyze scan"
         )
 
+@router.get("", response_model=List[ScanResponse])
 @router.get("/", response_model=List[ScanResponse])
 async def get_user_scans(
     pet_id: str = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get scans for the current user
@@ -285,7 +287,7 @@ async def get_user_scans(
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(
     scan_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get a specific scan

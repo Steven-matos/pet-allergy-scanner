@@ -386,7 +386,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 @router.put("/me", response_model=UserResponse)
 async def update_current_user(
     user_update: UserUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """

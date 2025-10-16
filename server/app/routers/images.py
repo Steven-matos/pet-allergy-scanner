@@ -8,7 +8,8 @@ from typing import Optional
 from app.utils.logging_config import get_logger
 
 from ..services.image_optimizer import ImageOptimizerService
-from ..middleware.security import get_current_user
+from app.models.user import UserResponse
+from ..core.security.jwt_handler import get_current_user
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/images", tags=["images"])
 async def optimize_image(
     file: UploadFile = File(...),
     target_size: Optional[int] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Optimize an uploaded image with compression and resizing
@@ -104,7 +105,7 @@ async def optimize_image(
 async def create_thumbnail(
     file: UploadFile = File(...),
     size: int = 200,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Create a square thumbnail from an image
@@ -165,7 +166,7 @@ async def create_thumbnail(
 @router.post("/validate")
 async def validate_image(
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Validate an image file and return information

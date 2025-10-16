@@ -3,6 +3,7 @@ GDPR compliance router
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, Response
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.services.gdpr_service import GDPRService
 from app.core.config import settings
@@ -13,7 +14,7 @@ logger = get_logger(__name__)
 
 @router.get("/export")
 async def export_user_data(
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Export all user data (GDPR Article 20 - Right to data portability)
@@ -54,7 +55,7 @@ async def export_user_data(
 
 @router.delete("/delete")
 async def delete_user_data(
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Delete all user data (GDPR Article 17 - Right to erasure)
@@ -93,7 +94,7 @@ async def delete_user_data(
 
 @router.post("/anonymize")
 async def anonymize_user_data(
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Anonymize user data while preserving functionality
@@ -125,7 +126,7 @@ async def anonymize_user_data(
 
 @router.get("/retention")
 async def get_data_retention_info(
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get data retention information (GDPR Article 13/14 - Information to be provided)

@@ -4,6 +4,7 @@ Pet management router
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.responses import RedirectResponse
 from typing import List
 from app.models.pet import PetCreate, PetResponse, PetUpdate
 from app.models.user import UserResponse
@@ -101,7 +102,6 @@ async def create_pet(
             detail="Failed to create pet profile"
         )
 
-@router.get("", response_model=List[PetResponse])
 @router.get("/", response_model=List[PetResponse])
 async def get_user_pets(current_user: UserResponse = Depends(get_current_user)):
     """

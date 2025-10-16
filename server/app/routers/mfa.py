@@ -5,6 +5,7 @@ Multi-Factor Authentication (MFA) router
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Optional
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.services.mfa_service import MFAService
 from app.utils.logging_config import get_logger
@@ -74,7 +75,7 @@ async def setup_mfa(current_user: dict = Depends(get_current_user)):
 @router.post("/enable")
 async def enable_mfa(
     request: MFAVerifyRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Enable MFA after verifying setup token
@@ -107,7 +108,7 @@ async def enable_mfa(
 @router.post("/disable")
 async def disable_mfa(
     request: MFAVerifyRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Disable MFA for the current user
@@ -140,7 +141,7 @@ async def disable_mfa(
 @router.post("/verify")
 async def verify_mfa(
     request: MFAVerifyRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Verify MFA token
@@ -173,7 +174,7 @@ async def verify_mfa(
 @router.post("/verify-backup")
 async def verify_backup_code(
     request: MFABackupCodeRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Verify MFA backup code

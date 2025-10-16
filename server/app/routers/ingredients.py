@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
 from app.models.ingredient import IngredientResponse, IngredientAnalysis
 from app.models.pet import PetSpecies
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.database import get_supabase_client
 from supabase import Client
@@ -54,11 +55,12 @@ COMMON_ALLERGENS = {
     "artificial flavors": {"safety": "caution", "species": "both", "common": True}
 }
 
+@router.get("", response_model=List[IngredientResponse])
 @router.get("/", response_model=List[IngredientResponse])
 async def get_ingredients(
     search: str = None,
     safety_level: str = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get ingredients with optional filtering
@@ -107,7 +109,7 @@ async def analyze_ingredients(
     ingredients: List[str],
     pet_species: PetSpecies,
     pet_sensitivities: List[str] = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Analyze ingredients for a specific pet
