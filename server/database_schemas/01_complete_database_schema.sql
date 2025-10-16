@@ -426,6 +426,31 @@ CREATE TRIGGER update_food_items_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================================================
+-- HEALTH EVENTS TABLE
+-- =============================================================================
+
+-- Health events table for tracking pet health events
+CREATE TABLE IF NOT EXISTS public.health_events (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    pet_id UUID REFERENCES public.pets(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+    event_type TEXT NOT NULL,
+    event_category TEXT NOT NULL CHECK (event_category IN ('digestive', 'physical', 'medical', 'behavioral')),
+    title TEXT NOT NULL CHECK (LENGTH(title) > 0 AND LENGTH(title) <= 200),
+    notes TEXT,
+    severity_level INTEGER DEFAULT 1 CHECK (severity_level BETWEEN 1 AND 5),
+    event_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Indexes for health events
+CREATE INDEX IF NOT EXISTS idx_health_events_pet_id ON public.health_events(pet_id);
+CREATE INDEX IF NOT EXISTS idx_health_events_user_id ON public.health_events(user_id);
+CREATE INDEX IF NOT EXISTS idx_health_events_event_date ON public.health_events(event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_health_events_category ON public.health_events(event_category);
+
+-- =============================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- =============================================================================
 
@@ -447,6 +472,7 @@ ALTER TABLE public.pet_weight_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutritional_trends ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.food_comparisons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutritional_analytics_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.health_events ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
 CREATE POLICY "Users can view own profile" ON public.users
@@ -621,6 +647,47 @@ CREATE POLICY "System can manage analytics cache" ON public.nutritional_analytic
 -- =============================================================================
 -- INITIAL DATA
 -- =============================================================================
+
+-- Health events policies
+CREATE POLICY "Users can view their own health events" ON public.health_events
+    FOR SELECT USING (
+        (select auth.uid()) = user_id AND 
+        EXISTS (
+            SELECT 1 FROM public.pets 
+            WHERE pets.id = health_events.pet_id 
+            AND pets.user_id = (select auth.uid())
+        )
+    );
+
+CREATE POLICY "Users can create health events for their pets" ON public.health_events
+    FOR INSERT WITH CHECK (
+        (select auth.uid()) = user_id AND 
+        EXISTS (
+            SELECT 1 FROM public.pets 
+            WHERE pets.id = health_events.pet_id 
+            AND pets.user_id = (select auth.uid())
+        )
+    );
+
+CREATE POLICY "Users can update their own health events" ON public.health_events
+    FOR UPDATE USING (
+        (select auth.uid()) = user_id AND 
+        EXISTS (
+            SELECT 1 FROM public.pets 
+            WHERE pets.id = health_events.pet_id 
+            AND pets.user_id = (select auth.uid())
+        )
+    );
+
+CREATE POLICY "Users can delete their own health events" ON public.health_events
+    FOR DELETE USING (
+        (select auth.uid()) = user_id AND 
+        EXISTS (
+            SELECT 1 FROM public.pets 
+            WHERE pets.id = health_events.pet_id 
+            AND pets.user_id = (select auth.uid())
+        )
+    );
 
 -- Insert initial ingredient data
 INSERT INTO public.ingredients (name, aliases, safety_level, species_compatibility, description, common_allergen) VALUES

@@ -23,33 +23,26 @@ import SwiftUI
 struct TrackersView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var petService = PetService.shared
-    @State private var selectedTracker: TrackerType = .weight
+    @StateObject private var healthEventService = HealthEventService.shared
+    @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false
+    @State private var showingHealthEvents = false
     
-    enum TrackerType: String, CaseIterable {
-        case weight = "Weight"
-        case feeding = "Feeding"
-        case health = "Health"
-        case activity = "Activity"
-        
-        var icon: String {
-            switch self {
-            case .weight: return "scalemass"
-            case .feeding: return "fork.knife"
-            case .health: return "heart.fill"
-            case .activity: return "figure.walk"
-            }
-        }
-        
-        var color: Color {
-            switch self {
-            case .weight: return ModernDesignSystem.Colors.primary
-            case .feeding: return ModernDesignSystem.Colors.success
-            case .health: return ModernDesignSystem.Colors.warning
-            case .activity: return ModernDesignSystem.Colors.info
-            }
+enum TrackerType: String, CaseIterable {
+    case health = "Health Events"
+    
+    var icon: String {
+        switch self {
+        case .health: return "heart.fill"
         }
     }
+    
+    var color: Color {
+        switch self {
+        case .health: return ModernDesignSystem.Colors.warning
+        }
+    }
+}
     
     var body: some View {
         NavigationView {
@@ -75,7 +68,12 @@ struct TrackersView: View {
             .navigationBarTitleDisplayMode(.large)
         }
         .sheet(isPresented: $showingAddTracker) {
-            AddTrackerSheet()
+            AddHealthEventView()
+        }
+        .sheet(isPresented: $showingHealthEvents) {
+            if let selectedPet = petService.pets.first {
+                HealthEventListView(pet: selectedPet)
+            }
         }
     }
     
@@ -83,12 +81,12 @@ struct TrackersView: View {
     
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Track Your Pet's Health")
+            Text("Health Event Tracking")
                 .font(ModernDesignSystem.Typography.title2)
                 .fontWeight(.bold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            Text("Monitor weight, feeding, health, and activity patterns to keep your pet healthy and happy.")
+            Text("Log and monitor your pet's health events like vomiting, vet visits, and behavioral changes.")
                 .font(ModernDesignSystem.Typography.body)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .multilineTextAlignment(.leading)
@@ -110,18 +108,17 @@ struct TrackersView: View {
     // MARK: - Quick Actions Grid
     
     private var quickActionsGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: ModernDesignSystem.Spacing.md) {
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
             ForEach(TrackerType.allCases, id: \.self) { tracker in
                 QuickActionCard(
-                    title: tracker.rawValue,
+                    title: tracker == .health ? "Add Health Event" : tracker.rawValue,
                     icon: tracker.icon,
                     color: tracker.color
                 ) {
                     selectedTracker = tracker
-                    showingAddTracker = true
+                    if tracker == .health {
+                        showingAddTracker = true
+                    }
                 }
             }
         }
@@ -131,7 +128,7 @@ struct TrackersView: View {
     
     private var trackerCardsSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Recent Activity")
+            Text("Health Events")
                 .font(ModernDesignSystem.Typography.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -140,11 +137,11 @@ struct TrackersView: View {
                 TrackerEmptyStateView(
                     icon: "pawprint.fill",
                     title: "No Pets Added",
-                    message: "Add a pet to start tracking their health and activity."
+                    message: "Add a pet to start tracking their health events."
                 )
             } else {
                 ForEach(petService.pets.prefix(3)) { pet in
-                    PetTrackerCard(pet: pet)
+                    PetHealthEventCard(pet: pet)
                 }
             }
         }
@@ -161,26 +158,33 @@ struct QuickActionCard: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+            HStack(spacing: ModernDesignSystem.Spacing.md) {
                 Image(systemName: icon)
-                    .font(.system(size: 24, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundColor(color)
                 
                 Text(title)
-                    .font(ModernDesignSystem.Typography.caption)
-                    .fontWeight(.medium)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 80)
+            .frame(height: 100)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             .background(
-                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
                     .fill(ModernDesignSystem.Colors.background)
                     .shadow(
-                        color: ModernDesignSystem.Shadows.small.color,
-                        radius: ModernDesignSystem.Shadows.small.radius,
-                        x: ModernDesignSystem.Shadows.small.x,
-                        y: ModernDesignSystem.Shadows.small.y
+                        color: ModernDesignSystem.Shadows.medium.color,
+                        radius: ModernDesignSystem.Shadows.medium.radius,
+                        x: ModernDesignSystem.Shadows.medium.x,
+                        y: ModernDesignSystem.Shadows.medium.y
                     )
             )
         }
@@ -188,10 +192,15 @@ struct QuickActionCard: View {
     }
 }
 
-// MARK: - Pet Tracker Card
+// MARK: - Pet Health Event Card
 
-struct PetTrackerCard: View {
+struct PetHealthEventCard: View {
     let pet: Pet
+    @StateObject private var healthEventService = HealthEventService.shared
+    
+    var recentEvents: [HealthEvent] {
+        healthEventService.healthEvents[pet.id]?.prefix(3).map { $0 } ?? []
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
@@ -213,16 +222,54 @@ struct PetTrackerCard: View {
                         .fontWeight(.semibold)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text("Last updated: Today")
+                    Text("Health Events")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
                 Spacer()
                 
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .medium))
+                Button("View Events") {
+                    // TODO: Navigate to health events for this pet
+                }
+                .font(ModernDesignSystem.Typography.caption)
+                .fontWeight(.medium)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                        .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                )
+            }
+            
+            if !recentEvents.isEmpty {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    ForEach(recentEvents) { event in
+                        HStack {
+                            Image(systemName: event.eventType.iconName)
+                                .foregroundColor(event.eventType.category.color)
+                                .font(.caption)
+                            
+                            Text(event.title)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            Text(event.eventDate, style: .date)
+                                .font(ModernDesignSystem.Typography.caption2)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                    }
+                }
+                .padding(.top, ModernDesignSystem.Spacing.xs)
+            } else {
+                Text("No recent health events")
+                    .font(ModernDesignSystem.Typography.caption)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .padding(.top, ModernDesignSystem.Spacing.xs)
             }
         }
         .padding(ModernDesignSystem.Spacing.md)
@@ -236,6 +283,14 @@ struct PetTrackerCard: View {
                     y: ModernDesignSystem.Shadows.small.y
                 )
         )
+        .task {
+            // Load health events for this pet
+            do {
+                _ = try await healthEventService.getHealthEvents(for: pet.id)
+            } catch {
+                print("Error loading health events for \(pet.name): \(error)")
+            }
+        }
     }
 }
 

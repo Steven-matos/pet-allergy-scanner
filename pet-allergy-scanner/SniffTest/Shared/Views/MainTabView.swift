@@ -31,12 +31,12 @@ struct MainTabView: View {
                 }
                 .tag(0)
             
-            // Nutrition Tab
-            AdvancedNutritionView()
+            // Trackers Tab (Replaces History)
+            TrackersView()
                 .environmentObject(authService)
                 .tabItem {
-                    Image(systemName: "leaf.fill")
-                    Text("Nutrition")
+                    Image(systemName: "plus.circle.fill")
+                    Text("Trackers")
                 }
                 .tag(1)
             
@@ -49,12 +49,12 @@ struct MainTabView: View {
                 }
                 .tag(2)
             
-            // Trackers Tab (Replaces History)
-            TrackersView()
+            // Nutrition Tab
+            AdvancedNutritionView()
                 .environmentObject(authService)
                 .tabItem {
-                    Image(systemName: "plus.circle.fill")
-                    Text("Trackers")
+                    Image(systemName: "leaf.fill")
+                    Text("Nutrition")
                 }
                 .tag(3)
             

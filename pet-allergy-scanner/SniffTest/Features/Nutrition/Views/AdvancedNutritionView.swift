@@ -370,6 +370,17 @@ struct AdvancedNutritionView: View {
      * Only makes API calls when cache is empty or data is stale
      */
     private func loadNutritionData() {
+        // First, load pets and check for auto-selection
+        Task {
+            petService.loadPets()
+            
+            await MainActor.run {
+                // Auto-select pet if user has only one pet
+                autoSelectSinglePet()
+            }
+        }
+        
+        // If no pet is selected, don't proceed with nutrition data loading
         guard let pet = selectedPet else { return }
         
         isLoading = true
@@ -404,6 +415,22 @@ struct AdvancedNutritionView: View {
                 print("❌ Failed to load nutrition data: \(error)")
             }
         }
+    }
+    
+    /**
+     * Automatically select pet if user has only one pet
+     * Follows KISS principle by providing simple auto-selection logic
+     */
+    private func autoSelectSinglePet() {
+        // Only auto-select if no pet is currently selected and user has exactly one pet
+        guard petSelectionService.selectedPet == nil,
+              petService.pets.count == 1,
+              let singlePet = petService.pets.first else {
+            return
+        }
+        
+        print("🔍 AdvancedNutritionView: Auto-selecting single pet: \(singlePet.name)")
+        petSelectionService.selectPet(singlePet)
     }
     
     private func tabIcon(for index: Int) -> String {
