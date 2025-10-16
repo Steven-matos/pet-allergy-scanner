@@ -221,8 +221,16 @@ async def get_food_by_barcode(
 
 
 @router.post("", response_model=FoodItemResponse)
+async def create_food_item_no_slash(
+    food_item: FoodItemCreate,
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Create food item (without trailing slash)"""
+    return await create_food_item_with_slash(food_item, supabase, current_user)
+
 @router.post("/", response_model=FoodItemResponse)
-async def create_food_item(
+async def create_food_item_with_slash(
     food_item: FoodItemCreate,
     supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)
