@@ -265,8 +265,16 @@ async def create_food_item_with_slash(
         if item_data.get("nutritional_info") and hasattr(item_data["nutritional_info"], "dict"):
             item_data["nutritional_info"] = item_data["nutritional_info"].dict()
         
-        # Insert new food item
-        response = supabase.table("food_items").insert(item_data).execute()
+        # Insert new food item using service role client to bypass RLS
+        from app.core.config import settings
+        from supabase import create_client
+        
+        service_supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key
+        )
+        
+        response = service_supabase.table("food_items").insert(item_data).execute()
         
         if not response.data:
             raise HTTPException(status_code=500, detail="Failed to create food item")
