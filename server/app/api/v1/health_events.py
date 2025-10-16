@@ -6,11 +6,9 @@ CRUD operations for pet health event tracking
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
 
-from app.core.database import get_db
-from app.core.security import get_current_user
+from app.database import get_db
+from app.core.security.jwt_handler import get_current_user
 from app.models.health_event import (
     HealthEvent,
     HealthEventCreate,
@@ -19,7 +17,6 @@ from app.models.health_event import (
     HealthEventListResponse,
     HealthEventCategory
 )
-from app.models.pet import Pet
 from app.services.health_event_service import HealthEventService
 
 router = APIRouter(prefix="/health-events", tags=["health-events"])
@@ -29,28 +26,23 @@ router = APIRouter(prefix="/health-events", tags=["health-events"])
 async def create_health_event(
     event: HealthEventCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Create a new health event for a pet
     """
     # Verify pet ownership
-    pet = db.query(Pet).filter(
-        and_(
-            Pet.id == event.pet_id,
-            Pet.user_id == current_user["id"]
-        )
-    ).first()
+    pet_response = supabase.table("pets").select("id").eq("id", event.pet_id).eq("user_id", current_user["id"]).execute()
     
-    if not pet:
+    if not pet_response.data:
         raise HTTPException(status_code=404, detail="Pet not found")
     
     # Create health event using service
     db_event = await HealthEventService.create_health_event(
-        event, current_user["id"], db
+        event, current_user["id"], supabase
     )
     
-    return HealthEventResponse.from_orm(db_event)
+    return HealthEventResponse(**db_event)
 
 
 @router.get("/pet/{pet_id}", response_model=HealthEventListResponse)
@@ -60,20 +52,15 @@ async def get_pet_health_events(
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Get health events for a specific pet with optional filtering
     """
     # Verify pet ownership
-    pet = db.query(Pet).filter(
-        and_(
-            Pet.id == pet_id,
-            Pet.user_id == current_user["id"]
-        )
-    ).first()
+    pet_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user["id"]).execute()
     
-    if not pet:
+    if not pet_response.data:
         raise HTTPException(status_code=404, detail="Pet not found")
     
     # Get events using service
@@ -81,22 +68,22 @@ async def get_pet_health_events(
         try:
             category_enum = HealthEventCategory(category)
             events = await HealthEventService.get_health_events_by_category(
-                pet_id, category_enum.value, current_user["id"], db, limit, offset
+                pet_id, category_enum.value, current_user["id"], supabase, limit, offset
             )
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid category")
     else:
         events = await HealthEventService.get_health_events_for_pet(
-            pet_id, current_user["id"], db, limit, offset
+            pet_id, current_user["id"], supabase, limit, offset
         )
     
     # Get total count
     total = await HealthEventService.get_health_events_count_for_pet(
-        pet_id, current_user["id"], db
+        pet_id, current_user["id"], supabase
     )
     
     return HealthEventListResponse(
-        events=[HealthEventResponse.from_orm(event) for event in events],
+        events=[HealthEventResponse(**event) for event in events],
         total=total,
         limit=limit,
         offset=offset
@@ -107,19 +94,19 @@ async def get_pet_health_events(
 async def get_health_event(
     event_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Get a specific health event by ID
     """
     event = await HealthEventService.get_health_event_by_id(
-        event_id, current_user["id"], db
+        event_id, current_user["id"], supabase
     )
     
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
     
-    return HealthEventResponse.from_orm(event)
+    return HealthEventResponse(**event)
 
 
 @router.put("/{event_id}", response_model=HealthEventResponse)
@@ -127,32 +114,32 @@ async def update_health_event(
     event_id: str,
     updates: HealthEventUpdate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Update a health event
     """
     event = await HealthEventService.update_health_event(
-        event_id, updates, current_user["id"], db
+        event_id, updates, current_user["id"], supabase
     )
     
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
     
-    return HealthEventResponse.from_orm(event)
+    return HealthEventResponse(**event)
 
 
 @router.delete("/{event_id}")
 async def delete_health_event(
     event_id: str,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    supabase = Depends(get_db)
 ):
     """
     Delete a health event
     """
     success = await HealthEventService.delete_health_event(
-        event_id, current_user["id"], db
+        event_id, current_user["id"], supabase
     )
     
     if not success:
