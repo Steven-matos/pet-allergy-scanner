@@ -9,6 +9,7 @@ from datetime import datetime
 
 from app.database import get_db
 from app.core.security.jwt_handler import get_current_user
+from app.models.user import UserResponse
 from app.models.health_event import (
     HealthEvent,
     HealthEventCreate,
@@ -25,21 +26,21 @@ router = APIRouter(prefix="/health-events", tags=["health-events"])
 @router.post("/", response_model=HealthEventResponse)
 async def create_health_event(
     event: HealthEventCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
     Create a new health event for a pet
     """
     # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", event.pet_id).eq("user_id", current_user["id"]).execute()
+    pet_response = supabase.table("pets").select("id").eq("id", event.pet_id).eq("user_id", current_user.id).execute()
     
     if not pet_response.data:
         raise HTTPException(status_code=404, detail="Pet not found")
     
     # Create health event using service
     db_event = await HealthEventService.create_health_event(
-        event, current_user["id"], supabase
+        event, current_user.id, supabase
     )
     
     return HealthEventResponse(**db_event)
@@ -51,14 +52,14 @@ async def get_pet_health_events(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
     Get health events for a specific pet with optional filtering
     """
     # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user["id"]).execute()
+    pet_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
     
     if not pet_response.data:
         raise HTTPException(status_code=404, detail="Pet not found")
@@ -68,18 +69,18 @@ async def get_pet_health_events(
         try:
             category_enum = HealthEventCategory(category)
             events = await HealthEventService.get_health_events_by_category(
-                pet_id, category_enum.value, current_user["id"], supabase, limit, offset
+                pet_id, category_enum.value, current_user.id, supabase, limit, offset
             )
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid category")
     else:
         events = await HealthEventService.get_health_events_for_pet(
-            pet_id, current_user["id"], supabase, limit, offset
+            pet_id, current_user.id, supabase, limit, offset
         )
     
     # Get total count
     total = await HealthEventService.get_health_events_count_for_pet(
-        pet_id, current_user["id"], supabase
+        pet_id, current_user.id, supabase
     )
     
     return HealthEventListResponse(
@@ -93,14 +94,14 @@ async def get_pet_health_events(
 @router.get("/{event_id}", response_model=HealthEventResponse)
 async def get_health_event(
     event_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
     Get a specific health event by ID
     """
     event = await HealthEventService.get_health_event_by_id(
-        event_id, current_user["id"], supabase
+        event_id, current_user.id, supabase
     )
     
     if not event:
@@ -113,14 +114,14 @@ async def get_health_event(
 async def update_health_event(
     event_id: str,
     updates: HealthEventUpdate,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
     Update a health event
     """
     event = await HealthEventService.update_health_event(
-        event_id, updates, current_user["id"], supabase
+        event_id, updates, current_user.id, supabase
     )
     
     if not event:
@@ -132,14 +133,14 @@ async def update_health_event(
 @router.delete("/{event_id}")
 async def delete_health_event(
     event_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
     Delete a health event
     """
     success = await HealthEventService.delete_health_event(
-        event_id, current_user["id"], supabase
+        event_id, current_user.id, supabase
     )
     
     if not success:

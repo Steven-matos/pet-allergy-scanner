@@ -20,7 +20,7 @@ from app.database import init_db
 from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, advanced_nutrition, food_management
 from app.api.v1.nutrition import router as nutrition_router
 from app.api.v1.data_quality import router as data_quality_router
-from app.api.v1.health_events import router as health_events_router
+from app.api.v1.health_events.router import router as health_events_router
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
