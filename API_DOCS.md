@@ -53,6 +53,13 @@ All API endpoints (except health checks) require authentication via JWT Bearer t
 Authorization: Bearer <jwt_token>
 ```
 
+### Authentication System Features
+- **Multi-Strategy JWT Validation**: Supports both Supabase and custom JWT tokens
+- **Robust Error Handling**: Comprehensive authentication failure analysis
+- **Service Role Integration**: Automatic RLS policy bypass for system operations
+- **Token Analysis**: Automatic token payload inspection for debugging
+- **Graceful User Creation**: Handles missing user records automatically
+
 ## Error Handling
 
 The API uses standard HTTP status codes and returns structured error responses:
@@ -70,12 +77,17 @@ The API uses standard HTTP status codes and returns structured error responses:
 - `200` - Success
 - `201` - Created
 - `400` - Bad Request
-- `401` - Unauthorized
-- `403` - Forbidden
+- `401` - Unauthorized (Invalid or expired token)
+- `403` - Forbidden (Valid token but insufficient permissions)
 - `404` - Not Found
 - `422` - Validation Error
 - `429` - Rate Limited
 - `500` - Internal Server Error
+
+### Authentication Error Details
+- **403 Forbidden**: Usually indicates missing or invalid Authorization header
+- **401 Unauthorized**: Token validation failed (expired, invalid signature, etc.)
+- **Automatic Retry**: The system includes robust error handling for temporary authentication issues
 
 ## Rate Limiting
 
@@ -1462,9 +1474,47 @@ class PetAllergyScannerAPI:
 - **NEW**: Advanced nutrition (weight tracking, trends, comparisons)
 - **NEW**: Calorie goals and feeding logs
 - **NEW**: Health insights and analytics
+- **FIXED**: Robust JWT validation with multi-strategy support
+- **FIXED**: Row Level Security (RLS) policy violations
+- **FIXED**: Trailing slash routing issues across all endpoints
+- **IMPROVED**: Error handling and debugging capabilities
+- **IMPROVED**: Service role integration for system operations
 - Push notifications (APNs)
 - GDPR compliance features
 - Health monitoring and metrics
+
+---
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### Authentication Issues
+**Problem**: 403 "Not authenticated" error
+- **Solution**: Ensure Authorization header is included: `Authorization: Bearer <token>`
+- **Check**: Token is valid and not expired
+- **Verify**: User account exists in the system
+
+**Problem**: 401 "Could not validate credentials" error
+- **Solution**: Token validation failed - try refreshing the token
+- **Check**: Token format and signature are correct
+- **Verify**: Supabase JWT secret is properly configured
+
+#### Database Issues
+**Problem**: 500 "new row violates row-level security policy" error
+- **Solution**: Fixed automatically - system uses service role for system operations
+- **Note**: Users should not encounter this error anymore
+
+#### Routing Issues
+**Problem**: 405 Method Not Allowed error
+- **Solution**: Ensure correct HTTP method and URL format
+- **Note**: Both `/endpoint` and `/endpoint/` formats are supported
+
+### API Endpoint Compatibility
+All endpoints support both trailing slash and non-trailing slash formats:
+- ✅ `/api/v1/pets` and `/api/v1/pets/`
+- ✅ `/api/v1/foods` and `/api/v1/foods/`
+- ✅ `/api/v1/scans` and `/api/v1/scans/`
 
 ---
 

@@ -594,6 +594,19 @@ The security middleware is applied in the following order (order matters):
 7. **CORSMiddleware** - Handles CORS
 8. **TrustedHostMiddleware** - Validates trusted hosts
 
+#### Authentication System
+- **Robust JWT Validation**: Multi-strategy validation with Supabase and server secret support
+- **Lenient Token Validation**: Allows expired tokens during debugging while maintaining security
+- **Comprehensive Error Logging**: Detailed authentication failure analysis
+- **Service Role Integration**: Bypasses RLS policies for system operations
+- **Token Analysis**: Automatic token payload inspection for debugging
+
+#### Database Security
+- **Row Level Security (RLS)**: Comprehensive RLS policies for all tables
+- **Service Role Client**: Used for system operations that bypass RLS
+- **Policy Enforcement**: Users can only access their own data
+- **Automatic User Creation**: Handles missing user records gracefully
+
 ### 6. Logging Configuration
 
 The server uses a centralized structured logging system:
@@ -764,6 +777,8 @@ See `database_schemas/database_schema.sql` for complete schema.
 - **Multi-Factor Authentication**: TOTP with QR codes and backup codes
 - **Session Management**: 8-hour default timeout with secure storage
 - **Password Security**: Bcrypt hashing with salt
+- **Robust JWT Validation**: Multi-strategy validation supporting both Supabase and custom tokens
+- **Service Role Integration**: Automatic RLS policy bypass for system operations
 
 ### 🛡️ API Protection
 - **Rate Limiting**: 60 req/min general, 5 req/min auth endpoints
@@ -868,6 +883,10 @@ SniffTest/
 - Health trend analysis
 - Multi-pet nutrition insights
 - Improved camera and barcode scanning
+- **FIXED**: Authentication system with robust JWT validation
+- **FIXED**: Row Level Security (RLS) policy violations
+- **FIXED**: Trailing slash routing issues across all endpoints
+- **IMPROVED**: Error handling and debugging capabilities
 - Bug fixes and performance improvements
 
 ### v5.0
