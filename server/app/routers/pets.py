@@ -101,6 +101,7 @@ async def create_pet(
             detail="Failed to create pet profile"
         )
 
+@router.get("", response_model=List[PetResponse])
 @router.get("/", response_model=List[PetResponse])
 async def get_user_pets(current_user: UserResponse = Depends(get_current_user)):
     """
