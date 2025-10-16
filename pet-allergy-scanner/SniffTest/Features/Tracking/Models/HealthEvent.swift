@@ -108,7 +108,7 @@ enum HealthEventType: String, Codable, CaseIterable {
     /// SF Symbol icon name
     var iconName: String {
         switch self {
-        case .vomiting: return "stomach"
+        case .vomiting: return "exclamationmark.triangle"
         case .diarrhea: return "toilet"
         case .shedding: return "leaf"
         case .lowEnergy: return "battery.25"

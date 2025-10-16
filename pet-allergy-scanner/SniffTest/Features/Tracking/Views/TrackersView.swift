@@ -108,13 +108,10 @@ enum TrackerType: String, CaseIterable {
     // MARK: - Quick Actions Grid
     
     private var quickActionsGrid: some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: ModernDesignSystem.Spacing.md) {
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
             ForEach(TrackerType.allCases, id: \.self) { tracker in
                 QuickActionCard(
-                    title: tracker.rawValue,
+                    title: tracker == .health ? "Add Health Event" : tracker.rawValue,
                     icon: tracker.icon,
                     color: tracker.color
                 ) {
@@ -161,26 +158,33 @@ struct QuickActionCard: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+            HStack(spacing: ModernDesignSystem.Spacing.md) {
                 Image(systemName: icon)
-                    .font(.system(size: 24, weight: .medium))
+                    .font(.system(size: 28, weight: .medium))
                     .foregroundColor(color)
                 
                 Text(title)
-                    .font(ModernDesignSystem.Typography.caption)
-                    .fontWeight(.medium)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 80)
+            .frame(height: 100)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             .background(
-                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
                     .fill(ModernDesignSystem.Colors.background)
                     .shadow(
-                        color: ModernDesignSystem.Shadows.small.color,
-                        radius: ModernDesignSystem.Shadows.small.radius,
-                        x: ModernDesignSystem.Shadows.small.x,
-                        y: ModernDesignSystem.Shadows.small.y
+                        color: ModernDesignSystem.Shadows.medium.color,
+                        radius: ModernDesignSystem.Shadows.medium.radius,
+                        x: ModernDesignSystem.Shadows.medium.x,
+                        y: ModernDesignSystem.Shadows.medium.y
                     )
             )
         }
