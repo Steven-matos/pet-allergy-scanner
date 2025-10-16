@@ -30,6 +30,7 @@ struct AddHealthEventView: View {
     @State private var isSubmitting = false
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var hasAutoSelectedPet = false
     
     var body: some View {
         NavigationView {
@@ -67,6 +68,11 @@ struct AddHealthEventView: View {
         }
         .onAppear {
             setupInitialValues()
+            // Auto-select pet if only one exists
+            if petService.pets.count == 1 && !hasAutoSelectedPet {
+                selectedPet = petService.pets.first
+                hasAutoSelectedPet = true
+            }
         }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
@@ -170,6 +176,44 @@ struct AddHealthEventView: View {
                     RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                         .fill(ModernDesignSystem.Colors.background)
                         .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+            } else if petService.pets.count == 1 {
+                // Auto-select single pet
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    HStack {
+                        AsyncImage(url: URL(string: petService.pets.first?.imageUrl ?? "")) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Image(systemName: petService.pets.first?.species.icon ?? "pawprint.fill")
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
+                        }
+                        .frame(width: 40, height: 40)
+                        .clipShape(Circle())
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Logging for \(petService.pets.first?.name ?? "your pet")")
+                                .font(ModernDesignSystem.Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("Automatically selected")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.success)
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .fill(ModernDesignSystem.Colors.background)
+                        .stroke(ModernDesignSystem.Colors.success, lineWidth: 1)
                 )
             } else {
                 LazyVGrid(columns: [
@@ -321,7 +365,9 @@ struct AddHealthEventView: View {
     // MARK: - Computed Properties
     
     private var isFormValid: Bool {
-        return selectedPet != nil && !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
+        // For single pet users, selectedPet will be auto-selected
+        let hasValidPet = selectedPet != nil || (petService.pets.count == 1 && petService.pets.first != nil)
+        return hasValidPet && !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
     }
     
     private var severityDescription: String {
@@ -361,7 +407,17 @@ struct AddHealthEventView: View {
     }
     
     private func saveHealthEvent() {
-        guard isFormValid, let pet = selectedPet else { return }
+        guard isFormValid else { return }
+        
+        // Get the pet - either selected or auto-selected for single pet users
+        let pet: Pet
+        if let selectedPet = selectedPet {
+            pet = selectedPet
+        } else if petService.pets.count == 1, let singlePet = petService.pets.first {
+            pet = singlePet
+        } else {
+            return
+        }
         
         isSubmitting = true
         
