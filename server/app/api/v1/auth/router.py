@@ -271,12 +271,12 @@ async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(securi
         )
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_profile(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user_profile(current_user: UserResponse = Depends(get_current_user)):
     """
     Get current user profile
     
     Args:
-        credentials: JWT token credentials
+        current_user: Current authenticated user from JWT validation
         
     Returns:
         Current user profile data
@@ -285,39 +285,9 @@ async def get_current_user_profile(credentials: HTTPAuthorizationCredentials = D
         HTTPException: If user not found or token invalid
     """
     try:
-        if not credentials:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No authentication token provided"
-            )
+        # Return the current user data directly since it's already validated
+        return current_user
         
-        supabase = get_supabase_client()
-        
-        # Set the session for the current request
-        supabase.auth.set_session(credentials.credentials, "")
-        
-        # Get current user
-        user = supabase.auth.get_user()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
-            )
-        
-        # Get user metadata
-        user_metadata = user.user_metadata or {}
-        
-        # Return merged user data
-        return await get_merged_user_data(user.id, {
-            "email": user.email,
-            "user_metadata": user_metadata,
-            "created_at": user.created_at,
-            "updated_at": user.updated_at
-        })
-        
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Get profile error: {e}")
         raise HTTPException(
