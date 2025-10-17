@@ -366,6 +366,112 @@ class InputValidator:
         
         check_depth(data)
         return data
+    
+    @classmethod
+    def validate_user_login(cls, login_data) -> Dict[str, Any]:
+        """
+        Validate user login data (email only)
+        
+        Args:
+            login_data: Login data to validate
+            
+        Returns:
+            Validation result with is_valid flag and errors list
+        """
+        errors = []
+        
+        # Validate email (login only accepts email, not username)
+        try:
+            cls.validate_email(login_data.email_or_username)
+        except HTTPException as e:
+            errors.append(f"Email: {e.detail}")
+        
+        # Validate password (basic check, not full strength validation for login)
+        if not login_data.password:
+            errors.append("Password is required")
+        elif len(login_data.password) < 1:
+            errors.append("Password cannot be empty")
+        
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors
+        }
+    
+    @classmethod
+    def validate_user_create(cls, user_data) -> Dict[str, Any]:
+        """
+        Validate user creation data
+        
+        Args:
+            user_data: User creation data to validate
+            
+        Returns:
+            Validation result with is_valid flag and errors list
+        """
+        errors = []
+        
+        # Validate email
+        try:
+            cls.validate_email(user_data.email)
+        except HTTPException as e:
+            errors.append(f"Email: {e.detail}")
+        
+        # Validate password
+        try:
+            cls.validate_password(user_data.password)
+        except HTTPException as e:
+            errors.append(f"Password: {e.detail}")
+        
+        # Validate username if provided
+        if hasattr(user_data, 'username') and user_data.username:
+            try:
+                cls.validate_username(user_data.username)
+            except HTTPException as e:
+                errors.append(f"Username: {e.detail}")
+        
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors
+        }
+    
+    @classmethod
+    def validate_user_update(cls, user_update) -> Dict[str, Any]:
+        """
+        Validate user update data
+        
+        Args:
+            user_update: User update data to validate
+            
+        Returns:
+            Validation result with is_valid flag and errors list
+        """
+        errors = []
+        
+        # Validate email if provided
+        if hasattr(user_update, 'email') and user_update.email:
+            try:
+                cls.validate_email(user_update.email)
+            except HTTPException as e:
+                errors.append(f"Email: {e.detail}")
+        
+        # Validate username if provided
+        if hasattr(user_update, 'username') and user_update.username:
+            try:
+                cls.validate_username(user_update.username)
+            except HTTPException as e:
+                errors.append(f"Username: {e.detail}")
+        
+        # Validate phone if provided
+        if hasattr(user_update, 'phone') and user_update.phone:
+            try:
+                cls.validate_phone_number(user_update.phone)
+            except HTTPException as e:
+                errors.append(f"Phone: {e.detail}")
+        
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors
+        }
 
 
 # Backward compatibility alias
