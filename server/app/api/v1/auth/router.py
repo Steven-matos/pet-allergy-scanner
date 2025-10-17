@@ -191,7 +191,7 @@ async def login_user(login_data: UserLogin):
         
         # Authenticate with Supabase
         auth_response = supabase.auth.sign_in_with_password({
-            "email": login_data.email,
+            "email": login_data.email_or_username,
             "password": login_data.password
         })
         
@@ -207,7 +207,7 @@ async def login_user(login_data: UserLogin):
         
         # Return merged user data with session
         user_data = await get_merged_user_data(user_id, {
-            "email": login_data.email,
+            "email": auth_response.user.email,
             "user_metadata": user_metadata,
             "created_at": auth_response.user.created_at,
             "updated_at": auth_response.user.updated_at
