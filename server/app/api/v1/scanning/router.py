@@ -47,10 +47,7 @@ async def create_scan(
             "pet_id": scan_data.pet_id,
             "image_url": scan_data.image_url,
             "raw_text": scan_data.raw_text,
-            "status": scan_data.status.value,
-            "method": scan_data.method.value if scan_data.method else ScanMethod.MANUAL.value,
-            "confidence_score": scan_data.confidence_score,
-            "notes": scan_data.notes
+            "status": scan_data.status.value
         }
         
         # Insert scan into database
@@ -71,9 +68,8 @@ async def create_scan(
             image_url=created_scan["image_url"],
             raw_text=created_scan["raw_text"],
             status=ScanStatus(created_scan["status"]),
-            method=ScanMethod(created_scan["method"]),
-            confidence_score=created_scan["confidence_score"],
-            notes=created_scan["notes"],
+            scan_method=ScanMethod.OCR,  # Default to OCR since method field doesn't exist in DB
+            result=created_scan.get("result"),
             created_at=created_scan["created_at"],
             updated_at=created_scan["updated_at"]
         )
@@ -114,9 +110,8 @@ async def get_user_scans(
                 image_url=scan["image_url"],
                 raw_text=scan["raw_text"],
                 status=ScanStatus(scan["status"]),
-                method=ScanMethod(scan["method"]),
-                confidence_score=scan["confidence_score"],
-                notes=scan["notes"],
+                scan_method=ScanMethod.OCR,  # Default to OCR since method field doesn't exist in DB
+                result=scan.get("result"),
                 created_at=scan["created_at"],
                 updated_at=scan["updated_at"]
             ))
@@ -161,9 +156,8 @@ async def get_scan(
             image_url=scan["image_url"],
             raw_text=scan["raw_text"],
             status=ScanStatus(scan["status"]),
-            method=ScanMethod(scan["method"]),
-            confidence_score=scan["confidence_score"],
-            notes=scan["notes"],
+            scan_method=ScanMethod.OCR,  # Default to OCR since method field doesn't exist in DB
+            result=scan.get("result"),
             created_at=scan["created_at"],
             updated_at=scan["updated_at"]
         )
