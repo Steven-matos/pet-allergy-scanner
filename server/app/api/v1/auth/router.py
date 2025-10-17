@@ -216,6 +216,8 @@ async def login_user(login_data: UserLogin):
         return {
             "access_token": auth_response.session.access_token,
             "refresh_token": auth_response.session.refresh_token,
+            "token_type": "Bearer",
+            "expires_in": auth_response.session.expires_in,
             "user": user_data
         }
         
@@ -470,6 +472,8 @@ async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(secu
         return {
             "access_token": session.session.access_token,
             "refresh_token": session.session.refresh_token,
+            "token_type": "Bearer",
+            "expires_in": session.session.expires_in,
             "user": user_data
         }
         
