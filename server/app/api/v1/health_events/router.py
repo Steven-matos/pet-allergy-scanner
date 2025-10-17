@@ -26,8 +26,8 @@ router = APIRouter(prefix="/health-events", tags=["health-events"])
 @router.post("/", response_model=HealthEventResponse)
 async def create_health_event(
     event: HealthEventCreate,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Create a new health event for a pet
@@ -52,8 +52,8 @@ async def get_pet_health_events(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
-    current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get health events for a specific pet with optional filtering
@@ -94,8 +94,8 @@ async def get_pet_health_events(
 @router.get("/{event_id}", response_model=HealthEventResponse)
 async def get_health_event(
     event_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Get a specific health event by ID
@@ -114,8 +114,8 @@ async def get_health_event(
 async def update_health_event(
     event_id: str,
     updates: HealthEventUpdate,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Update a health event
@@ -133,8 +133,8 @@ async def update_health_event(
 @router.delete("/{event_id}")
 async def delete_health_event(
     event_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Delete a health event

@@ -5,8 +5,8 @@ Provides nutritional analysis and recommendations for pet food
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
-from ..database import get_supabase_client
-from ..models.nutritional_standards import (
+from app.database import get_supabase_client
+from app.models.nutritional_standards import (
     NutritionalStandardResponse,
     NutritionalRecommendation,
     NutritionalAnalysisRequest,
@@ -14,11 +14,11 @@ from ..models.nutritional_standards import (
     LifeStage,
     ActivityLevel
 )
-from ..models.pet import PetResponse, PetLifeStage, PetActivityLevel
-from ..models.scan import NutritionalAnalysis
-from ..services.nutritional_calculator import NutritionalCalculator
-from ..models.user import User
-from ..routers.auth import get_current_user
+from app.models.pet import PetResponse, PetLifeStage, PetActivityLevel
+from app.models.scan import NutritionalAnalysis
+from app.services.nutritional_calculator import NutritionalCalculator
+from app.models.user import User
+from app.core.security.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/nutritional-analysis", tags=["nutritional-analysis"])
 

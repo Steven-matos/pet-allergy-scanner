@@ -6,8 +6,8 @@ Weight tracking, trends, comparisons, and advanced analytics
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
-from ..database import get_supabase_client
-from ..models.advanced_nutrition import (
+from app.database import get_supabase_client
+from app.models.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
     WeightTrendAnalysis, NutritionalTrendResponse,
@@ -17,12 +17,12 @@ from ..models.advanced_nutrition import (
     AdvancedNutritionResponse, WeightManagementDashboard,
     NutritionalTrendsDashboard, FoodComparisonDashboard
 )
-from ..models.user import User
-from ..routers.auth import get_current_user
-from ..services.weight_tracking_service import WeightTrackingService
-from ..services.nutritional_trends_service import NutritionalTrendsService
-from ..services.food_comparison_service import FoodComparisonService
-from ..services.advanced_analytics_service import AdvancedAnalyticsService
+from app.models.user import User
+from app.core.security.jwt_handler import get_current_user
+from app.services.weight_tracking_service import WeightTrackingService
+from app.services.nutritional_trends_service import NutritionalTrendsService
+from app.services.food_comparison_service import FoodComparisonService
+from app.services.advanced_analytics_service import AdvancedAnalyticsService
 
 router = APIRouter(prefix="/advanced-nutrition", tags=["advanced-nutrition"])
 

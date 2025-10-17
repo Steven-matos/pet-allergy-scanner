@@ -8,8 +8,8 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from ..database import get_supabase_client, get_db
-from ..models.food_items import (
+from app.database import get_supabase_client, get_db
+from app.models.food_items import (
     FoodItemCreate,
     FoodItemResponse,
     FoodItemUpdate,
@@ -18,10 +18,10 @@ from ..models.food_items import (
     FoodAnalysisResponse,
     NutritionalInfoBase
 )
-from ..models.user import UserResponse
-from ..core.security.jwt_handler import get_current_user
-from ..utils.error_handling import create_error_response, APIError
-from ..utils.logging_config import get_logger
+from app.models.user import UserResponse
+from app.core.security.jwt_handler import get_current_user
+from app.utils.error_handling import create_error_response, APIError
+from app.utils.logging_config import get_logger
 
 router = APIRouter(prefix="/foods", tags=["food-management"])
 logger = get_logger(__name__)
@@ -176,8 +176,8 @@ async def get_food_by_barcode(
         Food item with full details or None if not found
     """
     try:
-        from ..database import get_supabase_client
-        from ..utils.logging_config import get_logger
+        from app.database import get_supabase_client
+        from app.utils.logging_config import get_logger
         
         logger = get_logger(__name__)
         supabase = get_supabase_client()
@@ -214,7 +214,7 @@ async def get_food_by_barcode(
         )
         
     except Exception as e:
-        from ..utils.logging_config import get_logger
+        from app.utils.logging_config import get_logger
         logger = get_logger(__name__)
         logger.error(f"Error fetching food by barcode {barcode}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

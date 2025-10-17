@@ -17,7 +17,17 @@ import logging
 from dotenv import load_dotenv
 
 from app.database import init_db
-from app.routers import auth, pets, ingredients, scans, mfa, monitoring, gdpr, notifications, nutritional_analysis, advanced_nutrition, food_management
+from app.api.v1.auth.router import router as auth_router
+from app.api.v1.pets.router import router as pets_router
+from app.api.v1.ingredients.router import router as ingredients_router
+from app.api.v1.scanning.router import router as scans_router
+from app.api.v1.food_management.router import router as food_management_router
+from app.api.v1.mfa.router import router as mfa_router
+from app.api.v1.monitoring.router import router as monitoring_router
+from app.api.v1.gdpr.router import router as gdpr_router
+from app.api.v1.notifications.router import router as notifications_router
+from app.api.v1.nutritional_analysis.router import router as nutritional_analysis_router
+from app.api.v1.advanced_nutrition.router import router as advanced_nutrition_router
 from app.api.v1.nutrition import router as nutrition_router
 from app.api.v1.data_quality import router as data_quality_router
 from app.api.v1.health_events.router import router as health_events_router
@@ -114,18 +124,18 @@ app.add_exception_handler(HTTPException, handle_http_exception)
 app.add_exception_handler(Exception, handle_generic_exception)
 
 # Include routers
-app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
-app.include_router(mfa.router, prefix="/api/v1/mfa", tags=["mfa"])
-app.include_router(pets.router, prefix="/api/v1/pets", tags=["pets"])
-app.include_router(ingredients.router, prefix="/api/v1/ingredients", tags=["ingredients"])
-app.include_router(scans.router, prefix="/api/v1/scans", tags=["scans"])
-app.include_router(monitoring.router, prefix="/api/v1/monitoring", tags=["monitoring"])
-app.include_router(gdpr.router, prefix="/api/v1/gdpr", tags=["gdpr"])
-app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
-app.include_router(nutritional_analysis.router, prefix="/api/v1", tags=["nutritional-analysis"])
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["authentication"])
+app.include_router(mfa_router, prefix="/api/v1/mfa", tags=["mfa"])
+app.include_router(pets_router, prefix="/api/v1/pets", tags=["pets"])
+app.include_router(ingredients_router, prefix="/api/v1/ingredients", tags=["ingredients"])
+app.include_router(scans_router, prefix="/api/v1/scanning", tags=["scanning"])
+app.include_router(monitoring_router, prefix="/api/v1/monitoring", tags=["monitoring"])
+app.include_router(gdpr_router, prefix="/api/v1/gdpr", tags=["gdpr"])
+app.include_router(notifications_router, prefix="/api/v1", tags=["notifications"])
+app.include_router(nutritional_analysis_router, prefix="/api/v1", tags=["nutritional-analysis"])
 app.include_router(nutrition_router, prefix="/api/v1", tags=["nutrition"])
-app.include_router(advanced_nutrition.router, prefix="/api/v1", tags=["advanced-nutrition"])
-app.include_router(food_management.router, prefix="/api/v1", tags=["food-management"])
+app.include_router(advanced_nutrition_router, prefix="/api/v1", tags=["advanced-nutrition"])
+app.include_router(food_management_router, prefix="/api/v1", tags=["food-management"])
 app.include_router(data_quality_router, prefix="/api/v1/data-quality", tags=["data-quality"])
 app.include_router(health_events_router, prefix="/api/v1", tags=["health-events"])
 
