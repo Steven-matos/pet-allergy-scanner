@@ -10,7 +10,7 @@ from app.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
 from app.core.validation.input_validator import InputValidator
-from app.core.security.jwt_handler import security
+from app.core.security.jwt_handler import security, get_current_user
 
 async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserResponse:
     """
