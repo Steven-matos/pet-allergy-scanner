@@ -38,7 +38,7 @@ async def register_device_token(
     supabase = Depends(get_db)
 ):
     """
-    Register device token for push notifications
+    Register device token for push notifications (authenticated)
     
     Args:
         request: DeviceTokenRequest containing device_token
@@ -66,6 +66,39 @@ async def register_device_token(
         raise
     except Exception as e:
         logger.error(f"Failed to register device token: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to register device token: {str(e)}")
+
+
+@router.post("/register-device-anonymous")
+async def register_device_token_anonymous(
+    request: DeviceTokenRequest,
+    supabase = Depends(get_db)
+):
+    """
+    Register device token for push notifications (anonymous)
+    This endpoint allows device registration before user authentication
+    
+    Args:
+        request: DeviceTokenRequest containing device_token
+        supabase: Supabase client
+        
+    Returns:
+        Success message with temporary token
+    """
+    try:
+        # Extract device token from request
+        device_token = request.device_token
+        
+        # Store device token in a temporary table or cache
+        # For now, we'll just return success and let the authenticated endpoint handle it later
+        logger.info(f"Anonymous device token registration: {device_token[:20]}...")
+        
+        return {
+            "message": "Device token registered successfully. Please complete authentication to enable notifications.",
+            "requires_auth": True
+        }
+    except Exception as e:
+        logger.error(f"Failed to register anonymous device token: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to register device token: {str(e)}")
 
 

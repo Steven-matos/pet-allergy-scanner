@@ -99,10 +99,10 @@ async def register_user(user_data: UserCreate):
         # Validate input
         validator = InputValidator()
         validation_result = validator.validate_user_create(user_data)
-        if not validation_result.is_valid:
+        if not validation_result["is_valid"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Validation failed: {', '.join(validation_result.errors)}"
+                detail=f"Validation failed: {', '.join(validation_result['errors'])}"
             )
         
         supabase = get_supabase_client()
@@ -181,10 +181,10 @@ async def login_user(login_data: UserLogin):
         # Validate input
         validator = InputValidator()
         validation_result = validator.validate_user_login(login_data)
-        if not validation_result.is_valid:
+        if not validation_result["is_valid"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Validation failed: {', '.join(validation_result.errors)}"
+                detail=f"Validation failed: {', '.join(validation_result['errors'])}"
             )
         
         supabase = get_supabase_client()
@@ -351,10 +351,10 @@ async def update_user_profile(
         # Validate input
         validator = InputValidator()
         validation_result = validator.validate_user_update(user_update)
-        if not validation_result.is_valid:
+        if not validation_result["is_valid"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Validation failed: {', '.join(validation_result.errors)}"
+                detail=f"Validation failed: {', '.join(validation_result['errors'])}"
             )
         
         supabase = get_supabase_client()
