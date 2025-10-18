@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Foundation
 
 /**
  * Add Health Event View
@@ -31,6 +32,32 @@ struct AddHealthEventView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var hasAutoSelectedPet = false
+    
+    // Medication-specific fields
+    @State private var medicationName = ""
+    @State private var dosage = ""
+    @State private var frequency: MedicationFrequency = .daily
+    @State private var reminderTimes: [MedicationReminderTime] = []
+    @State private var startDate = Date()
+    @State private var endDate: Date?
+    @State private var hasEndDate = false
+    @State private var createReminder = false
+    
+    // Performance optimization: Cache computed values
+    private var isFormValid: Bool {
+        // For single pet users, selectedPet will be auto-selected
+        let hasValidPet = selectedPet != nil || (petService.pets.count == 1 && petService.pets.first != nil)
+        let hasValidTitle = !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
+        
+        // For medication events, validate medication fields
+        if selectedEventType == .medication {
+            let hasMedicationDetails = !medicationName.isEmpty && !dosage.isEmpty
+            let hasValidReminder = !createReminder || !reminderTimes.isEmpty
+            return hasValidPet && hasValidTitle && hasMedicationDetails && hasValidReminder
+        }
+        
+        return hasValidPet && hasValidTitle
+    }
     
     var body: some View {
         NavigationView {
@@ -137,17 +164,30 @@ struct AddHealthEventView: View {
                 customEventNameSection
             }
             
-            // Event Details
-            eventDetailsSection
+            // Event Details (hide for medication events)
+            if selectedEventType != .medication {
+                eventDetailsSection
+            }
             
-            // Severity Level
-            severitySection
+            // Severity Level (hide for medication events)
+            if selectedEventType != .medication {
+                severitySection
+            }
             
             // Date & Time
             dateTimeSection
             
-            // Notes
-            notesSection
+            // Medication-specific sections
+            if selectedEventType == .medication {
+                medicationDetailsSection
+                medicationReminderSection
+                
+                // Notes (moved after medication sections for medication events)
+                notesSection
+            } else {
+                // Notes (for non-medication events)
+                notesSection
+            }
         }
     }
     
@@ -369,12 +409,6 @@ struct AddHealthEventView: View {
     
     // MARK: - Computed Properties
     
-    private var isFormValid: Bool {
-        // For single pet users, selectedPet will be auto-selected
-        let hasValidPet = selectedPet != nil || (petService.pets.count == 1 && petService.pets.first != nil)
-        return hasValidPet && !title.isEmpty && (selectedEventType != .other || !customEventName.isEmpty)
-    }
-    
     private var currentPetName: String {
         if let selectedPet = selectedPet {
             return selectedPet.name
@@ -423,10 +457,220 @@ struct AddHealthEventView: View {
         }
     }
     
+    // MARK: - Medication Details Section
+    
+    private var medicationDetailsSection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
+            Text("Medication Details")
+                .font(ModernDesignSystem.Typography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            // Medication Name
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                Text("Medication Name")
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                TextField("Enter medication name", text: $medicationName)
+                    .textFieldStyle(ModernTextFieldStyle())
+            }
+            
+            // Dosage
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                Text("Dosage")
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                TextField("e.g., 10mg, 1 tablet, 5ml", text: $dosage)
+                    .textFieldStyle(ModernTextFieldStyle())
+            }
+            
+            // Frequency
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                Text("How often should \(currentPetName) take this medication?")
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                LazyVGrid(columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ], spacing: ModernDesignSystem.Spacing.sm) {
+                    ForEach(MedicationFrequency.allCases, id: \.self) { freq in
+                        MedicationFrequencyButton(
+                            frequency: freq,
+                            isSelected: frequency == freq
+                        ) {
+                            frequency = freq
+                            updateReminderTimes()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
+    }
+    
+    // MARK: - Medication Reminder Section
+    
+    private var medicationReminderSection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
+            HStack {
+                Text("Reminder Settings")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Toggle("Create Reminders", isOn: $createReminder)
+                    .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
+            }
+            
+            if createReminder {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
+                    // Reminder Times
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        HStack {
+                            Text("Reminder Times")
+                                .font(ModernDesignSystem.Typography.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Spacer()
+                            
+                            Button("Add Time") {
+                                addReminderTime()
+                            }
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                            .background(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                            )
+                        }
+                        
+                        ForEach(reminderTimes.indices, id: \.self) { index in
+                            HStack {
+                                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                                    TextField("Label (e.g., Morning, Evening)", text: Binding(
+                                        get: { reminderTimes[index].label },
+                                        set: { updateReminderTimeLabel(at: index, newLabel: $0) }
+                                    ))
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    
+                                    DatePicker("Time", selection: Binding(
+                                        get: { reminderTimes[index].timeDate },
+                                        set: { updateReminderTimeDate(at: index, newDate: $0) }
+                                    ), displayedComponents: [.hourAndMinute])
+                                    .datePickerStyle(CompactDatePickerStyle())
+                                }
+                                
+                                Spacer()
+                                
+                                Button("Remove") {
+                                    removeReminderTime(at: index)
+                                }
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.error)
+                                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                                .background(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                        .fill(ModernDesignSystem.Colors.error.opacity(0.1))
+                                )
+                            }
+                            .padding(ModernDesignSystem.Spacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .fill(ModernDesignSystem.Colors.background)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                        }
+                        
+                        if reminderTimes.isEmpty {
+                            Text("No reminder times set. Tap 'Add Time' to add one.")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .italic()
+                                .padding(ModernDesignSystem.Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .background(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                        .fill(ModernDesignSystem.Colors.background)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
+                        }
+                    }
+                    
+                    // Start Date
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        DatePicker(
+                            "Start Date",
+                            selection: $startDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(CompactDatePickerStyle())
+                    }
+                    
+                    // End Date (Optional)
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        HStack {
+                            Spacer()
+                            
+                            Toggle("Set End Date", isOn: $hasEndDate)
+                                .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
+                        }
+                        
+                        if hasEndDate {
+                            DatePicker(
+                                "End Date",
+                                selection: Binding(
+                                    get: { endDate ?? Date() },
+                                    set: { endDate = $0 }
+                                ),
+                                displayedComponents: [.date]
+                            )
+                            .datePickerStyle(CompactDatePickerStyle())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
+    }
+    
     // MARK: - Helper Methods
     
     private func setupInitialValues() {
         updateTitle()
+        updateReminderTimes()
     }
     
     private func updateTitle() {
@@ -435,6 +679,50 @@ struct AddHealthEventView: View {
         } else {
             title = selectedEventType.displayName
         }
+    }
+    
+    private func updateReminderTimes() {
+        reminderTimes = frequency.defaultReminderTimes
+    }
+    
+    private func addReminderTime() {
+        let newReminderTime = MedicationReminderTime(
+            time: "09:00",
+            label: "Reminder"
+        )
+        reminderTimes.append(newReminderTime)
+    }
+    
+    private func removeReminderTime(at index: Int) {
+        guard index < reminderTimes.count else { return }
+        reminderTimes.remove(at: index)
+    }
+    
+    private func updateReminderTimeLabel(at index: Int, newLabel: String) {
+        guard index < reminderTimes.count else { return }
+        let currentTime = reminderTimes[index]
+        let updatedTime = MedicationReminderTime(
+            time: currentTime.time,
+            label: newLabel.isEmpty ? "Reminder" : newLabel
+        )
+        reminderTimes[index] = updatedTime
+    }
+    
+    private func updateReminderTimeDate(at index: Int, newDate: Date) {
+        guard index < reminderTimes.count else { return }
+        let currentTime = reminderTimes[index]
+        let timeString = formatTime(from: newDate)
+        let updatedTime = MedicationReminderTime(
+            time: timeString,
+            label: currentTime.label
+        )
+        reminderTimes[index] = updatedTime
+    }
+    
+    private func formatTime(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
     
     private func saveHealthEvent() {
@@ -456,7 +744,7 @@ struct AddHealthEventView: View {
             do {
                 let finalTitle = selectedEventType == .other ? customEventName : title
                 
-                _ = try await healthEventService.createHealthEvent(
+                let healthEvent = try await healthEventService.createHealthEvent(
                     for: pet.id,
                     eventType: selectedEventType,
                     title: finalTitle,
@@ -464,6 +752,21 @@ struct AddHealthEventView: View {
                     severityLevel: severityLevel,
                     eventDate: eventDate
                 )
+                
+                // Create medication reminder if medication event and reminder is enabled
+                if selectedEventType == .medication && createReminder && !medicationName.isEmpty && !dosage.isEmpty {
+                    let reminderService = MedicationReminderService.shared
+                    _ = try await reminderService.createMedicationReminder(
+                        healthEventId: healthEvent.id,
+                        petId: pet.id,
+                        medicationName: medicationName,
+                        dosage: dosage,
+                        frequency: frequency,
+                        reminderTimes: reminderTimes,
+                        startDate: startDate,
+                        endDate: hasEndDate ? endDate : nil
+                    )
+                }
                 
                 await MainActor.run {
                     isSubmitting = false
@@ -552,6 +855,47 @@ struct HealthEventPetSelectionCard: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 100)
+            .padding(ModernDesignSystem.Spacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .fill(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.background)
+                    .stroke(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.borderPrimary, lineWidth: isSelected ? 2 : 1)
+                    .shadow(
+                        color: ModernDesignSystem.Shadows.small.color,
+                        radius: ModernDesignSystem.Shadows.small.radius,
+                        x: ModernDesignSystem.Shadows.small.x,
+                        y: ModernDesignSystem.Shadows.small.y
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Medication Frequency Button
+
+struct MedicationFrequencyButton: View {
+    let frequency: MedicationFrequency
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Text(frequency.displayName)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(isSelected ? .white : ModernDesignSystem.Colors.textPrimary)
+                    .multilineTextAlignment(.center)
+                
+                Text(frequency.description)
+                    .font(ModernDesignSystem.Typography.caption2)
+                    .foregroundColor(isSelected ? .white.opacity(0.8) : ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 60)
             .padding(ModernDesignSystem.Spacing.sm)
             .background(
                 RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)

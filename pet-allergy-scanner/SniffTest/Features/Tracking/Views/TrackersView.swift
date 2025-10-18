@@ -26,7 +26,6 @@ struct TrackersView: View {
     @StateObject private var healthEventService = HealthEventService.shared
     @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false
-    @State private var showingHealthEvents = false
     
 enum TrackerType: String, CaseIterable {
     case health = "Health Events"
@@ -66,14 +65,11 @@ enum TrackerType: String, CaseIterable {
             }
             .navigationTitle("Trackers")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
         }
         .sheet(isPresented: $showingAddTracker) {
             AddHealthEventView()
-        }
-        .sheet(isPresented: $showingHealthEvents) {
-            if let selectedPet = petService.pets.first {
-                HealthEventListView(pet: selectedPet)
-            }
         }
     }
     
@@ -93,15 +89,17 @@ enum TrackerType: String, CaseIterable {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(ModernDesignSystem.Spacing.lg)
-        .background(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
-                .fill(ModernDesignSystem.Colors.background)
-                .shadow(
-                    color: ModernDesignSystem.Shadows.medium.color,
-                    radius: ModernDesignSystem.Shadows.medium.radius,
-                    x: ModernDesignSystem.Shadows.medium.x,
-                    y: ModernDesignSystem.Shadows.medium.y
-                )
+        .background(ModernDesignSystem.Colors.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
     }
     
@@ -177,15 +175,17 @@ struct QuickActionCard: View {
             .frame(maxWidth: .infinity)
             .frame(height: 100)
             .padding(.horizontal, ModernDesignSystem.Spacing.lg)
-            .background(
-                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
-                    .fill(ModernDesignSystem.Colors.background)
-                    .shadow(
-                        color: ModernDesignSystem.Shadows.medium.color,
-                        radius: ModernDesignSystem.Shadows.medium.radius,
-                        x: ModernDesignSystem.Shadows.medium.x,
-                        y: ModernDesignSystem.Shadows.medium.y
-                    )
+            .background(ModernDesignSystem.Colors.surface)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .shadow(
+                color: ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -229,18 +229,18 @@ struct PetHealthEventCard: View {
                 
                 Spacer()
                 
-                Button("View Events") {
-                    // TODO: Navigate to health events for this pet
-                }
-                .font(ModernDesignSystem.Typography.caption)
-                .fontWeight(.medium)
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
-                .padding(.vertical, ModernDesignSystem.Spacing.xs)
-                .background(
-                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                        .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
-                )
+            NavigationLink(destination: HealthEventListView(pet: pet)) {
+                Text("View Events")
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    .background(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                    )
+            }
             }
             
             if !recentEvents.isEmpty {
@@ -273,15 +273,17 @@ struct PetHealthEventCard: View {
             }
         }
         .padding(ModernDesignSystem.Spacing.md)
-        .background(
+        .background(ModernDesignSystem.Colors.surface)
+        .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .fill(ModernDesignSystem.Colors.background)
-                .shadow(
-                    color: ModernDesignSystem.Shadows.small.color,
-                    radius: ModernDesignSystem.Shadows.small.radius,
-                    x: ModernDesignSystem.Shadows.small.x,
-                    y: ModernDesignSystem.Shadows.small.y
-                )
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
         .task {
             // Load health events for this pet
@@ -319,15 +321,17 @@ struct TrackerEmptyStateView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(ModernDesignSystem.Spacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
-                .fill(ModernDesignSystem.Colors.background)
-                .shadow(
-                    color: ModernDesignSystem.Shadows.small.color,
-                    radius: ModernDesignSystem.Shadows.small.radius,
-                    x: ModernDesignSystem.Shadows.small.x,
-                    y: ModernDesignSystem.Shadows.small.y
-                )
+        .background(ModernDesignSystem.Colors.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
     }
 }
