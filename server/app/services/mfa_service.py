@@ -238,11 +238,14 @@ class MFAService:
             True if MFA is enabled
         """
         try:
-            user_response = self.supabase.auth.get_user()
-            if not user_response.user:
+            # Get user from database instead of auth
+            user_response = self.supabase.table("users").select("user_metadata").eq("id", user_id).execute()
+            
+            if not user_response.data:
                 return False
             
-            return user_response.user.user_metadata.get("mfa_enabled", False)
+            user_metadata = user_response.data[0].get("user_metadata", {})
+            return user_metadata.get("mfa_enabled", False)
             
         except Exception as e:
             logger.error(f"Failed to check MFA status for user {user_id}: {e}")
@@ -303,15 +306,18 @@ class MFAService:
             HTTPException: If verification fails
         """
         try:
-            # Get user's backup codes
-            user_response = self.supabase.auth.get_user()
-            if not user_response.user:
+            # Get user's backup codes from database
+            user_response = self.supabase.table("users").select("user_metadata").eq("id", user_id).execute()
+            
+            if not user_response.data:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="User not found"
                 )
             
-            backup_codes = user_response.user.user_metadata.get("mfa_backup_codes", [])
+            user_metadata = user_response.data[0].get("user_metadata", {})
+            backup_codes = user_metadata.get("mfa_backup_codes", [])
+            
             if not backup_codes:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -322,11 +328,12 @@ class MFAService:
             if code.upper() in backup_codes:
                 # Remove used code
                 backup_codes.remove(code.upper())
-                self.supabase.auth.update_user({
-                    "data": {
+                self.supabase.table("users").update({
+                    "user_metadata": {
+                        **user_metadata,
                         "mfa_backup_codes": backup_codes
                     }
-                })
+                }).eq("id", user_id).execute()
                 
                 logger.info(f"Backup code verified for user: {user_id}")
                 return True
@@ -345,3 +352,29 @@ class MFAService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to verify backup code"
             )
+    
+    def get_backup_codes_count(self, user_id: str) -> int:
+        """
+        Get the number of remaining backup codes for a user
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Number of remaining backup codes
+        """
+        try:
+            # Get user's backup codes from database
+            user_response = self.supabase.table("users").select("user_metadata").eq("id", user_id).execute()
+            
+            if not user_response.data:
+                return 0
+            
+            user_metadata = user_response.data[0].get("user_metadata", {})
+            backup_codes = user_metadata.get("mfa_backup_codes", [])
+            
+            return len(backup_codes)
+            
+        except Exception as e:
+            logger.error(f"Failed to get backup codes count for user {user_id}: {e}")
+            return 0
