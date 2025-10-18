@@ -205,6 +205,23 @@ class APIService: ObservableObject, @unchecked Sendable {
     /// Register device token with the server for push notifications
     /// - Parameter deviceToken: The device token to register
     func registerDeviceToken(_ deviceToken: String) async throws {
+        // Try authenticated endpoint first if we have a token
+        if await authToken != nil {
+            do {
+                try await registerDeviceTokenAuthenticated(deviceToken)
+                return
+            } catch {
+                print("⚠️ DEBUG: Authenticated device registration failed, trying anonymous: \(error)")
+            }
+        }
+        
+        // Fall back to anonymous endpoint
+        try await registerDeviceTokenAnonymous(deviceToken)
+    }
+    
+    /// Register device token with authentication
+    /// - Parameter deviceToken: The device token to register
+    private func registerDeviceTokenAuthenticated(_ deviceToken: String) async throws {
         guard let url = URL(string: "\(baseURL)/notifications/register-device") else {
             throw APIError.invalidURL
         }
@@ -214,7 +231,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         let request = await createRequest(url: url, method: "POST", body: requestData)
         
-        print("🔍 DEBUG: Registering device token at URL: \(url)")
+        print("🔍 DEBUG: Registering device token (authenticated) at URL: \(url)")
         print("🔍 DEBUG: Device token: \(String(deviceToken.prefix(20)))...")
         
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -231,6 +248,48 @@ class APIService: ObservableObject, @unchecked Sendable {
                 print("❌ DEBUG: Error response: \(responseData)")
             }
             throw APIError.serverError(httpResponse.statusCode)
+        }
+    }
+    
+    /// Register device token anonymously (before authentication)
+    /// - Parameter deviceToken: The device token to register
+    private func registerDeviceTokenAnonymous(_ deviceToken: String) async throws {
+        guard let url = URL(string: "\(baseURL)/notifications/register-device-anonymous") else {
+            throw APIError.invalidURL
+        }
+        
+        let payload = ["device_token": deviceToken]
+        let requestData = try JSONSerialization.data(withJSONObject: payload)
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("iOS", forHTTPHeaderField: "User-Agent")
+        request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
+        request.httpBody = requestData
+        
+        print("🔍 DEBUG: Registering device token (anonymous) at URL: \(url)")
+        print("🔍 DEBUG: Device token: \(String(deviceToken.prefix(20)))...")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("❌ DEBUG: Invalid response type")
+            throw APIError.invalidResponse
+        }
+        
+        print("🔍 DEBUG: Anonymous device token registration response: \(httpResponse.statusCode)")
+        
+        if httpResponse.statusCode != 200 {
+            if let responseData = String(data: data, encoding: .utf8) {
+                print("❌ DEBUG: Error response: \(responseData)")
+            }
+            throw APIError.serverError(httpResponse.statusCode)
+        }
+        
+        // Parse response to check if authentication is required
+        if let responseData = String(data: data, encoding: .utf8) {
+            print("🔍 DEBUG: Anonymous registration response: \(responseData)")
         }
     }
     
@@ -291,6 +350,51 @@ class APIService: ObservableObject, @unchecked Sendable {
     /// - Returns: The current auth token or nil if not set
     func getAuthToken() async -> String? {
         return await authToken
+    }
+    
+    /// Debug method to check authentication state
+    func debugAuthState() async {
+        let token = await authToken
+        let refreshToken = await refreshToken
+        let expiry = await tokenExpiry
+        let hasToken = await hasAuthToken
+        
+        print("🔍 DEBUG AUTH STATE:")
+        print("  - Has Token: \(hasToken)")
+        print("  - Token: \(token?.prefix(20) ?? "nil")...")
+        print("  - Refresh Token: \(refreshToken?.prefix(20) ?? "nil")...")
+        print("  - Expiry: \(expiry?.description ?? "nil")")
+        print("  - Should Refresh: \(await shouldRefreshToken())")
+        
+        // Additional debugging for keychain access
+        print("🔍 DEBUG KEYCHAIN ACCESS:")
+        let keychainToken = await KeychainHelper.read(forKey: authTokenKey)
+        print("  - Keychain Token: \(keychainToken?.prefix(20) ?? "nil")...")
+        print("  - In-memory Token: \(_authToken?.prefix(20) ?? "nil")...")
+        print("  - Tokens Match: \(token == keychainToken)")
+    }
+    
+    /// Test method to verify authentication is working
+    func testAuthentication() async throws {
+        print("🧪 TESTING AUTHENTICATION...")
+        
+        // Check if we have a token
+        let hasToken = await hasAuthToken
+        print("  - Has Token: \(hasToken)")
+        
+        if !hasToken {
+            print("❌ No authentication token found!")
+            throw APIError.authenticationError
+        }
+        
+        // Try to get current user to verify token is valid
+        do {
+            let user = try await getCurrentUser()
+            print("✅ Authentication test successful! User: \(user.email)")
+        } catch {
+            print("❌ Authentication test failed: \(error)")
+            throw error
+        }
     }
     
     // MARK: - Generic HTTP Methods
@@ -453,10 +557,15 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Create URL request with authentication headers and security features
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) async -> URLRequest {
+        print("🔍 DEBUG: Creating request for URL: \(url)")
+        print("🔍 DEBUG: Method: \(method)")
+        
         // Check if token needs refresh before making the request
         if await shouldRefreshToken() {
+            print("🔄 DEBUG: Token needs refresh, attempting refresh...")
             do {
                 try await refreshAuthToken()
+                print("✅ DEBUG: Token refresh successful")
             } catch {
                 print("⚠️ Failed to refresh token: \(error)")
                 // Continue with existing token, let the request fail if needed
@@ -474,7 +583,10 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
         // Add authorization header with debug logging
-        if let token = await authToken {
+        let token = await authToken
+        print("🔍 DEBUG: Retrieved token from keychain: \(token?.prefix(20) ?? "nil")...")
+        
+        if let token = token {
             print("🔍 DEBUG: Setting Authorization header in createRequest")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             
@@ -486,6 +598,7 @@ class APIService: ObservableObject, @unchecked Sendable {
             }
         } else {
             print("⚠️ DEBUG: No auth token available in createRequest")
+            print("⚠️ DEBUG: This will result in a 403 error from the server")
         }
         
         if let body = body {
@@ -494,6 +607,18 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         // Set timeout for security
         request.timeoutInterval = 30.0
+        
+        // Print all headers for debugging
+        print("🔍 DEBUG: Final request headers:")
+        if let headers = request.allHTTPHeaderFields {
+            for (key, value) in headers {
+                if key.lowercased() == "authorization" {
+                    print("   \(key): \(value.prefix(30))...")
+                } else {
+                    print("   \(key): \(value)")
+                }
+            }
+        }
         
         return request
     }
@@ -792,7 +917,7 @@ extension APIService {
 extension APIService {
     /// Create a new scan
     func createScan(_ scan: ScanCreate) async throws -> Scan {
-        guard let url = URL(string: "\(baseURL)/scans/") else {
+        guard let url = URL(string: "\(baseURL)/scanning/") else {
             throw APIError.invalidURL
         }
         
@@ -809,7 +934,7 @@ extension APIService {
     
     /// Analyze scan text
     func analyzeScan(_ analysisRequest: ScanAnalysisRequest) async throws -> Scan {
-        guard let url = URL(string: "\(baseURL)/scans/analyze") else {
+        guard let url = URL(string: "\(baseURL)/scanning/analyze") else {
             throw APIError.invalidURL
         }
         
@@ -826,7 +951,7 @@ extension APIService {
     
     /// Get user's scans
     func getScans(petId: String? = nil) async throws -> [Scan] {
-        var urlString = "\(baseURL)/scans/"
+        var urlString = "\(baseURL)/scanning/"
         if let petId = petId {
             urlString += "?pet_id=\(petId)"
         }
@@ -841,7 +966,7 @@ extension APIService {
     
     /// Get specific scan
     func getScan(id: String) async throws -> Scan {
-        guard let url = URL(string: "\(baseURL)/scans/\(id)") else {
+        guard let url = URL(string: "\(baseURL)/scanning/\(id)") else {
             throw APIError.invalidURL
         }
         
@@ -851,7 +976,7 @@ extension APIService {
     
     /// Clear all scans for the current user
     func clearAllScans() async throws {
-        guard let url = URL(string: "\(baseURL)/scans/clear") else {
+        guard let url = URL(string: "\(baseURL)/scanning/clear") else {
             throw APIError.invalidURL
         }
         

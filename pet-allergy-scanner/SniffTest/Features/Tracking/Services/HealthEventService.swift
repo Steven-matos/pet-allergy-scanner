@@ -52,6 +52,17 @@ class HealthEventService: ObservableObject {
         isLoading = true
         error = nil
         
+        // Debug authentication state before making request
+        await apiService.debugAuthState()
+        
+        // Test authentication before making the request
+        do {
+            try await apiService.testAuthentication()
+        } catch {
+            print("❌ DEBUG: Authentication test failed: \(error)")
+            throw error
+        }
+        
         do {
             let healthEventCreate = HealthEventCreate(
                 petId: petId,
