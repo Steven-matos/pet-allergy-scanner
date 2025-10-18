@@ -187,7 +187,6 @@ def get_current_user(
                 
                 logger.info(f"Creating user with data: {create_data}")
                 create_response = supabase.table("users").insert(create_data).execute()
-                
                 logger.info(f"Create response: {create_response}")
                 logger.info(f"Create response data: {create_response.data}")
                 logger.info(f"Create response error: {getattr(create_response, 'error', None)}")
