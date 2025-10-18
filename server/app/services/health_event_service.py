@@ -54,7 +54,10 @@ class HealthEventService:
             response = supabase.table("health_events").insert(event_data).execute()
 
             if response.data:
-                return response.data[0]
+                # Add event_category to the response for proper serialization
+                event_result = response.data[0].copy()
+                event_result["event_category"] = health_event_create.event_category.value
+                return event_result
             else:
                 raise Exception("Failed to create health event")
 
@@ -74,7 +77,10 @@ class HealthEventService:
             response = supabase.table("health_events").select("*").eq("id", event_id).eq("user_id", user_id).execute()
 
             if response.data:
-                return response.data[0]
+                event = response.data[0]
+                # Add event_category to the response for proper serialization
+                event["event_category"] = event.get("event_category", "physical")  # Default fallback
+                return event
             return None
 
         except Exception as e:
@@ -94,7 +100,14 @@ class HealthEventService:
         try:
             response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
 
-            return response.data if response.data else []
+            if response.data:
+                # Add event_category to each event for proper serialization
+                events = []
+                for event in response.data:
+                    event["event_category"] = event.get("event_category", "physical")  # Default fallback
+                    events.append(event)
+                return events
+            return []
 
         except Exception as e:
             logger.error(f"Error getting health events for pet: {e}")
@@ -114,7 +127,14 @@ class HealthEventService:
         try:
             response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).eq("event_category", category).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
 
-            return response.data if response.data else []
+            if response.data:
+                # Add event_category to each event for proper serialization
+                events = []
+                for event in response.data:
+                    event["event_category"] = event.get("event_category", "physical")  # Default fallback
+                    events.append(event)
+                return events
+            return []
 
         except Exception as e:
             logger.error(f"Error getting health events by category: {e}")
@@ -152,7 +172,10 @@ class HealthEventService:
             response = supabase.table("health_events").update(update_data).eq("id", event_id).eq("user_id", user_id).execute()
 
             if response.data:
-                return response.data[0]
+                event = response.data[0]
+                # Add event_category to the response for proper serialization
+                event["event_category"] = event.get("event_category", "physical")  # Default fallback
+                return event
             return None
 
         except Exception as e:

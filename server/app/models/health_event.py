@@ -112,6 +112,7 @@ class HealthEventResponse(HealthEventBase):
     id: str
     pet_id: str
     user_id: str
+    event_category: HealthEventCategory
     created_at: datetime
     updated_at: datetime
     
