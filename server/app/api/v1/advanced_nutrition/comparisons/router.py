@@ -31,8 +31,16 @@ def get_comparison_service():
     return comparison_service
 
 
+@router.post("", response_model=FoodComparisonResponse)
+async def create_food_comparison_no_slash(
+    comparison: FoodComparisonCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create food comparison (without trailing slash)"""
+    return await create_food_comparison_with_slash(comparison, current_user)
+
 @router.post("/", response_model=FoodComparisonResponse)
-async def create_food_comparison(
+async def create_food_comparison_with_slash(
     comparison: FoodComparisonCreate,
     current_user: User = Depends(get_current_user)
 ):

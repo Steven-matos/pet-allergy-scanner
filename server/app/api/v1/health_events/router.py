@@ -5,7 +5,6 @@ CRUD operations for pet health event tracking
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
-from datetime import datetime
 
 from app.database import get_db
 from app.core.security.jwt_handler import get_current_user
@@ -23,8 +22,17 @@ from app.services.health_event_service import HealthEventService
 router = APIRouter(prefix="/health-events", tags=["health-events"])
 
 
+@router.post("", response_model=HealthEventResponse)
+async def create_health_event_no_slash(
+    event: HealthEventCreate,
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Create health event (without trailing slash)"""
+    return await create_health_event_with_slash(event, supabase, current_user)
+
 @router.post("/", response_model=HealthEventResponse)
-async def create_health_event(
+async def create_health_event_with_slash(
     event: HealthEventCreate,
     supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)

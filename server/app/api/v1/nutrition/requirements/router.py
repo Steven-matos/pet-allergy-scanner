@@ -20,8 +20,16 @@ from app.core.security.jwt_handler import get_current_user
 router = APIRouter(prefix="/requirements", tags=["nutrition-requirements"])
 
 
+@router.post("", response_model=NutritionalRequirementsResponse)
+async def create_nutritional_requirements_no_slash(
+    requirements: NutritionalRequirementsCreate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Create nutritional requirements (without trailing slash)"""
+    return await create_nutritional_requirements_with_slash(requirements, current_user)
+
 @router.post("/", response_model=NutritionalRequirementsResponse)
-async def create_nutritional_requirements(
+async def create_nutritional_requirements_with_slash(
     requirements: NutritionalRequirementsCreate,
     current_user: UserResponse = Depends(get_current_user)
 ):

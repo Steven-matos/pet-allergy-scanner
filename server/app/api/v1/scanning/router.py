@@ -19,8 +19,16 @@ import base64
 router = APIRouter()
 logger = get_logger(__name__)
 
+@router.post("", response_model=ScanResponse)
+async def create_scan_no_slash(
+    scan_data: ScanCreate,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Create scan (without trailing slash)"""
+    return await create_scan_with_slash(scan_data, current_user)
+
 @router.post("/", response_model=ScanResponse)
-async def create_scan(
+async def create_scan_with_slash(
     scan_data: ScanCreate,
     current_user: UserResponse = Depends(get_current_user)
 ):

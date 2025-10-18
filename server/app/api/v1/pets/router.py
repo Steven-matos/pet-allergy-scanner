@@ -16,8 +16,17 @@ from app.utils.logging_config import get_logger
 router = APIRouter()
 logger = get_logger(__name__)
 
+@router.post("", response_model=PetResponse)
+async def create_pet_no_slash(
+    pet_data: PetCreate,
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Create pet (without trailing slash)"""
+    return await create_pet_with_slash(pet_data, current_user, credentials)
+
 @router.post("/", response_model=PetResponse)
-async def create_pet(
+async def create_pet_with_slash(
     pet_data: PetCreate,
     current_user: UserResponse = Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials = Depends(security)

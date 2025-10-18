@@ -24,8 +24,17 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/feeding", tags=["nutrition-feeding"])
 
 
+@router.post("", response_model=FeedingRecordResponse)
+async def record_feeding_no_slash(
+    feeding_record: FeedingRecordCreate,
+    supabase = Depends(get_db),
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """Record feeding (without trailing slash)"""
+    return await record_feeding_with_slash(feeding_record, supabase, current_user)
+
 @router.post("/", response_model=FeedingRecordResponse)
-async def record_feeding(
+async def record_feeding_with_slash(
     feeding_record: FeedingRecordCreate,
     supabase = Depends(get_db),
     current_user: UserResponse = Depends(get_current_user)

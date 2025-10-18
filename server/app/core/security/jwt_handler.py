@@ -21,6 +21,9 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Don't auto-raise on missing header
 
+# Debug: Log HTTPBearer configuration
+logger.info(f"🔍 DEBUG: HTTPBearer configured with auto_error=False")
+
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
@@ -48,6 +51,7 @@ def get_current_user(
     # Check if credentials were provided
     if credentials is None:
         logger.error("❌ No Authorization header found in request")
+        logger.error("🔍 DEBUG: HTTPBearer security instance: auto_error=False")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated",

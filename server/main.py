@@ -80,7 +80,8 @@ app = FastAPI(
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
-    openapi_url="/openapi.json" if settings.debug else None
+    openapi_url="/openapi.json" if settings.debug else None,
+    redirect_slashes=False  # Prevent 307 redirects that can cause Authorization header loss
 )
 
 # Add security middleware (order matters!)
