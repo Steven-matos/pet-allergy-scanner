@@ -5,6 +5,7 @@ Provides consistent logging setup across all modules with clean console output
 
 import logging
 import sys
+import os
 from typing import Optional
 from app.core.config import settings
 
@@ -56,14 +57,17 @@ def setup_logging(log_level: Optional[str] = None) -> None:
     if log_level:
         level = getattr(logging, log_level.upper(), logging.ERROR)
     else:
-        # Production: ERROR only to avoid Railway rate limits
-        # Development: INFO for debugging
+        # Production and Railway deployment: ERROR only to avoid Railway rate limits
+        # Development: INFO for debugging, but reduce verbosity
         if settings.environment == "production":
+            level = logging.ERROR
+        elif settings.environment in ["staging", "production"] or "railway" in os.environ.get("RAILWAY_PROJECT_ID", ""):
+            # Railway deployment - be more aggressive about log reduction
             level = logging.ERROR
         elif settings.verbose_logging and settings.environment == "development":
             level = logging.DEBUG
         else:
-            level = getattr(logging, settings.log_level.upper(), logging.INFO)
+            level = logging.WARNING  # Default to WARNING to reduce noise
     
     # Create formatters based on environment
     if settings.environment == "production":
@@ -105,19 +109,19 @@ def _suppress_noisy_loggers() -> None:
     Suppress noisy third-party loggers to reduce console clutter
     In production: Only log CRITICAL errors to avoid Railway rate limits
     """
-    # In production, suppress almost all third-party logging
-    if settings.environment == "production":
+    # In production and Railway, suppress almost all third-party logging
+    if settings.environment == "production" or settings.environment in ["staging", "production"] or "railway" in os.environ.get("RAILWAY_PROJECT_ID", ""):
         noisy_loggers = {
             "uvicorn.access": logging.CRITICAL,     # Disable access logs completely
-            "uvicorn.error": logging.ERROR,         # Only critical uvicorn errors
+            "uvicorn.error": logging.CRITICAL,      # Disable uvicorn errors completely
             "httpx": logging.CRITICAL,              # Disable HTTP client logs
             "httpcore": logging.CRITICAL,           # Disable HTTP core logs
-            "supabase": logging.ERROR,              # Only Supabase errors
+            "supabase": logging.CRITICAL,           # Disable Supabase logs completely
             "urllib3": logging.CRITICAL,            # Disable urllib3 logs
             "asyncio": logging.CRITICAL,            # Disable asyncio logs
             "multipart": logging.CRITICAL,          # Disable multipart logs
-            "fastapi": logging.ERROR,               # Only FastAPI errors
-            "starlette": logging.ERROR,             # Only Starlette errors
+            "fastapi": logging.CRITICAL,            # Disable FastAPI logs completely
+            "starlette": logging.CRITICAL,          # Disable Starlette logs completely
         }
     else:
         # Development: Show warnings and above

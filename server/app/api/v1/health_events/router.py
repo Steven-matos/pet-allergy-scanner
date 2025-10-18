@@ -42,15 +42,15 @@ async def create_health_event_with_slash(
     """
     # Verify pet ownership
     pet_response = supabase.table("pets").select("id").eq("id", event.pet_id).eq("user_id", current_user.id).execute()
-    
+
     if not pet_response.data:
         raise HTTPException(status_code=404, detail="Pet not found")
-    
+
     # Create health event using service
     db_event = await HealthEventService.create_health_event(
         event, current_user.id, supabase
     )
-    
+
     return HealthEventResponse(**db_event)
 
 
@@ -85,14 +85,14 @@ async def get_pet_health_events(
         events = await HealthEventService.get_health_events_for_pet(
             pet_id, current_user.id, supabase, limit, offset
         )
-    
+
     # Get total count
     total = await HealthEventService.get_health_events_count_for_pet(
         pet_id, current_user.id, supabase
     )
-    
+
     return HealthEventListResponse(
-        events=[HealthEventResponse(**event) for event in events],
+        events=events,  # Events are already dictionaries from the service
         total=total,
         limit=limit,
         offset=offset
@@ -111,11 +111,11 @@ async def get_health_event(
     event = await HealthEventService.get_health_event_by_id(
         event_id, current_user.id, supabase
     )
-    
+
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
-    
-    return HealthEventResponse(**event)
+
+    return event  # Event is already a dictionary from the service
 
 
 @router.put("/{event_id}", response_model=HealthEventResponse)
@@ -131,11 +131,11 @@ async def update_health_event(
     event = await HealthEventService.update_health_event(
         event_id, updates, current_user.id, supabase
     )
-    
+
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
-    
-    return HealthEventResponse(**event)
+
+    return event  # Event is already a dictionary from the service
 
 
 @router.delete("/{event_id}")

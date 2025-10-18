@@ -4,7 +4,7 @@ Pet health event tracking for vomiting, shedding, vaccinations, etc.
 """
 
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, List
 from enum import Enum
 
@@ -38,7 +38,8 @@ class HealthEventBase(BaseModel):
     severity_level: int = Field(default=1, ge=1, le=5)
     event_date: datetime = Field(default_factory=datetime.utcnow)
     
-    @validator('event_type')
+    @field_validator('event_type')
+    @classmethod
     def validate_event_type(cls, v):
         """Validate event type and set category"""
         return v
@@ -73,8 +74,8 @@ class HealthEventCreate(HealthEventBase):
     """Schema for creating health events"""
     pet_id: str = Field(..., description="Pet ID for the health event")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "pet_id": "123e4567-e89b-12d3-a456-426614174000",
                 "event_type": "vomiting",
@@ -84,6 +85,7 @@ class HealthEventCreate(HealthEventBase):
                 "event_date": "2025-01-15T08:30:00Z"
             }
         }
+    )
 
 
 class HealthEventUpdate(BaseModel):
@@ -93,8 +95,8 @@ class HealthEventUpdate(BaseModel):
     severity_level: Optional[int] = Field(None, ge=1, le=5)
     event_date: Optional[datetime] = None
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "title": "Updated vomiting episode",
                 "notes": "Added more details about the incident",
@@ -102,6 +104,7 @@ class HealthEventUpdate(BaseModel):
                 "event_date": "2025-01-15T09:00:00Z"
             }
         }
+    )
 
 
 class HealthEventResponse(HealthEventBase):
@@ -112,9 +115,9 @@ class HealthEventResponse(HealthEventBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
-        json_schema_extra = {
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "pet_id": "123e4567-e89b-12d3-a456-426614174001",
@@ -129,6 +132,7 @@ class HealthEventResponse(HealthEventBase):
                 "updated_at": "2025-01-15T08:30:00Z"
             }
         }
+    )
 
 
 class HealthEventListResponse(BaseModel):
@@ -138,8 +142,8 @@ class HealthEventListResponse(BaseModel):
     limit: int
     offset: int
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "events": [
                     {
@@ -161,3 +165,4 @@ class HealthEventListResponse(BaseModel):
                 "offset": 0
             }
         }
+    )

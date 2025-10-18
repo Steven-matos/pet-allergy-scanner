@@ -42,12 +42,13 @@ async def init_db():
                 logger.info(f"Testing database connection (attempt {attempt + 1}/{max_retries})...")
                 response = supabase.table("users").select("id").limit(1).execute()
                 logger.info("✅ Database connection established successfully")
-                
-                # Initialize connection pool monitoring (non-blocking)
-                asyncio.create_task(_start_connection_monitoring())
-                
+
+                # Initialize connection pool monitoring (non-blocking) - only in development
+                if settings.environment != "production":
+                    asyncio.create_task(_start_connection_monitoring())
+
                 return True
-                
+
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Database connection attempt {attempt + 1} failed: {error_msg}")
@@ -88,10 +89,10 @@ async def _start_connection_monitoring():
                 # Reset failure counter on success
                 consecutive_failures = 0
                 
-                # Log performance metrics
-                if response_time > 1.0:  # Log slow queries
+                # Log performance metrics - only in development
+                if settings.environment != "production" and response_time > 1.0:
                     logger.warning(f"Slow database query: {response_time:.2f}s")
-                
+
                 # Sleep for 30 seconds before next check
                 await asyncio.sleep(30)
                 
@@ -106,13 +107,16 @@ async def _start_connection_monitoring():
                         logger.error("Stopping database monitoring due to persistent DNS issues")
                         break
                 else:
-                    logger.error(f"Database health check failed: {error_msg}")
-                
+                    # Only log errors in development to reduce production noise
+                    if settings.environment != "production":
+                        logger.error(f"Database health check failed: {error_msg}")
+
                 # Check more frequently on failure, but stop if too many consecutive failures
                 if consecutive_failures >= max_consecutive_failures:
-                    logger.error("Stopping database monitoring due to persistent connection issues")
+                    if settings.environment != "production":
+                        logger.error("Stopping database monitoring due to persistent connection issues")
                     break
-                
+
                 await asyncio.sleep(10)  # Check more frequently on failure
     
     # Start monitoring task
