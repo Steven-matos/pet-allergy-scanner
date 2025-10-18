@@ -16,6 +16,7 @@ Complete API reference for the Pet Allergy Scanner backend service.
 - [Nutrition API](#nutrition-api)
 - [Food Management](#food-management)
 - [Advanced Nutrition](#advanced-nutrition)
+- [Health Events](#health-events)
 - [Multi-Factor Authentication](#multi-factor-authentication)
 - [Push Notifications](#push-notifications)
 - [GDPR Compliance](#gdpr-compliance)
@@ -28,6 +29,29 @@ Complete API reference for the Pet Allergy Scanner backend service.
 Development: http://localhost:8000/api/v1
 Production: https://snifftest-api-production.up.railway.app/api/v1
 ```
+
+## Current API Structure
+
+The API is organized into the following main domains:
+
+- **Authentication** (`/api/v1/auth`) - User registration, login, profile management
+- **Pets** (`/api/v1/pets`) - Pet profile management and CRUD operations
+- **Scanning** (`/api/v1/scanning`) - OCR scanning and ingredient analysis
+- **Ingredients** (`/api/v1/ingredients`) - Ingredient safety database and analysis
+- **Nutrition** (`/api/v1/nutrition`) - Comprehensive nutrition tracking
+  - `/requirements` - Nutritional requirements for pets
+  - `/analysis` - Food analysis and compatibility
+  - `/feeding` - Feeding logs and meal tracking
+  - `/goals` - Calorie goals and targets
+  - `/summaries` - Daily nutrition summaries
+  - `/advanced` - Advanced analytics and insights
+- **Food Management** (`/api/v1/food-management`) - Food database and barcode lookup
+- **Advanced Nutrition** (`/api/v1/advanced-nutrition`) - Weight tracking, trends, comparisons
+- **Health Events** (`/api/v1/health-events`) - Pet health event tracking
+- **MFA** (`/api/v1/mfa`) - Multi-factor authentication
+- **Notifications** (`/api/v1/notifications`) - Push notification management
+- **GDPR** (`/api/v1/gdpr`) - Data export and deletion
+- **Monitoring** (`/api/v1/monitoring`) - Health checks and metrics
 
 ## Interactive API Documentation
 
@@ -1129,6 +1153,87 @@ Get comprehensive advanced nutrition dashboard.
 
 ```http
 GET /api/v1/advanced-nutrition/analytics/dashboard/{pet_id}
+Authorization: Bearer <jwt_token>
+```
+
+---
+
+## Health Events
+
+### Create Health Event
+
+Create a new health event for a pet.
+
+```http
+POST /api/v1/health-events
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "event_type": "vet_visit",
+  "title": "Annual Checkup",
+  "description": "Regular annual veterinary checkup",
+  "event_date": "2025-10-10T10:30:00Z",
+  "notes": "Pet is healthy, no issues found"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "event-uuid-here",
+  "user_id": "user-uuid-here",
+  "pet_id": "pet-uuid-here",
+  "event_type": "vet_visit",
+  "title": "Annual Checkup",
+  "description": "Regular annual veterinary checkup",
+  "event_date": "2025-10-10T10:30:00Z",
+  "notes": "Pet is healthy, no issues found",
+  "created_at": "2025-10-10T10:30:00Z",
+  "updated_at": "2025-10-10T10:30:00Z"
+}
+```
+
+### Get Health Events
+
+Retrieve health events for a pet.
+
+```http
+GET /api/v1/health-events?pet_id={pet_id}&limit=20&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+### Get Specific Health Event
+
+Retrieve a specific health event by ID.
+
+```http
+GET /api/v1/health-events/{event_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Update Health Event
+
+Update an existing health event.
+
+```http
+PUT /api/v1/health-events/{event_id}
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "title": "Updated Checkup",
+  "notes": "Updated notes about the visit"
+}
+```
+
+### Delete Health Event
+
+Delete a health event.
+
+```http
+DELETE /api/v1/health-events/{event_id}
 Authorization: Bearer <jwt_token>
 ```
 

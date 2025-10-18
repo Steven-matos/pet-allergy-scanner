@@ -267,21 +267,13 @@ app/
 │   ├── nutrition.py          # Nutritional data models
 │   ├── advanced_nutrition.py # Weight tracking and analytics models
 │   ├── food_items.py         # Food database models
-│   └── calorie_goals.py      # Calorie goal tracking models
-├── routers/
-│   ├── auth.py               # Authentication and user management
-│   ├── pets.py               # Pet CRUD operations and management
-│   ├── ingredients.py        # Ingredient analysis and safety data
-│   ├── scans.py              # Scan processing and analysis
-│   ├── nutritional_analysis.py # Nutritional analysis and calculations
-│   ├── food_management.py    # Food database management with barcode
-│   ├── advanced_nutrition.py # Weight tracking, trends, comparisons
-│   ├── mfa.py                # Multi-factor authentication
-│   ├── gdpr.py               # GDPR compliance and data management
-│   ├── monitoring.py         # Health monitoring and metrics
-│   ├── notifications.py      # Push notification management
-│   └── images.py             # Image processing and optimization
+│   ├── calorie_goals.py      # Calorie goal tracking models
+│   └── health_event.py       # Health event tracking models
 ├── api/v1/
+│   ├── auth/                 # Authentication and user management
+│   ├── pets/                 # Pet CRUD operations and management
+│   ├── ingredients/          # Ingredient analysis and safety data
+│   ├── scanning/             # Scan processing and analysis
 │   ├── nutrition/            # Structured nutrition API
 │   │   ├── analysis/         # Food analysis endpoints
 │   │   ├── feeding/          # Feeding log endpoints
@@ -289,11 +281,18 @@ app/
 │   │   ├── requirements/     # Nutritional requirements
 │   │   ├── summaries/        # Daily nutrition summaries
 │   │   └── advanced/         # Advanced analytics and insights
-│   └── advanced_nutrition/   # Advanced nutrition features
-│       ├── weight/           # Weight tracking endpoints
-│       ├── trends/           # Nutritional trends
-│       ├── comparisons/      # Food comparison endpoints
-│       └── analytics/        # Health insights and patterns
+│   ├── advanced_nutrition/   # Advanced nutrition features
+│   │   ├── weight/           # Weight tracking endpoints
+│   │   ├── trends/           # Nutritional trends
+│   │   ├── comparisons/      # Food comparison endpoints
+│   │   └── analytics/            # Health insights and patterns
+│   ├── food_management/      # Food database management with barcode
+│   ├── health_events/        # Pet health event tracking
+│   ├── mfa/                  # Multi-factor authentication
+│   ├── gdpr/                 # GDPR compliance and data management
+│   ├── monitoring/           # Health monitoring and metrics
+│   ├── notifications/         # Push notification management
+│   └── images/               # Image processing and optimization
 ├── services/
 │   ├── gdpr_service.py       # Data export and deletion services
 │   ├── mfa_service.py        # MFA implementation and management
@@ -303,11 +302,12 @@ app/
 │   ├── nutritional_trends_service.py # Trend analysis
 │   ├── food_comparison_service.py # Food comparison logic
 │   ├── weight_tracking_service.py # Weight tracking service
-│   └── advanced_analytics_service.py # AI-powered insights
+│   ├── advanced_analytics_service.py # AI-powered insights
+│   └── health_event_service.py # Health event management
 ├── middleware/
 │   ├── security.py           # Security headers and protection
 │   ├── audit.py              # Comprehensive audit logging
-│   └── request_limits.py     # Multi-tier rate limiting
+│   └── request_limits.py      # Multi-tier rate limiting
 └── utils/
     ├── error_handling.py     # Centralized error management
     ├── security.py           # Security utilities and validation
@@ -720,6 +720,7 @@ Complete API reference is available in [API_DOCS.md](API_DOCS.md).
 - **Nutrition API**: Comprehensive nutrition tracking and analysis
 - **Food Management**: Searchable food database with barcode lookup
 - **Advanced Nutrition**: Weight tracking, trends, and food comparisons
+- **Health Events**: Pet health tracking and medical event logging
 - **Push Notifications**: Birthday reminders and updates
 - **GDPR Compliance**: Data export and deletion
 - **Health Monitoring**: System status and metrics
@@ -755,6 +756,7 @@ Built on **Supabase (PostgreSQL)** with Row Level Security (RLS) for data protec
 | `pet_weight_records` | Weight history | Weight measurements over time |
 | `pet_weight_goals` | Weight targets | Weight loss/gain goals |
 | `food_comparisons` | Product comparisons | Side-by-side food analysis |
+| `health_events` | Health tracking | Vet visits, medical events, health notes |
 
 ### Key Features
 - **Row Level Security**: Users can only access their own data

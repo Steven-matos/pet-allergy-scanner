@@ -186,7 +186,9 @@ server/
 │   ├── 01_complete_database_schema.sql
 │   └── 02_storage_setup.sql
 ├── importing/                     # Data import utilities
-│   └── FULL_IMPORT_GUIDE.md      # Import documentation
+│   ├── import_no_duplicates.py   # Main import script
+│   ├── count_products.py         # Product counting utility
+│   └── README.md                 # Import documentation
 ├── keys/                          # APNs certificates (gitignored)
 │   └── AuthKey_*.p8              # Apple Push keys
 ├── logs/                          # Application logs (gitignored)
@@ -197,14 +199,12 @@ server/
 │   ├── check-deployment-ready.py # Deployment checks
 │   └── generate-railway-vars.py  # Env generator
 ├── standardizor/                  # Data standardization
-│   └── update_nutritional_info.py # Nutrition updates
+│   ├── update_nutritional_info.py # Nutrition updates
+│   └── README.md                  # Standardization docs
 ├── tests/                         # Test suite
-│   ├── database/                 # Database tests
-│   ├── integration/              # Integration tests
-│   ├── notifications/            # APNs tests
-│   ├── nutrition/                # Nutrition tests
-│   ├── security/                 # Security tests
-│   └── unit/                     # Unit tests
+│   ├── unit/                     # Unit tests
+│   ├── run_tests.py              # Test runner
+│   └── README.md                 # Test documentation
 ├── main.py                        # FastAPI app entry
 ├── start.py                       # Development server
 ├── requirements.txt               # Dependencies
@@ -241,6 +241,34 @@ Required variables (see `env.example` for complete list):
 - `ALLOWED_ORIGINS_STR` - Comma-separated allowed origins
 - `ALLOWED_HOSTS_STR` - Comma-separated trusted hosts
 
+### Rate Limiting
+- `RATE_LIMIT_PER_MINUTE` - General rate limit (default: 60)
+- `AUTH_RATE_LIMIT_PER_MINUTE` - Auth endpoint rate limit (default: 5)
+
+### Database Configuration
+- `DATABASE_POOL_SIZE` - Connection pool size (default: 10)
+- `DATABASE_TIMEOUT` - Connection timeout in seconds (default: 30)
+
+### File Upload Limits
+- `MAX_FILE_SIZE_MB` - Maximum file size for uploads (default: 10)
+- `MAX_REQUEST_SIZE_MB` - Maximum request size (default: 50)
+
+### Security Features
+- `ENABLE_MFA` - Enable multi-factor authentication (default: true)
+- `ENABLE_AUDIT_LOGGING` - Enable security audit logging (default: true)
+- `SESSION_TIMEOUT_MINUTES` - Session timeout in minutes (default: 480)
+
+### GDPR Compliance
+- `DATA_RETENTION_DAYS` - Data retention period in days (default: 365)
+- `ENABLE_DATA_EXPORT` - Enable data export functionality (default: true)
+- `ENABLE_DATA_DELETION` - Enable account deletion (default: true)
+
+### Logging & Environment
+- `LOG_LEVEL` - Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- `VERBOSE_LOGGING` - Enable detailed debug logging (default: false)
+- `DEBUG` - General debug mode (default: false)
+- `ENVIRONMENT` - Environment type (development, staging, production)
+
 ## 🧪 Testing
 
 Run the comprehensive test suite:
@@ -253,10 +281,8 @@ pytest
 pytest --cov=app --cov-report=html tests/
 
 # Specific test categories
-pytest tests/nutrition/           # Nutrition tests
-pytest tests/security/            # Security audit
-pytest tests/notifications/       # APNs tests
-pytest tests/database/            # Database policy tests
+pytest tests/unit/                # Unit tests
+pytest tests/                     # All working tests
 
 # Run test utility
 python tests/run_tests.py
@@ -403,12 +429,9 @@ python count_products.py
 
 # Import data (skips duplicates)
 python import_no_duplicates.py
-
-# Analyze skipped products
-python analyze_skipped_products.py
 ```
 
-See `importing/FULL_IMPORT_GUIDE.md` for detailed instructions.
+See `importing/README.md` for detailed instructions.
 
 ### Nutritional Data Standardization
 ```bash
@@ -499,8 +522,8 @@ The API provides comprehensive analytics for pet nutrition:
 ## 📚 Documentation
 
 - [`API_DOCS.md`](../API_DOCS.md) - Comprehensive API reference
-- [`importing/FULL_IMPORT_GUIDE.md`](./importing/FULL_IMPORT_GUIDE.md) - Data import guide
-- [`standardizor/NUTRITIONAL_INFO_API_REFERENCE.md`](./standardizor/NUTRITIONAL_INFO_API_REFERENCE.md) - Nutrition standards
+- [`importing/README.md`](./importing/README.md) - Data import guide
+- [`standardizor/README.md`](./standardizor/README.md) - Data standardization guide
 - [FastAPI Docs](https://fastapi.tiangolo.com/) - Framework documentation
 - [Supabase Docs](https://supabase.com/docs) - Database & Auth
 
