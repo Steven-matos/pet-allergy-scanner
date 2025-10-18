@@ -306,8 +306,8 @@ async def analyze_scan(
         # Perform ingredient analysis
         analysis_result = await analyze_ingredients(
             scan["raw_text"],
-            pet["allergies"],
-            pet["dietary_restrictions"]
+            pet.get("known_sensitivities", []),
+            []  # No dietary_restrictions field in database
         )
         
         # Update scan with analysis results
