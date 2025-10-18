@@ -63,28 +63,44 @@ struct HealthEventDetailView: View {
                     Button("Close") {
                         dismiss()
                     }
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         if isEditing {
                             Button("Cancel") {
                                 cancelEditing()
                             }
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             
                             Button("Save") {
                                 saveChanges()
                             }
+                            .font(ModernDesignSystem.Typography.body)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .fill(ModernDesignSystem.Colors.primary)
+                            )
                             .disabled(!isFormValid || isSubmitting)
                         } else {
                             Button("Edit") {
                                 startEditing()
                             }
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
                             
                             Button("Delete") {
                                 showingDeleteAlert = true
                             }
-                            .foregroundColor(.red)
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.error)
                         }
                     }
                 }
@@ -123,7 +139,7 @@ struct HealthEventDetailView: View {
                             .fill(Color(hex: event.eventType.colorCode).opacity(0.1))
                     )
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(event.eventType.displayName)
                         .font(ModernDesignSystem.Typography.title2)
                         .fontWeight(.bold)
@@ -149,6 +165,10 @@ struct HealthEventDetailView: View {
                 }
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
                 
                 Text("For \(pet.name)")
                     .font(ModernDesignSystem.Typography.body)
@@ -159,13 +179,17 @@ struct HealthEventDetailView: View {
         }
         .padding(ModernDesignSystem.Spacing.lg)
         .background(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.large)
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
                 .shadow(
-                    color: ModernDesignSystem.Shadows.medium.color,
-                    radius: ModernDesignSystem.Shadows.medium.radius,
-                    x: ModernDesignSystem.Shadows.medium.x,
-                    y: ModernDesignSystem.Shadows.medium.y
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
                 )
         )
     }
@@ -186,7 +210,13 @@ struct HealthEventDetailView: View {
                 
                 if isEditing {
                     TextField("Event title", text: $editedTitle)
-                        .textFieldStyle(ModernTextFieldStyle())
+                        .font(ModernDesignSystem.Typography.body)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .fill(ModernDesignSystem.Colors.background)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
                 } else {
                     Text(event.title)
                         .font(ModernDesignSystem.Typography.body)
@@ -196,11 +226,29 @@ struct HealthEventDetailView: View {
                         .background(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .fill(ModernDesignSystem.Colors.background)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
                         )
                 }
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
     }
     
     // MARK: - Severity Section
@@ -239,14 +287,23 @@ struct HealthEventDetailView: View {
                     HStack {
                         ForEach(1...5, id: \.self) { level in
                             Circle()
-                                .fill(level <= editedSeverityLevel ? severityColor(for: level) : Color.gray.opacity(0.3))
+                                .fill(level <= editedSeverityLevel ? severityColor(for: level) : ModernDesignSystem.Colors.textSecondary.opacity(0.3))
                                 .frame(width: 12, height: 12)
                         }
                     }
                 }
+                .padding(ModernDesignSystem.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .fill(ModernDesignSystem.Colors.background)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                )
             } else {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                         Text(event.severityDescription)
                             .font(ModernDesignSystem.Typography.title3)
                             .fontWeight(.semibold)
@@ -259,10 +316,10 @@ struct HealthEventDetailView: View {
                     
                     Spacer()
                     
-                    HStack(spacing: 4) {
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
                         ForEach(1...5, id: \.self) { level in
                             Circle()
-                                .fill(level <= event.severityLevel ? Color(hex: event.severityColor) : Color.gray.opacity(0.3))
+                                .fill(level <= event.severityLevel ? Color(hex: event.severityColor) : ModernDesignSystem.Colors.textSecondary.opacity(0.3))
                                 .frame(width: 8, height: 8)
                         }
                     }
@@ -271,10 +328,28 @@ struct HealthEventDetailView: View {
                 .background(
                     RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                         .fill(Color(hex: event.severityColor).opacity(0.1))
-                        .stroke(Color(hex: event.severityColor), lineWidth: 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(Color(hex: event.severityColor), lineWidth: 1)
+                        )
                 )
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
     }
     
     // MARK: - Date Time Section
@@ -293,8 +368,17 @@ struct HealthEventDetailView: View {
                     displayedComponents: [.date, .hourAndMinute]
                 )
                 .datePickerStyle(CompactDatePickerStyle())
+                .padding(ModernDesignSystem.Spacing.md)
+                .background(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .fill(ModernDesignSystem.Colors.background)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                )
             } else {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(event.eventDate, style: .date)
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -312,10 +396,28 @@ struct HealthEventDetailView: View {
                 .background(
                     RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                         .fill(ModernDesignSystem.Colors.background)
-                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
                 )
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
     }
     
     // MARK: - Notes Section
@@ -329,8 +431,17 @@ struct HealthEventDetailView: View {
             
             if isEditing {
                 TextField("Add notes...", text: $editedNotes, axis: .vertical)
-                    .textFieldStyle(ModernTextFieldStyle())
+                    .font(ModernDesignSystem.Typography.body)
                     .lineLimit(3...6)
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                            .fill(ModernDesignSystem.Colors.background)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                    )
             } else {
                 if let notes = event.notes, !notes.isEmpty {
                     Text(notes)
@@ -341,7 +452,10 @@ struct HealthEventDetailView: View {
                         .background(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .fill(ModernDesignSystem.Colors.background)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
                         )
                 } else {
                     Text("No notes added")
@@ -353,11 +467,29 @@ struct HealthEventDetailView: View {
                         .background(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .fill(ModernDesignSystem.Colors.background)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
                         )
                 }
             }
         }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
     }
     
     // MARK: - Computed Properties
@@ -446,12 +578,12 @@ struct HealthEventDetailView: View {
     
     private func severityColor(for level: Int) -> Color {
         switch level {
-        case 1: return .green
-        case 2: return .yellow
-        case 3: return .orange
-        case 4: return .red
-        case 5: return .purple
-        default: return .gray
+        case 1: return ModernDesignSystem.Colors.success // Green for mild
+        case 2: return ModernDesignSystem.Colors.goldenYellow // Golden yellow for low
+        case 3: return ModernDesignSystem.Colors.warmCoral // Warm coral for moderate
+        case 4: return ModernDesignSystem.Colors.error // Red for high
+        case 5: return Color(hex: "#8E44AD") // Purple for severe
+        default: return ModernDesignSystem.Colors.textSecondary
         }
     }
 }

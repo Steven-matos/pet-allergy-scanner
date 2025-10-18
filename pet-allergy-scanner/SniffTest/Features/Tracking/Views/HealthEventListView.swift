@@ -40,16 +40,11 @@ struct HealthEventListView: View {
         }
         
         guard let events = healthEventService.healthEvents[pet.id] else { 
-            cachedFilteredEvents = []
             return []
         }
         
         let filtered = selectedCategory == nil ? events : events.filter { $0.eventCategory == selectedCategory }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
-        
-        // Cache the result
-        cachedFilteredEvents = sorted
-        lastUpdateTime = currentTime
         
         return sorted
     }
@@ -62,15 +57,11 @@ struct HealthEventListView: View {
         }
         
         guard let events = healthEventService.healthEvents[pet.id] else { 
-            cachedMedicationEvents = []
             return []
         }
         
         let filtered = events.filter { $0.eventType == .medication }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
-        
-        // Cache the result
-        cachedMedicationEvents = sorted
         
         return sorted
     }
@@ -117,9 +108,6 @@ struct HealthEventListView: View {
         if !earlierEvents.isEmpty {
             groups.append(("Earlier", earlierEvents))
         }
-        
-        // Cache the result
-        cachedGroupedEvents = groups
         
         return groups
     }
