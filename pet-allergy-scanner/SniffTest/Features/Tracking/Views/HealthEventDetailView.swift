@@ -38,10 +38,10 @@ struct HealthEventDetailView: View {
                 
                 ScrollView {
                     VStack(spacing: ModernDesignSystem.Spacing.lg) {
-                        // Header
+                        // Header Section
                         headerSection
                         
-                        // Event Details
+                        // Event Details Section
                         eventDetailsSection
                         
                         // Severity Section
@@ -215,7 +215,10 @@ struct HealthEventDetailView: View {
                         .background(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .fill(ModernDesignSystem.Colors.background)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
                         )
                 } else {
                     Text(event.title)
@@ -261,11 +264,11 @@ struct HealthEventDetailView: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if isEditing {
-                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
                     HStack {
-                        Text("Severity: \(editedSeverityLevel)")
+                        Text("Level \(editedSeverityLevel)")
                             .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            .foregroundColor(severityColor(for: editedSeverityLevel))
                         
                         Spacer()
                         
@@ -274,14 +277,10 @@ struct HealthEventDetailView: View {
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     
-                    Slider(
-                        value: Binding(
-                            get: { Double(editedSeverityLevel) },
-                            set: { editedSeverityLevel = Int($0) }
-                        ),
-                        in: 1...5,
-                        step: 1
-                    )
+                    Slider(value: Binding(
+                        get: { Double(editedSeverityLevel) },
+                        set: { editedSeverityLevel = Int($0) }
+                    ), in: 1...5, step: 1)
                     .accentColor(severityColor(for: editedSeverityLevel))
                     
                     HStack {
@@ -290,15 +289,16 @@ struct HealthEventDetailView: View {
                                 .fill(level <= editedSeverityLevel ? severityColor(for: level) : ModernDesignSystem.Colors.textSecondary.opacity(0.3))
                                 .frame(width: 12, height: 12)
                         }
+                        Spacer()
                     }
                 }
                 .padding(ModernDesignSystem.Spacing.md)
                 .background(
                     RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                        .fill(ModernDesignSystem.Colors.background)
+                        .fill(severityColor(for: editedSeverityLevel).opacity(0.1))
                         .overlay(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                .stroke(severityColor(for: editedSeverityLevel), lineWidth: 1)
                         )
                 )
             } else {
@@ -352,7 +352,7 @@ struct HealthEventDetailView: View {
         )
     }
     
-    // MARK: - Date Time Section
+    // MARK: - Date & Time Section
     
     private var dateTimeSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -362,21 +362,17 @@ struct HealthEventDetailView: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if isEditing {
-                DatePicker(
-                    "Event Date",
-                    selection: $editedEventDate,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
-                .datePickerStyle(CompactDatePickerStyle())
-                .padding(ModernDesignSystem.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                        .fill(ModernDesignSystem.Colors.background)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                        )
-                )
+                DatePicker("Event Date", selection: $editedEventDate, displayedComponents: [.date, .hourAndMinute])
+                    .font(ModernDesignSystem.Typography.body)
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                            .fill(ModernDesignSystem.Colors.background)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                    )
             } else {
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text(event.eventDate, style: .date)
@@ -492,13 +488,11 @@ struct HealthEventDetailView: View {
         )
     }
     
-    // MARK: - Computed Properties
+    // MARK: - Helper Functions
     
     private var isFormValid: Bool {
-        return !editedTitle.isEmpty
+        !editedTitle.isEmpty
     }
-    
-    // MARK: - Helper Methods
     
     private func setupInitialValues() {
         editedTitle = event.title
@@ -517,31 +511,28 @@ struct HealthEventDetailView: View {
     }
     
     private func saveChanges() {
-        guard isFormValid else { return }
-        
         isSubmitting = true
-        
-        let updates = HealthEventUpdate(
-            title: editedTitle,
-            notes: editedNotes.isEmpty ? nil : editedNotes,
-            severityLevel: editedSeverityLevel,
-            eventDate: editedEventDate
-        )
         
         Task {
             do {
-                _ = try await healthEventService.updateHealthEvent(event.id, updates: updates)
+                let update = HealthEventUpdate(
+                    title: editedTitle,
+                    notes: editedNotes.isEmpty ? nil : editedNotes,
+                    severityLevel: editedSeverityLevel,
+                    eventDate: editedEventDate
+                )
+                
+                _ = try await healthEventService.updateHealthEvent(event.id, updates: update)
                 
                 await MainActor.run {
-                    isSubmitting = false
                     isEditing = false
+                    isSubmitting = false
                 }
-                
             } catch {
                 await MainActor.run {
-                    isSubmitting = false
                     errorMessage = error.localizedDescription
                     showingError = true
+                    isSubmitting = false
                 }
             }
         }
@@ -551,28 +542,15 @@ struct HealthEventDetailView: View {
         Task {
             do {
                 try await healthEventService.deleteHealthEvent(event.id, petId: pet.id)
-                
                 await MainActor.run {
                     dismiss()
                 }
-                
             } catch {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     showingError = true
                 }
             }
-        }
-    }
-    
-    private func severityDescription(for level: Int) -> String {
-        switch level {
-        case 1: return "Mild"
-        case 2: return "Low"
-        case 3: return "Moderate"
-        case 4: return "High"
-        case 5: return "Severe"
-        default: return "Unknown"
         }
     }
     
@@ -586,38 +564,15 @@ struct HealthEventDetailView: View {
         default: return ModernDesignSystem.Colors.textSecondary
         }
     }
-}
-
-#Preview {
-    HealthEventDetailView(
-        event: HealthEvent(
-            id: "preview-event",
-            petId: "preview-pet",
-            userId: "preview-user",
-            eventType: .vomiting,
-            eventCategory: .digestive,
-            title: "Morning vomiting episode",
-            notes: "Vomited after breakfast, seemed fine afterwards",
-            severityLevel: 2,
-            eventDate: Date(),
-            createdAt: Date(),
-            updatedAt: Date()
-        ),
-        pet: Pet(
-            id: "preview-pet",
-            userId: "preview-user",
-            name: "Buddy",
-            species: .dog,
-            breed: "Golden Retriever",
-            birthday: Date(),
-            weightKg: 25.0,
-            activityLevel: .moderate,
-            imageUrl: nil,
-            knownSensitivities: [],
-            vetName: nil,
-            vetPhone: nil,
-            createdAt: Date(),
-            updatedAt: Date()
-        )
-    )
+    
+    private func severityDescription(for level: Int) -> String {
+        switch level {
+        case 1: return "Mild"
+        case 2: return "Low"
+        case 3: return "Moderate"
+        case 4: return "High"
+        case 5: return "Severe"
+        default: return "Unknown"
+        }
+    }
 }

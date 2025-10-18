@@ -181,6 +181,18 @@ struct MedicationReminderTime: Codable, Equatable, Hashable {
         let date = Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) ?? Date()
         return formatter.string(from: date)
     }
+    
+    /// Date representation for DatePicker
+    var timeDate: Date {
+        let timeParts = time.split(separator: ":")
+        guard timeParts.count == 2,
+              let hour = Int(timeParts[0]),
+              let minute = Int(timeParts[1]) else {
+            return Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+        }
+        
+        return Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: Date()) ?? Date()
+    }
 }
 
 /**

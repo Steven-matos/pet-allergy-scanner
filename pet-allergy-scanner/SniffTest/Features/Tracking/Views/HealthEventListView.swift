@@ -23,7 +23,6 @@ struct HealthEventListView: View {
     @State private var showingAddEvent = false
     @State private var isLoading = false
     @State private var selectedEvent: HealthEvent? = nil
-    @State private var showingEventDetail = false
     
     // Performance optimization: Cache computed properties
     @State private var cachedFilteredEvents: [HealthEvent] = []
@@ -36,15 +35,19 @@ struct HealthEventListView: View {
         // Use cached data if recent and category hasn't changed
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastUpdateTime) < 1.0 && !cachedFilteredEvents.isEmpty {
+            print("🔄 Using cached filtered events: \(cachedFilteredEvents.count)")
             return cachedFilteredEvents
         }
         
         guard let events = healthEventService.healthEvents[pet.id] else { 
+            print("❌ No events found for pet: \(pet.id)")
             return []
         }
         
         let filtered = selectedCategory == nil ? events : events.filter { $0.eventCategory == selectedCategory }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
+        
+        print("📊 Filtered events - Total: \(events.count), Filtered: \(filtered.count), Category: \(selectedCategory?.displayName ?? "All")")
         
         return sorted
     }
@@ -70,6 +73,7 @@ struct HealthEventListView: View {
         // Use cached data if recent and events haven't changed
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastUpdateTime) < 1.0 && !cachedGroupedEvents.isEmpty {
+            print("🔄 Using cached grouped events: \(cachedGroupedEvents.count) groups")
             return cachedGroupedEvents
         }
         
@@ -82,7 +86,10 @@ struct HealthEventListView: View {
         var thisWeekEvents: [HealthEvent] = []
         var earlierEvents: [HealthEvent] = []
         
-        for event in filteredEvents {
+        let eventsToGroup = filteredEvents
+        print("📅 Grouping \(eventsToGroup.count) events")
+        
+        for event in eventsToGroup {
             let daysBetween = calendar.dateComponents([.day], from: event.eventDate, to: now).day ?? 0
             
             if daysBetween == 0 {
@@ -109,6 +116,8 @@ struct HealthEventListView: View {
             groups.append(("Earlier", earlierEvents))
         }
         
+        print("📊 Grouped events - Today: \(todayEvents.count), Yesterday: \(yesterdayEvents.count), This Week: \(thisWeekEvents.count), Earlier: \(earlierEvents.count)")
+        
         return groups
     }
     
@@ -130,7 +139,9 @@ struct HealthEventListView: View {
                 categoryFilterSection
                 
                 // Events List
-                if filteredEvents.isEmpty && medicationEvents.isEmpty {
+                if isLoading {
+                    loadingView
+                } else if filteredEvents.isEmpty && medicationEvents.isEmpty {
                     emptyStateView
                 } else {
                     eventsListSection
@@ -158,12 +169,20 @@ struct HealthEventListView: View {
         .sheet(isPresented: $showingAddEvent) {
             AddHealthEventView()
         }
-        .sheet(isPresented: $showingEventDetail) {
-            if let selectedEvent = selectedEvent {
-                HealthEventDetailView(event: selectedEvent, pet: pet)
-            }
+        .sheet(item: $selectedEvent) { event in
+            HealthEventDetailView(event: event, pet: pet)
         }
         .task {
+            await loadHealthEvents()
+        }
+        .onAppear {
+            // Ensure data is loaded when view appears
+            Task {
+                await loadHealthEvents()
+            }
+        }
+        .refreshable {
+            // Allow pull-to-refresh to reload data
             await loadHealthEvents()
         }
         .onChange(of: selectedCategory) { _, _ in
@@ -232,7 +251,6 @@ struct HealthEventListView: View {
                                 pet: pet,
                                 onTap: {
                                     selectedEvent = event
-                                    showingEventDetail = true
                                 }
                             )
                             .id("event-\(event.id)")
@@ -283,12 +301,25 @@ struct HealthEventListView: View {
                     pet: pet,
                     onTap: {
                         selectedEvent = event
-                        showingEventDetail = true
                     }
                 )
                 .id("medication-\(event.id)")
             }
         }
+    }
+    
+    // MARK: - Loading View
+    
+    private var loadingView: some View {
+        VStack {
+            ProgressView()
+                .scaleEffect(1.2)
+            Text("Loading health events...")
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .padding(.top, ModernDesignSystem.Spacing.md)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
     // MARK: - Empty State View
@@ -332,9 +363,15 @@ struct HealthEventListView: View {
         isLoading = true
         
         do {
-            _ = try await healthEventService.getHealthEvents(for: pet.id)
+            let events = try await healthEventService.getHealthEvents(for: pet.id)
+            print("✅ Loaded \(events.count) health events for pet: \(pet.id)")
+            
+            // Force UI update after data is loaded
+            await MainActor.run {
+                invalidateCache()
+            }
         } catch {
-            print("Error loading health events: \(error)")
+            print("❌ Error loading health events: \(error)")
         }
         
         isLoading = false

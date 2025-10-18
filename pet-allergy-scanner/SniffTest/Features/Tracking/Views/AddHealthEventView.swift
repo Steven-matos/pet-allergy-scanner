@@ -177,13 +177,16 @@ struct AddHealthEventView: View {
             // Date & Time
             dateTimeSection
             
-            // Notes
-            notesSection
-            
             // Medication-specific sections
             if selectedEventType == .medication {
                 medicationDetailsSection
                 medicationReminderSection
+                
+                // Notes (moved after medication sections for medication events)
+                notesSection
+            } else {
+                // Notes (for non-medication events)
+                notesSection
             }
         }
     }
@@ -541,22 +544,57 @@ struct AddHealthEventView: View {
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
                     // Reminder Times
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                        Text("Reminder Times")
-                            .font(ModernDesignSystem.Typography.body)
-                            .fontWeight(.medium)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        HStack {
+                            Text("Reminder Times")
+                                .font(ModernDesignSystem.Typography.body)
+                                .fontWeight(.medium)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Spacer()
+                            
+                            Button("Add Time") {
+                                addReminderTime()
+                            }
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                            .background(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                            )
+                        }
                         
                         ForEach(reminderTimes.indices, id: \.self) { index in
                             HStack {
-                                Text(reminderTimes[index].label)
+                                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                                    TextField("Label (e.g., Morning, Evening)", text: Binding(
+                                        get: { reminderTimes[index].label },
+                                        set: { updateReminderTimeLabel(at: index, newLabel: $0) }
+                                    ))
                                     .font(ModernDesignSystem.Typography.body)
-                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    
+                                    DatePicker("Time", selection: Binding(
+                                        get: { reminderTimes[index].timeDate },
+                                        set: { updateReminderTimeDate(at: index, newDate: $0) }
+                                    ), displayedComponents: [.hourAndMinute])
+                                    .datePickerStyle(CompactDatePickerStyle())
+                                }
                                 
                                 Spacer()
                                 
-                                Text(reminderTimes[index].displayTime)
-                                    .font(ModernDesignSystem.Typography.body)
-                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                Button("Remove") {
+                                    removeReminderTime(at: index)
+                                }
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.error)
+                                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                                .background(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                        .fill(ModernDesignSystem.Colors.error.opacity(0.1))
+                                )
                             }
                             .padding(ModernDesignSystem.Spacing.sm)
                             .background(
@@ -564,6 +602,20 @@ struct AddHealthEventView: View {
                                     .fill(ModernDesignSystem.Colors.background)
                                     .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
                             )
+                        }
+                        
+                        if reminderTimes.isEmpty {
+                            Text("No reminder times set. Tap 'Add Time' to add one.")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .italic()
+                                .padding(ModernDesignSystem.Spacing.sm)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                .background(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                        .fill(ModernDesignSystem.Colors.background)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
                         }
                     }
                     
@@ -631,6 +683,46 @@ struct AddHealthEventView: View {
     
     private func updateReminderTimes() {
         reminderTimes = frequency.defaultReminderTimes
+    }
+    
+    private func addReminderTime() {
+        let newReminderTime = MedicationReminderTime(
+            time: "09:00",
+            label: "Reminder"
+        )
+        reminderTimes.append(newReminderTime)
+    }
+    
+    private func removeReminderTime(at index: Int) {
+        guard index < reminderTimes.count else { return }
+        reminderTimes.remove(at: index)
+    }
+    
+    private func updateReminderTimeLabel(at index: Int, newLabel: String) {
+        guard index < reminderTimes.count else { return }
+        let currentTime = reminderTimes[index]
+        let updatedTime = MedicationReminderTime(
+            time: currentTime.time,
+            label: newLabel.isEmpty ? "Reminder" : newLabel
+        )
+        reminderTimes[index] = updatedTime
+    }
+    
+    private func updateReminderTimeDate(at index: Int, newDate: Date) {
+        guard index < reminderTimes.count else { return }
+        let currentTime = reminderTimes[index]
+        let timeString = formatTime(from: newDate)
+        let updatedTime = MedicationReminderTime(
+            time: timeString,
+            label: currentTime.label
+        )
+        reminderTimes[index] = updatedTime
+    }
+    
+    private func formatTime(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
     
     private func saveHealthEvent() {
