@@ -25,6 +25,7 @@ import Vision
 struct ModernCameraView: UIViewControllerRepresentable {
     let onImageCaptured: (UIImage) -> Void
     let onBarcodeDetected: ((BarcodeResult) -> Void)?
+    let onCameraControllerReady: ((ModernCameraViewController) -> Void)?
     
     // Configuration
     let enableRealTimeDetection: Bool
@@ -34,20 +35,31 @@ struct ModernCameraView: UIViewControllerRepresentable {
     init(
         onImageCaptured: @escaping (UIImage) -> Void,
         onBarcodeDetected: ((BarcodeResult) -> Void)? = nil,
+        onCameraControllerReady: ((ModernCameraViewController) -> Void)? = nil,
         enableRealTimeDetection: Bool = true,
         showScanOverlay: Bool = true,
         hapticFeedback: Bool = true
     ) {
         self.onImageCaptured = onImageCaptured
         self.onBarcodeDetected = onBarcodeDetected
+        self.onCameraControllerReady = onCameraControllerReady
         self.enableRealTimeDetection = enableRealTimeDetection
         self.showScanOverlay = showScanOverlay
         self.hapticFeedback = hapticFeedback
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        return isCameraUsable() ? createModernCameraViewController(context: context)
-                                : createSimulatorViewController(context: context)
+        let controller = isCameraUsable() ? createModernCameraViewController(context: context)
+                                         : createSimulatorViewController(context: context)
+        
+        // Store reference to camera controller for external control
+        if let cameraController = controller as? ModernCameraViewController {
+            context.coordinator.cameraController = cameraController
+            // Notify parent that camera controller is ready
+            context.coordinator.parent.onCameraControllerReady?(cameraController)
+        }
+        
+        return controller
     }
     
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
@@ -103,6 +115,7 @@ struct ModernCameraView: UIViewControllerRepresentable {
     @MainActor
     class Coordinator: NSObject, ModernCameraViewControllerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
         let parent: ModernCameraView
+        var cameraController: ModernCameraViewController?
         
         init(_ parent: ModernCameraView) {
             self.parent = parent
@@ -280,17 +293,18 @@ extension VideoCaptureDelegate: AVCaptureVideoDataOutputSampleBufferDelegate {
         // Configure symbologies
         barcodeRequest.symbologies = symbologies
         
+        // Create Vision request handler with optimized settings
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
         
         do {
             try handler.perform([barcodeRequest])
             
-            // Frame throttling to prevent queue overload
+            // Frame throttling to prevent queue overload and reduce continuous scanning
             frameProcessCounter += 1
-            if frameProcessCounter % 15 == 0 {
+            if frameProcessCounter % 30 == 0 { // Process every 30th frame instead of 15th
                 deferFrameProcessing = true
-                // Resume processing after a brief delay on background queue
-                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                // Resume processing after a longer delay to reduce scanning frequency
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) { [weak self] in
                     self?.resumeProcessing()
                 }
             }
@@ -340,7 +354,10 @@ class ModernCameraViewController: UIViewController {
     private var isSessionConfigured = false
     /// Tracks last barcode detection for cooldown
     private var lastBarcodeDetectionTime: Date?
-    private let barcodeDetectionCooldown: TimeInterval = 1.0
+    private let barcodeDetectionCooldown: TimeInterval = 3.0
+    
+    /// Tracks if barcode is currently being processed to prevent multiple detections
+    private var isProcessingBarcode = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -366,6 +383,18 @@ class ModernCameraViewController: UIViewController {
         stopCameraSession()
     }
     
+    deinit {
+        // Clean up notification observers
+        NotificationCenter.default.removeObserver(self)
+        
+        // Clean up capture session (nonisolated access)
+        if let session = captureSession {
+            session.stopRunning()
+        }
+        
+        print("📷 ModernCameraViewController deallocated")
+    }
+    
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         // Ensure session is stopped when view is no longer visible
@@ -374,10 +403,6 @@ class ModernCameraViewController: UIViewController {
         }
     }
     
-    deinit {
-        // MEMORY OPTIMIZATION: Properly clean up camera resources
-        cleanupResourcesNonIsolated()
-    }
     
     /// Clean up all camera resources and stop processing
     /// Called when view is dismantled or deallocated
@@ -433,14 +458,92 @@ class ModernCameraViewController: UIViewController {
         updateConfiguration()
     }
     
+    /// Resets barcode processing state to allow new detections
+    /// Call this when user dismisses barcode detection or retries scan
+    func resetBarcodeProcessingState() {
+        isProcessingBarcode = false
+        lastBarcodeDetectionTime = nil
+    }
+    
+    /// Temporarily stops camera session while preserving data
+    /// Used after barcode detection to save battery and prevent continuous scanning
+    func pauseCameraSession() {
+        guard isSessionRunning else { return }
+        
+        // Stop frame processing to prevent new barcode detections
+        videoCaptureDelegate?.stopProcessing()
+        
+        // Stop the camera session on background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let session = self?.captureSession, session.isRunning else { return }
+            session.stopRunning()
+            
+            Task { @MainActor [weak self] in
+                self?.isSessionRunning = false
+            }
+        }
+    }
+    
+    /// Completely stops camera session and cleans up resources
+    /// Used when presenting sheets to prevent resource conflicts and blank screens
+    func stopCameraSessionCompletely() {
+        guard isSessionRunning else { return }
+        
+        // Stop frame processing immediately
+        videoCaptureDelegate?.stopProcessing()
+        
+        // Stop the camera session on background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let session = self?.captureSession, session.isRunning else { return }
+            session.stopRunning()
+            
+            Task { @MainActor [weak self] in
+                self?.isSessionRunning = false
+                print("📷 Camera session completely stopped for sheet presentation")
+            }
+        }
+    }
+    
+    /// Resumes camera session for nutritional label scanning
+    /// Called when user needs to scan nutritional labels
+    func resumeCameraSession() {
+        guard !isSessionRunning else { return }
+        guard isSessionConfigured else { return }
+        guard let session = captureSession else { return }
+        
+        // Re-enable frame processing for new scans
+        videoCaptureDelegate?.startProcessing()
+        
+        // Start the camera session on background queue
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard !session.isRunning else { return }
+            session.startRunning()
+            
+            Task { @MainActor [weak self] in
+                self?.isSessionRunning = true
+            }
+        }
+    }
+    
     // MARK: - Private Methods
     
     private func setupCameraSession() {
         captureSession = AVCaptureSession()
         captureSession.sessionPreset = .high
         
+        // Configure session for better stability
+        if captureSession.canSetSessionPreset(.high) {
+            captureSession.sessionPreset = .high
+        } else if captureSession.canSetSessionPreset(.medium) {
+            captureSession.sessionPreset = .medium
+        }
+        
+        // Begin configuration to prevent warnings
+        captureSession.beginConfiguration()
+        
         // Setup camera input
         guard let backCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            captureSession.commitConfiguration()
             delegate?.cameraViewController(self, didFailWithError: CameraError.deviceNotFound)
             return
         }
@@ -451,6 +554,7 @@ class ModernCameraViewController: UIViewController {
                 captureSession.addInput(input)
             }
         } catch {
+            captureSession.commitConfiguration()
             delegate?.cameraViewController(self, didFailWithError: error)
             return
         }
@@ -465,6 +569,9 @@ class ModernCameraViewController: UIViewController {
         if enableRealTimeDetection {
             setupVideoDataOutput()
         }
+        
+        // Commit configuration
+        captureSession.commitConfiguration()
         
         // Setup preview layer
         videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
@@ -512,7 +619,12 @@ class ModernCameraViewController: UIViewController {
         
         videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
-        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        
+        // Optimize video settings to reduce ANE queries
+        videoDataOutput.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+        ]
         
         // Use isolated VideoCaptureDelegate instead of self
         videoDataOutput.setSampleBufferDelegate(videoCaptureDelegate, queue: videoDataOutputQueue)
@@ -606,6 +718,7 @@ class ModernCameraViewController: UIViewController {
                 return
             }
             
+            // Start session (AVCaptureSession.startRunning() doesn't throw)
             session.startRunning()
             Task { @MainActor [weak self] in
                 self?.isSessionRunning = true
@@ -631,6 +744,7 @@ class ModernCameraViewController: UIViewController {
             // Only stop if session is actually running
             if let session = session, session.isRunning {
                 session.stopRunning()
+                print("📷 Camera session stopped successfully")
             }
             
             // Update session state on main thread
@@ -663,6 +777,21 @@ class ModernCameraViewController: UIViewController {
             name: UIApplication.willEnterForegroundNotification,
             object: nil
         )
+        
+        // Add session interruption handling
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionInterruption),
+            name: .AVCaptureSessionWasInterrupted,
+            object: captureSession
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSessionInterruptionEnded),
+            name: .AVCaptureSessionInterruptionEnded,
+            object: captureSession
+        )
     }
     
     /// Handles app entering foreground by checking authorization status
@@ -677,6 +806,49 @@ class ModernCameraViewController: UIViewController {
         }
         
         // Restart session if it was stopped
+        if isSessionConfigured && !isSessionRunning {
+            startCameraSession()
+        }
+    }
+    
+    /// Handles camera session interruption
+    /// - Note: Called when session is interrupted (e.g., phone call, backgrounding)
+    @objc private func handleSessionInterruption(notification: NSNotification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVCaptureSessionInterruptionReasonKey] as? Int,
+              let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue) else {
+            return
+        }
+        
+        print("📷 Camera session interrupted: \(reason)")
+        
+        switch reason {
+        case .audioDeviceInUseByAnotherClient, .videoDeviceInUseByAnotherClient:
+            // Another app is using the camera
+            isSessionRunning = false
+        case .videoDeviceNotAvailableInBackground:
+            // Camera not available in background
+            isSessionRunning = false
+        case .videoDeviceNotAvailableWithMultipleForegroundApps:
+            // Camera not available with multiple foreground apps
+            isSessionRunning = false
+        case .videoDeviceNotAvailableDueToSystemPressure:
+            // Camera not available due to system pressure
+            isSessionRunning = false
+        case .sensitiveContentMitigationActivated:
+            // Camera blocked due to sensitive content mitigation
+            isSessionRunning = false
+        @unknown default:
+            isSessionRunning = false
+        }
+    }
+    
+    /// Handles camera session interruption end
+    /// - Note: Called when session interruption ends
+    @objc private func handleSessionInterruptionEnded(notification: NSNotification) {
+        print("📷 Camera session interruption ended")
+        
+        // Restart session if it was interrupted
         if isSessionConfigured && !isSessionRunning {
             startCameraSession()
         }
@@ -707,6 +879,9 @@ class ModernCameraViewController: UIViewController {
         guard isSessionRunning else { return }
         guard !barcodeData.isEmpty else { return }
         
+        // Prevent multiple simultaneous barcode processing
+        guard !isProcessingBarcode else { return }
+        
         // Check cooldown to prevent spam detection
         let now = Date()
         if let lastDetection = lastBarcodeDetectionTime,
@@ -718,6 +893,8 @@ class ModernCameraViewController: UIViewController {
         guard let bestBarcode = barcodeData.max(by: { $0.confidence < $1.confidence }),
               bestBarcode.confidence > 0.7 else { return }
         
+        // Set processing state to prevent multiple detections
+        isProcessingBarcode = true
         lastBarcodeDetectionTime = now
         
         let barcodeResult = BarcodeResult(
@@ -728,6 +905,11 @@ class ModernCameraViewController: UIViewController {
         )
         
         delegate?.cameraViewController(self, didDetectBarcode: barcodeResult)
+        
+        // Reset processing state after a delay to allow for user interaction
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            self?.isProcessingBarcode = false
+        }
     }
 }
 

@@ -141,15 +141,20 @@ struct NutritionalLabelScanView: View {
      * Capture photo from camera
      */
     private func capturePhoto() {
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Capture button pressed")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Barcode context: \(barcode ?? "NIL")")
+        
         cameraService.capturePhoto { result in
             switch result {
             case .success(let image):
+                print("🔍 [NUTRITIONAL_LABEL_CAPTURE] ✅ Photo captured successfully")
+                print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Image size: \(image.size)")
                 // Process the image to extract barcode information before passing to callback
                 Task {
                     await processImageWithBarcodeDetection(image)
                 }
             case .failure(let error):
-                print("Camera capture error: \(error.localizedDescription)")
+                print("🔍 [NUTRITIONAL_LABEL_CAPTURE] ❌ Camera capture error: \(error.localizedDescription)")
             }
         }
     }
@@ -159,11 +164,21 @@ struct NutritionalLabelScanView: View {
      * This ensures barcode data is available for nutritional label scanning
      */
     private func processImageWithBarcodeDetection(_ image: UIImage) async {
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Processing captured image")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Image size: \(image.size)")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Barcode context: \(barcode ?? "NIL")")
+        
         // Use the hybrid scan service to detect both barcode and OCR
         // The result is processed internally by the service
-        _ = await HybridScanService.shared.performHybridScan(from: image)
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Running hybrid scan on captured image")
+        let result = await HybridScanService.shared.performHybridScan(from: image)
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Hybrid scan completed")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Scan result - method: \(result.scanMethod), confidence: \(result.confidence)")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] OCR text length: \(result.ocrText.count) characters")
+        print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Barcode detected: \(result.barcode?.value ?? "NIL")")
         
         await MainActor.run {
+            print("🔍 [NUTRITIONAL_LABEL_CAPTURE] Calling onImageCaptured callback")
             // Pass the processed image with barcode information
             onImageCaptured(image)
         }

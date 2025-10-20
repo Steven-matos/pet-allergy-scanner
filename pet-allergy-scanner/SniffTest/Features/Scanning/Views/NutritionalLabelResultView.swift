@@ -28,18 +28,31 @@ struct NutritionalLabelResultView: View {
     @State private var parsedNutrition: ParsedNutrition
     
     init(result: HybridScanResult, onAnalyzeForPet: @escaping () -> Void, onUploadToDatabase: @escaping (String, String, [String], ParsedNutrition) -> Void, onRetry: @escaping () -> Void) {
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Initializing NutritionalLabelResultView")
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Result barcode: \(result.barcode?.value ?? "NIL")")
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] OCR text length: \(result.ocrText.count) characters")
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Scan method: \(result.scanMethod), confidence: \(result.confidence)")
+        
         self.result = result
         self.onAnalyzeForPet = onAnalyzeForPet
         self.onUploadToDatabase = onUploadToDatabase
         self.onRetry = onRetry
         
         // Parse nutrition from OCR text
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Parsing nutritional information from OCR text")
         let parsed = NutritionalLabelResultView.parseNutritionalInfo(from: result.ocrText)
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Parsed nutrition - productName: \(parsed.productName ?? "NIL"), brand: \(parsed.brand ?? "NIL")")
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Parsed nutrition - ingredients count: \(parsed.ingredients.count)")
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Parsed nutrition - calories: \(parsed.calories ?? 0), caloriesPerTreat: \(parsed.caloriesPerTreat ?? 0)")
         _parsedNutrition = State(initialValue: parsed)
         
         // Initialize editable fields
-        _editableBrand = State(initialValue: result.foodProduct?.brand ?? parsed.brand ?? "")
-        _editableProductName = State(initialValue: result.foodProduct?.name ?? parsed.productName ?? "Unknown Product")
+        let initialBrand = result.foodProduct?.brand ?? parsed.brand ?? ""
+        let initialProductName = result.foodProduct?.name ?? parsed.productName ?? "Unknown Product"
+        print("🔍 [NUTRITIONAL_LABEL_RESULT] Initial editable fields - brand: \(initialBrand), productName: \(initialProductName)")
+        
+        _editableBrand = State(initialValue: initialBrand)
+        _editableProductName = State(initialValue: initialProductName)
         _editableIngredients = State(initialValue: parsed.ingredients)
     }
     
@@ -208,6 +221,14 @@ struct NutritionalLabelResultView: View {
         }
         .background(Color.white)
         .onAppear {
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] View appeared")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Current result barcode: \(result.barcode?.value ?? "NIL")")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Editable fields - brand: \(editableBrand), productName: \(editableProductName)")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Ingredients count: \(editableIngredients.count)")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Parsed nutrition - calories: \(parsedNutrition.calories ?? 0), caloriesPerTreat: \(parsedNutrition.caloriesPerTreat ?? 0)")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Has macronutrients: \(parsedNutrition.hasMacronutrients)")
+            print("🔍 [NUTRITIONAL_LABEL_RESULT] Has additional nutrients: \(parsedNutrition.hasAdditionalNutrients)")
+            
             isAnimating = true
         }
     }
