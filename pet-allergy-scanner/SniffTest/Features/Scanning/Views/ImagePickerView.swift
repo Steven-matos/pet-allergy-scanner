@@ -169,7 +169,6 @@ struct AsyncImageView: View {
                     }
                 }
             } catch {
-                print("Failed to load image: \(error)")
                 await MainActor.run {
                     self.isLoading = false
                 }
@@ -288,11 +287,8 @@ struct ProfileImagePickerView: View {
     /// Load existing user image from URL
     private func loadExistingImage() {
         guard let imageUrl = currentImageUrl, !imageUrl.isEmpty else { 
-            print("🔍 ProfileImagePickerView: No image URL provided")
             return 
         }
-        
-        print("🔍 ProfileImagePickerView: Loading existing image from URL: \(imageUrl)")
         isLoadingExistingImage = true
         
         Task {
@@ -311,10 +307,8 @@ struct ProfileImagePickerView: View {
                 await MainActor.run {
                     self.existingImage = image
                     self.isLoadingExistingImage = false
-                    print("🔍 ProfileImagePickerView: Image loaded successfully: \(image != nil ? "YES" : "NO")")
                 }
             } catch {
-                print("Failed to load existing image: \(error)")
                 await MainActor.run {
                     self.isLoadingExistingImage = false
                 }
@@ -434,11 +428,8 @@ struct PetProfileImagePickerView: View {
     /// Load existing pet image from URL
     private func loadExistingImage() {
         guard let imageUrl = currentImageUrl, !imageUrl.isEmpty else { 
-            print("🔍 PetProfileImagePickerView: No image URL provided")
             return 
         }
-        
-        print("🔍 PetProfileImagePickerView: Loading existing pet image from URL: \(imageUrl)")
         isLoadingExistingImage = true
         
         Task {
@@ -457,10 +448,8 @@ struct PetProfileImagePickerView: View {
                 await MainActor.run {
                     self.existingImage = image
                     self.isLoadingExistingImage = false
-                    print("🔍 PetProfileImagePickerView: Pet image loaded successfully: \(image != nil ? "YES" : "NO")")
                 }
             } catch {
-                print("Failed to load existing pet image: \(error)")
                 await MainActor.run {
                     self.isLoadingExistingImage = false
                 }

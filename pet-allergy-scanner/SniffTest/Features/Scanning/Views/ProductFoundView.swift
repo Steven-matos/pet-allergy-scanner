@@ -138,7 +138,9 @@ struct ProductFoundView: View {
             // Action buttons at bottom
             VStack(spacing: ModernDesignSystem.Spacing.md) {
                 // Primary action: Analyze for pet
-                Button(action: onAnalyzeForPet) {
+                Button(action: {
+                    onAnalyzeForPet()
+                }) {
                     HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         Image(systemName: "pawprint.fill")
                             .font(ModernDesignSystem.Typography.title3)
@@ -184,6 +186,9 @@ struct ProductFoundView: View {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) {
                 isAnimating = true
             }
+        }
+        .onDisappear {
+            
         }
     }
 }

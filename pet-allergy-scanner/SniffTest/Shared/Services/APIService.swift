@@ -211,7 +211,7 @@ class APIService: ObservableObject, @unchecked Sendable {
                 try await registerDeviceTokenAuthenticated(deviceToken)
                 return
             } catch {
-                print("⚠️ DEBUG: Authenticated device registration failed, trying anonymous: \(error)")
+                // Continue to anonymous registration
             }
         }
         
@@ -231,22 +231,14 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         let request = await createRequest(url: url, method: "POST", body: requestData)
         
-        print("🔍 DEBUG: Registering device token (authenticated) at URL: \(url)")
-        print("🔍 DEBUG: Device token: \(String(deviceToken.prefix(20)))...")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ DEBUG: Invalid response type")
             throw APIError.invalidResponse
         }
         
-        print("🔍 DEBUG: Device token registration response: \(httpResponse.statusCode)")
-        
         if httpResponse.statusCode != 200 {
-            if let responseData = String(data: data, encoding: .utf8) {
-                print("❌ DEBUG: Error response: \(responseData)")
-            }
             throw APIError.serverError(httpResponse.statusCode)
         }
     }
@@ -268,28 +260,15 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
         request.httpBody = requestData
         
-        print("🔍 DEBUG: Registering device token (anonymous) at URL: \(url)")
-        print("🔍 DEBUG: Device token: \(String(deviceToken.prefix(20)))...")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ DEBUG: Invalid response type")
             throw APIError.invalidResponse
         }
         
-        print("🔍 DEBUG: Anonymous device token registration response: \(httpResponse.statusCode)")
-        
         if httpResponse.statusCode != 200 {
-            if let responseData = String(data: data, encoding: .utf8) {
-                print("❌ DEBUG: Error response: \(responseData)")
-            }
             throw APIError.serverError(httpResponse.statusCode)
-        }
-        
-        // Parse response to check if authentication is required
-        if let responseData = String(data: data, encoding: .utf8) {
-            print("🔍 DEBUG: Anonymous registration response: \(responseData)")
         }
     }
     
@@ -354,45 +333,26 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Debug method to check authentication state
     func debugAuthState() async {
-        let token = await authToken
-        let refreshToken = await refreshToken
-        let expiry = await tokenExpiry
-        let hasToken = await hasAuthToken
+        let _ = await authToken
+        let _ = await refreshToken
+        let _ = await tokenExpiry
+        let _ = await hasAuthToken
         
-        print("🔍 DEBUG AUTH STATE:")
-        print("  - Has Token: \(hasToken)")
-        print("  - Token: \(token?.prefix(20) ?? "nil")...")
-        print("  - Refresh Token: \(refreshToken?.prefix(20) ?? "nil")...")
-        print("  - Expiry: \(expiry?.description ?? "nil")")
-        print("  - Should Refresh: \(await shouldRefreshToken())")
-        
-        // Additional debugging for keychain access
-        print("🔍 DEBUG KEYCHAIN ACCESS:")
-        let keychainToken = await KeychainHelper.read(forKey: authTokenKey)
-        print("  - Keychain Token: \(keychainToken?.prefix(20) ?? "nil")...")
-        print("  - In-memory Token: \(_authToken?.prefix(20) ?? "nil")...")
-        print("  - Tokens Match: \(token == keychainToken)")
     }
     
     /// Test method to verify authentication is working
     func testAuthentication() async throws {
-        print("🧪 TESTING AUTHENTICATION...")
-        
         // Check if we have a token
         let hasToken = await hasAuthToken
-        print("  - Has Token: \(hasToken)")
         
         if !hasToken {
-            print("❌ No authentication token found!")
             throw APIError.authenticationError
         }
         
         // Try to get current user to verify token is valid
         do {
-            let user = try await getCurrentUser()
-            print("✅ Authentication test successful! User: \(user.email)")
+            let _ = try await getCurrentUser()
         } catch {
-            print("❌ Authentication test failed: \(error)")
             throw error
         }
     }
@@ -483,7 +443,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -520,20 +480,16 @@ class APIService: ObservableObject, @unchecked Sendable {
             let container = try decoder.singleValueContainer()
             let dateString = try container.decode(String.self)
             
-            print("🔍 DEBUG: Attempting to decode date string: \(dateString)")
-            
             // Try ISO8601 format first (with time)
             let iso8601Formatter = ISO8601DateFormatter()
             iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             if let date = iso8601Formatter.date(from: dateString) {
-                print("🔍 DEBUG: Successfully decoded date with ISO8601: \(date)")
                 return date
             }
             
             // Try ISO8601 without fractional seconds
             iso8601Formatter.formatOptions = [.withInternetDateTime]
             if let date = iso8601Formatter.date(from: dateString) {
-                print("🔍 DEBUG: Successfully decoded date with ISO8601 (no fractional): \(date)")
                 return date
             }
             
@@ -542,11 +498,8 @@ class APIService: ObservableObject, @unchecked Sendable {
             dateFormatter.dateFormat = "yyyy-MM-dd"
             dateFormatter.timeZone = TimeZone(identifier: "UTC")
             if let date = dateFormatter.date(from: dateString) {
-                print("🔍 DEBUG: Successfully decoded date with simple format: \(date)")
                 return date
             }
-            
-            print("🔍 DEBUG: Failed to decode date string: \(dateString)")
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Cannot decode date string \(dateString)"
@@ -557,17 +510,11 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Create URL request with authentication headers and security features
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) async -> URLRequest {
-        print("🔍 DEBUG: Creating request for URL: \(url)")
-        print("🔍 DEBUG: Method: \(method)")
-        
         // Check if token needs refresh before making the request
         if await shouldRefreshToken() {
-            print("🔄 DEBUG: Token needs refresh, attempting refresh...")
             do {
                 try await refreshAuthToken()
-                print("✅ DEBUG: Token refresh successful")
             } catch {
-                print("⚠️ Failed to refresh token: \(error)")
                 // Continue with existing token, let the request fail if needed
             }
         }
@@ -584,21 +531,9 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         // Add authorization header with debug logging
         let token = await authToken
-        print("🔍 DEBUG: Retrieved token from keychain: \(token?.prefix(20) ?? "nil")...")
         
         if let token = token {
-            print("🔍 DEBUG: Setting Authorization header in createRequest")
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            
-            // Verify it was set
-            if let authHeader = request.value(forHTTPHeaderField: "Authorization") {
-                print("✅ DEBUG: Authorization header confirmed: \(authHeader.prefix(30))...")
-            } else {
-                print("❌ DEBUG: Failed to set Authorization header!")
-            }
-        } else {
-            print("⚠️ DEBUG: No auth token available in createRequest")
-            print("⚠️ DEBUG: This will result in a 403 error from the server")
         }
         
         if let body = body {
@@ -608,17 +543,6 @@ class APIService: ObservableObject, @unchecked Sendable {
         // Set timeout for security
         request.timeoutInterval = 30.0
         
-        // Print all headers for debugging
-        print("🔍 DEBUG: Final request headers:")
-        if let headers = request.allHTTPHeaderFields {
-            for (key, value) in headers {
-                if key.lowercased() == "authorization" {
-                    print("   \(key): \(value.prefix(30))...")
-                } else {
-                    print("   \(key): \(value)")
-                }
-            }
-        }
         
         return request
     }
@@ -681,41 +605,9 @@ class APIService: ObservableObject, @unchecked Sendable {
                 return try decoder.decode(T.self, from: data)
             } catch let decodingError as DecodingError {
                 // Log the raw response for debugging
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("🔍 DEBUG: Failed to decode response. Raw response: \(responseString)")
-                    print("🔍 DEBUG: Response data length: \(data.count) bytes")
-                    print("🔍 DEBUG: Decoding error: \(decodingError)")
-                    
-                    // Log detailed decoding error information
-                    switch decodingError {
-                    case .typeMismatch(let type, let context):
-                        print("🔍 DEBUG: Type mismatch - Expected: \(type), Context: \(context)")
-                    case .valueNotFound(let type, let context):
-                        print("🔍 DEBUG: Value not found - Type: \(type), Context: \(context)")
-                    case .keyNotFound(let key, let context):
-                        print("🔍 DEBUG: Key not found - Key: \(key), Context: \(context)")
-                    case .dataCorrupted(let context):
-                        print("🔍 DEBUG: Data corrupted - Context: \(context)")
-                    @unknown default:
-                        print("🔍 DEBUG: Unknown decoding error")
-                    }
-                    
-                    // Try to provide more helpful error messages
-                    if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        print("🔍 DEBUG: Parsed JSON object: \(jsonObject)")
-                        
-                        // Check if this is an error response with a different format
-                        if let errorMessage = jsonObject["error"] as? String {
-                            print("🔍 DEBUG: Found error message in response: \(errorMessage)")
-                        }
-                    }
-                }
                 throw APIError.networkError("Failed to decode response: \(decodingError.localizedDescription)")
             } catch {
                 // Log the raw response for debugging
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("🔍 DEBUG: Failed to decode response. Raw response: \(responseString)")
-                }
                 throw error
             }
             
@@ -759,20 +651,14 @@ extension APIService {
             throw APIError.invalidURL
         }
         
-        print("🔍 DEBUG: Attempting login to URL: \(url)")
-        
         var request = await createRequest(url: url, method: "POST")
         
         let loginData = ["email_or_username": email, "password": password]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
-            print("🔍 DEBUG: Login request body: \(String(data: request.httpBody!, encoding: .utf8) ?? "nil")")
         } catch {
-            print("🔍 DEBUG: Failed to encode login data: \(error)")
             throw APIError.encodingError
         }
-        
-        print("🔍 DEBUG: Sending login request...")
         return try await performRequest(request, responseType: AuthResponse.self)
     }
     
@@ -888,7 +774,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -983,7 +869,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -1359,34 +1245,14 @@ extension APIService {
             throw APIError.encodingError
         }
         
-        // Debug: Print all request headers
-        print("🔍 DEBUG: Sending food item creation request to: \(url)")
-        print("🔍 DEBUG: Request headers:")
-        if let headers = request.allHTTPHeaderFields {
-            for (key, value) in headers {
-                if key.lowercased() == "authorization" {
-                    print("   \(key): \(value.prefix(30))...")
-                } else {
-                    print("   \(key): \(value)")
-                }
-            }
-        } else {
-            print("   No headers found!")
-        }
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ DEBUG: Invalid response type")
             throw APIError.invalidResponse
         }
         
-        print("🔍 DEBUG: Food item creation response: \(httpResponse.statusCode)")
-        
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
-            if let responseData = String(data: data, encoding: .utf8) {
-                print("❌ DEBUG: Error response: \(responseData)")
-            }
             if let errorMessage = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let detail = errorMessage["detail"] as? String {
                 throw APIError.serverMessage(detail)

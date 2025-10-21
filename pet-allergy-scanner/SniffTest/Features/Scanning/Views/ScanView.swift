@@ -40,13 +40,20 @@ struct ScanView: View {
     @State private var successMessage = ""
     @State private var errorMessage = ""
     
+    // Camera control state
+    @State private var cameraController: ModernCameraViewController?
+    @State private var isCameraPaused = false
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 // Full-screen camera view
                 ModernCameraView(
                     onImageCaptured: processCapturedImage,
-                    onBarcodeDetected: handleBarcodeDetection
+                    onBarcodeDetected: handleBarcodeDetection,
+                    onCameraControllerReady: { controller in
+                        cameraController = controller
+                    }
                 )
                 .ignoresSafeArea(.all)
                 
@@ -89,9 +96,15 @@ struct ScanView: View {
                     
                     // Real-time barcode detection feedback
                     if let barcode = detectedBarcode {
-                        BarcodeDetectionCard(barcode: barcode) {
-                            analyzeDetectedBarcode(barcode)
-                        }
+                        BarcodeDetectionCard(
+                            barcode: barcode,
+                            onAnalyze: {
+                                analyzeDetectedBarcode(barcode)
+                            },
+                            onRescan: {
+                                resumeCameraForRescan()
+                            }
+                        )
                         .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                         .padding(.bottom, ModernDesignSystem.Spacing.md)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -99,8 +112,18 @@ struct ScanView: View {
                             // Auto-close barcode detection card after 8 seconds if user doesn't interact
                             DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
                                 withAnimation(.easeInOut(duration: 0.3)) {
-                                    detectedBarcode = nil
+                                    // Don't clear detectedBarcode if we're in nutritional label flow, product not found flow, OR product found flow
+                                    if !showingNutritionalLabelScan && !showingProductNotFound && !showingProductFound {
+                                        detectedBarcode = nil
+                                    }
                                 }
+                            }
+                        }
+                        .onDisappear {
+                            // Reset barcode processing state when card is dismissed
+                            // This allows the camera to detect new barcodes
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                // Small delay to ensure the card animation completes
                             }
                         }
                     }
@@ -128,8 +151,11 @@ struct ScanView: View {
                             if result.scanMethod != .failed {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                                     withAnimation(.easeInOut(duration: 0.3)) {
-                                        hybridScanResult = nil
-                                        detectedBarcode = nil
+                                        // Don't clear results if we're in nutritional label flow, product not found flow, OCR results flow, OR product found flow
+                                        if !showingNutritionalLabelScan && !showingProductNotFound && !showingOCRResults && !showingProductFound {
+                                            hybridScanResult = nil
+                                            detectedBarcode = nil
+                                        }
                                     }
                                 }
                             }
@@ -195,7 +221,7 @@ struct ScanView: View {
                 }
             )
             .onAppear {
-                pauseCameraScanning()
+                stopCameraForSheetPresentation()
             }
             .onDisappear {
                 resumeCameraScanning()
@@ -204,7 +230,7 @@ struct ScanView: View {
         .sheet(isPresented: $showingAddPet) {
             AddPetView()
                 .onAppear {
-                    pauseCameraScanning()
+                    stopCameraForSheetPresentation()
                 }
                 .onDisappear {
                     resumeCameraScanning()
@@ -213,7 +239,7 @@ struct ScanView: View {
         .sheet(isPresented: $showingHistory) {
             HistoryView()
                 .onAppear {
-                    pauseCameraScanning()
+                    stopCameraForSheetPresentation()
                 }
                 .onDisappear {
                     resumeCameraScanning()
@@ -227,6 +253,7 @@ struct ScanView: View {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showingProductFound = false
                         }
+                        
                         // Convert product to scan result for analysis
                         analyzeProductForPet(product)
                     },
@@ -236,11 +263,17 @@ struct ScanView: View {
                     }
                 )
                 .onAppear {
-                    pauseCameraScanning()
+                    stopCameraForSheetPresentation()
                 }
                 .onDisappear {
                     resumeCameraScanning()
                 }
+            } else {
+                // Return an empty view when no product is available
+                EmptyView()
+                    .onAppear {
+                        print("🔍 [SHEET_EVENTS] ❌ No foundProduct available for ProductFoundView sheet")
+                    }
             }
         }
         .sheet(isPresented: $showingProductNotFound) {
@@ -250,6 +283,9 @@ struct ScanView: View {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         showingProductNotFound = false
                     }
+                    
+                    // Resume camera for nutritional label scanning
+                    resumeCameraForNutritionalLabelScan()
                     showingNutritionalLabelScan = true
                 },
                 onRetry: {
@@ -266,29 +302,48 @@ struct ScanView: View {
                 }
             )
             .onAppear {
-                print("🔍 ProductNotFoundView - Barcode: \(detectedBarcode?.value ?? "NIL")")
-                pauseCameraScanning()
+                stopCameraForSheetPresentation()
             }
             .onDisappear {
-                resumeCameraScanning()
+                // Camera will be resumed when user chooses to scan nutritional label
+                // This prevents premature camera resume while user is reviewing options
             }
         }
         .fullScreenCover(isPresented: $showingNutritionalLabelScan) {
             NutritionalLabelScanView(
                 barcode: detectedBarcode?.value,
                 onImageCaptured: { image in
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] Image captured, processing...")
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] Image size: \(image.size)")
+                    
                     showingNutritionalLabelScan = false
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] showingNutritionalLabelScan set to false")
+                    
+                    // Don't stop camera here - let the result sheet handle it
+                    // This prevents duplicate camera stops that cause blank sheets
                     processNutritionalLabelImage(image)
                 },
                 onCancel: {
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] User cancelled nutritional label scan")
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                    
                     showingNutritionalLabelScan = false
+                    print("🔍 [NUTRITIONAL_LABEL_SCAN] showingNutritionalLabelScan set to false")
+                    
+                    // Resume camera when canceling nutritional label scan
+                    resumeCameraForNutritionalLabelScan()
                 }
             )
             .onAppear {
+                print("🔍 [NUTRITIONAL_LABEL_SCAN] NutritionalLabelScanView appeared")
+                print("🔍 [NUTRITIONAL_LABEL_SCAN] Barcode passed to view: \(detectedBarcode?.value ?? "NIL")")
+                print("🔍 [NUTRITIONAL_LABEL_SCAN] Current UI state - showingNutritionalLabelScan: \(showingNutritionalLabelScan)")
                 pauseCameraScanning()
             }
             .onDisappear {
-                resumeCameraScanning()
+                print("🔍 [NUTRITIONAL_LABEL_SCAN] NutritionalLabelScanView disappeared")
+                // Don't resume camera here - it will be handled by the onImageCaptured callback
             }
         }
         .sheet(isPresented: $showingOCRResults) {
@@ -296,15 +351,32 @@ struct ScanView: View {
                 NutritionalLabelResultView(
                     result: result,
                     onAnalyzeForPet: {
+                        print("🔍 [OCR_RESULTS] User chose to analyze for pet")
+                        print("🔍 [OCR_RESULTS] Current result barcode: \(result.barcode?.value ?? "NIL")")
+                        print("🔍 [OCR_RESULTS] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                        
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showingOCRResults = false
                         }
+                        print("🔍 [OCR_RESULTS] showingOCRResults set to false")
+                        
+                        // Resume camera for continued scanning after analysis
+                        resumeCameraScanning()
                         analyzeHybridResult()
                     },
                     onUploadToDatabase: { productName, brand, ingredients, nutrition in
+                        print("🔍 [OCR_RESULTS] User chose to upload to database")
+                        print("🔍 [OCR_RESULTS] Product name: \(productName), brand: \(brand)")
+                        print("🔍 [OCR_RESULTS] Ingredients count: \(ingredients.count)")
+                        print("🔍 [OCR_RESULTS] Current result barcode: \(result.barcode?.value ?? "NIL")")
+                        
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showingOCRResults = false
                         }
+                        print("🔍 [OCR_RESULTS] showingOCRResults set to false")
+                        
+                        // Resume camera for continued scanning after upload
+                        resumeCameraScanning()
                         uploadNutritionalDataToDatabase(
                             productName: productName,
                             brand: brand,
@@ -313,16 +385,44 @@ struct ScanView: View {
                         )
                     },
                     onRetry: {
+                        print("🔍 [OCR_RESULTS] User chose to retry nutritional label scan")
+                        print("🔍 [OCR_RESULTS] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                        
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showingOCRResults = false
                         }
+                        print("🔍 [OCR_RESULTS] showingOCRResults set to false")
+                        
+                        // Resume camera for retry
+                        resumeCameraForNutritionalLabelScan()
                         showingNutritionalLabelScan = true
                         hybridScanResult = nil
+                        print("🔍 [OCR_RESULTS] Retry setup - showingNutritionalLabelScan: \(showingNutritionalLabelScan), hybridScanResult cleared")
                     }
                 )
                 .onAppear {
-                    print("🔍 NutritionalLabelResultView - Barcode: \(result.barcode?.value ?? "NIL")")
+                    print("🔍 [OCR_RESULTS] NutritionalLabelResultView appeared")
+                    print("🔍 [OCR_RESULTS] Result barcode: \(result.barcode?.value ?? "NIL")")
+                    print("🔍 [OCR_RESULTS] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                    print("🔍 [OCR_RESULTS] OCR text length: \(result.ocrText.count) characters")
+                    print("🔍 [OCR_RESULTS] Scan method: \(result.scanMethod), confidence: \(result.confidence)")
+                    print("🔍 [OCR_RESULTS] Current UI state - showingOCRResults: \(showingOCRResults)")
+                    
+                    // Don't stop camera here - let the result sheet handle it
+                    // This prevents duplicate camera stops that cause blank sheets
+                    stopCameraForSheetPresentation()
                 }
+                .onDisappear {
+                    print("🔍 [OCR_RESULTS] NutritionalLabelResultView disappeared")
+                    // Camera will be resumed when user returns to main scanning view
+                    // This prevents premature camera resume while sheet is still showing
+                }
+            } else {
+                // Return an empty view when no result is available
+                EmptyView()
+                    .onAppear {
+                        print("🔍 [OCR_RESULTS] ❌ No hybridScanResult available for OCR results sheet")
+                    }
             }
         }
         .alert("Camera Permission Required", isPresented: $showingPermissionAlert) {
@@ -343,6 +443,8 @@ struct ScanView: View {
         }
         .onAppear {
             checkCameraPermission()
+            // Don't resume camera here - it will be handled when sheets are dismissed
+            // This prevents camera resume while sheets are still showing
         }
         .onDisappear {
             // MEMORY OPTIMIZATION: Clear scan results when view disappears to prevent memory leaks
@@ -369,20 +471,44 @@ struct ScanView: View {
      * This helps prevent freezing when navigating between tabs
      */
     private func clearScanState() {
+        print("🔍 [CLEAR_SCAN_STATE] clearScanState called")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - showingNutritionalLabelScan: \(showingNutritionalLabelScan)")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductNotFound: \(showingProductNotFound)")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductFound: \(showingProductFound)")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - showingOCRResults: \(showingOCRResults)")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - foundProduct: \(foundProduct?.name ?? "NIL")")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - hybridScanResult: \(hybridScanResult != nil ? "SET" : "NIL")")
+        
         // Clear scan results
+        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanResult and scanResult")
         hybridScanResult = nil
         scanResult = nil
-        detectedBarcode = nil
+        
+        // Don't clear detectedBarcode if we're in nutritional label flow OR product not found flow
+        // This preserves the barcode for nutritional label processing and retry functionality
+        if !showingNutritionalLabelScan && !showingProductNotFound {
+            print("🔍 [CLEAR_SCAN_STATE] Clearing detectedBarcode because not in nutritional label or product not found flow")
+            detectedBarcode = nil
+        } else {
+            print("🔍 [CLEAR_SCAN_STATE] Preserving detectedBarcode because in nutritional label flow: \(showingNutritionalLabelScan) or product not found flow: \(showingProductNotFound)")
+        }
+        
+        print("🔍 [CLEAR_SCAN_STATE] Clearing foundProduct")
         foundProduct = nil
         
         // Clear service states
+        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanService results")
         hybridScanService.clearResults()
         
         // Reset UI states
+        print("🔍 [CLEAR_SCAN_STATE] Resetting UI states")
         showingProductFound = false
         showingProductNotFound = false
         showingNutritionalLabelScan = false
         showingBarcodeOverlay = false
+        
+        print("🔍 [CLEAR_SCAN_STATE] clearScanState completed")
     }
     
     // MARK: - Image Processing
@@ -402,30 +528,36 @@ struct ScanView: View {
     // MARK: - Barcode Detection
     
     private func handleBarcodeDetection(_ barcode: BarcodeResult) {
-        print("🔍 Barcode detected: \(barcode.value) (confidence: \(barcode.confidence))")
+        // Prevent barcode detection when any sheet is already being presented
+        if showingProductFound || showingProductNotFound || showingOCRResults || showingNutritionalLabelScan {
+            return
+        }
         
         withAnimation(.easeInOut(duration: 0.3)) {
             detectedBarcode = barcode
         }
         
-        print("🔍 detectedBarcode set to: \(detectedBarcode?.value ?? "NIL")")
+        // Pause camera after barcode detection to save battery and prevent continuous scanning
+        pauseCameraAfterBarcodeDetection()
         
         // Auto-analyze high confidence barcodes
         if barcode.confidence > 0.8 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 analyzeDetectedBarcode(barcode)
             }
+        } else {
+            // For low confidence barcodes, auto-resume camera after 10 seconds if no user interaction
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+                if self.detectedBarcode?.value == barcode.value && 
+                   !self.showingProductFound && !self.showingProductNotFound && 
+                   !self.showingOCRResults && !self.showingNutritionalLabelScan {
+                    self.resumeCameraForRescan()
+                }
+            }
         }
     }
     
     private func analyzeDetectedBarcode(_ barcode: BarcodeResult) {
-        print("🔍 Analyzing barcode: \(barcode.value)")
-        
-        // Clear barcode detection card when analysis starts
-        withAnimation(.easeInOut(duration: 0.3)) {
-            detectedBarcode = nil
-        }
-        
         Task {
             // Look up product in database
             do {
@@ -434,26 +566,24 @@ struct ScanView: View {
                 await MainActor.run {
                     if let product = product {
                         // Product found in database
-                        print("🔍 Product found in database: \(product.name)")
                         foundProduct = product
                         showingProductFound = true
-                        // Keep barcode for potential future use
+                        
+                        // Now clear the barcode detection card since we have the product
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            detectedBarcode = nil
+                        }
                     } else {
                         // Product not found - prompt for nutritional label scan
-                        print("🔍 Product not found - showing ProductNotFoundView with barcode: \(barcode.value)")
-                        // Keep detectedBarcode so it can be used for nutritional label scan
                         detectedBarcode = barcode // Restore barcode for nutritional label scan
                         showingProductNotFound = true
                     }
                 }
             } catch {
-                // Error looking up product
-                print("Error looking up product: \(error.localizedDescription)")
+                // Error looking up product - treat as not found
                 await MainActor.run {
-                    print("🔍 Error case - showing ProductNotFoundView with barcode: \(barcode.value)")
                     detectedBarcode = barcode // Restore barcode for nutritional label scan
                     showingProductNotFound = true
-                    // Keep the barcode even if lookup failed - user can still scan nutritional label
                 }
             }
         }
@@ -462,11 +592,16 @@ struct ScanView: View {
     // MARK: - Analysis
     
     private func analyzeHybridResult() {
-        guard hybridScanResult != nil else { return }
+        guard let result = hybridScanResult else { return }
+        
+        // Clear scan complete popup when analysis starts
+        withAnimation(.easeInOut(duration: 0.3)) {
+            hybridScanResult = nil
+        }
         
         if petService.pets.count == 1 {
             selectedPet = petService.pets.first
-            analyzeIngredients()
+            analyzeIngredientsWithResult(result)
         } else if petService.pets.count > 1 {
             showingPetSelection = true
         } else {
@@ -476,7 +611,16 @@ struct ScanView: View {
     
     private func analyzeIngredients() {
         guard let result = hybridScanResult,
-              let pet = selectedPet else { return }
+              let _ = selectedPet else { return }
+        
+        analyzeIngredientsWithResult(result)
+    }
+    
+    private func analyzeIngredientsWithResult(_ result: HybridScanResult) {
+        guard let pet = selectedPet else { return }
+        
+        // Don't clear OCR results if user is still in nutritional label scanning flow
+        let shouldPreserveOCRResults = showingOCRResults || showingNutritionalLabelScan
         
         let ingredients = result.ocrText
         let manufacturerCode = result.productInfo?.manufacturerCode
@@ -509,17 +653,22 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
-                // Clear all popups when analysis completes
+                // Clear all popups when analysis completes (only if not preserving OCR results)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showingProductFound = false
                     showingProductNotFound = false
-                    showingOCRResults = false
-                    detectedBarcode = nil
+                    if !shouldPreserveOCRResults {
+                        showingOCRResults = false
+                        detectedBarcode = nil
+                    }
                     foundProduct = nil
                 }
                 
                 scanResult = scan
                 showingResults = true
+                
+                // Resume camera for continued scanning after analysis completes
+                resumeCameraScanning()
             }
         }
     }
@@ -529,11 +678,18 @@ struct ScanView: View {
     private func retryScan() {
         withAnimation(.easeInOut(duration: 0.3)) {
             hybridScanResult = nil
-            detectedBarcode = nil
+            // Don't clear detectedBarcode on retry - preserve it for the user to try again
+            print("🔍 DEBUG: retryScan preserving detectedBarcode for retry: \(detectedBarcode?.value ?? "NIL")")
             showingProductFound = false
             showingProductNotFound = false
             foundProduct = nil
         }
+        
+        // Don't resume camera here - let the user choose when to start scanning again
+        // The camera will be resumed when the user actually starts scanning
+        
+        // Clear any existing barcode detection to allow fresh scanning
+        // The camera will automatically reset its processing state after the cooldown period
     }
     
     // MARK: - Camera Control
@@ -557,15 +713,92 @@ struct ScanView: View {
     }
     
     /**
+     * Pause camera after barcode detection to save battery and preserve data
+     * This prevents continuous scanning while keeping the barcode data
+     */
+    private func pauseCameraAfterBarcodeDetection() {
+        guard !isCameraPaused else { return }
+        
+        // Pause the camera session
+        cameraController?.pauseCameraSession()
+        isCameraPaused = true
+    }
+    
+    /**
+     * Resume camera for nutritional label scanning
+     * Called when user needs to scan nutritional labels
+     */
+    private func resumeCameraForNutritionalLabelScan() {
+        guard isCameraPaused else { return }
+        
+        // Resume the camera session
+        cameraController?.resumeCameraSession()
+        isCameraPaused = false
+    }
+    
+    /**
+     * Resume camera for rescanning after low confidence barcode detection
+     * Clears the barcode detection card and resumes normal scanning
+     */
+    private func resumeCameraForRescan() {
+        guard isCameraPaused else { return }
+        
+        // Resume the camera session
+        cameraController?.resumeCameraSession()
+        isCameraPaused = false
+        
+        // Clear the barcode detection card to allow fresh scanning
+        withAnimation(.easeInOut(duration: 0.3)) {
+            detectedBarcode = nil
+        }
+    }
+    
+    /**
+     * Pause camera after nutritional label capture to prevent interference
+     * This prevents barcode detection from interfering with nutritional label processing
+     */
+    private func pauseCameraAfterNutritionalLabelCapture() {
+        guard !isCameraPaused else { return }
+        
+        // Pause the camera session to prevent barcode interference
+        cameraController?.pauseCameraSession()
+        isCameraPaused = true
+    }
+    
+    /**
+     * Completely stop camera session when OCR results sheet is presented
+     * This prevents resource conflicts and blank screens
+     */
+    private func stopCameraForSheetPresentation() {
+        // Completely stop the camera session to prevent resource conflicts
+        cameraController?.stopCameraSessionCompletely()
+        isCameraPaused = true
+    }
+    
+    /**
      * Process nutritional label image captured manually
      */
     private func processNutritionalLabelImage(_ image: UIImage) {
+        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Starting image processing")
+        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Image size: \(image.size)")
+        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current UI state - showingNutritionalLabelScan: \(showingNutritionalLabelScan), showingOCRResults: \(showingOCRResults)")
+        
         Task {
+            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Starting OCR-only scan")
             // Use OCR-only scan for nutritional label
             let result = await hybridScanService.performOCROnlyScan(from: image)
+            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR scan completed")
+            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR result - scanMethod: \(result.scanMethod), confidence: \(result.confidence)")
+            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR text length: \(result.ocrText.count) characters")
+            
             await MainActor.run {
                 // Preserve the detected barcode from the original scan
+                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Processing result on main thread")
+                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
+                
                 if let originalBarcode = detectedBarcode {
+                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ✅ Preserving barcode: \(originalBarcode.value)")
                     // Create a new result with the preserved barcode
                     let updatedResult = HybridScanResult(
                         barcode: originalBarcode,
@@ -579,11 +812,16 @@ struct ScanView: View {
                         lastCapturedImage: result.lastCapturedImage
                     )
                     hybridScanResult = updatedResult
+                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ✅ Updated result created with barcode: \(updatedResult.barcode?.value ?? "NIL")")
                 } else {
-                hybridScanResult = result
+                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ❌ No detectedBarcode to preserve, using OCR-only result")
+                    hybridScanResult = result
                 }
+                
                 // Show the OCR results sheet
+                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Setting showingOCRResults to true")
                 showingOCRResults = true
+                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Final UI state - showingOCRResults: \(showingOCRResults), hybridScanResult: \(hybridScanResult != nil ? "SET" : "NIL")")
             }
         }
     }
@@ -677,6 +915,11 @@ struct ScanView: View {
                     
                     // Automatically analyze the uploaded data for the user's pet
                     await analyzeUploadedDataForPet(result: result, foodProduct: foodProduct)
+                    
+                    // Resume camera for continued scanning after upload completes
+                    await MainActor.run {
+                        resumeCameraScanning()
+                    }
                 } else {
                     await MainActor.run {
                         print("❌ Failed to upload food product to database")
@@ -689,6 +932,9 @@ struct ScanView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
                             showingErrorToast = false
                         }
+                        
+                        // Resume camera for continued scanning even after upload failure
+                        resumeCameraScanning()
                     }
                 }
                 
@@ -704,6 +950,9 @@ struct ScanView: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
                         showingErrorToast = false
                     }
+                    
+                    // Resume camera for continued scanning even after upload error
+                    resumeCameraScanning()
                 }
             }
         }
@@ -745,6 +994,9 @@ struct ScanView: View {
             print("🔍 Analyzing uploaded food for \(pet.name)...")
         }
         
+        // Don't clear OCR results if user is still in nutritional label scanning flow
+        let shouldPreserveOCRResults = showingOCRResults || showingNutritionalLabelScan
+        
         // Use the ingredients from the uploaded food product
         let ingredients = foodProduct.nutritionalInfo?.ingredients.joined(separator: ", ") ?? result.ocrText
         let productName = foodProduct.name
@@ -770,12 +1022,14 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
-                // Clear all popups when analysis completes
+                // Clear all popups when analysis completes (only if not preserving OCR results)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showingProductFound = false
                     showingProductNotFound = false
-                    showingOCRResults = false
-                    detectedBarcode = nil
+                    if !shouldPreserveOCRResults {
+                        showingOCRResults = false
+                        detectedBarcode = nil
+                    }
                     foundProduct = nil
                 }
                 
@@ -786,6 +1040,8 @@ struct ScanView: View {
                     print("   Safety: \(result.overallSafety)")
                     print("   Confidence: \(result.confidenceScore)")
                 }
+                
+                // Camera will be resumed when the nutritional label result sheet is dismissed
             }
         }
     }
@@ -1029,6 +1285,7 @@ struct ScanView: View {
      * Analyze product from database for pet safety
      */
     private func analyzeProductForPet(_ product: FoodProduct) {
+        
         // Select pet first
         if petService.pets.count == 1 {
             selectedPet = petService.pets.first
@@ -1046,6 +1303,9 @@ struct ScanView: View {
     private func analyzeProductIngredients(_ product: FoodProduct) {
         guard let pet = selectedPet else { return }
         
+        // Don't clear OCR results if user is still in nutritional label scanning flow
+        let shouldPreserveOCRResults = showingOCRResults || showingNutritionalLabelScan
+        
         // Get ingredients from product
         let ingredientsText = product.nutritionalInfo?.ingredients.joined(separator: ", ") ?? ""
         
@@ -1060,12 +1320,14 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
-                // Clear all popups when analysis completes
+                // Clear all popups when analysis completes (only if not preserving OCR results)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showingProductFound = false
                     showingProductNotFound = false
-                    showingOCRResults = false
-                    detectedBarcode = nil
+                    if !shouldPreserveOCRResults {
+                        showingOCRResults = false
+                        detectedBarcode = nil
+                    }
                     foundProduct = nil
                 }
                 
@@ -1130,6 +1392,10 @@ struct ScanningFrameOverlay: View {
 struct BarcodeDetectionCard: View {
     let barcode: BarcodeResult
     let onAnalyze: () -> Void
+    let onRescan: () -> Void
+    
+    @State private var countdownTimer: Timer?
+    @State private var timeRemaining = 10
     
     var body: some View {
         HStack(spacing: ModernDesignSystem.Spacing.md) {
@@ -1153,21 +1419,50 @@ struct BarcodeDetectionCard: View {
                 
                 Text("Confidence: \(Int(barcode.confidence * 100))%")
                     .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .foregroundColor(barcode.confidence > 0.8 ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.warning)
+                
+                // Show countdown for low confidence barcodes
+                if barcode.confidence <= 0.8 {
+                    Text("Auto-rescan in \(timeRemaining)s")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .opacity(0.8)
+                }
             }
             
             Spacer()
             
-            // Analyze button with Trust & Nature primary color
-            Button(action: onAnalyze) {
-                Text("Analyze")
-                    .font(ModernDesignSystem.Typography.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                    .background(ModernDesignSystem.Colors.primary)
-                    .clipShape(Capsule())
+            // Action buttons
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Rescan button for low confidence barcodes
+                if barcode.confidence <= 0.8 {
+                    Button(action: onRescan) {
+                        Text("Rescan")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule()
+                                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                            )
+                    }
+                }
+                
+                // Analyze button with Trust & Nature primary color
+                Button(action: onAnalyze) {
+                    Text("Analyze")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.primary)
+                        .clipShape(Capsule())
+                }
             }
         }
         .padding(ModernDesignSystem.Spacing.md)
@@ -1183,6 +1478,36 @@ struct BarcodeDetectionCard: View {
             x: 0,
             y: 4
         )
+        .onAppear {
+            // Start countdown timer for low confidence barcodes
+            if barcode.confidence <= 0.8 {
+                startCountdownTimer()
+            }
+        }
+        .onDisappear {
+            // Stop countdown timer when card disappears
+            stopCountdownTimer()
+        }
+    }
+    
+    private func startCountdownTimer() {
+        timeRemaining = 10
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            Task { @MainActor in
+                if timeRemaining > 0 {
+                    timeRemaining -= 1
+                } else {
+                    // Auto-rescan when countdown reaches 0
+                    onRescan()
+                    stopCountdownTimer()
+                }
+            }
+        }
+    }
+    
+    private func stopCountdownTimer() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
     }
 }
 

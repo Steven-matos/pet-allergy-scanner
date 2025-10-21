@@ -184,7 +184,7 @@ class CacheService: ObservableObject {
                 storeOnDisk(entry as CacheEntry<Data>, forKey: key)
             }
         } catch {
-            print("❌ Failed to encode data for caching: \(error)")
+            // Failed to encode data for caching
         }
     }
     
@@ -199,7 +199,6 @@ class CacheService: ObservableObject {
                memoryEntry.isValid {
                 return memoryEntry.data
             } else {
-                print("❌ Memory cache contains invalid data for key \(key), clearing entry")
                 // Clear the corrupted memory cache entry
                 memoryCache.removeValue(forKey: key)
             }
@@ -302,7 +301,7 @@ class CacheService: ObservableObject {
         do {
             try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         } catch {
-            print("❌ Failed to create cache directory: \(error)")
+            // Failed to create cache directory
         }
     }
     
@@ -325,7 +324,7 @@ class CacheService: ObservableObject {
                 }
             }
         } catch {
-            print("❌ Failed to load persistent cache: \(error)")
+            // Failed to load persistent cache
         }
     }
     
@@ -350,7 +349,7 @@ class CacheService: ObservableObject {
             let fileURL = cacheDirectory.appendingPathComponent("\(key).cache")
             try data.write(to: fileURL)
         } catch {
-            print("❌ Failed to store cache on disk: \(error)")
+            // Failed to store cache on disk
         }
     }
     
@@ -364,7 +363,6 @@ class CacheService: ObservableObject {
             let data = try Data(contentsOf: fileURL)
             return try JSONDecoder().decode(CacheEntry<T>.self, from: data)
         } catch {
-            print("❌ Failed to load cache from disk: \(error)")
             return nil
         }
     }
@@ -383,7 +381,7 @@ class CacheService: ObservableObject {
                 try fileManager.removeItem(at: file)
             }
         } catch {
-            print("❌ Failed to clear disk cache: \(error)")
+            // Failed to clear disk cache
         }
     }
     
@@ -402,7 +400,7 @@ class CacheService: ObservableObject {
                 }
             }
         } catch {
-            print("❌ Failed to invalidate disk cache: \(error)")
+            // Failed to invalidate disk cache
         }
     }
     
@@ -492,7 +490,6 @@ class CacheService: ObservableObject {
             memoryCache.removeValue(forKey: key)
         }
         
-        print("🧹 Memory warning: Cleared \(sessionKeys.count) session cache entries")
     }
 }
 

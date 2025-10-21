@@ -104,10 +104,10 @@ struct CameraView: UIViewControllerRepresentable {
 #Preview {
     CameraView(
         onImageCaptured: { image in
-            print("Image captured: \(image)")
+            
         },
         onError: { error in
-            print("Camera error: \(error)")
+            
         }
     )
 }

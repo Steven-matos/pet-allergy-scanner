@@ -392,7 +392,6 @@ class ModernCameraViewController: UIViewController {
             session.stopRunning()
         }
         
-        print("📷 ModernCameraViewController deallocated")
     }
     
     override func viewDidDisappear(_ animated: Bool) {
@@ -499,7 +498,6 @@ class ModernCameraViewController: UIViewController {
             
             Task { @MainActor [weak self] in
                 self?.isSessionRunning = false
-                print("📷 Camera session completely stopped for sheet presentation")
             }
         }
     }
@@ -744,7 +742,6 @@ class ModernCameraViewController: UIViewController {
             // Only stop if session is actually running
             if let session = session, session.isRunning {
                 session.stopRunning()
-                print("📷 Camera session stopped successfully")
             }
             
             // Update session state on main thread
@@ -820,7 +817,6 @@ class ModernCameraViewController: UIViewController {
             return
         }
         
-        print("📷 Camera session interrupted: \(reason)")
         
         switch reason {
         case .audioDeviceInUseByAnotherClient, .videoDeviceInUseByAnotherClient:
@@ -846,7 +842,6 @@ class ModernCameraViewController: UIViewController {
     /// Handles camera session interruption end
     /// - Note: Called when session interruption ends
     @objc private func handleSessionInterruptionEnded(notification: NSNotification) {
-        print("📷 Camera session interruption ended")
         
         // Restart session if it was interrupted
         if isSessionConfigured && !isSessionRunning {
