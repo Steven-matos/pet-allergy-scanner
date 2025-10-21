@@ -148,7 +148,7 @@ struct NutritionalLabelScanView: View {
                 Task {
                     await processImageWithBarcodeDetection(image)
                 }
-            case .failure(let error):
+            case .failure(_):
                 break
             }
         }
@@ -161,7 +161,7 @@ struct NutritionalLabelScanView: View {
     private func processImageWithBarcodeDetection(_ image: UIImage) async {
         // Use the hybrid scan service to detect both barcode and OCR
         // The result is processed internally by the service
-        let result = await HybridScanService.shared.performHybridScan(from: image)
+        _ = await HybridScanService.shared.performHybridScan(from: image)
         
         await MainActor.run {
             // Pass the processed image with barcode information

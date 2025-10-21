@@ -443,7 +443,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -774,7 +774,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -869,7 +869,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
