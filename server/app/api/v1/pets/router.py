@@ -270,18 +270,24 @@ async def update_pet(
                 detail="Pet not found"
             )
         
-        # Validate species-specific requirements for updates
-        if pet_update.species == "cat" and pet_update.weight_kg and pet_update.weight_kg > 15:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cat weight seems unusually high. Please verify the weight."
-            )
+        # Get existing pet to validate species-specific requirements
+        existing_pet_response = supabase.table("pets").select("species").eq("id", pet_id).eq("user_id", current_user.id).execute()
         
-        if pet_update.species == "dog" and pet_update.weight_kg and pet_update.weight_kg > 100:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Dog weight seems unusually high. Please verify the weight."
-            )
+        if existing_pet_response.data:
+            existing_species = existing_pet_response.data[0]["species"]
+            
+            # Validate species-specific requirements for updates
+            if existing_species == "cat" and pet_update.weight_kg and pet_update.weight_kg > 15:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cat weight seems unusually high. Please verify the weight."
+                )
+            
+            if existing_species == "dog" and pet_update.weight_kg and pet_update.weight_kg > 100:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Dog weight seems unusually high. Please verify the weight."
+                )
         
         # Prepare update data
         update_data = pet_update.dict(exclude_unset=True)
