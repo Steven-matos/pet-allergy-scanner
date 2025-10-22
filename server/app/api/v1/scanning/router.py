@@ -223,9 +223,8 @@ async def update_scan(
             image_url=updated_scan["image_url"],
             raw_text=updated_scan["raw_text"],
             status=ScanStatus(updated_scan["status"]),
-            method=ScanMethod(updated_scan["method"]),
-            confidence_score=updated_scan["confidence_score"],
-            notes=updated_scan["notes"],
+            scan_method=ScanMethod(updated_scan.get("method", "ocr")),
+            result=updated_scan.get("result"),
             created_at=updated_scan["created_at"],
             updated_at=updated_scan["updated_at"]
         )

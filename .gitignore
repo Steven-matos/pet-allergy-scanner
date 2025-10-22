@@ -180,3 +180,5 @@ temp_*.py
 *.backup
 *.bak
 project.pbxproj.backup
+server/database_migrations/*.sql
+server/scripts/*.py

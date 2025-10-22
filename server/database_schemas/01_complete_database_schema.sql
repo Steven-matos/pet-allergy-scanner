@@ -72,6 +72,9 @@ CREATE TABLE IF NOT EXISTS public.scans (
     image_url TEXT,
     raw_text TEXT,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    method TEXT DEFAULT 'ocr' CHECK (method IN ('barcode', 'ocr', 'hybrid')),
+    confidence_score DECIMAL(3,2) CHECK (confidence_score >= 0.0 AND confidence_score <= 1.0),
+    notes TEXT CHECK (LENGTH(notes) <= 1000),
     result JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -307,6 +310,8 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
 CREATE INDEX IF NOT EXISTS idx_pets_user_id ON public.pets(user_id);
 CREATE INDEX IF NOT EXISTS idx_scans_user_id ON public.scans(user_id);
 CREATE INDEX IF NOT EXISTS idx_scans_pet_id ON public.scans(pet_id);
+CREATE INDEX IF NOT EXISTS idx_scans_confidence_score ON public.scans(confidence_score);
+CREATE INDEX IF NOT EXISTS idx_scans_method ON public.scans(method);
 CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON public.favorites(user_id);
 CREATE INDEX IF NOT EXISTS idx_favorites_pet_id ON public.favorites(pet_id);
 

@@ -60,6 +60,9 @@ class ScanUpdate(BaseModel):
     status: Optional[ScanStatus] = None
     result: Optional[ScanResult] = None
     raw_text: Optional[str] = None
+    confidence_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    notes: Optional[str] = Field(None, max_length=1000)
+    method: Optional[ScanMethod] = None
 
 class ScanResponse(ScanBase):
     """Scan response model"""
