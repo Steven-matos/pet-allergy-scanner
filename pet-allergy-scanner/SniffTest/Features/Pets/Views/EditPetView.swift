@@ -37,6 +37,7 @@ struct EditPetView: View {
     @State private var weightKg: Double?
     @State private var activityLevel: PetActivityLevel = .moderate
     @State private var selectedImage: UIImage?
+    @State private var imageRemoved = false
     @State private var knownSensitivities: [String] = []
     @State private var vetName = ""
     @State private var vetPhone = ""
@@ -143,7 +144,10 @@ struct EditPetView: View {
                 PetProfileImagePickerView(
                     selectedImage: $selectedImage,
                     currentImageUrl: pet.imageUrl,
-                    species: pet.species
+                    species: pet.species,
+                    onImageRemoved: {
+                        imageRemoved = true
+                    }
                 )
                 Spacer()
             }
@@ -624,29 +628,23 @@ struct EditPetView: View {
                 
                 // Handle image changes
                 if let selectedImage = selectedImage {
-                    // Check if image changed by comparing with existing
-                    let existingImage = pet.imageUrl.flatMap { UIImage(contentsOfFile: $0) }
-                    if existingImage == nil || !imagesAreEqual(selectedImage, existingImage) {
-                        // Get current user ID for folder organization
-                        guard let userId = AuthService.shared.currentUser?.id else {
-                            petService.errorMessage = "User not authenticated"
-                            return
-                        }
-                        
-                        // Replace old image with new one (deletes old, uploads new)
-                        newImageUrl = try await StorageService.shared.replacePetImage(
-                            oldImageUrl: pet.imageUrl,
-                            newImage: selectedImage,
-                            userId: userId,
-                            petId: pet.id
-                        )
-                        
-                        print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
-                    } else {
-                        newImageUrl = nil // No change
+                    // User selected a new image - upload it
+                    guard let userId = AuthService.shared.currentUser?.id else {
+                        petService.errorMessage = "User not authenticated"
+                        return
                     }
-                } else if pet.imageUrl != nil {
-                    // Image was removed - delete old image if it's in Supabase
+                    
+                    // Replace old image with new one (deletes old, uploads new)
+                    newImageUrl = try await StorageService.shared.replacePetImage(
+                        oldImageUrl: pet.imageUrl,
+                        newImage: selectedImage,
+                        userId: userId,
+                        petId: pet.id
+                    )
+                    
+                    print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
+                } else if imageRemoved {
+                    // User explicitly removed the image - delete old image and set to empty
                     if let oldUrl = pet.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
                         do {
                             try await StorageService.shared.deletePetImage(path: oldUrl)
@@ -657,7 +655,8 @@ struct EditPetView: View {
                     }
                     newImageUrl = ""
                 } else {
-                    newImageUrl = nil // No change
+                    // No image change - keep existing image (don't include imageUrl in update)
+                    newImageUrl = nil
                 }
                 
                 // Convert weight to kg for storage (backend expects kg)

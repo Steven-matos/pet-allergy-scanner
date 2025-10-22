@@ -322,6 +322,7 @@ struct PetProfileImagePickerView: View {
     @Binding var selectedImage: UIImage?
     let currentImageUrl: String?
     let species: PetSpecies
+    let onImageRemoved: (() -> Void)?
     
     @State private var showingImagePicker = false
     @State private var showingActionSheet = false
@@ -412,6 +413,7 @@ struct PetProfileImagePickerView: View {
                 Button("Remove Photo", role: .destructive) {
                     selectedImage = nil
                     existingImage = nil
+                    onImageRemoved?()
                     HapticFeedback.light()
                 }
             }
@@ -468,9 +470,9 @@ struct PetProfileImagePickerView: View {
         
         ProfileImagePickerView(selectedImage: .constant(nil), currentImageUrl: "https://example.com/image.jpg")
         
-        PetProfileImagePickerView(selectedImage: .constant(nil), currentImageUrl: nil, species: .dog)
+        PetProfileImagePickerView(selectedImage: .constant(nil), currentImageUrl: nil, species: .dog, onImageRemoved: nil)
         
-        PetProfileImagePickerView(selectedImage: .constant(nil), currentImageUrl: "https://example.com/pet.jpg", species: .cat)
+        PetProfileImagePickerView(selectedImage: .constant(nil), currentImageUrl: "https://example.com/pet.jpg", species: .cat, onImageRemoved: nil)
     }
 }
 
