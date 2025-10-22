@@ -71,8 +71,12 @@ class ScanResponse(ScanBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.isoformat() + 'Z' if v.tzinfo is None else v.isoformat()
+        }
+    )
 
 class ScanAnalysisRequest(BaseModel):
     """Scan analysis request model"""

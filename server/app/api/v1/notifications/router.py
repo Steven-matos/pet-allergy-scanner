@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models.user import User
+from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.utils.logging_config import get_logger
 from app.services.push_notification_service import PushNotificationService
@@ -34,7 +34,7 @@ class DeviceTokenRequest(BaseModel):
 @router.post("/register-device")
 async def register_device_token(
     request: DeviceTokenRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
@@ -106,7 +106,7 @@ async def register_device_token_anonymous(
 async def send_push_notification(
     device_token: str,
     payload: Dict[str, Any],
-    current_user: User = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -145,7 +145,7 @@ async def send_push_notification(
 
 @router.post("/cancel-all")
 async def cancel_all_notifications(
-    current_user: User = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     supabase = Depends(get_db)
 ):
     """
@@ -170,7 +170,7 @@ async def cancel_all_notifications(
 
 @router.post("/schedule-engagement")
 async def schedule_engagement_notifications(
-    current_user: User = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -241,7 +241,7 @@ async def schedule_engagement_notifications(
 async def send_birthday_notification(
     pet_name: str,
     pet_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: UserResponse = Depends(get_current_user),
     background_tasks: BackgroundTasks = None
 ):
     """
