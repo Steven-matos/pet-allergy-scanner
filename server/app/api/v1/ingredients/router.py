@@ -162,7 +162,8 @@ async def analyze_ingredients(ingredient_text: str, pet_allergies: List[str] = N
                 unknown_ingredients=[],
                 allergy_warnings=[],
                 overall_safety="unknown",
-                recommendations=[]
+                recommendations=["No ingredients found in the provided text"],
+                confidence_score=0.0
             )
         
         # Analyze each ingredient
@@ -221,6 +222,11 @@ async def analyze_ingredients(ingredient_text: str, pet_allergies: List[str] = N
         if allergy_warnings:
             recommendations.append("Check for potential allergens")
         
+        # Calculate confidence score based on ingredient analysis
+        total_ingredients = len(ingredients)
+        known_ingredients = len(safe_ingredients) + len(caution_ingredients) + len(dangerous_ingredients)
+        confidence_score = known_ingredients / total_ingredients if total_ingredients > 0 else 0.0
+        
         return IngredientAnalysis(
             ingredients=analyzed_ingredients,
             safe_ingredients=safe_ingredients,
@@ -229,7 +235,8 @@ async def analyze_ingredients(ingredient_text: str, pet_allergies: List[str] = N
             unknown_ingredients=unknown_ingredients,
             allergy_warnings=allergy_warnings,
             overall_safety=overall_safety,
-            recommendations=recommendations
+            recommendations=recommendations,
+            confidence_score=confidence_score
         )
         
     except Exception as e:

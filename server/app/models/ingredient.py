@@ -67,8 +67,12 @@ class IngredientResponse(IngredientBase):
 
 class IngredientAnalysis(BaseModel):
     """Ingredient analysis result"""
-    ingredient_name: str
-    safety_level: IngredientSafety
-    is_unsafe_for_pet: bool
-    reason: Optional[str] = None
-    alternatives: List[str] = Field(default_factory=list)
+    ingredients: List[IngredientResponse] = Field(default_factory=list)
+    safe_ingredients: List[str] = Field(default_factory=list)
+    caution_ingredients: List[str] = Field(default_factory=list)
+    dangerous_ingredients: List[str] = Field(default_factory=list)
+    unknown_ingredients: List[str] = Field(default_factory=list)
+    allergy_warnings: List[str] = Field(default_factory=list)
+    overall_safety: str = "unknown"
+    recommendations: List[str] = Field(default_factory=list)
+    confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)

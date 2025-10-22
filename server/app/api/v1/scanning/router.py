@@ -318,6 +318,24 @@ async def analyze_scan(
             []  # No dietary_restrictions field in database
         )
         
+        # Convert IngredientAnalysis to ScanResult
+        scan_result = ScanResult(
+            product_name=analysis_request.product_name,
+            brand=None,  # Not available from barcode scan
+            ingredients_found=[ing.name for ing in analysis_result.ingredients],
+            unsafe_ingredients=analysis_result.dangerous_ingredients,
+            safe_ingredients=analysis_result.safe_ingredients,
+            overall_safety=analysis_result.overall_safety,
+            confidence_score=analysis_result.confidence_score,
+            analysis_details={
+                "caution_ingredients": ", ".join(analysis_result.caution_ingredients),
+                "unknown_ingredients": ", ".join(analysis_result.unknown_ingredients),
+                "allergy_warnings": ", ".join(analysis_result.allergy_warnings),
+                "recommendations": "; ".join(analysis_result.recommendations),
+                "analysis_type": "server_analysis"
+            }
+        )
+        
         # Update scan with analysis results
         update_data = {
             "status": ScanStatus.COMPLETED.value,
@@ -327,7 +345,7 @@ async def analyze_scan(
         
         supabase.table("scans").update(update_data).eq("id", scan_id).execute()
         
-        return analysis_result
+        return scan_result
         
     except HTTPException:
         raise
