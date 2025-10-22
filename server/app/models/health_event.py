@@ -112,7 +112,6 @@ class HealthEventResponse(HealthEventBase):
     id: str
     pet_id: str
     user_id: str
-    event_category: HealthEventCategory
     created_at: datetime
     updated_at: datetime
     
@@ -124,7 +123,6 @@ class HealthEventResponse(HealthEventBase):
                 "pet_id": "123e4567-e89b-12d3-a456-426614174001",
                 "user_id": "123e4567-e89b-12d3-a456-426614174002",
                 "event_type": "vomiting",
-                "event_category": "digestive",
                 "title": "Morning vomiting episode",
                 "notes": "Vomited after breakfast, seemed fine afterwards",
                 "severity_level": 2,
@@ -152,7 +150,6 @@ class HealthEventListResponse(BaseModel):
                         "pet_id": "123e4567-e89b-12d3-a456-426614174001",
                         "user_id": "123e4567-e89b-12d3-a456-426614174002",
                         "event_type": "vomiting",
-                        "event_category": "digestive",
                         "title": "Morning vomiting episode",
                         "notes": "Vomited after breakfast",
                         "severity_level": 2,
