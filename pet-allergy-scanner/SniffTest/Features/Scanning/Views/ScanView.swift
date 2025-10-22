@@ -206,7 +206,7 @@ struct ScanView: View {
         .navigationBarHidden(true)
         .sheet(isPresented: $showingResults) {
             if let scanResult = scanResult {
-                ScanResultView(scan: scanResult)
+                ScanResultView(scan: scanResult, onDismissAll: dismissAllSheets)
                     .onAppear {
                         stopCameraForSheetPresentation()
                     }
@@ -682,6 +682,33 @@ struct ScanView: View {
     }
     
     // MARK: - Actions
+    
+    /**
+     * Dismiss all presented sheets and return to the main scanning view
+     * This ensures a clean state when the user clicks "Done" on scan results
+     */
+    private func dismissAllSheets() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            showingResults = false
+            showingProductFound = false
+            showingProductNotFound = false
+            showingOCRResults = false
+            showingNutritionalLabelScan = false
+            showingPetSelection = false
+            showingAddPet = false
+            showingHistory = false
+            
+            // Clear all related state
+            scanResult = nil
+            foundProduct = nil
+            hybridScanResult = nil
+            detectedBarcode = nil
+            selectedPet = nil
+        }
+        
+        // Resume camera scanning after dismissing all sheets
+        resumeCameraScanning()
+    }
     
     private func retryScan() {
         withAnimation(.easeInOut(duration: 0.3)) {

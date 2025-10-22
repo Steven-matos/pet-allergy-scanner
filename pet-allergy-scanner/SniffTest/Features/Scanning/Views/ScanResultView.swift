@@ -9,8 +9,19 @@ import SwiftUI
 
 struct ScanResultView: View {
     let scan: Scan
+    let onDismissAll: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var settingsManager = SettingsManager.shared
+    @StateObject private var sensitivityService = PetSensitivityService()
+    @State private var sensitivityAssessment: SensitivityAssessment?
+    @State private var isLoadingSensitivity = false
+    @State private var sensitivityError: String?
+    @State private var hasAttemptedSensitivityLoad = false
+    
+    init(scan: Scan, onDismissAll: (() -> Void)? = nil) {
+        self.scan = scan
+        self.onDismissAll = onDismissAll
+    }
     
     var body: some View {
         NavigationStack {
@@ -30,10 +41,21 @@ struct ScanResultView: View {
                             NutritionalAnalysisSection(nutritionalAnalysis: nutritionalAnalysis)
                         }
                         
-                        // Analysis Details (only show if detailed reports are enabled)
-                        if settingsManager.shouldShowDetailedAnalysis && !result.analysisDetails.isEmpty {
-                            AnalysisDetailsSection(details: result.analysisDetails)
+                        // Pet Sensitivity Assessment (always visible)
+                        if hasAttemptedSensitivityLoad {
+                            if let sensitivityAssessment = sensitivityAssessment {
+                                SensitivityAssessmentCard(assessment: sensitivityAssessment)
+                            } else if isLoadingSensitivity {
+                                SensitivityLoadingView()
+                            } else if let error = sensitivityError {
+                                SensitivityErrorView(error: error) {
+                                    loadSensitivityAssessment()
+                                }
+                            }
                         }
+                        
+                        // Veterinary Disclaimer
+                        VeterinaryDisclaimerCard()
                     } else {
                         // Loading state
                         LoadingStateView()
@@ -49,15 +71,63 @@ struct ScanResultView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
-                        dismiss()
+                        if let onDismissAll = onDismissAll {
+                            onDismissAll()
+                        } else {
+                            dismiss()
+                        }
                     }
                     .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .onAppear {
+                loadSensitivityAssessment()
+            }
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    /**
+     * Load sensitivity assessment for the current scan
+     */
+    private func loadSensitivityAssessment() {
+        guard scan.result != nil else { 
+            isLoadingSensitivity = false
+            hasAttemptedSensitivityLoad = true
+            return 
+        }
+        
+        hasAttemptedSensitivityLoad = true
+        isLoadingSensitivity = true
+        sensitivityError = nil
+        
+        Task {
+            do {
+                let assessment = try await sensitivityService.assessSensitivities(for: scan)
+                await MainActor.run {
+                    self.sensitivityAssessment = assessment
+                    self.isLoadingSensitivity = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.sensitivityError = error.localizedDescription
+                    self.isLoadingSensitivity = false
                 }
             }
         }
     }
 }
 
+/**
+ * Safety result card displaying overall safety assessment
+ * 
+ * Overall Safety Calculation:
+ * - "dangerous" if any dangerous ingredients are found
+ * - "caution" if any caution ingredients are found (and no dangerous ones)
+ * - "unknown" if any unknown ingredients are found (and no dangerous/caution ones)
+ * - "safe" if all ingredients are safe
+ */
 struct SafetyResultCard: View {
     let result: ScanResult
     let settingsManager: SettingsManager
@@ -110,6 +180,12 @@ struct SafetyResultCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(colorForSafety(result.overallSafety), lineWidth: 2)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
     }
     
@@ -198,6 +274,12 @@ struct UnsafeIngredientsList: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.warmCoral, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -236,6 +318,12 @@ struct SafeIngredientsList: View {
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.safe, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
     }
 }
@@ -348,6 +436,12 @@ struct CalorieInfoCard: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -386,6 +480,12 @@ struct MacronutrientsCard: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -414,6 +514,12 @@ struct NutritionalMineralsCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
         )
     }
 }
@@ -485,6 +591,108 @@ struct LoadingStateView: View {
     }
 }
 
+/**
+ * Loading view for sensitivity assessment
+ */
+struct SensitivityLoadingView: View {
+    var body: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            HStack {
+                Image(systemName: "pawprint.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .accessibilityLabel("Pet sensitivity icon")
+                
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Sensitivity Assessment")
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    
+                    Text("Analyzing for your pet...")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                Spacer()
+                
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .tint(ModernDesignSystem.Colors.primary)
+                    .accessibilityLabel("Loading sensitivity assessment")
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+}
+
+/**
+ * Error view for sensitivity assessment
+ */
+struct SensitivityErrorView: View {
+    let error: String
+    let retryAction: () -> Void
+    
+    var body: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(ModernDesignSystem.Colors.warmCoral)
+                    .accessibilityLabel("Error icon")
+                
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Sensitivity Assessment")
+                        .font(ModernDesignSystem.Typography.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .accessibilityAddTraits(.isHeader)
+                    
+                    Text("Unable to load")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                Spacer()
+            }
+            
+            Text(error)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.leading)
+            
+            Button("Retry") {
+                retryAction()
+            }
+            .modernButton(style: .secondary)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.warmCoral.opacity(0.1))
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.warmCoral, lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+}
+
 #Preview {
     let sampleResult = ScanResult(
         productName: "Sample Pet Food",
@@ -528,4 +736,56 @@ struct LoadingStateView: View {
     )
     
     ScanResultView(scan: sampleScan)
+}
+
+/**
+ * Veterinary disclaimer card reminding users to consult their vet
+ * 
+ * Displays an important disclaimer that this app does not replace
+ * professional veterinary assessment and users should always consult
+ * with their veterinarian.
+ */
+struct VeterinaryDisclaimerCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Image(systemName: "stethoscope")
+                    .font(.system(size: 20))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .accessibilityLabel("Veterinary icon")
+                
+                Text("Important Disclaimer")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+                
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                Text("This analysis is for informational purposes only and does not replace professional veterinary assessment.")
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.leading)
+                
+                Text("Always consult with your veterinarian before making any changes to your pet's diet or if you have concerns about your pet's health.")
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.primary.opacity(0.05))
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.primary.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
 }
