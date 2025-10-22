@@ -270,7 +270,7 @@ async def update_pet(
                 detail="Pet not found"
             )
         
-        # Get existing pet to validate species-specific requirements
+        # Get existing pet to validate species-specific requirements (fixed species validation)
         existing_pet_response = supabase.table("pets").select("species").eq("id", pet_id).eq("user_id", current_user.id).execute()
         
         if existing_pet_response.data:
