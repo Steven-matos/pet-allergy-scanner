@@ -274,7 +274,7 @@ async def delete_scan(
             detail="Internal server error deleting scan"
         )
 
-@router.post("/{scan_id}/analyze", response_model=ScanResult)
+@router.post("/{scan_id}/analyze", response_model=ScanResponse)
 async def analyze_scan(
     scan_id: str,
     analysis_request: ScanAnalysisRequest,
@@ -283,7 +283,7 @@ async def analyze_scan(
     """
     Analyze a scan for ingredients and potential issues
     
-    Performs ingredient analysis on the scan data and returns results
+    Performs ingredient analysis on the scan data and returns the updated scan
     """
     try:
         supabase = get_supabase_client()
@@ -339,12 +339,33 @@ async def analyze_scan(
         update_data = {
             "status": ScanStatus.COMPLETED.value,
             "confidence_score": analysis_result.confidence_score,
-            "notes": f"Analysis completed with {len(analysis_result.ingredients)} ingredients found"
+            "notes": f"Analysis completed with {len(analysis_result.ingredients)} ingredients found",
+            "result": scan_result.model_dump()  # Store the result in the scan record
         }
         
-        supabase.table("scans").update(update_data).eq("id", scan_id).execute()
+        updated_scan_response = supabase.table("scans").update(update_data).eq("id", scan_id).execute()
         
-        return scan_result
+        if not updated_scan_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update scan with analysis results"
+            )
+        
+        updated_scan = updated_scan_response.data[0]
+        
+        # Return the updated scan as ScanResponse
+        return ScanResponse(
+            id=updated_scan["id"],
+            user_id=updated_scan["user_id"],
+            pet_id=updated_scan["pet_id"],
+            image_url=updated_scan["image_url"],
+            raw_text=updated_scan["raw_text"],
+            status=ScanStatus(updated_scan["status"]),
+            scan_method=ScanMethod(updated_scan.get("method", "ocr")),
+            result=scan_result,
+            created_at=updated_scan["created_at"],
+            updated_at=updated_scan["updated_at"]
+        )
         
     except HTTPException:
         raise
