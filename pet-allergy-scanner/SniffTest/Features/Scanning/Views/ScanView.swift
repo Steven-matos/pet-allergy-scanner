@@ -41,14 +41,14 @@ struct ScanView: View {
     @State private var errorMessage = ""
     
     // Camera control state
-    @State private var cameraController: ModernCameraViewController?
+    @State private var cameraController: SimpleCameraViewController?
     @State private var isCameraPaused = false
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 // Full-screen camera view
-                ModernCameraView(
+                SimpleCameraView(
                     onImageCaptured: processCapturedImage,
                     onBarcodeDetected: handleBarcodeDetection,
                     onCameraControllerReady: { controller in
@@ -207,6 +207,12 @@ struct ScanView: View {
         .sheet(isPresented: $showingResults) {
             if let scanResult = scanResult {
                 ScanResultView(scan: scanResult)
+                    .onAppear {
+                        stopCameraForSheetPresentation()
+                    }
+                    .onDisappear {
+                        resumeCameraScanning()
+                    }
             }
         }
         .sheet(isPresented: $showingPetSelection) {
@@ -250,6 +256,9 @@ struct ScanView: View {
                 ProductFoundView(
                     product: product,
                     onAnalyzeForPet: {
+                        print("🔍 [PRODUCT_FOUND] User clicked 'Analyze for My Pet'")
+                        print("🔍 [PRODUCT_FOUND] Product: \(product.name)")
+                        
                         withAnimation(.easeInOut(duration: 0.3)) {
                             showingProductFound = false
                         }
@@ -594,10 +603,8 @@ struct ScanView: View {
     private func analyzeHybridResult() {
         guard let result = hybridScanResult else { return }
         
-        // Clear scan complete popup when analysis starts
-        withAnimation(.easeInOut(duration: 0.3)) {
-            hybridScanResult = nil
-        }
+        // Don't clear the result immediately - let the analysis complete first
+        // The result will be cleared after analysis completes in analyzeIngredientsWithResult
         
         if petService.pets.count == 1 {
             selectedPet = petService.pets.first
@@ -662,13 +669,14 @@ struct ScanView: View {
                         detectedBarcode = nil
                     }
                     foundProduct = nil
+                    // Clear the hybrid scan result after analysis completes
+                    hybridScanResult = nil
                 }
                 
                 scanResult = scan
                 showingResults = true
                 
-                // Resume camera for continued scanning after analysis completes
-                resumeCameraScanning()
+                // Don't resume camera here - the results sheet will handle camera management
             }
         }
     }
@@ -708,6 +716,12 @@ struct ScanView: View {
      * This restores normal scanning functionality
      */
     private func resumeCameraScanning() {
+        // Resume the camera session if it was paused
+        if isCameraPaused {
+            cameraController?.resumeCameraSession()
+            isCameraPaused = false
+        }
+        
         // Resume the hybrid scan service for normal operation
         hybridScanService.resumeScanning()
     }
@@ -770,8 +784,8 @@ struct ScanView: View {
      * This prevents resource conflicts and blank screens
      */
     private func stopCameraForSheetPresentation() {
-        // Completely stop the camera session to prevent resource conflicts
-        cameraController?.stopCameraSessionCompletely()
+        // Stop the camera session to prevent resource conflicts
+        cameraController?.stopCameraForSheetPresentation()
         isCameraPaused = true
     }
     
@@ -1031,6 +1045,8 @@ struct ScanView: View {
                         detectedBarcode = nil
                     }
                     foundProduct = nil
+                    // Clear the hybrid scan result after analysis completes
+                    hybridScanResult = nil
                 }
                 
                 scanResult = scan
@@ -1285,14 +1301,19 @@ struct ScanView: View {
      * Analyze product from database for pet safety
      */
     private func analyzeProductForPet(_ product: FoodProduct) {
+        print("🔍 [PRODUCT_ANALYSIS] analyzeProductForPet called for product: \(product.name)")
+        print("🔍 [PRODUCT_ANALYSIS] Available pets: \(petService.pets.count)")
         
         // Select pet first
         if petService.pets.count == 1 {
             selectedPet = petService.pets.first
+            print("🔍 [PRODUCT_ANALYSIS] Using single pet: \(selectedPet?.name ?? "Unknown")")
             analyzeProductIngredients(product)
         } else if petService.pets.count > 1 {
+            print("🔍 [PRODUCT_ANALYSIS] Multiple pets found - showing pet selection")
             showingPetSelection = true
         } else {
+            print("🔍 [PRODUCT_ANALYSIS] No pets found - showing add pet")
             showingAddPet = true
         }
     }
@@ -1301,7 +1322,14 @@ struct ScanView: View {
      * Analyze product ingredients for selected pet
      */
     private func analyzeProductIngredients(_ product: FoodProduct) {
-        guard let pet = selectedPet else { return }
+        guard let pet = selectedPet else { 
+            print("🔍 [PRODUCT_ANALYSIS] ❌ No selected pet found")
+            return 
+        }
+        
+        print("🔍 [PRODUCT_ANALYSIS] Starting analysis for product: \(product.name)")
+        print("🔍 [PRODUCT_ANALYSIS] Pet: \(pet.name)")
+        print("🔍 [PRODUCT_ANALYSIS] Ingredients: \(product.nutritionalInfo?.ingredients.joined(separator: ", ") ?? "None")")
         
         // Don't clear OCR results if user is still in nutritional label scanning flow
         let shouldPreserveOCRResults = showingOCRResults || showingNutritionalLabelScan
@@ -1318,7 +1346,12 @@ struct ScanView: View {
             imageData: nil  // No image needed for database products
         )
         
+        print("🔍 [PRODUCT_ANALYSIS] Analysis request created - calling scanService.analyzeScan")
+        
         scanService.analyzeScan(analysisRequest) { scan in
+            print("🔍 [PRODUCT_ANALYSIS] ✅ Analysis completed successfully")
+            print("🔍 [PRODUCT_ANALYSIS] Scan result: \(scan.result?.overallSafety ?? "Unknown")")
+            
             Task { @MainActor in
                 // Clear all popups when analysis completes (only if not preserving OCR results)
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -1329,10 +1362,14 @@ struct ScanView: View {
                         detectedBarcode = nil
                     }
                     foundProduct = nil
+                    // Clear the hybrid scan result after analysis completes
+                    hybridScanResult = nil
                 }
                 
                 scanResult = scan
                 showingResults = true
+                
+                print("🔍 [PRODUCT_ANALYSIS] ✅ Results sheet should now be showing")
             }
         }
     }

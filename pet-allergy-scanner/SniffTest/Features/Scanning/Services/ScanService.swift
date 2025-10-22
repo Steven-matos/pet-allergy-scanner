@@ -9,6 +9,29 @@ import Foundation
 import UIKit
 import Combine
 
+/**
+ * Scan-related errors
+ */
+enum ScanError: Error, LocalizedError {
+    case analysisInProgress
+    case invalidRequest
+    case networkError
+    case parsingError
+    
+    var errorDescription: String? {
+        switch self {
+        case .analysisInProgress:
+            return "Analysis is already in progress"
+        case .invalidRequest:
+            return "Invalid analysis request"
+        case .networkError:
+            return "Network connection error"
+        case .parsingError:
+            return "Failed to parse scan results"
+        }
+    }
+}
+
 /// Scan service for managing scan operations and history
 /// Respects user settings for auto-save and analysis behavior
 @MainActor
@@ -130,7 +153,7 @@ class ScanService: ObservableObject, @unchecked Sendable {
         }
     }
     
-    /// Analyze scan text with proper task management
+    /// Analyze scan text with proper task management (legacy callback-based)
     func analyzeScan(_ analysisRequest: ScanAnalysisRequest, completion: @escaping (Scan) -> Void) {
         // Cancel any existing analysis task
         currentAnalysisTask?.cancel()
@@ -138,10 +161,14 @@ class ScanService: ObservableObject, @unchecked Sendable {
         isAnalyzing = true
         errorMessage = nil
         
+        print("🔍 [SCAN_SERVICE] Starting analysis with request: \(analysisRequest)")
+        
         // Use Task to handle async API call
         currentAnalysisTask = Task { @MainActor in
             do {
+                print("🔍 [SCAN_SERVICE] Calling apiService.analyzeScan...")
                 let analyzedScan = try await apiService.analyzeScan(analysisRequest)
+                print("🔍 [SCAN_SERVICE] ✅ API call successful, received scan: \(analyzedScan.id)")
                 
                 // Update the scan in our list
                 if let index = recentScans.firstIndex(where: { $0.id == analyzedScan.id }) {
@@ -155,11 +182,171 @@ class ScanService: ObservableObject, @unchecked Sendable {
                 // Notify notification manager of scan completion
                 NotificationManager.shared.handleScanCompleted()
                 
+                print("🔍 [SCAN_SERVICE] Calling completion handler...")
                 completion(analyzedScan)
-            } catch {
-                isAnalyzing = false
-                errorMessage = error.localizedDescription
+                print("🔍 [SCAN_SERVICE] ✅ Completion handler called successfully")
+               } catch {
+                   print("🔍 [SCAN_SERVICE] ❌ Error during analysis: \(error.localizedDescription)")
+                   print("🔍 [SCAN_SERVICE] ❌ Error type: \(type(of: error))")
+                   isAnalyzing = false
+                   errorMessage = error.localizedDescription
+                   
+                   // Create a more informative error scan based on the error type
+                   let errorDetails: [String: String]
+                   let overallSafety: String
+                   
+                   if error.localizedDescription.contains("500") || error.localizedDescription.contains("Server error") {
+                       // Perform client-side fallback analysis
+                       print("🔍 [SCAN_SERVICE] 🔄 Server error detected, performing client-side fallback analysis...")
+                       let fallbackAnalysis = performClientSideAnalysis(analysisRequest.extractedText)
+                       print("🔍 [SCAN_SERVICE] ✅ Fallback analysis complete:")
+                       print("🔍 [SCAN_SERVICE] - Overall Safety: \(fallbackAnalysis.overallSafety)")
+                       print("🔍 [SCAN_SERVICE] - Safe Ingredients: \(fallbackAnalysis.safeIngredients)")
+                       print("🔍 [SCAN_SERVICE] - Unsafe Ingredients: \(fallbackAnalysis.unsafeIngredients)")
+                       print("🔍 [SCAN_SERVICE] - Caution Ingredients: \(fallbackAnalysis.cautionIngredients)")
+                       
+                       errorDetails = [
+                           "error": "Server temporarily unavailable",
+                           "message": "Using offline analysis while server is being fixed.",
+                           "ingredients": analysisRequest.extractedText,
+                           "analysis_type": "client_side_fallback"
+                       ]
+                       overallSafety = fallbackAnalysis.overallSafety
+                   } else {
+                       errorDetails = [
+                           "error": "Analysis failed",
+                           "message": error.localizedDescription,
+                           "ingredients": analysisRequest.extractedText
+                       ]
+                       overallSafety = "unknown"
+                   }
+                   
+                   // Create error scan with fallback analysis if available
+                   let fallbackAnalysis = error.localizedDescription.contains("500") || error.localizedDescription.contains("Server error") 
+                       ? performClientSideAnalysis(analysisRequest.extractedText) 
+                       : (overallSafety, [], [], [])
+                   
+                   let errorScan = Scan(
+                       id: UUID().uuidString,
+                       userId: "error-user",
+                       petId: analysisRequest.petId,
+                       imageUrl: nil,
+                       rawText: analysisRequest.extractedText,
+                       status: .failed,
+                       result: ScanResult(
+                           productName: analysisRequest.productName,
+                           brand: nil,
+                           ingredientsFound: fallbackAnalysis.1 + fallbackAnalysis.2 + fallbackAnalysis.3,
+                           unsafeIngredients: fallbackAnalysis.3,
+                           safeIngredients: fallbackAnalysis.1,
+                           overallSafety: fallbackAnalysis.0,
+                           confidenceScore: 0.7, // Higher confidence for client-side analysis
+                           analysisDetails: errorDetails
+                       ),
+                       nutritionalAnalysis: nil,
+                       createdAt: Date(),
+                       updatedAt: Date()
+                   )
+                   
+                   print("🔍 [SCAN_SERVICE] Creating error scan and calling completion...")
+                   completion(errorScan)
+               }
+        }
+    }
+    
+    /// Perform client-side fallback analysis when server is unavailable
+    private func performClientSideAnalysis(_ ingredientText: String) -> (overallSafety: String, safeIngredients: [String], unsafeIngredients: [String], cautionIngredients: [String]) {
+        let ingredients = ingredientText.components(separatedBy: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        
+        var safeIngredients: [String] = []
+        var unsafeIngredients: [String] = []
+        var cautionIngredients: [String] = []
+        
+        // Known dangerous ingredients for pets
+        let dangerousIngredients = [
+            "chocolate", "cocoa", "xylitol", "grapes", "raisins", "onions", "garlic", "avocado",
+            "macadamia nuts", "walnuts", "alcohol", "caffeine", "artificial sweeteners",
+            "xylitol", "sorbitol", "mannitol", "erythritol", "stevia", "saccharin", "aspartame"
+        ]
+        
+        // Known caution ingredients
+        let cautionIngredientsList = [
+            "salt", "sodium", "sugar", "corn syrup", "high fructose", "preservatives",
+            "artificial colors", "artificial flavors", "bha", "bht", "ethoxyquin"
+        ]
+        
+        // Known safe ingredients
+        let safeIngredientsList = [
+            "chicken", "beef", "turkey", "fish", "salmon", "rice", "brown rice",
+            "oats", "barley", "sweet potato", "carrots", "peas", "blueberries",
+            "cranberries", "pumpkin", "spinach", "broccoli", "flaxseed", "omega-3"
+        ]
+        
+        for ingredient in ingredients {
+            let lowercased = ingredient.lowercased()
+            
+            if dangerousIngredients.contains(where: { lowercased.contains($0) }) {
+                unsafeIngredients.append(ingredient)
+            } else if cautionIngredientsList.contains(where: { lowercased.contains($0) }) {
+                cautionIngredients.append(ingredient)
+            } else if safeIngredientsList.contains(where: { lowercased.contains($0) }) {
+                safeIngredients.append(ingredient)
+            } else {
+                // Unknown ingredients go to caution
+                cautionIngredients.append(ingredient)
             }
+        }
+        
+        // Determine overall safety
+        let overallSafety: String
+        if !unsafeIngredients.isEmpty {
+            overallSafety = "dangerous"
+        } else if !cautionIngredients.isEmpty {
+            overallSafety = "caution"
+        } else if !safeIngredients.isEmpty {
+            overallSafety = "safe"
+        } else {
+            overallSafety = "unknown"
+        }
+        
+        return (overallSafety, safeIngredients, unsafeIngredients, cautionIngredients)
+    }
+    
+    /// Analyze scan with Swift 6 concurrency optimization
+    /// - Parameter analysisRequest: Analysis request with pet and scan data
+    /// - Returns: Scan result
+    func analyzeScanAsync(_ analysisRequest: ScanAnalysisRequest) async throws -> Scan {
+        // Cancel any existing analysis task
+        currentAnalysisTask?.cancel()
+        
+        guard !isAnalyzing else {
+            throw ScanError.analysisInProgress
+        }
+        
+        isAnalyzing = true
+        errorMessage = nil
+        
+        defer {
+            isAnalyzing = false
+        }
+        
+        do {
+            let analyzedScan = try await apiService.analyzeScan(analysisRequest)
+            
+            // Update the scan in our list
+            if let index = recentScans.firstIndex(where: { $0.id == analyzedScan.id }) {
+                recentScans[index] = analyzedScan
+            } else {
+                recentScans.insert(analyzedScan, at: 0)
+            }
+            
+            // Notify notification manager of scan completion
+            NotificationManager.shared.handleScanCompleted()
+            
+            return analyzedScan
+        } catch {
+            errorMessage = error.localizedDescription
+            throw error
         }
     }
     

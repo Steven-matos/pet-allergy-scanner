@@ -818,21 +818,52 @@ extension APIService {
         return try await performRequest(request, responseType: Scan.self)
     }
     
-    /// Analyze scan text
+    /// Analyze scan text - creates scan first, then analyzes it
     func analyzeScan(_ analysisRequest: ScanAnalysisRequest) async throws -> Scan {
-        guard let url = URL(string: "\(baseURL)/scanning/analyze") else {
+        print("🔍 [API_SERVICE] Starting analyzeScan API call...")
+        print("🔍 [API_SERVICE] Base URL: \(baseURL)")
+        
+        // Step 1: Create a scan record first
+        print("🔍 [API_SERVICE] Step 1: Creating scan record...")
+        let scanCreate = ScanCreate(
+            petId: analysisRequest.petId,
+            imageUrl: nil,
+            rawText: analysisRequest.extractedText,
+            status: .pending,
+            scanMethod: analysisRequest.scanMethod
+        )
+        
+        let createdScan = try await createScan(scanCreate)
+        print("🔍 [API_SERVICE] ✅ Scan created with ID: \(createdScan.id)")
+        
+        // Step 2: Analyze the scan
+        print("🔍 [API_SERVICE] Step 2: Analyzing scan...")
+        guard let url = URL(string: "\(baseURL)/scanning/\(createdScan.id)/analyze") else {
+            print("🔍 [API_SERVICE] ❌ Invalid URL: \(baseURL)/scanning/\(createdScan.id)/analyze")
             throw APIError.invalidURL
         }
+        
+        print("🔍 [API_SERVICE] Analysis URL: \(url)")
         
         var request = await createRequest(url: url, method: "POST")
         
         do {
             request.httpBody = try createJSONEncoder().encode(analysisRequest)
+            print("🔍 [API_SERVICE] Request body encoded successfully")
         } catch {
+            print("🔍 [API_SERVICE] ❌ Encoding error: \(error)")
             throw APIError.encodingError
         }
         
-        return try await performRequest(request, responseType: Scan.self)
+        print("🔍 [API_SERVICE] Making analysis request...")
+        do {
+            let result = try await performRequest(request, responseType: Scan.self)
+            print("🔍 [API_SERVICE] ✅ Analysis successful, received scan: \(result.id)")
+            return result
+        } catch {
+            print("🔍 [API_SERVICE] ❌ Analysis request failed: \(error)")
+            throw error
+        }
     }
     
     /// Get user's scans
