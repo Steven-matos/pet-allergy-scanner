@@ -65,9 +65,17 @@ class IngredientResponse(IngredientBase):
     class Config:
         from_attributes = True
 
+class IngredientAnalysisResult(BaseModel):
+    """Individual ingredient analysis result (no database fields)"""
+    name: str = Field(..., min_length=1, max_length=200)
+    safety_level: str = Field(..., description="Safety level: safe, caution, dangerous, unknown")
+    is_common_allergen: bool = Field(default=False)
+    recommendation: str = Field(..., description="Recommendation for this ingredient")
+    notes: str = Field(..., description="Additional notes about this ingredient")
+
 class IngredientAnalysis(BaseModel):
     """Ingredient analysis result"""
-    ingredients: List[IngredientResponse] = Field(default_factory=list)
+    ingredients: List[IngredientAnalysisResult] = Field(default_factory=list)
     safe_ingredients: List[str] = Field(default_factory=list)
     caution_ingredients: List[str] = Field(default_factory=list)
     dangerous_ingredients: List[str] = Field(default_factory=list)

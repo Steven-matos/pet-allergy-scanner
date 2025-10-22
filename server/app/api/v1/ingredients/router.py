@@ -4,7 +4,7 @@ Ingredient management and analysis router
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
-from app.models.ingredient import IngredientResponse, IngredientAnalysis
+from app.models.ingredient import IngredientAnalysisResult, IngredientAnalysis
 from app.models.pet import PetSpecies
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
@@ -177,7 +177,7 @@ async def analyze_ingredients(ingredient_text: str, pet_allergies: List[str] = N
         for ingredient in ingredients:
             analysis = analyze_ingredient_safety(ingredient, "both")  # Default to both species
             
-            analyzed_ingredients.append(IngredientResponse(
+            analyzed_ingredients.append(IngredientAnalysisResult(
                 name=ingredient,
                 safety_level=analysis["safety_level"],
                 is_common_allergen=analysis["is_common_allergen"],
