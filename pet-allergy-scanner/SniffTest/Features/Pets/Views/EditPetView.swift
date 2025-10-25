@@ -663,7 +663,7 @@ struct EditPetView: View {
                 let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
                 let originalWeightInKg = pet.weightKg
                 
-                // Only include imageUrl if it actually changed
+                // Create PetUpdate - imageUrl will be nil if no image change, which is correct
                 let petUpdate = PetUpdate(
                     name: name != pet.name ? name : nil,
                     breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
@@ -677,6 +677,10 @@ struct EditPetView: View {
                 )
                 
                 petService.updatePet(id: pet.id, petUpdate: petUpdate)
+                
+                // Reset image flags after successful update
+                imageRemoved = false
+                selectedImage = nil
                 
                 // Dismiss after successful update
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
