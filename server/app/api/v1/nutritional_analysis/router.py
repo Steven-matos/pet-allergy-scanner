@@ -19,6 +19,7 @@ from app.models.scan import NutritionalAnalysis
 from app.services.nutritional_calculator import NutritionalCalculator
 from app.models.user import User
 from app.core.security.jwt_handler import get_current_user
+from app.shared.services.pet_authorization import verify_pet_ownership
 
 router = APIRouter(prefix="/nutritional-analysis", tags=["nutritional-analysis"])
 
@@ -42,17 +43,9 @@ async def analyze_nutritional_content(
         Nutritional analysis with recommendations
     """
     try:
-        # Get pet information from Supabase
+        # Verify pet ownership using centralized service
         supabase = get_supabase_client()
-        response = supabase.table("pets").select("*").eq("id", analysis_request.pet_id).eq("user_id", current_user.id).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
-        
-        pet_data = response.data[0]
+        pet_data = await verify_pet_ownership(analysis_request.pet_id, current_user.id, supabase)
         pet = PetResponse(
             id=pet_data["id"],
             user_id=pet_data["user_id"],
@@ -190,17 +183,9 @@ async def get_nutritional_recommendations(
         Nutritional recommendations for the pet
     """
     try:
-        # Get pet information from Supabase
+        # Verify pet ownership using centralized service
         supabase = get_supabase_client()
-        response = supabase.table("pets").select("*").eq("id", pet_id).eq("user_id", current_user.id).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
-        
-        pet_data = response.data[0]
+        pet_data = await verify_pet_ownership(pet_id, current_user.id, supabase)
         pet = PetResponse(
             id=pet_data["id"],
             user_id=pet_data["user_id"],

@@ -13,6 +13,7 @@ from app.database import get_supabase_client
 from app.services.storage_service import StorageService
 from supabase import Client
 from app.utils.logging_config import get_logger
+from app.shared.services.pet_authorization import verify_pet_ownership
 import re
 import base64
 
@@ -40,14 +41,8 @@ async def create_scan_with_slash(
     try:
         supabase = get_supabase_client()
         
-        # Verify pet belongs to user
-        pet_response = supabase.table("pets").select("*").eq("id", scan_data.pet_id).eq("user_id", current_user.id).execute()
-        
-        if not pet_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet profile not found"
-            )
+        # Verify pet ownership using centralized service
+        await verify_pet_ownership(scan_data.pet_id, current_user.id, supabase)
         
         # Create scan record
         scan_record = {
@@ -299,16 +294,8 @@ async def analyze_scan(
         
         scan = scan_response.data[0]
         
-        # Get pet information
-        pet_response = supabase.table("pets").select("*").eq("id", scan["pet_id"]).eq("user_id", current_user.id).execute()
-        
-        if not pet_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
-        
-        pet = pet_response.data[0]
+        # Verify pet ownership using centralized service
+        pet = await verify_pet_ownership(scan["pet_id"], current_user.id, supabase)
         
         # Perform ingredient analysis
         analysis_result = await analyze_ingredients(

@@ -18,6 +18,7 @@ from app.models.medication_reminder import (
     MedicationFrequency
 )
 from app.services.medication_reminder_service import MedicationReminderService
+from app.shared.services.pet_authorization import verify_pet_ownership
 
 router = APIRouter(prefix="/medication-reminders", tags=["medication-reminders"])
 
@@ -40,11 +41,8 @@ async def create_medication_reminder_with_slash(
     """
     Create a new medication reminder for a pet
     """
-    # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", reminder.pet_id).eq("user_id", current_user.id).execute()
-
-    if not pet_response.data:
-        raise HTTPException(status_code=404, detail="Pet not found")
+    # Verify pet ownership using centralized service
+    await verify_pet_ownership(reminder.pet_id, current_user.id, supabase)
 
     # Verify health event ownership
     health_event_response = supabase.table("health_events").select("id").eq("id", reminder.health_event_id).eq("user_id", current_user.id).execute()
@@ -72,11 +70,8 @@ async def get_pet_medication_reminders(
     """
     Get medication reminders for a specific pet with optional filtering
     """
-    # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
-    
-    if not pet_response.data:
-        raise HTTPException(status_code=404, detail="Pet not found")
+    # Verify pet ownership using centralized service
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
     
     # Get reminders using service
     reminders = await MedicationReminderService.get_medication_reminders_for_pet(

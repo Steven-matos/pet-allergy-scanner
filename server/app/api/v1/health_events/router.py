@@ -18,6 +18,7 @@ from app.models.health_event import (
     HealthEventCategory
 )
 from app.services.health_event_service import HealthEventService
+from app.shared.services.pet_authorization import verify_pet_ownership
 
 router = APIRouter(prefix="/health-events", tags=["health-events"])
 
@@ -40,11 +41,8 @@ async def create_health_event_with_slash(
     """
     Create a new health event for a pet
     """
-    # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", event.pet_id).eq("user_id", current_user.id).execute()
-
-    if not pet_response.data:
-        raise HTTPException(status_code=404, detail="Pet not found")
+    # Verify pet ownership using centralized service
+    await verify_pet_ownership(event.pet_id, current_user.id, supabase)
 
     # Create health event using service
     db_event = await HealthEventService.create_health_event(
@@ -66,11 +64,8 @@ async def get_pet_health_events(
     """
     Get health events for a specific pet with optional filtering
     """
-    # Verify pet ownership
-    pet_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
-    
-    if not pet_response.data:
-        raise HTTPException(status_code=404, detail="Pet not found")
+    # Verify pet ownership using centralized service
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
     
     # Get events using service
     if category:
