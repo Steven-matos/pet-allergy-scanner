@@ -53,7 +53,8 @@ async def record_weight(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(weight_record.pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(weight_record.pet_id, current_user.id, supabase)
         
         # Create weight record
         service = get_weight_service()
@@ -91,7 +92,8 @@ async def get_weight_history(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight history
         service = get_weight_service()
@@ -127,7 +129,8 @@ async def create_weight_goal(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(weight_goal.pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Create weight goal
         service = get_weight_service()
@@ -163,7 +166,8 @@ async def upsert_weight_goal(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(weight_goal.pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Upsert weight goal
         service = get_weight_service()
@@ -199,7 +203,8 @@ async def get_active_weight_goal(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get active weight goal
         service = get_weight_service()
@@ -237,7 +242,8 @@ async def analyze_weight_trend(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze weight trend
         service = get_weight_service()
@@ -275,7 +281,8 @@ async def get_weight_management_dashboard(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight management dashboard
         service = get_weight_service()
