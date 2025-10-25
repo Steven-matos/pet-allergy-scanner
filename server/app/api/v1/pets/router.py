@@ -292,6 +292,10 @@ async def update_pet(
         # Prepare update data
         update_data = pet_update.dict(exclude_unset=True)
         
+        # Convert date objects to strings for JSON serialization
+        if 'birthday' in update_data and update_data['birthday'] is not None:
+            update_data['birthday'] = update_data['birthday'].isoformat()
+        
         # Update pet
         response = supabase.table("pets").update(update_data).eq("id", pet_id).eq("user_id", current_user.id).execute()
         
