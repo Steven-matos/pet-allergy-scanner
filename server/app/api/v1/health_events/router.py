@@ -111,8 +111,11 @@ async def get_pet_health_events(
         pet_id, current_user.id, supabase
     )
 
+    # Convert raw database dictionaries to HealthEventResponse objects
+    health_event_responses = [HealthEventResponse(**event) for event in events]
+    
     return HealthEventListResponse(
-        events=events,  # Events are already dictionaries from the service
+        events=health_event_responses,
         total=total,
         limit=limit,
         offset=offset
