@@ -62,7 +62,10 @@ async def create_health_event_with_slash(
         event, current_user.id, supabase
     )
 
-    return HealthEventResponse(**db_event)
+    # Add computed event_category field
+    event_with_category = db_event.copy()
+    event_with_category['event_category'] = HealthEventCategory.from_event_type(db_event['event_type'])
+    return HealthEventResponse(**event_with_category)
 
 
 @router.get("/pet/{pet_id}", response_model=HealthEventListResponse)
@@ -112,7 +115,13 @@ async def get_pet_health_events(
     )
 
     # Convert raw database dictionaries to HealthEventResponse objects
-    health_event_responses = [HealthEventResponse(**event) for event in events]
+    # Add computed event_category field
+    health_event_responses = []
+    for event in events:
+        # Create a copy of the event dict and add the computed event_category
+        event_with_category = event.copy()
+        event_with_category['event_category'] = HealthEventCategory.from_event_type(event['event_type'])
+        health_event_responses.append(HealthEventResponse(**event_with_category))
     
     return HealthEventListResponse(
         events=health_event_responses,
@@ -138,7 +147,10 @@ async def get_health_event(
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
 
-    return event  # Event is already a dictionary from the service
+    # Add computed event_category field
+    event_with_category = event.copy()
+    event_with_category['event_category'] = HealthEventCategory.from_event_type(event['event_type'])
+    return HealthEventResponse(**event_with_category)
 
 
 @router.put("/{event_id}", response_model=HealthEventResponse)
@@ -158,7 +170,10 @@ async def update_health_event(
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
 
-    return event  # Event is already a dictionary from the service
+    # Add computed event_category field
+    event_with_category = event.copy()
+    event_with_category['event_category'] = HealthEventCategory.from_event_type(event['event_type'])
+    return HealthEventResponse(**event_with_category)
 
 
 @router.delete("/{event_id}")

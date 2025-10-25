@@ -15,6 +15,22 @@ class HealthEventCategory(str, Enum):
     PHYSICAL = "physical"
     MEDICAL = "medical"
     BEHAVIORAL = "behavioral"
+    
+    @classmethod
+    def from_event_type(cls, event_type: str) -> "HealthEventCategory":
+        """Get category from event type"""
+        category_mapping = {
+            HealthEventType.VOMITING: cls.DIGESTIVE,
+            HealthEventType.DIARRHEA: cls.DIGESTIVE,
+            HealthEventType.SHEDDING: cls.PHYSICAL,
+            HealthEventType.LOW_ENERGY: cls.PHYSICAL,
+            HealthEventType.VACCINATION: cls.MEDICAL,
+            HealthEventType.VET_VISIT: cls.MEDICAL,
+            HealthEventType.MEDICATION: cls.MEDICAL,
+            HealthEventType.ANXIETY: cls.BEHAVIORAL,
+            HealthEventType.OTHER: cls.PHYSICAL,  # Default for custom events
+        }
+        return category_mapping.get(event_type, cls.PHYSICAL)
 
 
 class HealthEventType(str, Enum):
@@ -112,6 +128,7 @@ class HealthEventResponse(HealthEventBase):
     id: str
     pet_id: str
     user_id: str
+    event_category: HealthEventCategory
     created_at: datetime
     updated_at: datetime
     
@@ -123,6 +140,7 @@ class HealthEventResponse(HealthEventBase):
                 "pet_id": "123e4567-e89b-12d3-a456-426614174001",
                 "user_id": "123e4567-e89b-12d3-a456-426614174002",
                 "event_type": "vomiting",
+                "event_category": "digestive",
                 "title": "Morning vomiting episode",
                 "notes": "Vomited after breakfast, seemed fine afterwards",
                 "severity_level": 2,
