@@ -14,7 +14,7 @@ struct SniffTestApp: App {
     
     // MEMORY OPTIMIZATION: Create shared service instances once
     private let authService = AuthService.shared
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private let notificationManager = NotificationManager.shared
     
     var body: some Scene {

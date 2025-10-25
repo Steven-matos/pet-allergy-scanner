@@ -24,7 +24,7 @@ import Charts
  */
 struct FoodComparisonView: View {
     @EnvironmentObject var authService: AuthService
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @StateObject private var comparisonService = FoodComparisonService.shared
     @StateObject private var nutritionService = NutritionService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared

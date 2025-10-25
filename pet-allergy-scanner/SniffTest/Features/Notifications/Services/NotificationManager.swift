@@ -20,7 +20,7 @@ class NotificationManager: ObservableObject {
     @Published var navigateToScan = false
     
     private let notificationSettingsManager = NotificationSettingsManager.shared
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private let scanService = ScanService.shared
     private var cancellables = Set<AnyCancellable>()
     

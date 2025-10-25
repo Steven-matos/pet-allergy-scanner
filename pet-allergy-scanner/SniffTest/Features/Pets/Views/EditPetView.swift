@@ -27,7 +27,7 @@ import SwiftUI
 struct EditPetView: View {
     let pet: Pet
     
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @Environment(\.dismiss) private var dismiss
     
     @State private var name = ""
@@ -833,6 +833,6 @@ struct EditPetView: View {
     )
     
     EditPetView(pet: mockPet)
-        .environmentObject(PetService.shared)
+        .environmentObject(CachedPetService.shared)
 }
 

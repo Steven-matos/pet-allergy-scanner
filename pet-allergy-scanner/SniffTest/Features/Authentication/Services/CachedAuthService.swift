@@ -111,7 +111,7 @@ class CachedAuthService: ObservableObject {
         errorMessage = nil
         
         // Clear all user data
-        PetService.shared.clearPets()
+        CachedPetService.shared.clearPets()
         ScanService.shared.clearScans()
         
         // Stop refresh timer

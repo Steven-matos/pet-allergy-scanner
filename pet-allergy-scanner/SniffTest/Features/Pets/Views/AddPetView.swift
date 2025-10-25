@@ -25,7 +25,7 @@ import SwiftUI
  * - Maintains accessibility standards
  */
 struct AddPetView: View {
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @Environment(\.dismiss) private var dismiss
     
     @State private var name = ""
@@ -754,11 +754,11 @@ struct AddPetView: View {
 
 #Preview {
     AddPetView()
-        .environmentObject(PetService.shared)
+        .environmentObject(CachedPetService.shared)
 }
 
 #Preview("With Mock Data") {
-    let petService = PetService.shared
+    let petService = CachedPetService.shared
     // Note: Using shared instance for preview purposes
     
     return AddPetView()

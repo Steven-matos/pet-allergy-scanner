@@ -141,6 +141,6 @@ struct MockData {
     // MARK: - Mock Services
     
     /// Note: Mock service creation methods removed as services use singleton pattern.
-    /// Use shared instances (PetService.shared, AuthService.shared, ScanService.shared) 
+    /// Use shared instances (CachedPetService.shared, AuthService.shared, ScanService.shared) 
     /// in SwiftUI previews instead of creating new instances.
 }

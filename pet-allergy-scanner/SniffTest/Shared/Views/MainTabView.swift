@@ -10,7 +10,7 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var notificationManager: NotificationManager
-    @StateObject private var petService = PetService.shared
+    @StateObject private var petService = CachedPetService.shared
     @State private var selectedTab = 2 {
         didSet {
             print("🔍 MainTabView: selectedTab changed from \(oldValue) to \(selectedTab)")

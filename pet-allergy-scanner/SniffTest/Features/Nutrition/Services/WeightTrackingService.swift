@@ -34,7 +34,7 @@ class WeightTrackingService: ObservableObject {
     
     private let apiService: APIService
     private let unitService = WeightUnitPreferenceService.shared
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private var cancellables = Set<AnyCancellable>()
     
     private init() {

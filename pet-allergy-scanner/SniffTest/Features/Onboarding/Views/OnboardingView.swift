@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Onboarding view for new users to set up their first pet
 struct OnboardingView: View {
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @StateObject private var authService = AuthService.shared
     
     /// Callback when user skips onboarding
@@ -747,5 +747,5 @@ struct MonthPickerView: View {
     OnboardingView(onSkip: {
         print("Skipped onboarding")
     })
-    .environmentObject(PetService.shared)
+    .environmentObject(CachedPetService.shared)
 }

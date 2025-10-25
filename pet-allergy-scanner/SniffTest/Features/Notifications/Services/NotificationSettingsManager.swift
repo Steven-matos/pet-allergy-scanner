@@ -86,7 +86,7 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     // MARK: - Private Properties
     
     private let userDefaults = UserDefaults.standard
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private let scanService = ScanService.shared
     private let pushNotificationService = PushNotificationService.shared
     

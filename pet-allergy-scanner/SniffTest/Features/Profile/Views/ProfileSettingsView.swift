@@ -41,7 +41,7 @@ struct ProfileSettingsView: View {
     
     // MARK: - Service Dependencies
     @EnvironmentObject var authService: AuthService
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @StateObject private var mfaService = MFAService.shared
     @StateObject private var gdprService = GDPRService.shared
     @StateObject private var analyticsManager = AnalyticsManager.shared
@@ -1108,5 +1108,5 @@ struct EmailSupportView: View {
 #Preview {
     ProfileSettingsView()
         .environmentObject(AuthService.shared)
-        .environmentObject(PetService.shared)
+        .environmentObject(CachedPetService.shared)
 }

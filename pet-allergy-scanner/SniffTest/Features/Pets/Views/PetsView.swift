@@ -10,7 +10,7 @@ import SwiftUI
 /// Main view for displaying and managing user's pets
 /// Follows Trust & Nature Design System for consistent styling
 struct PetsView: View {
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @State private var showingAddPet = false
     @State private var showingEditPet: Pet?
     @State private var petToDelete: Pet?
@@ -396,5 +396,5 @@ struct PetTagFlowLayout: Layout {
 
 #Preview {
     PetsView()
-        .environmentObject(PetService.shared)
+        .environmentObject(CachedPetService.shared)
 }

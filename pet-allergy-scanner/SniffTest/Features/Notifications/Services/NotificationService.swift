@@ -21,7 +21,7 @@ class NotificationService: NSObject, ObservableObject {
     @Published var lastScanDate: Date?
     
     private let userDefaults = UserDefaults.standard
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private let scanService = ScanService.shared
     
     // MARK: - Constants

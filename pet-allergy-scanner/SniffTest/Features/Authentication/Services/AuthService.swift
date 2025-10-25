@@ -193,7 +193,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
         }
         
         // Clear all user data to prevent 403 errors on logout
-        PetService.shared.clearPets()
+        CachedPetService.shared.clearPets()
         ScanService.shared.clearScans()
     }
     

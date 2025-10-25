@@ -130,7 +130,7 @@ class GDPRService: ObservableObject {
                 }
                 
                 // Delete all pet images for this user
-                for pet in PetService.shared.pets {
+                for pet in CachedPetService.shared.pets {
                     if let imageUrl = pet.imageUrl,
                        imageUrl.contains(Configuration.supabaseURL) {
                         do {

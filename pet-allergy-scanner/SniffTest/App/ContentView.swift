@@ -10,7 +10,7 @@ import SwiftUI
 struct ContentView: View {
     // MEMORY OPTIMIZATION: Use shared service instances instead of @StateObject
     @EnvironmentObject var authService: AuthService
-    @EnvironmentObject var petService: PetService
+    @EnvironmentObject var petService: CachedPetService
     @EnvironmentObject var notificationManager: NotificationManager
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     

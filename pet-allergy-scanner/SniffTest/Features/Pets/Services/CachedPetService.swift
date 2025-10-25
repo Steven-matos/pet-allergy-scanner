@@ -24,7 +24,6 @@ class CachedPetService: ObservableObject {
     
     private let apiService = APIService.shared
     private let cacheService = CacheService.shared
-    private let petService = PetService.shared
     
     /// Current user ID for cache scoping
     private var currentUserId: String? {

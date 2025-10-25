@@ -33,7 +33,7 @@ class CachedWeightTrackingService: ObservableObject {
     private let cacheService = CacheService.shared
     private let authService = AuthService.shared
     private let unitService = WeightUnitPreferenceService.shared
-    private let petService = PetService.shared
+    private let petService = CachedPetService.shared
     private var cancellables = Set<AnyCancellable>()
     
     /// Current user ID for cache scoping

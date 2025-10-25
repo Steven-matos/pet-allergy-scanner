@@ -19,7 +19,7 @@ import Foundation
 struct AddHealthEventView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var healthEventService = HealthEventService.shared
-    @StateObject private var petService = PetService.shared
+    @StateObject private var petService = CachedPetService.shared
     
     @State private var selectedPet: Pet?
     @State private var selectedEventType: HealthEventType = .vomiting
