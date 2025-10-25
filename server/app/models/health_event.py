@@ -4,7 +4,7 @@ Pet health event tracking for vomiting, shedding, vaccinations, etc.
 """
 
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, computed_field
 from typing import Optional, List
 from enum import Enum
 
@@ -60,6 +60,7 @@ class HealthEventBase(BaseModel):
         """Validate event type and set category"""
         return v
     
+    @computed_field
     @property
     def event_category(self) -> HealthEventCategory:
         """Get category from event type"""
@@ -128,7 +129,6 @@ class HealthEventResponse(HealthEventBase):
     id: str
     pet_id: str
     user_id: str
-    event_category: HealthEventCategory
     created_at: datetime
     updated_at: datetime
     
