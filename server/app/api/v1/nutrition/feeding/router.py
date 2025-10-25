@@ -6,6 +6,7 @@ Extracted from app.routers.nutrition for better organization.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 import uuid
 from datetime import datetime
@@ -17,7 +18,7 @@ from app.models.nutrition import (
     DailyNutritionSummaryResponse
 )
 from app.models.user import UserResponse
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -27,8 +28,8 @@ router = APIRouter(prefix="/feeding", tags=["nutrition-feeding"])
 @router.post("", response_model=FeedingRecordResponse)
 async def record_feeding_no_slash(
     feeding_record: FeedingRecordCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Record feeding (without trailing slash)"""
     return await record_feeding_with_slash(feeding_record, supabase, current_user)
@@ -36,8 +37,8 @@ async def record_feeding_no_slash(
 @router.post("/", response_model=FeedingRecordResponse)
 async def record_feeding_with_slash(
     feeding_record: FeedingRecordCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Record a feeding event for a pet
@@ -54,9 +55,19 @@ async def record_feeding_with_slash(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(feeding_record.pet_id, current_user.id)
+        await verify_pet_ownership(feeding_record.pet_id, current_user.id, supabase)
         
         # Create feeding record
         record_data = feeding_record.dict()
@@ -85,8 +96,8 @@ async def record_feeding_with_slash(
 @router.get("/{pet_id}", response_model=List[FeedingRecordResponse])
 async def get_feeding_records(
     pet_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get feeding records for a pet
@@ -103,9 +114,19 @@ async def get_feeding_records(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get feeding records
         response = supabase.table("feeding_records").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).order("created_at", desc=True).execute()
@@ -128,8 +149,8 @@ async def get_feeding_records(
 @router.get("/summaries/{pet_id}", response_model=List[DailyNutritionSummaryResponse])
 async def get_daily_summaries(
     pet_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get daily nutrition summaries for a pet
@@ -146,9 +167,19 @@ async def get_daily_summaries(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get daily summaries (this would contain the actual summary logic)
         summaries = []  # Placeholder for actual summary generation
@@ -168,8 +199,8 @@ async def get_daily_summaries(
 @router.get("/daily-summary/{pet_id}", response_model=Optional[DailyNutritionSummaryResponse])
 async def get_daily_summary(
     pet_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get today's nutrition summary for a pet
@@ -186,9 +217,19 @@ async def get_daily_summary(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get today's summary (this would contain the actual summary logic)
         summary = None  # Placeholder for actual summary generation

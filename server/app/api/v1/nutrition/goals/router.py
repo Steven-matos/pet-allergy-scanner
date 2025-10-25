@@ -6,6 +6,7 @@ Extracted from app.routers.nutrition for better organization.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 import uuid
 
@@ -16,7 +17,7 @@ from app.models.calorie_goals import (
     CalorieGoalUpdate
 )
 from app.models.user import UserResponse
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -26,8 +27,8 @@ router = APIRouter(prefix="/goals", tags=["nutrition-goals"])
 @router.post("/calorie-goals", response_model=CalorieGoalResponse)
 async def create_calorie_goal(
     goal: CalorieGoalCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Create a calorie goal for a pet
@@ -44,9 +45,19 @@ async def create_calorie_goal(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(goal.pet_id, current_user.id)
+        await verify_pet_ownership(goal.pet_id, current_user.id, supabase)
         
         # Create calorie goal
         goal_data = goal.dict()
@@ -74,8 +85,8 @@ async def create_calorie_goal(
 
 @router.get("/calorie-goals", response_model=List[CalorieGoalResponse])
 async def get_calorie_goals(
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get all calorie goals for the current user
@@ -110,8 +121,8 @@ async def get_calorie_goals(
 @router.get("/calorie-goals/{pet_id}", response_model=Optional[CalorieGoalResponse])
 async def get_pet_calorie_goal(
     pet_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get calorie goal for a specific pet
@@ -128,9 +139,19 @@ async def get_pet_calorie_goal(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get calorie goal
         response = supabase.table("calorie_goals").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()
@@ -152,8 +173,8 @@ async def get_pet_calorie_goal(
 @router.delete("/calorie-goals/{pet_id}")
 async def delete_calorie_goal(
     pet_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Delete calorie goal for a pet
@@ -170,9 +191,19 @@ async def delete_calorie_goal(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Check if calorie goal exists
         check_response = supabase.table("calorie_goals").select("id").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()

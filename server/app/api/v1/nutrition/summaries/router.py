@@ -6,6 +6,7 @@ Extracted from app.routers.nutrition for better organization.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 
 from app.database import get_db
@@ -14,7 +15,7 @@ from app.models.nutrition import (
     DailyNutritionSummaryResponse
 )
 from app.models.user import UserResponse
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -23,8 +24,8 @@ router = APIRouter(prefix="/summaries", tags=["nutrition-summaries"])
 
 @router.get("/insights/multi-pet", response_model=MultiPetNutritionInsights)
 async def get_multi_pet_insights(
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get multi-pet nutrition insights for the current user
@@ -81,8 +82,8 @@ async def get_multi_pet_insights(
 async def get_daily_nutrition_summaries(
     pet_id: str,
     days: int = 7,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get daily nutrition summaries for a pet over specified days
@@ -100,9 +101,19 @@ async def get_daily_nutrition_summaries(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get daily summaries (this would contain the actual summary logic)
         summaries = []  # Placeholder for actual summary generation

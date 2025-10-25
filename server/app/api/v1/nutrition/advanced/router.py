@@ -6,12 +6,13 @@ Future-ready module for sophisticated nutrition analysis.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models.user import UserResponse
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.utils.logging_config import get_logger
 
 # Import advanced analytics services
@@ -28,8 +29,8 @@ router = APIRouter(prefix="/advanced", tags=["nutrition-advanced"])
 async def get_analytics_overview(
     pet_id: Optional[str] = Query(None, description="Pet ID for specific analytics"),
     days: int = Query(30, description="Number of days to analyze"),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get comprehensive nutrition analytics overview
@@ -74,8 +75,8 @@ async def get_analytics_overview(
 async def get_nutrition_insights(
     pet_id: str,
     insight_type: str = Query("all", description="Type of insights to generate"),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get advanced nutrition insights for a pet
@@ -93,9 +94,19 @@ async def get_nutrition_insights(
         HTTPException: If pet not found or insights generation fails
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         insights_service = NutritionInsightsService(supabase)
         insights = await insights_service.generate_insights(pet_id, insight_type)
@@ -116,8 +127,8 @@ async def get_nutrition_insights(
 async def get_nutrition_patterns(
     pet_id: str,
     pattern_type: str = Query("feeding", description="Type of patterns to analyze"),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Analyze nutrition patterns for a pet
@@ -135,9 +146,19 @@ async def get_nutrition_patterns(
         HTTPException: If pet not found or pattern analysis fails
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         patterns_service = NutritionPatternsService(supabase)
         patterns = await patterns_service.analyze_patterns(pet_id, pattern_type)
@@ -158,8 +179,8 @@ async def get_nutrition_patterns(
 async def get_nutrition_trends(
     pet_id: str,
     trend_period: str = Query("monthly", description="Trend period (weekly, monthly, yearly)"),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get nutrition trends for a pet
@@ -177,9 +198,19 @@ async def get_nutrition_trends(
         HTTPException: If pet not found or trend analysis fails
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         trends_service = NutritionTrendsService(supabase)
         trends = await trends_service.analyze_trends(pet_id, trend_period)
@@ -200,8 +231,8 @@ async def get_nutrition_trends(
 async def get_advanced_recommendations(
     pet_id: str,
     recommendation_type: str = Query("all", description="Type of recommendations"),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get advanced nutrition recommendations for a pet
@@ -219,9 +250,19 @@ async def get_advanced_recommendations(
         HTTPException: If pet not found or recommendations generation fails
     """
     try:
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Combine insights from all services for comprehensive recommendations
         insights_service = NutritionInsightsService(supabase)
