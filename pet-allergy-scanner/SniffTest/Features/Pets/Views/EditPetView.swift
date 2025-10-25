@@ -663,13 +663,14 @@ struct EditPetView: View {
                 let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
                 let originalWeightInKg = pet.weightKg
                 
+                // Only include imageUrl if it actually changed
                 let petUpdate = PetUpdate(
                     name: name != pet.name ? name : nil,
                     breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
                     birthday: createBirthday(year: birthYear, month: birthMonth),
                     weightKg: weightInKg != originalWeightInKg ? weightInKg : nil,
                     activityLevel: activityLevel != pet.effectiveActivityLevel ? activityLevel : nil,
-                    imageUrl: newImageUrl,
+                    imageUrl: newImageUrl, // This will be nil if no image change, which is correct
                     knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
                     vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
                     vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
