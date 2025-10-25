@@ -27,6 +27,7 @@ import SwiftUI
 struct EditProfileView: View {
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var profileService = CachedProfileService.shared
     
     @State private var username: String = ""
     @State private var firstName: String = ""
@@ -387,12 +388,27 @@ struct EditProfileView: View {
             }
             
             print("🔍 EditProfileView: Updating profile with imageUrl: \(newImageUrl ?? "nil")")
-            await authService.updateProfile(
+            
+            let userUpdate = UserUpdate(
                 username: username.isEmpty ? nil : username,
                 firstName: firstName.isEmpty ? nil : firstName,
                 lastName: lastName.isEmpty ? nil : lastName,
-                imageUrl: newImageUrl
+                imageUrl: newImageUrl,
+                role: nil,
+                onboarded: nil
             )
+            
+            do {
+                _ = try await profileService.updateProfile(userUpdate)
+                await MainActor.run {
+                    showingSuccessAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    authService.errorMessage = "Failed to update profile: \(error.localizedDescription)"
+                    showingErrorAlert = true
+                }
+            }
             
             isSaving = false
             

@@ -440,7 +440,7 @@ class WeightTrackingService: ObservableObject {
 
 // MARK: - Data Models
 
-struct WeightRecord: Identifiable, Codable {
+struct WeightRecord: Identifiable, Codable, Equatable {
     let id: String
     let petId: String
     let weightKg: Double

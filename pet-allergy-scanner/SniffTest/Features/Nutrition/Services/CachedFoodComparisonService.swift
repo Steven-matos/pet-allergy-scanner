@@ -1,54 +1,79 @@
 //
-//  FoodComparisonService.swift
+//  CachedFoodComparisonService.swift
 //  SniffTest
 //
-//  Created by Steven Matos on 9/26/25.
+//  Created by Steven Matos on 1/25/25.
 //
 
 import Foundation
 import Combine
 
 /**
- * Food Comparison Service
+ * Cached Food Comparison Service
  * 
- * Handles all food comparison operations including:
- * - Side-by-side food comparison
- * - Nutritional value analysis
- * - Cost per nutritional value analysis
- * - Recommendation generation
- * - Comparison history management
+ * Provides intelligent caching for food comparison operations.
+ * Caches comparison results and food details to reduce API calls.
  * 
- * Follows SOLID principles with single responsibility for food comparison
- * Implements DRY by reusing common analysis methods
- * Follows KISS by keeping the API simple and focused
+ * Features:
+ * - Cache-first loading for saved comparisons
+ * - Cached food details to avoid repeated lookups
+ * - Automatic cache invalidation
+ * - User-scoped caching
+ * 
+ * Follows SOLID principles: Single responsibility for cached food comparison
+ * Implements DRY by reusing cache patterns
+ * Follows KISS by keeping the caching logic simple and transparent
  */
 @MainActor
-class FoodComparisonService: ObservableObject {
-    static let shared = FoodComparisonService()
+class CachedFoodComparisonService: ObservableObject {
+    static let shared = CachedFoodComparisonService()
+    
+    // MARK: - Published Properties
     
     @Published var recentComparisons: [SavedComparison] = []
     @Published var currentComparison: FoodComparisonResults?
     @Published var isLoading = false
     @Published var error: Error?
     
+    // MARK: - Private Properties
+    
     private let apiService: APIService
+    private let cacheService = CacheService.shared
+    private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
+    
+    /// Cache for food details to avoid repeated API calls
+    private var foodDetailsCache: [String: FoodAnalysis] = [:]
+    
+    /// Current user ID for cache scoping
+    private var currentUserId: String? {
+        authService.currentUser?.id
+    }
+    
+    // MARK: - Initialization
     
     private init() {
         self.apiService = APIService.shared
+        observeAuthChanges()
         loadRecentComparisons()
     }
     
     // MARK: - Public API
     
     /**
-     * Compare multiple foods
+     * Compare multiple foods with caching
      * - Parameter foodIds: Array of food IDs to compare
      * - Parameter comparisonName: Name for the comparison
      * - Parameter pet: Optional pet to check for allergies/sensitivities
+     * - Parameter forceRefresh: Force refresh food details from server
      * - Returns: Comparison results
      */
-    func compareFoods(foodIds: [String], comparisonName: String, pet: Pet? = nil) async throws -> FoodComparisonResults {
+    func compareFoods(
+        foodIds: [String],
+        comparisonName: String,
+        pet: Pet? = nil,
+        forceRefresh: Bool = false
+    ) async throws -> FoodComparisonResults {
         guard foodIds.count >= 2 else {
             throw ComparisonError.insufficientFoods
         }
@@ -61,8 +86,8 @@ class FoodComparisonService: ObservableObject {
         error = nil
         
         do {
-            // Load food details
-            var foods = try await loadFoodDetails(foodIds: foodIds)
+            // Load food details with caching
+            var foods = try await loadFoodDetailsWithCache(foodIds: foodIds, forceRefresh: forceRefresh)
             
             // Check for pet allergies if pet is provided
             if let pet = pet {
@@ -94,7 +119,7 @@ class FoodComparisonService: ObservableObject {
                 petName: pet?.name
             )
             
-            // Save to recent comparisons
+            // Save to recent comparisons and cache
             await saveComparison(results)
             
             currentComparison = results
@@ -110,11 +135,26 @@ class FoodComparisonService: ObservableObject {
     }
     
     /**
-     * Load a saved comparison from backend
+     * Load a saved comparison with caching
      * - Parameter comparisonId: ID of the comparison to load
+     * - Parameter forceRefresh: Force refresh from server
      * - Returns: Comparison results
      */
-    func loadComparison(comparisonId: String) async throws -> FoodComparisonResults {
+    func loadComparison(comparisonId: String, forceRefresh: Bool = false) async throws -> FoodComparisonResults {
+        guard let userId = currentUserId else {
+            throw ComparisonError.notImplemented
+        }
+        
+        // Try cache first unless force refresh is requested
+        if !forceRefresh {
+            let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
+            if let cachedComparison = cacheService.retrieve(FoodComparisonResults.self, forKey: cacheKey) {
+                currentComparison = cachedComparison
+                return cachedComparison
+            }
+        }
+        
+        // Load from server
         isLoading = true
         error = nil
         
@@ -165,9 +205,9 @@ class FoodComparisonService: ObservableObject {
                 responseType: ComparisonResponse.self
             )
             
-            // Convert to FoodAnalysis objects
+            // Convert to FoodAnalysis objects and cache them
             let foods = response.comparisonData.foods.map { food in
-                FoodAnalysis(
+                let analysis = FoodAnalysis(
                     id: food.id,
                     petId: "",
                     foodName: food.name,
@@ -181,6 +221,11 @@ class FoodComparisonService: ObservableObject {
                     allergens: food.allergens,
                     analyzedAt: Date()
                 )
+                
+                // Cache food details
+                foodDetailsCache[food.id] = analysis
+                
+                return analysis
             }
             
             // Generate metrics and recommendations
@@ -203,6 +248,10 @@ class FoodComparisonService: ObservableObject {
                 petName: nil
             )
             
+            // Cache the comparison
+            let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
+            cacheService.store(results, forKey: cacheKey, policy: .timeBased(600)) // 10 minutes cache
+            
             currentComparison = results
             isLoading = false
             
@@ -220,6 +269,8 @@ class FoodComparisonService: ObservableObject {
      * - Parameter comparisonId: ID of the comparison to delete
      */
     func deleteComparison(comparisonId: String) async throws {
+        guard let userId = currentUserId else { return }
+        
         do {
             // Delete from backend
             try await apiService.delete(
@@ -229,31 +280,65 @@ class FoodComparisonService: ObservableObject {
             // Remove from local storage
             recentComparisons.removeAll { $0.id == comparisonId }
             
+            // Invalidate cache
+            let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
+            cacheService.invalidate(forKey: cacheKey)
+            
         } catch {
             throw error
         }
     }
     
     /**
-     * Get comparison history
+     * Get comparison history with caching
+     * - Parameter forceRefresh: Force refresh from server
      * - Returns: Array of saved comparisons
      */
-    func getComparisonHistory() -> [SavedComparison] {
+    func getComparisonHistory(forceRefresh: Bool = false) async -> [SavedComparison] {
+        if !forceRefresh && !recentComparisons.isEmpty {
+            return recentComparisons
+        }
+        
+        loadRecentComparisons()
         return recentComparisons
+    }
+    
+    /**
+     * Clear all cached data
+     * Call this on logout
+     */
+    func clearCache() {
+        recentComparisons = []
+        currentComparison = nil
+        foodDetailsCache = [:]
+        error = nil
+        isLoading = false
+        
+        // Clear user-specific cache
+        if let userId = currentUserId {
+            cacheService.clearUserCache(userId: userId)
+        }
     }
     
     // MARK: - Private Methods
     
     /**
-     * Load food details from backend
+     * Load food details with caching
      * - Parameter foodIds: Array of food IDs to load
+     * - Parameter forceRefresh: Force refresh from server
      * - Returns: Array of food analysis objects
      */
-    private func loadFoodDetails(foodIds: [String]) async throws -> [FoodAnalysis] {
+    private func loadFoodDetailsWithCache(foodIds: [String], forceRefresh: Bool) async throws -> [FoodAnalysis] {
         var foodAnalyses: [FoodAnalysis] = []
         
-        // Load each food item
         for foodId in foodIds {
+            // Check cache first unless force refresh
+            if !forceRefresh, let cachedFood = foodDetailsCache[foodId] {
+                foodAnalyses.append(cachedFood)
+                continue
+            }
+            
+            // Load from server
             do {
                 let foodItem = try await apiService.get(
                     endpoint: "/foods/\(foodId)",
@@ -263,7 +348,7 @@ class FoodComparisonService: ObservableObject {
                 // Convert FoodItem to FoodAnalysis
                 let analysis = FoodAnalysis(
                     id: foodItem.id,
-                    petId: "", // Not pet-specific for comparison
+                    petId: "",
                     foodName: foodItem.name,
                     brand: foodItem.brand,
                     caloriesPer100g: foodItem.nutritionalInfo?.caloriesPer100g ?? 0,
@@ -276,7 +361,10 @@ class FoodComparisonService: ObservableObject {
                     analyzedAt: foodItem.updatedAt
                 )
                 
+                // Cache the food details
+                foodDetailsCache[foodId] = analysis
                 foodAnalyses.append(analysis)
+                
             } catch {
                 throw ComparisonError.foodNotFound(foodId)
             }
@@ -285,6 +373,11 @@ class FoodComparisonService: ObservableObject {
         return foodAnalyses
     }
     
+    /**
+     * Generate comparison metrics
+     * - Parameter foods: Array of food analyses
+     * - Returns: Comparison metrics
+     */
     private func generateComparisonMetrics(foods: [FoodAnalysis]) -> ComparisonMetrics {
         var costPerCalorie: [String: Double] = [:]
         var nutritionalDensity: [String: Double] = [:]
@@ -311,26 +404,26 @@ class FoodComparisonService: ObservableObject {
     
     /**
      * Check foods against pet's known allergies and sensitivities
-     * Updates each food with allergy warnings
+     * - Parameters:
+     *   - foods: Array of food analyses
+     *   - pet: Pet to check against
+     * - Returns: Updated food analyses with allergy warnings
      */
     private func checkPetAllergies(foods: [FoodAnalysis], pet: Pet) -> [FoodAnalysis] {
         return foods.map { food in
             var updatedFood = food
             var matchedAllergens: [String] = []
             
-            // Check each ingredient against pet's known sensitivities
             let petSensitivities = Set(pet.knownSensitivities.map { $0.lowercased().trimmingCharacters(in: .whitespaces) })
             
             for ingredient in food.ingredients {
                 let normalizedIngredient = ingredient.lowercased().trimmingCharacters(in: .whitespaces)
                 
-                // Check for exact matches
                 if petSensitivities.contains(normalizedIngredient) {
                     matchedAllergens.append(ingredient)
                     continue
                 }
                 
-                // Check for partial matches (e.g., "chicken meal" matches "chicken")
                 for sensitivity in petSensitivities {
                     if normalizedIngredient.contains(sensitivity) || sensitivity.contains(normalizedIngredient) {
                         matchedAllergens.append(ingredient)
@@ -346,16 +439,23 @@ class FoodComparisonService: ObservableObject {
         }
     }
     
+    /**
+     * Generate recommendations based on comparison metrics
+     * - Parameters:
+     *   - metrics: Comparison metrics
+     *   - foods: Array of food analyses
+     *   - pet: Optional pet for allergy checks
+     * - Returns: Array of recommendations
+     */
     private func generateRecommendations(metrics: ComparisonMetrics, foods: [FoodAnalysis], pet: Pet?) -> [String] {
         var recommendations: [String] = []
         
-        // Pet allergy warnings (MOST IMPORTANT - show first)
+        // Pet allergy warnings
         if let pet = pet {
             let foodsWithAllergens = foods.filter { $0.hasPetAllergyWarning }
             if !foodsWithAllergens.isEmpty {
                 recommendations.append("⚠️ WARNING: \(foodsWithAllergens.count) food(s) contain ingredients that \(pet.name) is sensitive to")
                 
-                // List specific foods with allergens
                 for food in foodsWithAllergens {
                     if let allergens = food.petAllergyWarnings, !allergens.isEmpty {
                         recommendations.append("• \(food.foodName): Contains \(allergens.joined(separator: ", "))")
@@ -385,12 +485,16 @@ class FoodComparisonService: ObservableObject {
         return recommendations
     }
     
+    /**
+     * Determine best food options from comparison
+     * - Parameters:
+     *   - metrics: Comparison metrics
+     *   - foods: Array of food analyses
+     * - Returns: Best options for different criteria
+     */
     private func determineBestOptions(metrics: ComparisonMetrics, foods: [FoodAnalysis]) -> BestOptions {
-        // CRITICAL: Filter out foods with pet sensitivities first!
-        // Never recommend a food that clashes with pet's known sensitivities
         let safeFoods = foods.filter { !$0.hasPetAllergyWarning }
         
-        // If all foods have sensitivities, return warning message
         guard !safeFoods.isEmpty else {
             return BestOptions(
                 overall: "⚠️ All foods contain pet sensitivities",
@@ -399,7 +503,7 @@ class FoodComparisonService: ObservableObject {
             )
         }
         
-        // Best overall (highest composite score) - only from safe foods
+        // Best overall
         let overallScores = safeFoods.map { food in
             let calorieScore = min(100, max(0, 100 - abs(food.caloriesPer100g - 350) / 3.5))
             let proteinScore = min(100, food.proteinPercentage * 2)
@@ -413,13 +517,13 @@ class FoodComparisonService: ObservableObject {
         
         let bestOverall = overallScores.max { $0.1 < $1.1 }?.0.foodName ?? "Unknown"
         
-        // Best value (lowest cost per calorie) - only from safe foods
-        let bestValue = safeFoods.min { 
-            (metrics.costPerCalorie[$0.id] ?? Double.infinity) < (metrics.costPerCalorie[$1.id] ?? Double.infinity) 
+        // Best value
+        let bestValue = safeFoods.min {
+            (metrics.costPerCalorie[$0.id] ?? Double.infinity) < (metrics.costPerCalorie[$1.id] ?? Double.infinity)
         }?.foodName ?? "Unknown"
         
-        // Best nutrition (highest protein) - only from safe foods
-        let bestNutrition = safeFoods.max { 
+        // Best nutrition
+        let bestNutrition = safeFoods.max {
             $0.proteinPercentage < $1.proteinPercentage
         }?.foodName ?? "Unknown"
         
@@ -431,12 +535,13 @@ class FoodComparisonService: ObservableObject {
     }
     
     /**
-     * Save comparison to backend
+     * Save comparison to backend and cache
      * - Parameter results: Comparison results to save
      */
     private func saveComparison(_ results: FoodComparisonResults) async {
+        guard let userId = currentUserId else { return }
+        
         do {
-            // Create comparison request
             struct ComparisonRequest: Codable {
                 let comparisonName: String
                 let foodIds: [String]
@@ -485,6 +590,10 @@ class FoodComparisonService: ObservableObject {
                 recentComparisons = Array(recentComparisons.prefix(20))
             }
             
+            // Cache the comparison
+            let cacheKey = "food_comparison_\(userId)_\(response.id)"
+            cacheService.store(results, forKey: cacheKey, policy: .timeBased(600)) // 10 minutes cache
+            
         } catch {
             print("Failed to save comparison to backend: \(error)")
             // Still add to local cache even if backend save fails
@@ -503,9 +612,17 @@ class FoodComparisonService: ObservableObject {
     }
     
     /**
-     * Load recent comparisons from backend
+     * Load recent comparisons from backend with caching
      */
     private func loadRecentComparisons() {
+        guard let userId = currentUserId else { return }
+        
+        // Check cache first
+        let cacheKey = "recent_comparisons_\(userId)"
+        if let cachedComparisons = cacheService.retrieve([SavedComparison].self, forKey: cacheKey) {
+            recentComparisons = cachedComparisons
+        }
+        
         Task {
             do {
                 struct ComparisonListItem: Codable {
@@ -528,7 +645,6 @@ class FoodComparisonService: ObservableObject {
                 )
                 
                 let comparisons = response.compactMap { item -> SavedComparison? in
-                    // Parse ISO8601 date
                     let formatter = ISO8601DateFormatter()
                     guard let date = formatter.date(from: item.createdAt) else {
                         return nil
@@ -544,86 +660,35 @@ class FoodComparisonService: ObservableObject {
                 
                 await MainActor.run {
                     recentComparisons = comparisons
+                    // Cache the recent comparisons
+                    cacheService.store(comparisons, forKey: cacheKey, policy: .timeBased(300)) // 5 minutes cache
                 }
                 
             } catch {
                 print("Failed to load recent comparisons: \(error)")
-                // Use empty array if load fails
                 await MainActor.run {
-                    recentComparisons = []
+                    if recentComparisons.isEmpty {
+                        recentComparisons = []
+                    }
                 }
             }
         }
     }
-}
-
-// MARK: - Data Models
-
-struct FoodComparisonResults {
-    let id: String
-    let comparisonName: String
-    let foods: [FoodAnalysis]
-    let bestOverall: String
-    let bestValue: String
-    let bestNutrition: String
-    let costPerCalorie: [String: Double]
-    let nutritionalDensity: [String: Double]
-    let compatibilityScores: [String: Double]
-    let recommendations: [String]
-    let petAllergiesChecked: Bool
-    let petName: String?
-}
-
-struct ComparisonMetrics {
-    let costPerCalorie: [String: Double]
-    let nutritionalDensity: [String: Double]
-    let compatibilityScores: [String: Double]
-}
-
-struct BestOptions {
-    let overall: String
-    let value: String
-    let nutrition: String
-}
-
-struct FoodAnalysis: Identifiable {
-    let id: String
-    let petId: String
-    let foodName: String
-    let brand: String?
-    let caloriesPer100g: Double
-    let proteinPercentage: Double
-    let fatPercentage: Double
-    let fiberPercentage: Double
-    let moisturePercentage: Double
-    let ingredients: [String]
-    let allergens: [String]
-    let analyzedAt: Date
-    var hasPetAllergyWarning: Bool = false
-    var petAllergyWarnings: [String]? = nil
-}
-
-// MARK: - Errors
-
-enum ComparisonError: Error, LocalizedError {
-    case insufficientFoods
-    case tooManyFoods
-    case foodNotFound(String)
-    case notImplemented
     
-    var errorDescription: String? {
-        switch self {
-        case .insufficientFoods:
-            return "At least 2 foods are required for comparison"
-        case .tooManyFoods:
-            return "Maximum 3 foods allowed for comparison"
-        case .foodNotFound(let foodId):
-            return "Food with ID \(foodId) not found"
-        case .notImplemented:
-            return "Feature not yet implemented"
-        }
+    /**
+     * Observe authentication changes to manage user-specific cache
+     */
+    private func observeAuthChanges() {
+        authService.$authState
+            .sink { [weak self] authState in
+                if !authState.isAuthenticated {
+                    // Clear cache on logout
+                    self?.clearCache()
+                }
+            }
+            .store(in: &cancellables)
     }
 }
 
-// MARK: - API Service Extensions
-// Removed placeholder methods - now using real API endpoints
+// Models imported from FoodComparisonModels.swift
+

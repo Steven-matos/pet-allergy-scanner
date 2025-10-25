@@ -12,6 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var petService: CachedPetService
     @EnvironmentObject var notificationManager: NotificationManager
+    @StateObject private var hydrationService = CacheHydrationService.shared
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     
     var body: some View {
@@ -68,6 +69,17 @@ struct ContentView: View {
         .sheet(isPresented: $notificationManager.showBirthdayCelebration) {
             if let pet = notificationManager.birthdayPet {
                 BirthdayCelebrationView(pet: pet, isPresented: $notificationManager.showBirthdayCelebration)
+            }
+        }
+        .overlay {
+            // Show cache hydration progress if hydrating
+            if hydrationService.isHydrating {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .overlay {
+                        CacheHydrationProgressView()
+                            .frame(maxWidth: 300)
+                    }
             }
         }
     }

@@ -65,6 +65,17 @@ class CachedWeightTrackingService: ObservableObject {
     // MARK: - Public API
     
     /**
+     * Check if we have cached weight data for a pet
+     * - Parameter petId: The pet's ID
+     * - Returns: True if we have any cached weight data
+     */
+    func hasCachedWeightData(for petId: String) -> Bool {
+        let hasHistory = !weightHistory(for: petId).isEmpty
+        let hasGoal = activeWeightGoal(for: petId) != nil
+        return hasHistory || hasGoal
+    }
+    
+    /**
      * Record a new weight measurement for a pet with cache invalidation
      * - Parameter petId: The pet's ID
      * - Parameter weight: Weight in the user's selected unit
@@ -185,21 +196,28 @@ class CachedWeightTrackingService: ObservableObject {
      */
     func loadWeightData(for petId: String) async throws {
         // Try cache first
+        var hasCachedData = false
+        
         if currentUserId != nil {
             // Try weight history cache
             let historyCacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
             if let cachedHistory = cacheService.retrieve([WeightRecord].self, forKey: historyCacheKey) {
                 weightHistory[petId] = cachedHistory
+                // Only consider it cached if it has actual data
+                if !cachedHistory.isEmpty {
+                    hasCachedData = true
+                }
             }
             
             // Try weight goal cache
             let goalCacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
             if let cachedGoal = cacheService.retrieve(WeightGoal.self, forKey: goalCacheKey) {
                 weightGoals[petId] = cachedGoal
+                hasCachedData = true
             }
             
-            // If we have cached data, use it and skip server calls
-            if weightHistory[petId] != nil || weightGoals[petId] != nil {
+            // If we have meaningful cached data, use it and skip server calls
+            if hasCachedData {
                 // Update current weight from cached history
                 if let latestRecord = weightHistory[petId]?.first {
                     currentWeights[petId] = latestRecord.weightKg
@@ -207,6 +225,12 @@ class CachedWeightTrackingService: ObservableObject {
                 
                 // Generate recommendations
                 await generateRecommendations(for: petId)
+                
+                // Background refresh if data seems stale
+                Task {
+                    await refreshWeightDataInBackground(for: petId)
+                }
+                
                 return
             }
         }
@@ -225,46 +249,53 @@ class CachedWeightTrackingService: ObservableObject {
                 let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
                 cacheService.store(history, forKey: cacheKey)
             }
-            
-            // Load weight goals
-            do {
-                if let goal = try await apiService.getActiveWeightGoal(petId: petId) {
-                    print("✅ Loaded weight goal from backend: \(goal.id)")
-                    weightGoals[petId] = goal
-                    
-                    // Cache weight goal
-                    if currentUserId != nil {
-                        let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                        cacheService.store(goal, forKey: cacheKey)
-                    }
-                } else {
-                    print("⚠️ No weight goal found in backend for pet: \(petId)")
-                    // Clear local goal if no goal exists in backend
-                    weightGoals[petId] = nil
-                    
-                    // Invalidate goal cache
-                    if currentUserId != nil {
-                        let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                        cacheService.invalidate(forKey: cacheKey)
-                    }
-                }
-            } catch {
-                // If goal loading fails, keep local goal but log the error
-                print("❌ Failed to load weight goal from backend: \(error.localizedDescription)")
-            }
-            
-            // Update current weight
-            if let latestRecord = history.first {
-                currentWeights[petId] = latestRecord.weightKg
-            }
-            
-            // Generate recommendations
-            await generateRecommendations(for: petId)
-            
         } catch {
-            self.error = error
-            throw error
+            // If weight history endpoint doesn't exist (404), initialize with empty array
+            print("⚠️ Weight history endpoint not implemented (404), initializing with empty history: \(error)")
+            weightHistory[petId] = []
+            
+            // Cache empty history to prevent future API calls
+            if currentUserId != nil {
+                let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
+                let emptyHistory: [WeightRecord] = []
+                cacheService.store(emptyHistory, forKey: cacheKey)
+            }
         }
+        
+        // Load weight goals
+        do {
+            if let goal = try await apiService.getActiveWeightGoal(petId: petId) {
+                print("✅ Loaded weight goal from backend: \(goal.id)")
+                weightGoals[petId] = goal
+                
+                // Cache weight goal
+                if currentUserId != nil {
+                    let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
+                    cacheService.store(goal, forKey: cacheKey)
+                }
+            } else {
+                print("⚠️ No weight goal found in backend for pet: \(petId)")
+                // Clear local goal if no goal exists in backend
+                weightGoals[petId] = nil
+                
+                // Invalidate goal cache
+                if currentUserId != nil {
+                    let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
+                    cacheService.invalidate(forKey: cacheKey)
+                }
+            }
+        } catch {
+            // If goal loading fails, keep local goal but log the error
+            print("❌ Failed to load weight goal from backend: \(error.localizedDescription)")
+        }
+        
+        // Update current weight
+        if let latestRecord = weightHistory[petId]?.first {
+            currentWeights[petId] = latestRecord.weightKg
+        }
+        
+        // Generate recommendations
+        await generateRecommendations(for: petId)
         
         isLoading = false
     }
@@ -384,6 +415,44 @@ class CachedWeightTrackingService: ObservableObject {
     }
     
     // MARK: - Private Methods
+    
+    /**
+     * Refresh weight data in background if cache is stale
+     * - Parameter petId: The pet's ID
+     */
+    private func refreshWeightDataInBackground(for petId: String) async {
+        // Check if cache is stale (older than 5 minutes)
+        let historyCacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
+        
+        // If cache doesn't exist or is stale, refresh
+        if !cacheService.exists(forKey: historyCacheKey) {
+            do {
+                // Load weight history silently
+                let history = try await apiService.getWeightHistory(petId: petId)
+                
+                // Update if different from current
+                if history != weightHistory[petId] {
+                    await MainActor.run {
+                        weightHistory[petId] = history
+                        
+                        // Update current weight
+                        if let latestRecord = history.first {
+                            currentWeights[petId] = latestRecord.weightKg
+                        }
+                        
+                        // Cache the updated data
+                        cacheService.store(history, forKey: historyCacheKey)
+                    }
+                    
+                    // Regenerate recommendations with new data
+                    await generateRecommendations(for: petId)
+                }
+            } catch {
+                // Silent failure for background refresh
+                print("⚠️ Background weight data refresh failed: \(error.localizedDescription)")
+            }
+        }
+    }
     
     /**
      * Update pet's current weight in PetService

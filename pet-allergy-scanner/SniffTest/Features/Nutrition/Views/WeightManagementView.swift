@@ -71,7 +71,7 @@ struct WeightManagementView: View {
             }
         }
         .onAppear {
-            loadWeightData()
+            loadWeightDataIfNeeded()
         }
     }
     
@@ -170,6 +170,27 @@ struct WeightManagementView: View {
     
     // MARK: - Helper Methods
     
+    /**
+     * Load weight data only if not already cached
+     * This prevents unnecessary server calls when data is already available
+     */
+    private func loadWeightDataIfNeeded() {
+        guard let pet = selectedPet else { return }
+        
+        // Check if we already have cached data for this pet
+        if weightService.hasCachedWeightData(for: pet.id) {
+            // We have cached data, just ensure UI is updated
+            refreshTrigger.toggle()
+        } else {
+            // No cached data, load from server
+            loadWeightData()
+        }
+    }
+    
+    /**
+     * Force load weight data from server
+     * Used when new data is added (weight entry, goal setting)
+     */
     private func loadWeightData() {
         guard selectedPet != nil else { return }
         

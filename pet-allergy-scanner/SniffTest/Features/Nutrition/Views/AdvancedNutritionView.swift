@@ -179,7 +179,7 @@ struct AdvancedNutritionView: View {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
         }
         .onAppear {
-            loadNutritionData()
+            loadNutritionDataIfNeeded()
         }
     }
     
@@ -364,6 +364,39 @@ struct AdvancedNutritionView: View {
     }
     
     // MARK: - Helper Methods
+    
+    /**
+     * Load nutrition data only if needed (cache-first approach)
+     * Checks for cached data before making server calls
+     */
+    private func loadNutritionDataIfNeeded() {
+        // First, load pets and check for auto-selection
+        Task {
+            petService.loadPets()
+            
+            await MainActor.run {
+                // Auto-select pet if user has only one pet
+                autoSelectSinglePet()
+            }
+        }
+        
+        // If no pet is selected, don't proceed with nutrition data loading
+        guard let pet = selectedPet else { return }
+        
+        // Check if we have cached data for this pet
+        let hasCachedNutritionData = cachedNutritionService.hasCachedNutritionData(for: pet.id)
+        let hasCachedWeightData = cachedWeightService.hasCachedWeightData(for: pet.id)
+        
+        if hasCachedNutritionData && hasCachedWeightData {
+            // We have cached data, no need to make server calls
+            print("✅ Using cached nutrition data for pet: \(pet.name)")
+            return
+        } else {
+            // Missing some cached data, load from server
+            print("⚠️ Missing cached data, loading from server for pet: \(pet.name)")
+            loadNutritionData()
+        }
+    }
     
     /**
      * Load nutrition data using cache-first approach for optimal performance

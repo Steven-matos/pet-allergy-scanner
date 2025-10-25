@@ -25,7 +25,7 @@ import Charts
 struct FoodComparisonView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var petService: CachedPetService
-    @StateObject private var comparisonService = FoodComparisonService.shared
+    @StateObject private var comparisonService = CachedFoodComparisonService.shared
     @StateObject private var nutritionService = NutritionService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @State private var selectedFoods: Set<String> = []
@@ -1233,13 +1233,7 @@ struct SearchBar: View {
 }
 
 // MARK: - Data Models
-
-struct SavedComparison: Identifiable {
-    let id: String
-    let name: String
-    let foodCount: Int
-    let createdAt: Date
-}
+// SavedComparison model imported from FoodComparisonModels.swift
 
 #Preview {
     FoodComparisonView()

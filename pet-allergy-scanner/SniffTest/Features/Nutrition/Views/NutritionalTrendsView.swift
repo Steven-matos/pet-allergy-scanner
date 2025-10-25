@@ -24,7 +24,7 @@ import Charts
  */
 struct NutritionalTrendsView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var trendsService = NutritionalTrendsService.shared
+    @StateObject private var trendsService = CachedNutritionalTrendsService.shared
     @StateObject private var petService = CachedPetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
@@ -61,7 +61,7 @@ struct NutritionalTrendsView: View {
                 }
         }
         .onAppear {
-            loadTrendsData()
+            loadTrendsDataIfNeeded()
         }
     }
     
@@ -271,6 +271,27 @@ struct NutritionalTrendsView: View {
     
     // MARK: - Helper Methods
     
+    /**
+     * Load trends data only if not already cached
+     * This prevents unnecessary server calls when data is already available
+     */
+    private func loadTrendsDataIfNeeded() {
+        guard let pet = selectedPet else { return }
+        
+        // Check if we already have cached trends data for this pet
+        if trendsService.hasCachedTrendsData(for: pet.id) {
+            // We have cached data, no need to show loading or make server calls
+            return
+        } else {
+            // No cached data, load from server
+            loadTrendsData()
+        }
+    }
+    
+    /**
+     * Force load trends data from server
+     * Used when new data is added (feeding log, weight entry)
+     */
     private func loadTrendsData() {
         guard selectedPet != nil else { return }
         

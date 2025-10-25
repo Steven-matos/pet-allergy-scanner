@@ -47,6 +47,7 @@ struct ProfileSettingsView: View {
     @StateObject private var analyticsManager = AnalyticsManager.shared
     @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
     @StateObject private var weightUnitService = WeightUnitPreferenceService.shared
+    @StateObject private var profileService = CachedProfileService.shared
     
     var body: some View {
         NavigationStack {

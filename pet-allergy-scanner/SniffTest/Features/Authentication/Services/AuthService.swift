@@ -69,6 +69,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
     @Published var errorMessage: String?
     
     private let apiService = APIService.shared
+    private lazy var cacheHydrationService = CacheHydrationService.shared
     
     /// Convenience computed properties for backward compatibility
     var isAuthenticated: Bool { authState.isAuthenticated }
@@ -192,9 +193,8 @@ class AuthService: ObservableObject, @unchecked Sendable {
             errorMessage = nil
         }
         
-        // Clear all user data to prevent 403 errors on logout
-        CachedPetService.shared.clearPets()
-        ScanService.shared.clearScans()
+        // Clear all caches
+        cacheHydrationService.clearAllCaches()
     }
     
     /// Update current user profile
@@ -263,6 +263,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 // Only transition to authenticated once we have complete user data
                 await MainActor.run {
                     authState = .authenticated(finalUser)
+                }
+                
+                // Start cache hydration in background
+                Task {
+                    await cacheHydrationService.hydrateAllCaches()
                 }
             } catch {
                 // Fallback to registration response user if getCurrentUser fails
@@ -373,6 +378,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(user)
                 }
+                
+                // Start cache hydration in background
+                Task {
+                    await cacheHydrationService.hydrateAllCaches()
+                }
                 print("AuthService: Password reset token validated")
             } catch {
                 print("AuthService: Password reset validation failed - \(error)")
@@ -407,6 +417,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(finalUser)
                 }
+                
+                // Start cache hydration in background
+                Task {
+                    await cacheHydrationService.hydrateAllCaches()
+                }
+                
                 print("AuthService: Auth callback successful")
             } catch {
                 print("AuthService: Auth callback failed - \(error)")

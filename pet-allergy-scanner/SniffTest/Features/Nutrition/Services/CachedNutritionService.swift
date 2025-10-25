@@ -77,17 +77,39 @@ class CachedNutritionService: ObservableObject {
             }
         }
         
-        // Fallback to server
-        let requirements = try await loadNutritionalRequirementsFromServer(for: petId)
-        
-        // Cache the result
-        if currentUserId != nil {
-            let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
-            cacheService.store(requirements, forKey: cacheKey)
+        // Try to get from server, but handle 404/500 errors gracefully
+        do {
+            let requirements = try await loadNutritionalRequirementsFromServer(for: petId)
+            
+            // Cache the result
+            if currentUserId != nil {
+                let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
+                cacheService.store(requirements, forKey: cacheKey)
+            }
+            
+            nutritionalRequirements[petId] = requirements
+            return requirements
+        } catch {
+            // If server fails (404/500 error), try to calculate requirements locally
+            print("⚠️ Server failed to load nutritional requirements for pet \(petId) (endpoint not implemented), calculating locally: \(error)")
+            
+            // Get the pet to calculate requirements
+            guard let pet = CachedPetService.shared.pets.first(where: { $0.id == petId }) else {
+                throw error // Re-throw if we can't find the pet
+            }
+            
+            // Calculate requirements locally
+            let requirements = PetNutritionalRequirements.calculate(for: pet)
+            nutritionalRequirements[petId] = requirements
+            
+            // Cache the calculated requirements
+            if currentUserId != nil {
+                let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
+                cacheService.store(requirements, forKey: cacheKey)
+            }
+            
+            return requirements
         }
-        
-        nutritionalRequirements[petId] = requirements
-        return requirements
     }
     
     /**
@@ -518,5 +540,19 @@ class CachedNutritionService: ObservableObject {
         try await loadFoodAnalyses(for: petId)
         try await loadFeedingRecords(for: petId)
         try await loadDailySummaries(for: petId)
+    }
+    
+    /**
+     * Check if we have cached nutrition data for a pet
+     * - Parameter petId: The pet's ID
+     * - Returns: True if we have any cached nutrition data
+     */
+    func hasCachedNutritionData(for petId: String) -> Bool {
+        let hasRequirements = nutritionalRequirements[petId] != nil
+        let hasFeedingRecords = !feedingRecords.isEmpty
+        let hasDailySummaries = !(dailySummaries[petId] ?? []).isEmpty
+        let hasFoodAnalyses = !foodAnalyses.isEmpty
+        
+        return hasRequirements || hasFeedingRecords || hasDailySummaries || hasFoodAnalyses
     }
 }

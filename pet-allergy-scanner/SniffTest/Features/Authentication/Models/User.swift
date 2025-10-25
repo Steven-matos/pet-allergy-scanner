@@ -8,7 +8,7 @@
 import Foundation
 
 /// User data model representing the authenticated user
-struct User: Codable, Identifiable {
+struct User: Codable, Identifiable, Equatable {
     let id: String
     let email: String
     let username: String?
