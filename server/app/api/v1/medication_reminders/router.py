@@ -4,10 +4,11 @@ CRUD operations for medication reminder scheduling
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 
 from app.database import get_db
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.models.user import UserResponse
 from app.models.medication_reminder import (
     MedicationReminder,
@@ -26,21 +27,33 @@ router = APIRouter(prefix="/medication-reminders", tags=["medication-reminders"]
 @router.post("", response_model=MedicationReminderResponse)
 async def create_medication_reminder_no_slash(
     reminder: MedicationReminderCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Create medication reminder (without trailing slash)"""
-    return await create_medication_reminder_with_slash(reminder, supabase, current_user)
+    return await create_medication_reminder_with_slash(reminder, current_user, credentials)
 
 @router.post("/", response_model=MedicationReminderResponse)
 async def create_medication_reminder_with_slash(
     reminder: MedicationReminderCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Create a new medication reminder for a pet
     """
+    # Create authenticated Supabase client with user's JWT token
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    
+    # Set the session with the user's JWT token
+    supabase.auth.set_session(credentials.credentials, "")
+    
     # Verify pet ownership using centralized service
     await verify_pet_ownership(reminder.pet_id, current_user.id, supabase)
 
@@ -64,12 +77,24 @@ async def get_pet_medication_reminders(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     active_only: bool = Query(True),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get medication reminders for a specific pet with optional filtering
     """
+    # Create authenticated Supabase client with user's JWT token
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    
+    # Set the session with the user's JWT token
+    supabase.auth.set_session(credentials.credentials, "")
+    
     # Verify pet ownership using centralized service
     await verify_pet_ownership(pet_id, current_user.id, supabase)
     
