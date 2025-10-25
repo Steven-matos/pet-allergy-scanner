@@ -4,10 +4,11 @@ CRUD operations for pet health event tracking
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 
 from app.database import get_db
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.models.user import UserResponse
 from app.models.health_event import (
     HealthEvent,
@@ -26,21 +27,33 @@ router = APIRouter(prefix="/health-events", tags=["health-events"])
 @router.post("", response_model=HealthEventResponse)
 async def create_health_event_no_slash(
     event: HealthEventCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Create health event (without trailing slash)"""
-    return await create_health_event_with_slash(event, supabase, current_user)
+    return await create_health_event_with_slash(event, current_user, credentials)
 
 @router.post("/", response_model=HealthEventResponse)
 async def create_health_event_with_slash(
     event: HealthEventCreate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Create a new health event for a pet
     """
+    # Create authenticated Supabase client with user's JWT token
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    
+    # Set the session with the user's JWT token
+    supabase.auth.set_session(credentials.credentials, "")
+    
     # Verify pet ownership using centralized service
     await verify_pet_ownership(event.pet_id, current_user.id, supabase)
 
@@ -58,12 +71,24 @@ async def get_pet_health_events(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get health events for a specific pet with optional filtering
     """
+    # Create authenticated Supabase client with user's JWT token
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    
+    # Set the session with the user's JWT token
+    supabase.auth.set_session(credentials.credentials, "")
+    
     # Verify pet ownership using centralized service
     await verify_pet_ownership(pet_id, current_user.id, supabase)
     
