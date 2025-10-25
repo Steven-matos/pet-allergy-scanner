@@ -125,12 +125,22 @@ async def get_pet_health_events(
 @router.get("/{event_id}", response_model=HealthEventResponse)
 async def get_health_event(
     event_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get a specific health event by ID
     """
+    # Create authenticated Supabase client
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    supabase.auth.set_session(credentials.credentials, "")
+    
     event = await HealthEventService.get_health_event_by_id(
         event_id, current_user.id, supabase
     )
@@ -145,12 +155,22 @@ async def get_health_event(
 async def update_health_event(
     event_id: str,
     updates: HealthEventUpdate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Update a health event
     """
+    # Create authenticated Supabase client
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    supabase.auth.set_session(credentials.credentials, "")
+    
     event = await HealthEventService.update_health_event(
         event_id, updates, current_user.id, supabase
     )
@@ -164,12 +184,22 @@ async def update_health_event(
 @router.delete("/{event_id}")
 async def delete_health_event(
     event_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Delete a health event
     """
+    # Create authenticated Supabase client
+    from app.core.config import settings
+    from supabase import create_client
+    
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
+    supabase.auth.set_session(credentials.credentials, "")
+    
     success = await HealthEventService.delete_health_event(
         event_id, current_user.id, supabase
     )
