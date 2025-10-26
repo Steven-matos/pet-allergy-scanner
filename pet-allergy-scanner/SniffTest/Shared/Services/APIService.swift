@@ -131,18 +131,20 @@ class APIService: ObservableObject, @unchecked Sendable {
         isRefreshing = false
     }
     
-    /// Check if token needs refresh (refresh 5 minutes before expiry)
+    /// Check if token needs refresh (refresh 1 hour before expiry or if already expired)
     private func shouldRefreshToken() async -> Bool {
         guard let expiry = await tokenExpiry else {
-            return false
+            // If no expiry stored, check if we have a refresh token and try refresh
+            return await refreshToken != nil
         }
         
-        // Refresh if token expires in less than 5 minutes
-        let refreshThreshold = Date().addingTimeInterval(5 * 60)
+        // Refresh if token expires in less than 1 hour OR already expired
+        let refreshThreshold = Date().addingTimeInterval(60 * 60) // 1 hour
         return expiry < refreshThreshold
     }
     
-    /// Refresh authentication token
+    /// Refresh authentication token using refresh token
+    /// This works even when access token is expired (up to 30 days)
     private func refreshAuthToken() async throws {
         // Prevent multiple simultaneous refresh attempts
         if isRefreshing {
@@ -155,29 +157,39 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         let task = Task<Void, Error> {
             guard let refreshToken = await self.refreshToken else {
+                self.isRefreshing = false
                 throw APIError.authenticationError
             }
             
             guard let url = URL(string: "\(baseURL)/auth/refresh") else {
+                self.isRefreshing = false
                 throw APIError.invalidURL
             }
             
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("iOS", forHTTPHeaderField: "User-Agent")
+            request.setValue("1.0.0", forHTTPHeaderField: "X-Client-Version")
             
+            // Send refresh token in request body
             let refreshData = ["refresh_token": refreshToken]
             request.httpBody = try JSONSerialization.data(withJSONObject: refreshData)
             
             let (data, response) = try await URLSession.shared.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
+                self.isRefreshing = false
                 throw APIError.invalidResponse
             }
             
             guard httpResponse.statusCode == 200 else {
-                // Refresh token is invalid or expired
-                await self.clearAuthToken()
+                // Refresh token is invalid or expired (older than 30 days)
+                // Only clear tokens if it's a 401/403 error, not other errors
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    await self.clearAuthToken()
+                }
+                self.isRefreshing = false
                 throw APIError.authenticationError
             }
             
@@ -186,11 +198,13 @@ class APIService: ObservableObject, @unchecked Sendable {
             decoder.dateDecodingStrategy = .iso8601
             let authResponse = try decoder.decode(AuthResponse.self, from: data)
             
-            // Store new tokens
+            // Store new tokens with proper expiry
+            // Supabase tokens typically expire in 3600 seconds (1 hour)
+            // But refresh tokens last 30 days, so we'll refresh every hour automatically
             await self.setAuthToken(
                 authResponse.accessToken,
                 refreshToken: authResponse.refreshToken,
-                expiresIn: authResponse.expiresIn
+                expiresIn: authResponse.expiresIn ?? 3600 // Default to 1 hour if not provided
             )
             
             self.isRefreshing = false
@@ -329,6 +343,26 @@ class APIService: ObservableObject, @unchecked Sendable {
     /// - Returns: The current auth token or nil if not set
     func getAuthToken() async -> String? {
         return await authToken
+    }
+    
+    /// Ensure token is valid by refreshing if needed
+    /// This is called when app becomes active to maintain session
+    func ensureValidToken() async {
+        // Check if we have any tokens
+        guard await hasAuthToken else {
+            return
+        }
+        
+        // Refresh token if it's about to expire or already expired
+        if await shouldRefreshToken() {
+            do {
+                try await refreshAuthToken()
+            } catch {
+                // If refresh fails, token may be expired (>30 days)
+                // Don't clear tokens here - let the normal error handling handle it
+                print("Failed to refresh token on app activation: \(error)")
+            }
+        }
     }
     
     /// Debug method to check authentication state
@@ -558,6 +592,27 @@ class APIService: ObservableObject, @unchecked Sendable {
                 case 200...299:
                     break // Success
                 case 401:
+                    // Try to refresh token before logging out
+                    if await refreshToken != nil {
+                        do {
+                            try await refreshAuthToken()
+                            // Retry the original request with new token
+                            var retryRequest = request
+                            if let newToken = await authToken {
+                                retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                            }
+                            let (retryData, retryResponse) = try await URLSession.shared.data(for: retryRequest)
+                            if let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                               (200...299).contains(retryHttpResponse.statusCode) {
+                                // Success after refresh, decode and return
+                                let decoder = createJSONDecoder()
+                                return try decoder.decode(T.self, from: retryData)
+                            }
+                        } catch {
+                            // Refresh failed, continue to error handling
+                        }
+                    }
+                    
                     // Try to decode error message from response
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         // Clear invalid token only if this is a session/token error
@@ -570,6 +625,27 @@ class APIService: ObservableObject, @unchecked Sendable {
                     await clearAuthToken()
                     throw APIError.authenticationError
                 case 403:
+                    // Try to refresh token before treating as error
+                    if await refreshToken != nil {
+                        do {
+                            try await refreshAuthToken()
+                            // Retry the original request with new token
+                            var retryRequest = request
+                            if let newToken = await authToken {
+                                retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
+                            }
+                            let (retryData, retryResponse) = try await URLSession.shared.data(for: retryRequest)
+                            if let retryHttpResponse = retryResponse as? HTTPURLResponse,
+                               (200...299).contains(retryHttpResponse.statusCode) {
+                                // Success after refresh, decode and return
+                                let decoder = createJSONDecoder()
+                                return try decoder.decode(T.self, from: retryData)
+                            }
+                        } catch {
+                            // Refresh failed, continue to error handling
+                        }
+                    }
+                    
                     // Check if this is an email verification error
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         if errorResponse.message.contains("verify your email") {

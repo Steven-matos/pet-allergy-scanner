@@ -2,7 +2,7 @@
 Authentication router for user management
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.models.user import UserCreate, UserResponse, UserUpdate, UserLogin
 from app.core.config import settings
@@ -393,12 +393,22 @@ async def update_user_profile(
         )
 
 @router.post("/refresh")
-async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def refresh_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
-    Refresh authentication token
+    Refresh authentication token using refresh token
+    
+    Accepts refresh token either in:
+    1. Request body as JSON: {"refresh_token": "..."}
+    2. Authorization header as Bearer token (fallback)
+    
+    This allows refreshing even when access token is expired.
     
     Args:
-        credentials: JWT token credentials
+        request: FastAPI request object to read body
+        credentials: Optional JWT token credentials from header
         
     Returns:
         New access token and user data
@@ -406,25 +416,66 @@ async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(secu
     Raises:
         HTTPException: If refresh fails
     """
+    refresh_token_value = None
+    
     try:
-        if not credentials:
+        # Try to get refresh token from request body first
+        try:
+            body = await request.json()
+            refresh_token_value = body.get("refresh_token")
+        except Exception:
+            pass
+        
+        # Fallback: try to use refresh token from Authorization header
+        if not refresh_token_value and credentials:
+            refresh_token_value = credentials.credentials
+        
+        if not refresh_token_value:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No authentication token provided"
+                detail="No refresh token provided. Provide refresh_token in request body or Authorization header."
             )
         
-        supabase = get_supabase_client()
+        # Use Supabase to exchange refresh token for new session
+        # This works even when access token is expired
+        from supabase import create_client
         
-        # Set the session for the current request
-        supabase.auth.set_session(credentials.credentials, "")
-        
-        # Refresh the session
-        session = supabase.auth.refresh_session()
-        
-        if not session.session:
+        try:
+            # Create a client instance with anon key
+            supabase = create_client(
+                settings.supabase_url,
+                settings.supabase_anon_key
+            )
+            
+            # Set session with refresh token (access token can be empty when expired)
+            # Supabase will use the refresh token to get new tokens
+            supabase.auth.set_session("", refresh_token_value)
+            
+            # Refresh the session to get new access and refresh tokens
+            response = supabase.auth.refresh_session()
+            
+            if not response or not hasattr(response, 'session') or not response.session:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token expired or invalid"
+                )
+            
+            session = response
+            
+        except HTTPException:
+            raise
+        except Exception as refresh_error:
+            logger.error(f"Token refresh failed: {refresh_error}")
+            # Check if it's a token expiration issue
+            error_str = str(refresh_error).lower()
+            if "expired" in error_str or "invalid" in error_str or "401" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token expired or invalid. Please login again."
+                )
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Failed to refresh token"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error refreshing token"
             )
         
         # Get user data

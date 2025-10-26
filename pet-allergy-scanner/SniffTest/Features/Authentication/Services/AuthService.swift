@@ -101,6 +101,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             authState = .loading
         }
         
+        // First, ensure token is valid by refreshing if needed
+        await apiService.ensureValidToken()
+        
         do {
             let user = try await apiService.getCurrentUser()
             

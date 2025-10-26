@@ -40,8 +40,12 @@ struct ContentView: View {
                             // Handle app becoming active
                             notificationManager.handleAppBecameActive()
                             
-                            // Refresh user session to ensure token is valid
+                            // Refresh token if needed and validate session
                             Task {
+                                // Check if token needs refresh and refresh if necessary
+                                await APIService.shared.ensureValidToken()
+                                
+                                // Refresh user data to ensure session is valid
                                 await authService.refreshCurrentUser()
                             }
                         }
