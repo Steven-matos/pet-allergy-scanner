@@ -28,12 +28,27 @@ struct ScanResultView: View {
             ScrollView {
                 VStack(spacing: ModernDesignSystem.Spacing.xl) {
                     if let result = scan.result {
-                        // Overall Safety Result
-                        SafetyResultCard(result: result, settingsManager: settingsManager)
-                        
                         // Ingredients Analysis
                         if !result.ingredientsFound.isEmpty {
                             IngredientsAnalysisSection(result: result)
+                        } else {
+                            // Show a message if no ingredients were found
+                            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(ModernDesignSystem.Colors.warning)
+                                
+                                Text("No Ingredients Found")
+                                    .font(ModernDesignSystem.Typography.title3)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                
+                                Text("The scan didn't detect any ingredients. This might be due to image quality or the product not being in our database.")
+                                    .font(ModernDesignSystem.Typography.body)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(ModernDesignSystem.Spacing.lg)
+                            .modernCard()
                         }
                         
                         // Nutritional Analysis (if available)
@@ -42,16 +57,17 @@ struct ScanResultView: View {
                         }
                         
                         // Pet Sensitivity Assessment (always visible)
-                        if hasAttemptedSensitivityLoad {
-                            if let sensitivityAssessment = sensitivityAssessment {
-                                SensitivityAssessmentCard(assessment: sensitivityAssessment)
-                            } else if isLoadingSensitivity {
-                                SensitivityLoadingView()
-                            } else if let error = sensitivityError {
-                                SensitivityErrorView(error: error) {
-                                    loadSensitivityAssessment()
-                                }
+                        if let sensitivityAssessment = sensitivityAssessment {
+                            SensitivityAssessmentCard(assessment: sensitivityAssessment)
+                        } else if isLoadingSensitivity {
+                            SensitivityLoadingView()
+                        } else if let error = sensitivityError {
+                            SensitivityErrorView(error: error) {
+                                loadSensitivityAssessment()
                             }
+                        } else {
+                            // Show loading state if sensitivity assessment hasn't been attempted yet
+                            SensitivityLoadingView()
                         }
                         
                         // Veterinary Disclaimer
@@ -81,7 +97,25 @@ struct ScanResultView: View {
                 }
             }
             .onAppear {
+                print("🔍 ScanResultView: onAppear called")
+                if let result = scan.result {
+                    print("🔍 ScanResultView: Displaying scan result")
+                    print("🔍 ScanResultView: Ingredients found: \(result.ingredientsFound.count)")
+                    print("🔍 ScanResultView: Unsafe ingredients: \(result.unsafeIngredients.count)")
+                    print("🔍 ScanResultView: Safe ingredients: \(result.safeIngredients.count)")
+                } else {
+                    print("⚠️ ScanResultView: No scan result available")
+                }
                 loadSensitivityAssessment()
+            }
+            .onAppear {
+                // Ensure sensitivity assessment loads even if there are timing issues
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if !hasAttemptedSensitivityLoad && !isLoadingSensitivity {
+                        print("🔍 ScanResultView: Retrying sensitivity assessment load")
+                        loadSensitivityAssessment()
+                    }
+                }
             }
         }
     }
@@ -93,24 +127,35 @@ struct ScanResultView: View {
      */
     private func loadSensitivityAssessment() {
         guard scan.result != nil else { 
+            print("⚠️ ScanResultView: No scan result available for sensitivity assessment")
             isLoadingSensitivity = false
             hasAttemptedSensitivityLoad = true
             return 
+        }
+        
+        // Prevent multiple simultaneous loads
+        guard !isLoadingSensitivity else {
+            print("⚠️ ScanResultView: Sensitivity assessment already loading")
+            return
         }
         
         hasAttemptedSensitivityLoad = true
         isLoadingSensitivity = true
         sensitivityError = nil
         
+        print("🔍 ScanResultView: Starting sensitivity assessment for scan")
+        
         Task {
             do {
                 let assessment = try await sensitivityService.assessSensitivities(for: scan)
                 await MainActor.run {
+                    print("✅ ScanResultView: Sensitivity assessment completed successfully")
                     self.sensitivityAssessment = assessment
                     self.isLoadingSensitivity = false
                 }
             } catch {
                 await MainActor.run {
+                    print("❌ ScanResultView: Sensitivity assessment failed: \(error.localizedDescription)")
                     self.sensitivityError = error.localizedDescription
                     self.isLoadingSensitivity = false
                 }

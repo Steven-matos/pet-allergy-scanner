@@ -18,7 +18,29 @@ struct ScanView: View {
     @State private var showingPetSelection = false
     @State private var selectedPet: Pet?
     @State private var showingResults = false
-    @State private var scanResult: Scan?
+    @State private var scanResult: Scan? {
+        didSet {
+            if let newValue = scanResult {
+                print("🔍 [SCAN_RESULT_SET] scanResult set to: \(newValue.id)")
+            } else {
+                print("🔍 [SCAN_RESULT_SET] ⚠️ scanResult cleared to nil")
+            }
+        }
+    }
+    @State private var isPreparingScanResult = false
+    
+    // Force UI refresh when scan data is ready
+    @State private var scanDataReady = false
+    @State private var pendingScanResult: Scan? {
+        didSet {
+            if let newValue = pendingScanResult {
+                print("🔍 [PENDING_SCAN_RESULT_SET] pendingScanResult set to: \(newValue.id)")
+            } else {
+                print("🔍 [PENDING_SCAN_RESULT_SET] ⚠️ pendingScanResult cleared to nil")
+            }
+        }
+    }
+    @State private var sheetScanData: Scan?
     @State private var showingPermissionAlert = false
     @State private var cameraError: String?
     @State private var showingAddPet = false
@@ -43,6 +65,118 @@ struct ScanView: View {
     // Camera control state
     @State private var cameraController: SimpleCameraViewController?
     @State private var isCameraPaused = false
+    
+    // MARK: - Helper to present scan result sheet with async/await
+    private func presentScanResult(_ scan: Scan) async {
+        print("🔍 [SCAN_VIEW] presentScanResult called with scan: \(scan.id)")
+        print("🔍 [SCAN_VIEW] Scan result available: \(scan.result != nil)")
+        if let result = scan.result {
+            print("🔍 [SCAN_VIEW] Scan result ingredients: \(result.ingredientsFound.count)")
+        }
+        
+        // Set loading state immediately
+        isPreparingScanResult = true
+        scanDataReady = false
+        print("🔍 [SCAN_VIEW] Setting isPreparingScanResult to true")
+        
+        // Present loading sheet first
+        showingResults = true
+        print("🔍 [SCAN_VIEW] Showing loading sheet")
+        
+        do {
+            // Wait for scan data to be fully loaded and validated
+            let validatedScan = try await waitForScanData(scan)
+            
+            // Update state variables on main thread to ensure UI updates immediately
+            await MainActor.run {
+                // Store the validated scan data
+                pendingScanResult = validatedScan
+                sheetScanData = validatedScan
+                scanResult = validatedScan
+                
+                print("🔍 [SCAN_VIEW] ✅ Scan data validated and ready")
+                print("🔍 [SCAN_VIEW] pendingScanResult set to: \(pendingScanResult?.id ?? "nil")")
+                print("🔍 [SCAN_VIEW] sheetScanData set to: \(sheetScanData?.id ?? "nil")")
+                print("🔍 [SCAN_VIEW] scanResult set to: \(scanResult?.id ?? "nil")")
+                
+                // Clear loading state - the sheet will now show the results
+                isPreparingScanResult = false
+                scanDataReady = true
+                print("🔍 [SCAN_VIEW] Loading state cleared - data is ready")
+            }
+            
+            // Small delay to ensure UI state updates are processed
+            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+        } catch {
+            print("❌ [SCAN_VIEW] Failed to validate scan data: \(error.localizedDescription)")
+            // Keep loading state true to show error view
+            await MainActor.run {
+                isPreparingScanResult = true
+            }
+        }
+    }
+    
+    /**
+     * Wait for scan data to be fully loaded and validated
+     * This ensures we have complete data before presenting results
+     */
+    private func waitForScanData(_ scan: Scan) async throws -> Scan {
+        print("🔍 [SCAN_VIEW] Waiting for scan data validation...")
+        
+        // If scan already has result, validate it
+        if scan.result != nil {
+            print("🔍 [SCAN_VIEW] Scan already has result, validating...")
+            return try await validateScanData(scan)
+        }
+        
+        // If scan doesn't have result yet, wait for it to be loaded
+        print("🔍 [SCAN_VIEW] Scan doesn't have result yet, waiting for completion...")
+        
+        // Poll for scan completion with timeout
+        let maxAttempts = 30 // 30 seconds timeout
+        var attempts = 0
+        
+        while attempts < maxAttempts {
+            // Check if scan has been updated with result
+            if let updatedScan = scanService.getScan(id: scan.id),
+               updatedScan.result != nil {
+                print("🔍 [SCAN_VIEW] Scan result loaded after \(attempts) attempts")
+                return try await validateScanData(updatedScan)
+            }
+            
+            // Wait 1 second before next attempt
+            try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            attempts += 1
+            
+            print("🔍 [SCAN_VIEW] Waiting for scan result... attempt \(attempts)/\(maxAttempts)")
+        }
+        
+        throw ScanError.timeout("Scan analysis timed out")
+    }
+    
+    /**
+     * Validate that scan data is complete and ready for presentation
+     */
+    private func validateScanData(_ scan: Scan) async throws -> Scan {
+        print("🔍 [SCAN_VIEW] Validating scan data...")
+        
+        guard let result = scan.result else {
+            throw ScanError.invalidData("Scan result is nil")
+        }
+        
+        // Validate that we have meaningful data
+        guard !result.ingredientsFound.isEmpty else {
+            throw ScanError.invalidData("No ingredients found in scan result")
+        }
+        
+        print("🔍 [SCAN_VIEW] ✅ Scan data validation passed")
+        print("🔍 [SCAN_VIEW] Ingredients found: \(result.ingredientsFound.count)")
+        print("🔍 [SCAN_VIEW] Unsafe ingredients: \(result.unsafeIngredients.count)")
+        print("🔍 [SCAN_VIEW] Safe ingredients: \(result.safeIngredients.count)")
+        
+        return scan
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -205,14 +339,79 @@ struct ScanView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showingResults) {
-            if let scanResult = scanResult {
-                ScanResultView(scan: scanResult, onDismissAll: dismissAllSheets)
+            // Enhanced data validation and loading state management
+            Group {
+                // Debug logging for sheet presentation
+                let _ = print("🔍 [SCAN_VIEW] Sheet presentation logic - checking data sources")
+                let _ = print("🔍 [SCAN_VIEW] pendingScanResult: \(pendingScanResult?.id ?? "nil")")
+                let _ = print("🔍 [SCAN_VIEW] sheetScanData: \(sheetScanData?.id ?? "nil")")
+                let _ = print("🔍 [SCAN_VIEW] scanResult: \(scanResult?.id ?? "nil")")
+                let _ = print("🔍 [SCAN_VIEW] isPreparingScanResult: \(isPreparingScanResult)")
+                let _ = print("🔍 [SCAN_VIEW] scanDataReady: \(scanDataReady)")
+                
+                if let scanData = pendingScanResult ?? sheetScanData ?? scanResult,
+                   scanData.result != nil && scanDataReady {
+                    // Data is valid and ready - show results
+                    ScanResultView(scan: scanData, onDismissAll: dismissAllSheets)
+                        .onAppear {
+                            print("🔍 [SCAN_VIEW] Sheet presenting with valid scan data: \(scanData.id)")
+                            print("🔍 [SCAN_VIEW] Data source - pendingScanResult: \(pendingScanResult?.id ?? "nil")")
+                            print("🔍 [SCAN_VIEW] Data source - sheetScanData: \(sheetScanData?.id ?? "nil")")
+                            print("🔍 [SCAN_VIEW] Data source - scanResult: \(scanResult?.id ?? "nil")")
+                            print("🔍 [SCAN_VIEW] ScanResultView onAppear called")
+                            print("🔍 [SCAN_VIEW] Presenting ScanResultView with scan: \(scanData.id)")
+                            print("🔍 [SCAN_VIEW] Scan result available: \(scanData.result != nil)")
+                            if let result = scanData.result {
+                                print("🔍 [SCAN_VIEW] Scan result ingredients: \(result.ingredientsFound.count)")
+                                print("🔍 [SCAN_VIEW] Scan result unsafe ingredients: \(result.unsafeIngredients.count)")
+                                print("🔍 [SCAN_VIEW] Scan result safe ingredients: \(result.safeIngredients.count)")
+                            }
+                            
+                            // Clear loading state now that the sheet is fully presented
+                            isPreparingScanResult = false
+                            print("🔍 [SCAN_VIEW] Loading state cleared - isPreparingScanResult: \(isPreparingScanResult)")
+                            
+                            stopCameraForSheetPresentation()
+                        }
+                        .onDisappear {
+                            print("🔍 [SCAN_VIEW] ScanResultView onDisappear called")
+                            resumeCameraScanning()
+                        }
+                } else if isPreparingScanResult {
+                    // Show enhanced loading view while preparing scan result
+                    EnhancedLoadingView(
+                        title: "Analyzing Product",
+                        subtitle: "Processing ingredients and nutritional data...",
+                        isPreparingScanResult: $isPreparingScanResult
+                    )
                     .onAppear {
-                        stopCameraForSheetPresentation()
+                        print("🔍 [SCAN_VIEW] Showing enhanced loading view")
+                        print("🔍 [SCAN_VIEW] isPreparingScanResult: \(isPreparingScanResult)")
+                        print("🔍 [SCAN_VIEW] pendingScanResult: \(pendingScanResult?.id ?? "nil")")
+                        print("🔍 [SCAN_VIEW] sheetScanData: \(sheetScanData?.id ?? "nil")")
+                        print("🔍 [SCAN_VIEW] scanResult: \(scanResult?.id ?? "nil")")
                     }
-                    .onDisappear {
-                        resumeCameraScanning()
+                } else {
+                    // Fallback error view if no scan data is available
+                    ScanDataErrorView(
+                        onRetry: {
+                            print("🔍 [SCAN_VIEW] Retry requested - dismissing sheet")
+                            showingResults = false
+                        },
+                        onDismiss: {
+                            print("🔍 [SCAN_VIEW] Dismiss requested - dismissing sheet")
+                            showingResults = false
+                        }
+                    )
+                    .onAppear {
+                        print("⚠️ [SCAN_VIEW] Sheet presenting but ALL scan data sources are nil!")
+                        print("⚠️ [SCAN_VIEW] pendingScanResult: \(pendingScanResult?.id ?? "nil")")
+                        print("⚠️ [SCAN_VIEW] sheetScanData: \(sheetScanData?.id ?? "nil")")
+                        print("⚠️ [SCAN_VIEW] scanResult: \(scanResult?.id ?? "nil")")
+                        print("⚠️ [SCAN_VIEW] Current showingResults state: \(showingResults)")
+                        print("⚠️ [SCAN_VIEW] isPreparingScanResult: \(isPreparingScanResult)")
                     }
+                }
             }
         }
         .sheet(isPresented: $showingPetSelection) {
@@ -457,7 +656,13 @@ struct ScanView: View {
         }
         .onDisappear {
             // MEMORY OPTIMIZATION: Clear scan results when view disappears to prevent memory leaks
-            clearScanState()
+            // But only if we're not about to show results
+            if !showingResults {
+                print("🔍 [ON_DISAPPEAR] View disappearing and not showing results - clearing state")
+                clearScanState()
+            } else {
+                print("🔍 [ON_DISAPPEAR] View disappearing but showing results - preserving state")
+            }
         }
     }
     
@@ -478,6 +683,8 @@ struct ScanView: View {
     /**
      * Clear scan state when view disappears to prevent memory leaks
      * This helps prevent freezing when navigating between tabs
+     * 
+     * SAFETY: Never clears scanResult if it's needed for results presentation
      */
     private func clearScanState() {
         print("🔍 [CLEAR_SCAN_STATE] clearScanState called")
@@ -486,13 +693,23 @@ struct ScanView: View {
         print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductNotFound: \(showingProductNotFound)")
         print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductFound: \(showingProductFound)")
         print("🔍 [CLEAR_SCAN_STATE] Current state - showingOCRResults: \(showingOCRResults)")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - showingResults: \(showingResults)")
         print("🔍 [CLEAR_SCAN_STATE] Current state - foundProduct: \(foundProduct?.name ?? "NIL")")
         print("🔍 [CLEAR_SCAN_STATE] Current state - hybridScanResult: \(hybridScanResult != nil ? "SET" : "NIL")")
+        print("🔍 [CLEAR_SCAN_STATE] Current state - scanResult: \(scanResult?.id ?? "NIL")")
         
-        // Clear scan results
-        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanResult and scanResult")
+        // Don't clear scanResult if we're about to show results or if scanResult exists
+        if showingResults || scanResult != nil {
+            print("🔍 [CLEAR_SCAN_STATE] Preserving scanResult because showingResults: \(showingResults) or scanResult exists: \(scanResult?.id ?? "nil")")
+        } else {
+            print("🔍 [CLEAR_SCAN_STATE] Clearing scanResult because showingResults is false and scanResult is nil")
+            print("🔍 [CLEAR_SCAN_STATE] ⚠️ CLEARING scanResult = nil")
+            scanResult = nil
+        }
+        
+        // Clear other scan results
+        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanResult")
         hybridScanResult = nil
-        scanResult = nil
         
         // Don't clear detectedBarcode if we're in nutritional label flow OR product not found flow
         // This preserves the barcode for nutritional label processing and retry functionality
@@ -557,8 +774,8 @@ struct ScanView: View {
         } else {
             // For low confidence barcodes, auto-resume camera after 10 seconds if no user interaction
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
-                if self.detectedBarcode?.value == barcode.value && 
-                   !self.showingProductFound && !self.showingProductNotFound && 
+                if self.detectedBarcode?.value == barcode.value &&
+                   !self.showingProductFound && !self.showingProductNotFound &&
                    !self.showingOCRResults && !self.showingNutritionalLabelScan {
                     self.resumeCameraForRescan()
                 }
@@ -660,6 +877,10 @@ struct ScanView: View {
         
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
+                print("🔍 [SCAN_ANALYSIS] Analysis completed, setting scan result")
+                print("🔍 [SCAN_ANALYSIS] Scan result ingredients: \(scan.result?.ingredientsFound.count ?? 0)")
+                print("🔍 [SCAN_ANALYSIS] Scan result unsafe ingredients: \(scan.result?.unsafeIngredients.count ?? 0)")
+                
                 // Clear all popups when analysis completes (only if not preserving OCR results)
                 withAnimation(.easeInOut(duration: 0.3)) {
                     showingProductFound = false
@@ -669,13 +890,14 @@ struct ScanView: View {
                         detectedBarcode = nil
                     }
                     foundProduct = nil
-                    // Clear the hybrid scan result after analysis completes
-                    hybridScanResult = nil
+                    // DON'T clear hybridScanResult yet - keep it for the results view
+                    // hybridScanResult = nil
                 }
                 
-                scanResult = scan
-                showingResults = true
+                // Use async/await to ensure data is fully loaded
+                await presentScanResult(scan)
                 
+                print("🔍 [SCAN_ANALYSIS] Results sheet should now be showing")
                 // Don't resume camera here - the results sheet will handle camera management
             }
         }
@@ -688,6 +910,7 @@ struct ScanView: View {
      * This ensures a clean state when the user clicks "Done" on scan results
      */
     private func dismissAllSheets() {
+        print("🔍 [DISMISS_ALL] Dismissing all sheets and clearing scan data")
         withAnimation(.easeInOut(duration: 0.3)) {
             showingResults = false
             showingProductFound = false
@@ -699,9 +922,12 @@ struct ScanView: View {
             showingHistory = false
             
             // Clear all related state
+            print("🔍 [DISMISS_ALL] ⚠️ CLEARING scanResult = nil")
             scanResult = nil
+            pendingScanResult = nil  // Clear pending scan result when dismissing
+            sheetScanData = nil      // Clear sheet scan data when dismissing
             foundProduct = nil
-            hybridScanResult = nil
+            hybridScanResult = nil  // Clear hybrid scan result when dismissing
             detectedBarcode = nil
             selectedPet = nil
         }
@@ -1076,8 +1302,8 @@ struct ScanView: View {
                     hybridScanResult = nil
                 }
                 
-                scanResult = scan
-                showingResults = true
+                await presentScanResult(scan)
+                
                 print("✅ Analysis complete for \(pet.name)!")
                 if let result = scan.result {
                     print("   Safety: \(result.overallSafety)")
@@ -1140,14 +1366,14 @@ struct ScanView: View {
         let parsedNutrition = NutritionalLabelResultView.parseNutritionalInfo(from: result.ocrText)
         
         // Extract product name (use parsed name or fallback to first line)
-        let productName = parsedNutrition.productName ?? 
+        let productName = parsedNutrition.productName ??
                          result.ocrText.components(separatedBy: .newlines)
-                         .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? 
+                         .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ??
                          "Unknown Product"
         
         // Convert kcal/kg to calories per 100g for database storage
         // Formula: kcal/kg ÷ 10 = kcal/100g
-        let caloriesPer100g: Double? = parsedNutrition.calories != nil ? 
+        let caloriesPer100g: Double? = parsedNutrition.calories != nil ?
                                       parsedNutrition.calories! / 10.0 : nil
         
         // Create comprehensive nutritional info matching database schema exactly
@@ -1210,7 +1436,7 @@ struct ScanView: View {
     ) -> FoodProduct {
         // Convert kcal/kg to calories per 100g for database storage
         // Formula: kcal/kg ÷ 10 = kcal/100g
-        let caloriesPer100g: Double? = nutrition.calories != nil ? 
+        let caloriesPer100g: Double? = nutrition.calories != nil ?
                                       nutrition.calories! / 10.0 : nil
         
         // Create comprehensive nutritional info matching database schema exactly
@@ -1349,9 +1575,9 @@ struct ScanView: View {
      * Analyze product ingredients for selected pet
      */
     private func analyzeProductIngredients(_ product: FoodProduct) {
-        guard let pet = selectedPet else { 
+        guard let pet = selectedPet else {
             print("🔍 [PRODUCT_ANALYSIS] ❌ No selected pet found")
-            return 
+            return
         }
         
         print("🔍 [PRODUCT_ANALYSIS] Starting analysis for product: \(product.name)")
@@ -1378,6 +1604,7 @@ struct ScanView: View {
         scanService.analyzeScan(analysisRequest) { scan in
             print("🔍 [PRODUCT_ANALYSIS] ✅ Analysis completed successfully")
             print("🔍 [PRODUCT_ANALYSIS] Scan result: \(scan.result?.overallSafety ?? "Unknown")")
+            print("🔍 [PRODUCT_ANALYSIS] Scan result ingredients: \(scan.result?.ingredientsFound.count ?? 0)")
             
             Task { @MainActor in
                 // Clear all popups when analysis completes (only if not preserving OCR results)
@@ -1389,12 +1616,11 @@ struct ScanView: View {
                         detectedBarcode = nil
                     }
                     foundProduct = nil
-                    // Clear the hybrid scan result after analysis completes
-                    hybridScanResult = nil
+                    // DON'T clear hybridScanResult yet - keep it for the results view
+                    // hybridScanResult = nil
                 }
                 
-                scanResult = scan
-                showingResults = true
+                await presentScanResult(scan)
                 
                 print("🔍 [PRODUCT_ANALYSIS] ✅ Results sheet should now be showing")
             }
@@ -1901,7 +2127,155 @@ struct ErrorToastView: View {
     }
 }
 
+// MARK: - Enhanced Loading and Error Views
+
+/**
+ * Enhanced loading view with proper state management
+ * Shows while scan data is being prepared and validated
+ */
+struct EnhancedLoadingView: View {
+    let title: String
+    let subtitle: String
+    @Binding var isPreparingScanResult: Bool
+    @State private var animationPhase = 0
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: ModernDesignSystem.Spacing.xl) {
+                Spacer()
+                
+                // Animated loading indicator
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    ZStack {
+                        // Background circle
+                        Circle()
+                            .stroke(ModernDesignSystem.Colors.primary.opacity(0.2), lineWidth: 4)
+                            .frame(width: 80, height: 80)
+                        
+                        // Animated progress circle
+                        Circle()
+                            .trim(from: 0, to: 0.7)
+                            .stroke(
+                                ModernDesignSystem.Colors.primary,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                            )
+                            .frame(width: 80, height: 80)
+                            .rotationEffect(.degrees(Double(animationPhase)))
+                            .animation(
+                                .linear(duration: 1.0).repeatForever(autoreverses: false),
+                                value: animationPhase
+                            )
+                        
+                        // Center icon
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 24))
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                    
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        Text(title)
+                            .font(ModernDesignSystem.Typography.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text(subtitle)
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.xl)
+                .modernCard()
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                
+                Spacer()
+            }
+            .background(ModernDesignSystem.Colors.softCream)
+            .navigationTitle("Analysis")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cancel") {
+                        isPreparingScanResult = false
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .onAppear {
+                animationPhase = 360
+            }
+        }
+    }
+}
+
+/**
+ * Error view for when scan data is not available
+ * Provides retry and dismiss options
+ */
+struct ScanDataErrorView: View {
+    let onRetry: () -> Void
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: ModernDesignSystem.Spacing.xl) {
+                Spacer()
+                
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // Error icon
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(ModernDesignSystem.Colors.warmCoral)
+                        .accessibilityLabel("Error icon")
+                    
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        Text("Scan Data Unavailable")
+                            .font(ModernDesignSystem.Typography.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("The scan result is not available. This might be due to a timing issue or network problem.")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    }
+                    
+                    // Action buttons
+                    VStack(spacing: ModernDesignSystem.Spacing.md) {
+                        Button("Retry Scan") {
+                            onRetry()
+                        }
+                        .modernButton(style: .primary)
+                        
+                        Button("Cancel") {
+                            onDismiss()
+                        }
+                        .modernButton(style: .secondary)
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.xl)
+                .modernCard()
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                
+                Spacer()
+            }
+            .background(ModernDesignSystem.Colors.softCream)
+            .navigationTitle("Error")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
+        }
+    }
+}
+
 #Preview {
     ScanView()
         .environmentObject(CachedPetService.shared)
 }
+

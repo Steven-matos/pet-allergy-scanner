@@ -17,6 +17,8 @@ enum ScanError: Error, LocalizedError {
     case invalidRequest
     case networkError
     case parsingError
+    case timeout(String)
+    case invalidData(String)
     
     var errorDescription: String? {
         switch self {
@@ -28,6 +30,10 @@ enum ScanError: Error, LocalizedError {
             return "Network connection error"
         case .parsingError:
             return "Failed to parse scan results"
+        case .timeout(let message):
+            return "Scan analysis timed out: \(message)"
+        case .invalidData(let message):
+            return "Invalid scan data: \(message)"
         }
     }
 }

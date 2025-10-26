@@ -43,11 +43,18 @@ class PetSensitivityService: ObservableObject {
      * - Returns: SensitivityAssessment with detailed analysis
      */
     func assessSensitivities(for scan: Scan) async throws -> SensitivityAssessment {
+        print("🔍 [SENSITIVITY_SERVICE] Starting sensitivity assessment for scan: \(scan.id)")
+        print("🔍 [SENSITIVITY_SERVICE] Pet ID: \(scan.petId)")
+        print("🔍 [SENSITIVITY_SERVICE] Scan result available: \(scan.result != nil)")
+        
         // Fetch pet information
         let pet = try await fetchPet(id: scan.petId)
+        print("🔍 [SENSITIVITY_SERVICE] Pet fetched: \(pet.name)")
+        print("🔍 [SENSITIVITY_SERVICE] Pet sensitivities: \(pet.knownSensitivities)")
         
         // Get ingredients from scan result
         guard let result = scan.result else {
+            print("⚠️ [SENSITIVITY_SERVICE] No scan result available for sensitivity assessment")
             return SensitivityAssessment(
                 petId: scan.petId,
                 petName: pet.name,
@@ -59,13 +66,24 @@ class PetSensitivityService: ObservableObject {
             )
         }
         
+        print("🔍 [SENSITIVITY_SERVICE] Scan result ingredients: \(result.ingredientsFound.count)")
+        print("🔍 [SENSITIVITY_SERVICE] Unsafe ingredients: \(result.unsafeIngredients.count)")
+        print("🔍 [SENSITIVITY_SERVICE] Safe ingredients: \(result.safeIngredients.count)")
+        
         // Perform sensitivity analysis
-        return analyzeSensitivities(
+        let assessment = analyzeSensitivities(
             pet: pet,
             ingredients: result.ingredientsFound,
             unsafeIngredients: result.unsafeIngredients,
             safeIngredients: result.safeIngredients
         )
+        
+        print("✅ [SENSITIVITY_SERVICE] Sensitivity assessment completed successfully")
+        print("🔍 [SENSITIVITY_SERVICE] Assessment has matches: \(assessment.hasSensitivityMatches)")
+        print("🔍 [SENSITIVITY_SERVICE] Matched sensitivities: \(assessment.matchedSensitivities)")
+        print("🔍 [SENSITIVITY_SERVICE] Recommendations count: \(assessment.recommendations.count)")
+        
+        return assessment
     }
     
     /**
@@ -94,16 +112,23 @@ class PetSensitivityService: ObservableObject {
      * Fetch pet information by ID with caching
      */
     private func fetchPet(id: String) async throws -> Pet {
+        print("🔍 [SENSITIVITY_SERVICE] Fetching pet with ID: \(id)")
+        
         // Try cache first
         if let cachedPet: Pet = cacheService.retrievePetData(Pet.self, forKey: .petDetails, petId: id) {
+            print("🔍 [SENSITIVITY_SERVICE] Pet found in cache: \(cachedPet.name)")
             return cachedPet
         }
         
+        print("🔍 [SENSITIVITY_SERVICE] Pet not in cache, fetching from API...")
+        
         // Fetch from API
         let pet = try await apiService.getPet(id: id)
+        print("🔍 [SENSITIVITY_SERVICE] Pet fetched from API: \(pet.name)")
         
         // Cache the result
         cacheService.storePetData(pet, forKey: .petDetails, petId: id)
+        print("🔍 [SENSITIVITY_SERVICE] Pet cached successfully")
         
         return pet
     }
