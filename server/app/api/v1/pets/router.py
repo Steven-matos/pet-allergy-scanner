@@ -63,20 +63,30 @@ async def create_pet_with_slash(
                 detail="Dog weight seems unusually high. Please verify the weight."
             )
         
-        # Create pet record
+        # Create pet record, only including non-None values
         pet_record = {
             "name": pet_data.name,
             "species": pet_data.species,
-            "breed": pet_data.breed,
-            "birthday": pet_data.birthday.isoformat() if pet_data.birthday else None,
-            "weight_kg": pet_data.weight_kg,
-            "activity_level": pet_data.activity_level,
-            "image_url": pet_data.image_url,
-            "known_sensitivities": pet_data.known_sensitivities,
-            "vet_name": pet_data.vet_name,
-            "vet_phone": pet_data.vet_phone,
             "user_id": current_user.id
         }
+        
+        # Add optional fields only if they have values
+        if pet_data.breed is not None:
+            pet_record["breed"] = pet_data.breed
+        if pet_data.birthday is not None:
+            pet_record["birthday"] = pet_data.birthday.isoformat()
+        if pet_data.weight_kg is not None:
+            pet_record["weight_kg"] = pet_data.weight_kg
+        if pet_data.activity_level is not None:
+            pet_record["activity_level"] = pet_data.activity_level.value
+        if pet_data.image_url is not None:
+            pet_record["image_url"] = pet_data.image_url
+        if pet_data.known_sensitivities:
+            pet_record["known_sensitivities"] = pet_data.known_sensitivities
+        if pet_data.vet_name is not None:
+            pet_record["vet_name"] = pet_data.vet_name
+        if pet_data.vet_phone is not None:
+            pet_record["vet_phone"] = pet_data.vet_phone
         
         # Insert pet into database
         response = supabase.table("pets").insert(pet_record).execute()
