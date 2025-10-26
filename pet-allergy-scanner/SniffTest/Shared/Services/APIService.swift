@@ -956,7 +956,7 @@ extension APIService {
     
     /// Get common allergens
     func getCommonAllergens() async throws -> [String] {
-        guard let url = URL(string: "\(baseURL)/ingredients/common-allergens") else {
+        guard let url = URL(string: "\(baseURL)/ingredients/allergens") else {
             throw APIError.invalidURL
         }
         
@@ -966,7 +966,7 @@ extension APIService {
     
     /// Get safe alternatives
     func getSafeAlternatives() async throws -> [String] {
-        guard let url = URL(string: "\(baseURL)/ingredients/safe-alternatives") else {
+        guard let url = URL(string: "\(baseURL)/ingredients/safe") else {
             throw APIError.invalidURL
         }
         

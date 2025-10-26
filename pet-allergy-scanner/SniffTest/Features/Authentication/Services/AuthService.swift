@@ -107,7 +107,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
             // Auto-complete onboarding if user has pets but onboarded is false
             let finalUser = await checkAndCompleteOnboardingIfNeeded(user: user)
             
-            // Only transition to authenticated once we have complete user data
+            // Hydrate all caches before transitioning to authenticated state
+            await cacheHydrationService.hydrateAllCaches()
+            
+            // Only transition to authenticated once cache hydration is complete
             await MainActor.run {
                 authState = .authenticated(finalUser)
             }
@@ -260,14 +263,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     freshUser
                 }
                 
-                // Only transition to authenticated once we have complete user data
+                // Hydrate all caches before transitioning to authenticated state
+                await cacheHydrationService.hydrateAllCaches()
+                
+                // Only transition to authenticated once cache hydration is complete
                 await MainActor.run {
                     authState = .authenticated(finalUser)
-                }
-                
-                // Start cache hydration in background
-                Task {
-                    await cacheHydrationService.hydrateAllCaches()
                 }
             } catch {
                 // Fallback to registration response user if getCurrentUser fails
@@ -314,12 +315,18 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 freshUser
             }
             
-            // Only transition to authenticated once we have complete user data
+            // Hydrate all caches before transitioning to authenticated state
+            await cacheHydrationService.hydrateAllCaches()
+            
+            // Only transition to authenticated once cache hydration is complete
             await MainActor.run {
                 authState = .authenticated(finalUser)
             }
         } catch {
             // Fallback to auth response user if getCurrentUser fails
+            // Still hydrate caches even on fallback
+            await cacheHydrationService.hydrateAllCaches()
+            
             await MainActor.run {
                 authState = .authenticated(authResponse.user)
             }
@@ -350,6 +357,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     user
                 }
                 
+                // Hydrate all caches before transitioning to authenticated state
+                await cacheHydrationService.hydrateAllCaches()
+                
                 await MainActor.run {
                     authState = .authenticated(finalUser)
                 }
@@ -375,13 +385,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
             
             do {
                 let user = try await apiService.getCurrentUser()
+                
+                // Hydrate all caches before transitioning to authenticated state
+                await cacheHydrationService.hydrateAllCaches()
+                
                 await MainActor.run {
                     authState = .authenticated(user)
-                }
-                
-                // Start cache hydration in background
-                Task {
-                    await cacheHydrationService.hydrateAllCaches()
                 }
                 print("AuthService: Password reset token validated")
             } catch {
@@ -414,13 +423,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     user
                 }
                 
+                // Hydrate all caches before transitioning to authenticated state
+                await cacheHydrationService.hydrateAllCaches()
+                
                 await MainActor.run {
                     authState = .authenticated(finalUser)
-                }
-                
-                // Start cache hydration in background
-                Task {
-                    await cacheHydrationService.hydrateAllCaches()
                 }
                 
                 print("AuthService: Auth callback successful")

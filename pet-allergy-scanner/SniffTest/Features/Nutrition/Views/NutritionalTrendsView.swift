@@ -276,15 +276,12 @@ struct NutritionalTrendsView: View {
      * This prevents unnecessary server calls when data is already available
      */
     private func loadTrendsDataIfNeeded() {
-        guard let pet = selectedPet else { return }
+        guard selectedPet != nil else { return }
         
-        // Check if we already have cached trends data for this pet
-        if trendsService.hasCachedTrendsData(for: pet.id) {
-            // We have cached data, no need to show loading or make server calls
-            return
-        } else {
-            // No cached data, load from server
-            loadTrendsData()
+        // Call the service - it will check cache first and populate in-memory if cache exists
+        // We don't show loading immediately - let the service check cache first
+        Task {
+            await loadTrendsDataAsync(showLoadingIfNeeded: false)
         }
     }
     
@@ -295,19 +292,29 @@ struct NutritionalTrendsView: View {
     private func loadTrendsData() {
         guard selectedPet != nil else { return }
         
-        isLoading = true
-        errorMessage = nil
-        
         Task {
-            await loadTrendsDataAsync()
+            await loadTrendsDataAsync(showLoadingIfNeeded: true)
         }
     }
     
-    private func loadTrendsDataAsync() async {
+    private func loadTrendsDataAsync(showLoadingIfNeeded: Bool = false) async {
         guard let pet = selectedPet else { return }
         
+        // Check if we already have data in memory (from cache or previous load)
+        let hadDataBefore = trendsService.hasCachedTrendsData(for: pet.id)
+        
+        // Only show loading if explicitly requested and we don't have data
+        if showLoadingIfNeeded && !hadDataBefore {
+            await MainActor.run {
+                isLoading = true
+                errorMessage = nil
+            }
+        }
+        
         do {
+            // Load data - this will check cache first and populate in-memory if cache exists
             try await trendsService.loadTrendsData(for: pet.id, period: selectedPeriod)
+            
             await MainActor.run {
                 isLoading = false
             }

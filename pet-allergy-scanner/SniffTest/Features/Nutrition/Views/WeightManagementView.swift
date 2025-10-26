@@ -175,15 +175,12 @@ struct WeightManagementView: View {
      * This prevents unnecessary server calls when data is already available
      */
     private func loadWeightDataIfNeeded() {
-        guard let pet = selectedPet else { return }
+        guard selectedPet != nil else { return }
         
-        // Check if we already have cached data for this pet
-        if weightService.hasCachedWeightData(for: pet.id) {
-            // We have cached data, just ensure UI is updated
-            refreshTrigger.toggle()
-        } else {
-            // No cached data, load from server
-            loadWeightData()
+        // Call the service - it will check cache first and populate in-memory if cache exists
+        // We don't show loading immediately - let the service check cache first
+        Task {
+            await loadWeightDataAsync(showLoadingIfNeeded: false)
         }
     }
     
@@ -194,19 +191,32 @@ struct WeightManagementView: View {
     private func loadWeightData() {
         guard selectedPet != nil else { return }
         
-        isLoading = true
-        errorMessage = nil
-        
         Task {
-            await loadWeightDataAsync()
+            await loadWeightDataAsync(showLoadingIfNeeded: true)
         }
     }
     
-    private func loadWeightDataAsync() async {
+    private func loadWeightDataAsync(showLoadingIfNeeded: Bool = false) async {
         guard let pet = selectedPet else { return }
         
+        // Check if we already have data in memory (from cache or previous load)
+        let hadDataBefore = weightService.hasCachedWeightData(for: pet.id)
+        
+        // Only show loading if explicitly requested and we don't have data
+        if showLoadingIfNeeded && !hadDataBefore {
+            await MainActor.run {
+                isLoading = true
+                errorMessage = nil
+            }
+        }
+        
         do {
+            // Load data - this will check cache first and populate in-memory if cache exists
             try await weightService.loadWeightData(for: pet.id)
+            
+            // Check if we have data now
+            _ = weightService.hasCachedWeightData(for: pet.id)
+            
             await MainActor.run {
                 isLoading = false
                 refreshTrigger.toggle() // Trigger UI refresh

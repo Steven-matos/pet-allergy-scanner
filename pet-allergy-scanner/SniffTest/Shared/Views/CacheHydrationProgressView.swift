@@ -61,7 +61,7 @@ struct CacheHydrationProgressView: View {
                         .font(ModernDesignSystem.Typography.title2)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text("We're preloading your pets, weight data, and nutrition information for instant access.")
+                    Text("We're preloading your profile, pets, nutrition data, and reference information for instant access.")
                         .font(ModernDesignSystem.Typography.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .multilineTextAlignment(.center)
