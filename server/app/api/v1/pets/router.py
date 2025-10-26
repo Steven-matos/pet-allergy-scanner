@@ -68,7 +68,7 @@ async def create_pet_with_slash(
             "name": pet_data.name,
             "species": pet_data.species,
             "breed": pet_data.breed,
-            "birthday": pet_data.birthday,
+            "birthday": pet_data.birthday.isoformat() if pet_data.birthday else None,
             "weight_kg": pet_data.weight_kg,
             "activity_level": pet_data.activity_level,
             "image_url": pet_data.image_url,

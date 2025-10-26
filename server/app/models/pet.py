@@ -2,7 +2,7 @@
 Pet data models and schemas
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List
 from datetime import datetime, date
 from enum import Enum
@@ -43,6 +43,14 @@ class PetBase(BaseModel):
     known_sensitivities: List[str] = Field(default_factory=list)
     vet_name: Optional[str] = None
     vet_phone: Optional[str] = None
+    
+    @field_validator('birthday')
+    @classmethod
+    def validate_birthday_not_future(cls, v: Optional[date]) -> Optional[date]:
+        """Validate that birthday is not in the future"""
+        if v is not None and v > date.today():
+            raise ValueError('Birthday cannot be in the future')
+        return v
 
 class PetCreate(PetBase):
     """Pet creation model"""
@@ -59,6 +67,14 @@ class PetUpdate(BaseModel):
     known_sensitivities: Optional[List[str]] = None
     vet_name: Optional[str] = None
     vet_phone: Optional[str] = None
+    
+    @field_validator('birthday')
+    @classmethod
+    def validate_birthday_not_future(cls, v: Optional[date]) -> Optional[date]:
+        """Validate that birthday is not in the future"""
+        if v is not None and v > date.today():
+            raise ValueError('Birthday cannot be in the future')
+        return v
 
 class PetResponse(PetBase):
     """Pet response model"""
