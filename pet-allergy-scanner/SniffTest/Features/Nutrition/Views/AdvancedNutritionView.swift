@@ -590,47 +590,178 @@ struct AdvancedAnalyticsView: View {
             .padding(ModernDesignSystem.Spacing.lg)
         }
         .background(ModernDesignSystem.Colors.background)
+        .refreshable {
+            await loadAnalyticsDataAsync()
+        }
         .onAppear {
             loadAnalyticsData()
         }
     }
     
-    private var analyticsSummarySection: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Analytics Summary")
-                .font(ModernDesignSystem.Typography.title3)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+    /**
+     * Async version of loadAnalyticsData for refreshable support
+     */
+    private func loadAnalyticsDataAsync() async {
+        guard let pet = petSelectionService.selectedPet else { return }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        let petId = pet.id
+        
+        do {
+            async let insightsTask = analyticsService.fetchHealthInsights(petId: petId)
+            async let patternsTask = analyticsService.fetchNutritionalPatterns(petId: petId)
             
+            let insights = try await insightsTask
+            let patterns = try await patternsTask
+            
+            await MainActor.run {
+                self.healthInsights = insights
+                self.nutritionalPatterns = patterns
+                self.isLoading = false
+                self.errorMessage = nil
+            }
+        } catch {
+            // Silently fall back to cached data - not showing error message
+            // since cached data is still useful and valid
+            await MainActor.run {
+                self.isLoading = false
+            }
+            
+            // Load fallback data in background
+            await loadFallbackData(petId: petId)
+        }
+    }
+    
+    /**
+     * Load fallback analytics data from cached services
+     * Used when API calls fail - provides local calculations as backup
+     */
+    private func loadFallbackData(petId: String) async {
+        await MainActor.run {
+            // Use cached data as fallback
+            let weightTrend = cachedWeightService.analyzeWeightTrend(for: petId)
+            let recommendations = cachedWeightService.recommendations(for: petId)
+            let feedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
+            let dailySummaries = cachedNutritionService.dailySummaries[petId] ?? []
+            
+            // Convert recommendations to API format
+            let recommendationObjects = recommendations.map { rec in
+                NutritionalRecommendation(
+                    id: UUID().uuidString,
+                    petId: petId,
+                    recommendationType: "general",
+                    title: rec,
+                    description: rec,
+                    priority: "medium",
+                    category: "diet",
+                    isActive: true,
+                    generatedAt: Date()
+                )
+            }
+            
+            // Create fallback insights using simple initializer
+            let fallbackInsights = HealthInsights(
+                petId: petId,
+                analysisDate: Date(),
+                weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
+                nutritionalAdequacyScore: calculateNutritionalScore(dailySummaries: dailySummaries),
+                feedingConsistencyScore: calculateConsistencyScore(feedingRecords: feedingRecords),
+                healthRisks: generateHealthRisks(
+                    weightTrend: weightTrend,
+                    dailySummaries: dailySummaries,
+                    recommendations: recommendations
+                ),
+                positiveIndicators: generatePositiveIndicators(
+                    weightTrend: weightTrend,
+                    dailySummaries: dailySummaries
+                ),
+                recommendations: recommendationObjects,
+                overallHealthScore: calculateHealthScore(
+                    weightTrend: weightTrend,
+                    feedingRecords: feedingRecords,
+                    dailySummaries: dailySummaries
+                )
+            )
+            
+            let fallbackPatterns = NutritionalPatterns(
+                petId: petId,
+                analysisPeriod: "30_days",
+                feedingTimes: extractFeedingTimes(feedingRecords: feedingRecords),
+                preferredFoods: extractPreferredFoods(feedingRecords: feedingRecords),
+                nutritionalGaps: generateHealthRisks(
+                    weightTrend: weightTrend,
+                    dailySummaries: dailySummaries,
+                    recommendations: recommendations
+                ),
+                seasonalPatterns: [:],
+                behavioralInsights: generateBehavioralInsights(feedingRecords: feedingRecords),
+                optimizationSuggestions: recommendations
+            )
+            
+            self.healthInsights = fallbackInsights
+            self.nutritionalPatterns = fallbackPatterns
+            self.isLoading = false
+            self.errorMessage = nil
+        }
+    }
+    
+    private var analyticsSummarySection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
+            // Section Header
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Analytics Summary")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            // Summary Cards Grid
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: ModernDesignSystem.Spacing.md) {
+                // Health Score Card
                 AnalyticsSummaryCard(
                     title: "Health Score",
-                    value: "\(Int(healthInsights?.overallHealthScore ?? 0))",
+                    value: healthInsights?.overallHealthScore ?? 0,
                     unit: "/100",
-                    color: ModernDesignSystem.Colors.primary
+                    icon: "heart.fill",
+                    color: healthScoreColor(healthInsights?.overallHealthScore ?? 0)
                 )
                 
+                // Nutritional Balance Card
                 AnalyticsSummaryCard(
                     title: "Nutritional Balance",
-                    value: "\(Int(healthInsights?.nutritionalAdequacyScore ?? 0))",
+                    value: healthInsights?.nutritionalAdequacyScore ?? 0,
                     unit: "%",
-                    color: ModernDesignSystem.Colors.primary
+                    icon: "leaf.fill",
+                    color: scoreColor(healthInsights?.nutritionalAdequacyScore ?? 0)
                 )
                 
+                // Feeding Consistency Card
                 AnalyticsSummaryCard(
                     title: "Feeding Consistency",
-                    value: "\(Int(healthInsights?.feedingConsistencyScore ?? 0))",
+                    value: healthInsights?.feedingConsistencyScore ?? 0,
                     unit: "%",
-                    color: ModernDesignSystem.Colors.goldenYellow
+                    icon: "clock.fill",
+                    color: scoreColor(healthInsights?.feedingConsistencyScore ?? 0)
                 )
                 
+                // Weight Management Card
                 AnalyticsSummaryCard(
-                    title: "Weight Management",
+                    title: "Weight Status",
                     value: healthInsights?.weightManagementStatus.capitalized ?? "Unknown",
                     unit: "",
-                    color: ModernDesignSystem.Colors.warmCoral
+                    icon: "scalemass.fill",
+                    color: weightStatusColor(healthInsights?.weightManagementStatus)
                 )
             }
         }
@@ -650,8 +781,53 @@ struct AdvancedAnalyticsView: View {
     }
     
     /**
-     * Load analytics data using cached nutrition and weight data
-     * Generates insights from cached data instead of making new API calls
+     * Get color for health score based on value
+     * Following Trust & Nature design system guidelines
+     */
+    private func healthScoreColor(_ score: Double) -> Color {
+        if score >= 80 {
+            return ModernDesignSystem.Colors.primary // Deep Forest Green - Excellent
+        } else if score >= 60 {
+            return ModernDesignSystem.Colors.goldenYellow // Golden Yellow - Good
+        } else {
+            return ModernDesignSystem.Colors.warmCoral // Warm Coral - Needs Attention
+        }
+    }
+    
+    /**
+     * Get color for percentage-based scores
+     */
+    private func scoreColor(_ score: Double) -> Color {
+        if score >= 80 {
+            return ModernDesignSystem.Colors.primary
+        } else if score >= 60 {
+            return ModernDesignSystem.Colors.goldenYellow
+        } else {
+            return ModernDesignSystem.Colors.warmCoral
+        }
+    }
+    
+    /**
+     * Get color for weight status
+     */
+    private func weightStatusColor(_ status: String?) -> Color {
+        guard let status = status?.lowercased() else {
+            return ModernDesignSystem.Colors.textSecondary
+        }
+        
+        switch status {
+        case "stable":
+            return ModernDesignSystem.Colors.primary
+        case "increasing", "decreasing":
+            return ModernDesignSystem.Colors.goldenYellow
+        default:
+            return ModernDesignSystem.Colors.textSecondary
+        }
+    }
+    
+    /**
+     * Load analytics data from backend API
+     * Fetches real-time health insights and nutritional patterns
      */
     private func loadAnalyticsData() {
         guard let pet = petSelectionService.selectedPet else { return }
@@ -660,65 +836,27 @@ struct AdvancedAnalyticsView: View {
         errorMessage = nil
         
         Task {
-            // Generate analytics from cached data instead of making new API calls
             let petId = pet.id
             
-            // Get cached weight data for analysis
-            let weightTrend = cachedWeightService.analyzeWeightTrend(for: petId)
-            let recommendations = cachedWeightService.recommendations(for: petId)
-            
-            // Get cached nutrition data for analysis
-            let feedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
-            let dailySummaries = cachedNutritionService.dailySummaries[petId] ?? []
-            
-            // Calculate analytics from cached data
-            let healthScore = calculateHealthScore(
-                weightTrend: weightTrend,
-                feedingRecords: feedingRecords,
-                dailySummaries: dailySummaries
-            )
-            
-            let nutritionalScore = calculateNutritionalScore(dailySummaries: dailySummaries)
-            let consistencyScore = calculateConsistencyScore(feedingRecords: feedingRecords)
-            
-            let healthRisks = generateHealthRisks(
-                weightTrend: weightTrend,
-                dailySummaries: dailySummaries,
-                recommendations: recommendations
-            )
-            
-            let positiveIndicators = generatePositiveIndicators(
-                weightTrend: weightTrend,
-                dailySummaries: dailySummaries
-            )
-            
-            let insights = HealthInsights(
-                petId: petId,
-                analysisDate: Date(),
-                weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
-                nutritionalAdequacyScore: nutritionalScore,
-                feedingConsistencyScore: consistencyScore,
-                healthRisks: healthRisks,
-                positiveIndicators: positiveIndicators,
-                recommendations: recommendations,
-                overallHealthScore: healthScore
-            )
-            
-            let patterns = NutritionalPatterns(
-                petId: petId,
-                analysisPeriod: "30_days",
-                feedingTimes: extractFeedingTimes(feedingRecords: feedingRecords),
-                preferredFoods: extractPreferredFoods(feedingRecords: feedingRecords),
-                nutritionalGaps: healthRisks,
-                seasonalPatterns: [:],
-                behavioralInsights: generateBehavioralInsights(feedingRecords: feedingRecords),
-                optimizationSuggestions: recommendations
-            )
-            
-            await MainActor.run {
-                healthInsights = insights
-                nutritionalPatterns = patterns
-                isLoading = false
+            do {
+                // Fetch data from API in parallel for better performance
+                async let insightsTask = analyticsService.fetchHealthInsights(petId: petId)
+                async let patternsTask = analyticsService.fetchNutritionalPatterns(petId: petId)
+                
+                // Wait for both API calls to complete
+                let insights = try await insightsTask
+                let patterns = try await patternsTask
+                
+                await MainActor.run {
+                    self.healthInsights = insights
+                    self.nutritionalPatterns = patterns
+                    self.isLoading = false
+                    self.errorMessage = nil
+                }
+            } catch {
+                // Silently fall back to cached data - not showing error message
+                // since cached data is still useful and valid
+                await loadFallbackData(petId: petId)
             }
         }
     }
@@ -845,10 +983,35 @@ struct AdvancedAnalyticsView: View {
     
     /**
      * Extract preferred foods from feeding records
+     * Analyzes actual feeding data to determine most frequently fed foods
      */
     private func extractPreferredFoods(feedingRecords: [FeedingRecord]) -> [String] {
-        // This would require food analysis data, simplified for now
-        return ["Chicken & Rice", "Salmon Formula", "Turkey & Sweet Potato"]
+        guard !feedingRecords.isEmpty else { return [] }
+        
+        // Count food occurrences by food analysis ID
+        var foodCounts: [String: Int] = [:]
+        for record in feedingRecords {
+            let foodAnalysisId = record.foodAnalysisId
+            foodCounts[foodAnalysisId, default: 0] += 1
+        }
+        
+        // Sort by frequency and get top 3
+        let topFoods = foodCounts.sorted { $0.value > $1.value }.prefix(3)
+        
+        // Try to get food names from cached service
+        var preferredFoods: [String] = []
+        for (foodAnalysisId, _) in topFoods {
+            // Look up food name in cached service if available
+            if let foodAnalysis = cachedNutritionService.foodAnalyses.first(where: { $0.id == foodAnalysisId }) {
+                preferredFoods.append(foodAnalysis.foodName)
+            } else {
+                // Fallback to food analysis ID if name not available
+                preferredFoods.append("Food \(foodAnalysisId.prefix(8))")
+            }
+        }
+        
+        // Return empty array if no foods found, letting the view handle the empty state
+        return preferredFoods.isEmpty ? [] : preferredFoods
     }
     
     /**
@@ -955,6 +1118,45 @@ struct HealthInsightsCard: View {
                             Text(indicator)
                                 .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            
+            // Recommendations
+            if !insights.recommendations.isEmpty {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("Recommendations")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                    
+                    ForEach(insights.recommendations, id: \.id) { recommendation in
+                        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                // Only show title and description if they're different
+                                if recommendation.title == recommendation.description {
+                                    // Same text - only show once as description
+                                    Text(recommendation.description)
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                } else {
+                                    // Different text - show both with hierarchy
+                                    Text(recommendation.title)
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    
+                                    Text(recommendation.description)
+                                        .font(ModernDesignSystem.Typography.caption2)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                            }
                             
                             Spacer()
                         }
@@ -1075,43 +1277,110 @@ struct NutritionalPatternsCard: View {
     }
 }
 
+/**
+ * Enhanced Analytics Summary Card
+ * Displays metrics with icons, progress indicators, and visual hierarchy
+ * Follows Trust & Nature design system principles
+ */
 struct AnalyticsSummaryCard: View {
     let title: String
-    let value: String
+    let value: Any
     let unit: String
+    let icon: String
     let color: Color
     
     var body: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-            Text(title)
-                .font(ModernDesignSystem.Typography.caption)
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-            
-            HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
-                Text(value)
-                    .font(ModernDesignSystem.Typography.title2)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Icon and Title Row
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: icon)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(color)
+                    .frame(width: 20, height: 20)
                 
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
+                Text(title)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
                 
                 Spacer()
-                
-                Image(systemName: "circle.fill")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(color)
             }
+            
+            // Value Display
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: ModernDesignSystem.Spacing.xs) {
+                    if let numericValue = value as? Double {
+                        // Display numeric value with unit
+                        Text("\(Int(numericValue))")
+                            .font(ModernDesignSystem.Typography.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        if !unit.isEmpty {
+                            Text(unit)
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .baselineOffset(4)
+                        }
+                        
+                        Spacer()
+                    } else if let stringValue = value as? String {
+                        // Display string value (for weight status)
+                        Text(stringValue)
+                            .font(ModernDesignSystem.Typography.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
+                        
+                        Spacer()
+                        
+                        // Status indicator circle
+                        Circle()
+                            .fill(color.opacity(0.2))
+                            .frame(width: 8, height: 8)
+                            .overlay(
+                                Circle()
+                                    .fill(color)
+                                    .frame(width: 6, height: 6)
+                            )
+                    }
+                }
+                
+                // Progress bar for numeric values
+                if let numericValue = value as? Double, numericValue >= 0 && numericValue <= 100 {
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background track
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(color.opacity(0.2))
+                                .frame(height: 4)
+                            
+                            // Progress fill
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(color)
+                                .frame(
+                                    width: geometry.size.width * CGFloat(numericValue / 100),
+                                    height: 4
+                                )
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
+        .padding(ModernDesignSystem.Spacing.md)
+        .frame(maxWidth: .infinity, minHeight: 100, maxHeight: 100, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(Color.white)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                .stroke(color.opacity(0.3), lineWidth: 1)
         )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
         .shadow(
             color: ModernDesignSystem.Shadows.small.color,
             radius: ModernDesignSystem.Shadows.small.radius,
@@ -1123,7 +1392,11 @@ struct AnalyticsSummaryCard: View {
 
 // MARK: - Data Models
 
-struct HealthInsights {
+/**
+ * Health Insights model matching backend API response
+ * Decodes JSON from /api/v1/advanced-nutrition/analytics/health-insights/{pet_id}
+ */
+struct HealthInsights: Codable {
     let petId: String
     let analysisDate: Date
     let weightManagementStatus: String
@@ -1131,23 +1404,186 @@ struct HealthInsights {
     let feedingConsistencyScore: Double
     let healthRisks: [String]
     let positiveIndicators: [String]
-    let recommendations: [String]
+    let recommendations: [NutritionalRecommendation]
     let overallHealthScore: Double
+    
+    enum CodingKeys: String, CodingKey {
+        case petId = "pet_id"
+        case analysisDate = "analysis_date"
+        case weightManagementStatus = "weight_management_status"
+        case nutritionalAdequacyScore = "nutritional_adequacy_score"
+        case feedingConsistencyScore = "feeding_consistency_score"
+        case healthRisks = "health_risks"
+        case positiveIndicators = "positive_indicators"
+        case recommendations
+        case overallHealthScore = "overall_health_score"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        petId = try container.decode(String.self, forKey: .petId)
+        
+        // Parse analysis date
+        let dateString = try container.decode(String.self, forKey: .analysisDate)
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
+        if let date = dateFormatter.date(from: dateString) {
+            analysisDate = date
+        } else {
+            // Fallback to current date if parsing fails
+            analysisDate = Date()
+        }
+        
+        weightManagementStatus = try container.decode(String.self, forKey: .weightManagementStatus)
+        nutritionalAdequacyScore = try container.decode(Double.self, forKey: .nutritionalAdequacyScore)
+        feedingConsistencyScore = try container.decode(Double.self, forKey: .feedingConsistencyScore)
+        healthRisks = try container.decode([String].self, forKey: .healthRisks)
+        positiveIndicators = try container.decode([String].self, forKey: .positiveIndicators)
+        recommendations = try container.decode([NutritionalRecommendation].self, forKey: .recommendations)
+        overallHealthScore = try container.decode(Double.self, forKey: .overallHealthScore)
+    }
+    
+    /**
+     * Simple initializer for creating HealthInsights from calculated data
+     * Used for fallback scenarios when API is unavailable
+     */
+    init(
+        petId: String,
+        analysisDate: Date,
+        weightManagementStatus: String,
+        nutritionalAdequacyScore: Double,
+        feedingConsistencyScore: Double,
+        healthRisks: [String],
+        positiveIndicators: [String],
+        recommendations: [NutritionalRecommendation],
+        overallHealthScore: Double
+    ) {
+        self.petId = petId
+        self.analysisDate = analysisDate
+        self.weightManagementStatus = weightManagementStatus
+        self.nutritionalAdequacyScore = nutritionalAdequacyScore
+        self.feedingConsistencyScore = feedingConsistencyScore
+        self.healthRisks = healthRisks
+        self.positiveIndicators = positiveIndicators
+        self.recommendations = recommendations
+        self.overallHealthScore = overallHealthScore
+    }
 }
 
-struct NutritionalPatterns {
+/**
+ * Nutritional Recommendation model matching backend API
+ */
+struct NutritionalRecommendation: Codable {
+    let id: String
+    let petId: String
+    let recommendationType: String
+    let title: String
+    let description: String
+    let priority: String
+    let category: String
+    let isActive: Bool
+    let generatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case petId = "pet_id"
+        case recommendationType = "recommendation_type"
+        case title
+        case description
+        case priority
+        case category
+        case isActive = "is_active"
+        case generatedAt = "generated_at"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        petId = try container.decode(String.self, forKey: .petId)
+        recommendationType = try container.decode(String.self, forKey: .recommendationType)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        priority = try container.decode(String.self, forKey: .priority)
+        category = try container.decode(String.self, forKey: .category)
+        isActive = try container.decode(Bool.self, forKey: .isActive)
+        
+        // Parse generated date
+        let dateString = try container.decode(String.self, forKey: .generatedAt)
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = dateFormatter.date(from: dateString) {
+            generatedAt = date
+        } else {
+            // Fallback parsing without fractional seconds
+            dateFormatter.formatOptions = [.withInternetDateTime]
+            if let date = dateFormatter.date(from: dateString) {
+                generatedAt = date
+            } else {
+                generatedAt = Date()
+            }
+        }
+    }
+    
+    /**
+     * Simple initializer for creating NutritionalRecommendation from data
+     * Used for fallback scenarios when API is unavailable
+     */
+    init(
+        id: String,
+        petId: String,
+        recommendationType: String,
+        title: String,
+        description: String,
+        priority: String,
+        category: String,
+        isActive: Bool,
+        generatedAt: Date
+    ) {
+        self.id = id
+        self.petId = petId
+        self.recommendationType = recommendationType
+        self.title = title
+        self.description = description
+        self.priority = priority
+        self.category = category
+        self.isActive = isActive
+        self.generatedAt = generatedAt
+    }
+}
+
+/**
+ * Nutritional Patterns model matching backend API response
+ * Decodes JSON from /api/v1/advanced-nutrition/analytics/patterns/{pet_id}
+ */
+struct NutritionalPatterns: Codable {
     let petId: String
     let analysisPeriod: String
     let feedingTimes: [String]
     let preferredFoods: [String]
     let nutritionalGaps: [String]
-    let seasonalPatterns: [String: Any]
+    let seasonalPatterns: [String: String]
     let behavioralInsights: [String]
     let optimizationSuggestions: [String]
+    
+    enum CodingKeys: String, CodingKey {
+        case petId = "pet_id"
+        case analysisPeriod = "analysis_period"
+        case feedingTimes = "feeding_times"
+        case preferredFoods = "preferred_foods"
+        case nutritionalGaps = "nutritional_gaps"
+        case seasonalPatterns = "seasonal_patterns"
+        case behavioralInsights = "behavioral_insights"
+        case optimizationSuggestions = "optimization_suggestions"
+    }
 }
 
 // MARK: - Services
 
+/**
+ * Advanced Analytics Service
+ * Handles API calls for health insights and nutritional patterns
+ * Follows SOLID principles with single responsibility for analytics API calls
+ */
 @MainActor
 class AdvancedAnalyticsService: ObservableObject {
     static let shared = AdvancedAnalyticsService()
@@ -1155,7 +1591,63 @@ class AdvancedAnalyticsService: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     
+    private let apiService = APIService.shared
+    
     private init() {}
+    
+    /**
+     * Fetch health insights for a pet from the backend API
+     * - Parameter petId: The pet ID to fetch insights for
+     * - Returns: HealthInsights object with comprehensive health data
+     * - Throws: APIError if the request fails
+     */
+    func fetchHealthInsights(petId: String) async throws -> HealthInsights {
+        isLoading = true
+        error = nil
+        
+        defer {
+            isLoading = false
+        }
+        
+        do {
+            let endpoint = "/api/v1/advanced-nutrition/analytics/health-insights/\(petId)"
+            let insights = try await apiService.get(
+                endpoint: endpoint,
+                responseType: HealthInsights.self
+            )
+            return insights
+        } catch {
+            self.error = error
+            throw error
+        }
+    }
+    
+    /**
+     * Fetch nutritional patterns for a pet from the backend API
+     * - Parameter petId: The pet ID to fetch patterns for
+     * - Returns: NutritionalPatterns object with pattern analysis
+     * - Throws: APIError if the request fails
+     */
+    func fetchNutritionalPatterns(petId: String) async throws -> NutritionalPatterns {
+        isLoading = true
+        error = nil
+        
+        defer {
+            isLoading = false
+        }
+        
+        do {
+            let endpoint = "/api/v1/advanced-nutrition/analytics/patterns/\(petId)"
+            let patterns = try await apiService.get(
+                endpoint: endpoint,
+                responseType: NutritionalPatterns.self
+            )
+            return patterns
+        } catch {
+            self.error = error
+            throw error
+        }
+    }
 }
 
 #Preview {
