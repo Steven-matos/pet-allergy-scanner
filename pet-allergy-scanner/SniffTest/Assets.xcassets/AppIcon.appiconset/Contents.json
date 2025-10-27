@@ -37,8 +37,7 @@
   },
   "properties" : {
     "pre-rendered" : false,
-    "opaque" : false,
-    "translucent" : true
+    "opaque" : true
   },
   "icon-spec" : {
     "fill-specializations" : [
