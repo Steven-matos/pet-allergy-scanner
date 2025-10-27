@@ -159,15 +159,16 @@ struct OnboardingView: View {
             
             // Welcome illustration
             VStack(spacing: 20) {
-                Image(systemName: "pawprint.circle.fill")
-                    .font(.system(size: 100))
-                    .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                
                 Text("Welcome to SniffTest!")
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     .multilineTextAlignment(.center)
+
+                Image("Illustrations/welcome")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 300, height: 300)
                 
                 Text("Let's set up your first pet profile to get started with ingredient scanning and safety monitoring.")
                     .font(.body)
