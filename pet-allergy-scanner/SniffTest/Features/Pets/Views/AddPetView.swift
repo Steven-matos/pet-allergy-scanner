@@ -42,8 +42,6 @@ struct AddPetView: View {
     @State private var newSensitivity = ""
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
-    @State private var showingYearPicker = false
-    @State private var showingMonthPicker = false
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
@@ -101,18 +99,6 @@ struct AddPetView: View {
                     showingAlert = true
                 }
             }
-            .overlay(
-                Group {
-                    if showingYearPicker {
-                        YearPickerView(selectedYear: $birthYear, availableYears: availableYears, showingYearPicker: $showingYearPicker)
-                            .transition(.opacity)
-                    }
-                    if showingMonthPicker {
-                        MonthPickerView(selectedMonth: $birthMonth, showingMonthPicker: $showingMonthPicker)
-                            .transition(.opacity)
-                    }
-                }
-            )
         }
     }
     
@@ -281,28 +267,22 @@ struct AddPetView: View {
                                 .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             
-                            Button(action: {
-                                showingYearPicker = true
-                            }) {
-                                HStack {
-                                    Text(birthYear != nil ? "\(birthYear!, specifier: "%d")" : "Select Year")
-                                        .font(ModernDesignSystem.Typography.body)
-                                        .foregroundColor(birthYear != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                        .font(ModernDesignSystem.Typography.caption)
+                            Picker("Year", selection: $birthYear) {
+                                Text("Select Year").tag(nil as Int?)
+                                ForEach(availableYears, id: \.self) { year in
+                                    Text("\(year, specifier: "%d")").tag(year as Int?)
                                 }
-                                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
-                                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                                .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                        .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
-                                )
-                                .cornerRadius(ModernDesignSystem.CornerRadius.small)
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
                         }
                         
                         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
@@ -310,28 +290,22 @@ struct AddPetView: View {
                                 .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             
-                            Button(action: {
-                                showingMonthPicker = true
-                            }) {
-                                HStack {
-                                    Text(birthMonth != nil ? monthName(for: birthMonth!) : "Select Month")
-                                        .font(ModernDesignSystem.Typography.body)
-                                        .foregroundColor(birthMonth != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                        .font(ModernDesignSystem.Typography.caption)
+                            Picker("Month", selection: $birthMonth) {
+                                Text("Select Month").tag(nil as Int?)
+                                ForEach(availableMonths, id: \.0) { month in
+                                    Text("\(month.1) - \(String(format: "%02d", month.0))").tag(month.0 as Int?)
                                 }
-                                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
-                                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                                .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                        .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
-                                )
-                                .cornerRadius(ModernDesignSystem.CornerRadius.small)
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
                         }
                     }
                     
@@ -400,6 +374,15 @@ struct AddPetView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.softCream)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                    )
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
                 }
             }
         }
@@ -699,6 +682,15 @@ struct AddPetView: View {
     private var availableYears: [Int] {
         let currentYear = Calendar.current.component(.year, from: Date())
         return Array(1900...currentYear).reversed()
+    }
+    
+    /// Available months for selection with display names
+    private var availableMonths: [(Int, String)] {
+        return [
+            (1, "January"), (2, "February"), (3, "March"), (4, "April"),
+            (5, "May"), (6, "June"), (7, "July"), (8, "August"),
+            (9, "September"), (10, "October"), (11, "November"), (12, "December")
+        ]
     }
     
     // MARK: - Helper Functions

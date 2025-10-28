@@ -30,8 +30,8 @@ struct OnboardingView: View {
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
     @State private var isCreatingPet = false
-    @State private var showingYearPicker = false
-    @State private var showingMonthPicker = false
+    @State private var showNameValidationError = false
+    @FocusState private var isNameFieldFocused: Bool
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     private let totalSteps = 4
@@ -42,9 +42,9 @@ struct OnboardingView: View {
                 // Progress indicator
                 ProgressView(value: Double(currentStep + 1), total: Double(totalSteps))
                     .progressViewStyle(LinearProgressViewStyle())
-                    .tint(ModernDesignSystem.Colors.deepForestGreen)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
+                    .tint(ModernDesignSystem.Colors.primary)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    .padding(.top, ModernDesignSystem.Spacing.sm)
                 
                 // Step content
                 TabView(selection: $currentStep) {
@@ -66,15 +66,59 @@ struct OnboardingView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut, value: currentStep)
+                .simultaneousGesture(
+                    DragGesture().onChanged { _ in
+                        // Block swipe if on step 1 and validation fails
+                        if currentStep == 1 && !canProceed {
+                            showNameValidationError = true
+                            isNameFieldFocused = true
+                            
+                            // Auto-hide validation error after 2 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation {
+                                    showNameValidationError = false
+                                }
+                            }
+                        }
+                    }
+                )
+                .onChange(of: currentStep) { oldValue, newValue in
+                    // Prevent swiping forward if validation fails
+                    if newValue > oldValue {
+                        // User is trying to move forward
+                        if !canProceedFromStep(oldValue) {
+                            // Show validation error and reset
+                            withAnimation {
+                                if oldValue == 1 {
+                                    // Pet name validation failed
+                                    showNameValidationError = true
+                                    isNameFieldFocused = true
+                                }
+                                currentStep = oldValue
+                            }
+                            
+                            // Auto-hide validation error after 2 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                withAnimation {
+                                    showNameValidationError = false
+                                }
+                            }
+                        } else {
+                            // Validation passed, hide any errors
+                            showNameValidationError = false
+                        }
+                    }
+                }
                 
                 // Navigation buttons
-                HStack {
+                HStack(spacing: ModernDesignSystem.Spacing.md) {
                     if currentStep > 0 {
                         Button("Back") {
                             withAnimation {
                                 currentStep -= 1
                             }
                         }
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     
@@ -87,43 +131,72 @@ struct OnboardingView: View {
                             // User will see onboarding again next time until they add a pet
                             onSkip()
                         }
+                        .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        .padding(.trailing, 16)
+                        .padding(.trailing, ModernDesignSystem.Spacing.md)
                     }
                     
-                    Button(currentStep == totalSteps - 1 ? "Complete Setup" : "Next") {
+                    Button(action: {
                         if currentStep == totalSteps - 1 {
                             createPet()
                         } else {
-                            withAnimation {
-                                currentStep += 1
+                            // Validate before moving forward
+                            if canProceed {
+                                withAnimation {
+                                    currentStep += 1
+                                    showNameValidationError = false
+                                }
+                            } else if currentStep == 1 {
+                                // Show validation error for pet name
+                                withAnimation {
+                                    showNameValidationError = true
+                                    isNameFieldFocused = true
+                                }
+                                
+                                // Auto-hide after 2 seconds
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                    withAnimation {
+                                        showNameValidationError = false
+                                    }
+                                }
                             }
                         }
-                    }
-                    .font(.headline)
-                    .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(ModernDesignSystem.Colors.buttonPrimary)
-                    .cornerRadius(10)
-                    .disabled(!canProceed || isCreatingPet)
-                    .overlay(
-                        Group {
+                    }) {
+                        ZStack {
+                            Text(currentStep == totalSteps - 1 ? "Complete Setup" : "Next")
+                                .font(ModernDesignSystem.Typography.bodyEmphasized)
+                                .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                                .padding(.vertical, ModernDesignSystem.Spacing.md)
+                                .opacity(isCreatingPet ? 0 : 1)
+                            
                             if isCreatingPet {
-                                HStack {
+                                HStack(spacing: ModernDesignSystem.Spacing.sm) {
                                     ProgressView()
                                         .scaleEffect(0.8)
                                         .tint(ModernDesignSystem.Colors.textOnPrimary)
                                     Text("Creating...")
-                                        .font(.headline)
+                                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                                         .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                                 }
                             }
                         }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .background(ModernDesignSystem.Colors.buttonPrimary)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    .shadow(
+                        color: ModernDesignSystem.Shadows.small.color,
+                        radius: ModernDesignSystem.Shadows.small.radius,
+                        x: ModernDesignSystem.Shadows.small.x,
+                        y: ModernDesignSystem.Shadows.small.y
                     )
+                    .disabled(!canProceed || isCreatingPet)
+                    .opacity((!canProceed || isCreatingPet) ? 0.5 : 1.0)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 30)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                .padding(.bottom, ModernDesignSystem.Spacing.xl)
             }
             .navigationBarHidden(true)
             .alert("Error", isPresented: $showingAlert) {
@@ -136,32 +209,19 @@ struct OnboardingView: View {
                     showingAlert = true
                 }
             }
-            .overlay(
-                Group {
-                    if showingYearPicker {
-                        YearPickerView(selectedYear: $birthYear, availableYears: availableYears, showingYearPicker: $showingYearPicker)
-                            .transition(.opacity)
-                    }
-                    if showingMonthPicker {
-                        MonthPickerView(selectedMonth: $birthMonth, showingMonthPicker: $showingMonthPicker)
-                            .transition(.opacity)
-                    }
-                }
-            )
         }
     }
     
     // MARK: - Step Views
     
     private var welcomeStep: some View {
-        VStack(spacing: 30) {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
             Spacer()
             
             // Welcome illustration
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 Text("Welcome to SniffTest!")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(ModernDesignSystem.Typography.largeTitle)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     .multilineTextAlignment(.center)
 
@@ -171,63 +231,91 @@ struct OnboardingView: View {
                     .frame(width: 300, height: 300)
                 
                 Text("Let's set up your first pet profile to get started with ingredient scanning and safety monitoring.")
-                    .font(.body)
+                    .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             }
             
             // Features preview
-            VStack(spacing: 16) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
                 FeatureRow(icon: "camera.viewfinder", title: "Scan Ingredients", description: "Use your camera to scan pet food labels")
+                FeatureRow(icon: "chart.bar.fill", title: "Nutrition Tracking", description: "Monitor feeding, calories, and health trends")
                 FeatureRow(icon: "exclamationmark.triangle", title: "Allergy Alerts", description: "Get instant warnings about harmful ingredients")
                 FeatureRow(icon: "heart.fill", title: "Pet Safety", description: "Keep your furry friends healthy and happy")
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
             Spacer()
         }
     }
     
     private var basicInfoStep: some View {
-        VStack(spacing: 30) {
-            VStack(spacing: 16) {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
                 Text("Tell us about your pet")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(ModernDesignSystem.Typography.title2)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text("We'll use this information to provide personalized safety recommendations.")
-                    .font(.body)
+                    .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
-            .padding(.top, 40)
+            .padding(.top, ModernDesignSystem.Spacing.xxl)
             
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Pet name
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Pet Name *")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     TextField("Enter your pet's name", text: $name)
-                        .textFieldStyle(.roundedBorder)
+                        .focused($isNameFieldFocused)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(
+                            showNameValidationError ? 
+                                Color(hex: "#FFF3E0") : // Light amber background
+                                ModernDesignSystem.Colors.surface
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(
+                                    showNameValidationError ? 
+                                        Color(hex: "#FFB300") : // Amber border
+                                        ModernDesignSystem.Colors.borderPrimary, 
+                                    lineWidth: showNameValidationError ? 2 : 1
+                                )
+                        )
+                        .animation(.easeInOut(duration: 0.3), value: showNameValidationError)
                         .onChange(of: name) { _, _ in
                             validateForm()
+                            showNameValidationError = false
                         }
                     
-                    if validationErrors.contains(where: { $0.contains("name") }) {
+                    if showNameValidationError {
+                        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundColor(Color(hex: "#FFB300"))
+                                .font(ModernDesignSystem.Typography.caption)
+                            Text("Pet name is required (minimum 2 characters)")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(Color(hex: "#FFB300"))
+                        }
+                        .transition(.opacity)
+                    } else if validationErrors.contains(where: { $0.contains("name") }) {
                         Text(validationErrors.first(where: { $0.contains("name") }) ?? "")
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     }
                 }
                 
                 // Species selection
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Species *")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     Picker("Species", selection: $species) {
@@ -240,98 +328,101 @@ struct OnboardingView: View {
                 }
                 
                 // Breed (optional)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Breed (Optional)")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     TextField("e.g., Golden Retriever", text: $breed)
-                        .textFieldStyle(.roundedBorder)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.surface)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
             Spacer()
         }
     }
     
     private var physicalInfoStep: some View {
-        VStack(spacing: 30) {
-            VStack(spacing: 16) {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
                 Text("Physical Information")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(ModernDesignSystem.Typography.title2)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
+                Image("Illustrations/running")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 250, height: 250)
+                
                 Text("This helps us provide age and size-appropriate recommendations.")
-                    .font(.body)
+                    .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             }
-            .padding(.top, 40)
+            .padding(.top, ModernDesignSystem.Spacing.xxl)
             
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Birthday
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Birthday (Optional)")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: ModernDesignSystem.Spacing.md) {
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                             Text("Year")
-                                .font(.caption)
+                                .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             
-                            Button(action: {
-                                showingYearPicker = true
-                            }) {
-                                HStack {
-                                    Text(birthYear != nil ? "\(birthYear!, specifier: "%d")" : "Select Year")
-                                        .foregroundColor(birthYear != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                        .font(.caption)
+                            Picker("Year", selection: $birthYear) {
+                                Text("Select Year").tag(nil as Int?)
+                                ForEach(availableYears, id: \.self) { year in
+                                    Text("\(year, specifier: "%d")").tag(year as Int?)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(ModernDesignSystem.Colors.lightGray.opacity(0.3), lineWidth: 1)
-                                )
-                                .cornerRadius(8)
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                             Text("Month")
-                                .font(.caption)
+                                .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             
-                            Button(action: {
-                                showingMonthPicker = true
-                            }) {
-                                HStack {
-                                    Text(birthMonth != nil ? monthName(for: birthMonth!) : "Select Month")
-                                        .foregroundColor(birthMonth != nil ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textSecondary)
-                                    Spacer()
-                                    Image(systemName: "chevron.down")
-                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                        .font(.caption)
+                            Picker("Month", selection: $birthMonth) {
+                                Text("Select Month").tag(nil as Int?)
+                                ForEach(availableMonths, id: \.0) { month in
+                                    Text("\(month.1) - \(String(format: "%02d", month.0))").tag(month.0 as Int?)
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background(ModernDesignSystem.Colors.lightGray.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(ModernDesignSystem.Colors.lightGray.opacity(0.3), lineWidth: 1)
-                                )
-                                .cornerRadius(8)
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .pickerStyle(.menu)
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
                         }
                     }
                     
@@ -339,137 +430,182 @@ struct OnboardingView: View {
                         if let birthday = createBirthday(year: birthYear, month: birthMonth) {
                             let age = calculateAge(from: birthday)
                             Text("Age: \(age)")
-                                .font(.caption)
+                                .font(ModernDesignSystem.Typography.caption)
                                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         }
                     }
                     
                     if validationErrors.contains(where: { $0.contains("Birthday") }) {
                         Text(validationErrors.first(where: { $0.contains("Birthday") }) ?? "")
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     }
                 }
                 
                 // Weight
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Weight (Optional)")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    HStack {
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         TextField("Weight (\(unitService.getUnitSymbol()))", value: $weightKg, format: .number)
                             .keyboardType(.decimalPad)
-                            .textFieldStyle(.roundedBorder)
+                            .padding(ModernDesignSystem.Spacing.md)
+                            .background(ModernDesignSystem.Colors.surface)
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
                             .onChange(of: weightKg) { _, _ in
                                 validateForm()
                             }
                         
                         Text(unitService.getUnitSymbol())
+                            .font(ModernDesignSystem.Typography.body)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                     
                     if validationErrors.contains(where: { $0.contains("Weight") }) {
                         Text(validationErrors.first(where: { $0.contains("Weight") }) ?? "")
-                            .font(.caption)
+                            .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                     }
                 }
                 
                 // Activity Level
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Activity Level")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     Picker("Activity Level", selection: $activityLevel) {
                         ForEach(PetActivityLevel.allCases, id: \.self) { level in
                             VStack(alignment: .leading) {
                                 Text(level.displayName)
-                                    .font(.body)
+                                    .font(ModernDesignSystem.Typography.body)
                                 Text(level.description)
-                                    .font(.caption)
+                                    .font(ModernDesignSystem.Typography.caption)
                                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             }
                             .tag(level)
                         }
                     }
                     .pickerStyle(.menu)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.softCream)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                    )
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
             Spacer()
         }
     }
     
     private var allergiesAndVetStep: some View {
-        VStack(spacing: 30) {
-            VStack(spacing: 16) {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
                 Text("Health & Safety Information")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(ModernDesignSystem.Typography.title2)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text("Help us keep your pet safe by sharing any known allergies and vet information.")
-                    .font(.body)
+                    .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
             }
-            .padding(.top, 40)
+            .padding(.top, ModernDesignSystem.Spacing.xxl)
             
-            VStack(spacing: 20) {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Known allergies
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Food Sensitivities (Optional)")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     ForEach(knownSensitivities, id: \.self) { sensitivity in
-                        HStack {
+                        HStack(spacing: ModernDesignSystem.Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundColor(ModernDesignSystem.Colors.warmCoral)
                             Text(sensitivity)
+                                .font(ModernDesignSystem.Typography.body)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                             Spacer()
                             Button("Remove") {
                                 knownSensitivities.removeAll { $0 == sensitivity }
                             }
+                            .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.warmCoral)
-                            .font(.caption)
                         }
-                        .padding(.vertical, 4)
+                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
                     }
                     
-                    HStack {
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         TextField("Add sensitivity", text: $newSensitivity)
-                            .textFieldStyle(.roundedBorder)
+                            .padding(ModernDesignSystem.Spacing.md)
+                            .background(ModernDesignSystem.Colors.surface)
+                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
+                        
                         Button("Add") {
                             if !newSensitivity.isEmpty {
                                 knownSensitivities.append(newSensitivity)
                                 newSensitivity = ""
                             }
                         }
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.surface)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                        )
                         .disabled(newSensitivity.isEmpty)
-                        .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                        .opacity(newSensitivity.isEmpty ? 0.5 : 1.0)
                     }
                 }
                 
                 // Vet information
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Veterinary Information (Optional)")
-                        .font(.headline)
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     TextField("Vet Name", text: $vetName)
-                        .textFieldStyle(.roundedBorder)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.surface)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
                     
                     TextField("Vet Phone", text: $vetPhone)
                         .keyboardType(.phonePad)
-                        .textFieldStyle(.roundedBorder)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(ModernDesignSystem.Colors.surface)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
             Spacer()
         }
@@ -483,12 +619,39 @@ struct OnboardingView: View {
         return Array(1900...currentYear).reversed()
     }
     
+    /// Available months for selection with display names
+    private var availableMonths: [(Int, String)] {
+        return [
+            (1, "January"), (2, "February"), (3, "March"), (4, "April"),
+            (5, "May"), (6, "June"), (7, "July"), (8, "August"),
+            (9, "September"), (10, "October"), (11, "November"), (12, "December")
+        ]
+    }
+    
     private var canProceed: Bool {
         switch currentStep {
         case 0:
             return true // Welcome step
         case 1:
             return !name.isEmpty && name.count >= 2 // Basic info step
+        case 2:
+            return true // Physical info step (all optional)
+        case 3:
+            return true // Allergies and vet step (all optional)
+        default:
+            return false
+        }
+    }
+    
+    /// Check if user can proceed from a specific step (used for swipe validation)
+    /// - Parameter step: The step number to validate
+    /// - Returns: True if validation passes for that step
+    private func canProceedFromStep(_ step: Int) -> Bool {
+        switch step {
+        case 0:
+            return true // Welcome step
+        case 1:
+            return !name.isEmpty && name.count >= 2 // Basic info step - pet name required
         case 2:
             return true // Physical info step (all optional)
         case 3:
@@ -608,25 +771,26 @@ struct OnboardingView: View {
 
 // MARK: - Supporting Views
 
+/// Feature row component displaying an icon, title, and description
 struct FeatureRow: View {
     let icon: String
     let title: String
     let description: String
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
             Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
                 .frame(width: 30)
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                 Text(title)
-                    .font(.headline)
+                    .font(ModernDesignSystem.Typography.bodyEmphasized)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Text(description)
-                    .font(.caption)
+                    .font(ModernDesignSystem.Typography.caption)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
             
@@ -634,115 +798,6 @@ struct FeatureRow: View {
         }
     }
 }
-
-// MARK: - Picker Views
-
-struct YearPickerView: View {
-    @Binding var selectedYear: Int?
-    let availableYears: [Int]
-    @Binding var showingYearPicker: Bool
-    
-    var body: some View {
-        ZStack {
-            // Background overlay
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    showingYearPicker = false
-                }
-            
-            VStack(spacing: 0) {
-                Text("Select Year")
-                    .font(.headline)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    .padding(.top, 20)
-                
-                List {
-                    Button("None") {
-                        selectedYear = nil
-                        showingYearPicker = false
-                    }
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    
-                    ForEach(availableYears, id: \.self) { year in
-                        Button("\(year, specifier: "%d")") {
-                            print("Year selected: \(year)")
-                            selectedYear = year
-                            showingYearPicker = false
-                        }
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    }
-                }
-                .frame(maxHeight: 300)
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .padding(.horizontal, 20)
-                
-                Button("Cancel") {
-                    showingYearPicker = false
-                }
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                .padding(.top, 10)
-            }
-        }
-    }
-}
-
-struct MonthPickerView: View {
-    @Binding var selectedMonth: Int?
-    @Binding var showingMonthPicker: Bool
-    
-    private let months = [
-        (1, "January"), (2, "February"), (3, "March"), (4, "April"),
-        (5, "May"), (6, "June"), (7, "July"), (8, "August"),
-        (9, "September"), (10, "October"), (11, "November"), (12, "December")
-    ]
-    
-    var body: some View {
-        ZStack {
-            // Background overlay
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    showingMonthPicker = false
-                }
-            
-            VStack(spacing: 0) {
-                Text("Select Month")
-                    .font(.headline)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    .padding(.top, 20)
-                
-                List {
-                    Button("None") {
-                        selectedMonth = nil
-                        showingMonthPicker = false
-                    }
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    
-                    ForEach(months, id: \.0) { month in
-                        Button(month.1) {
-                            selectedMonth = month.0
-                            showingMonthPicker = false
-                        }
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    }
-                }
-                .frame(maxHeight: 300)
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .padding(.horizontal, 20)
-                
-                Button("Cancel") {
-                    showingMonthPicker = false
-                }
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                .padding(.top, 10)
-            }
-        }
-    }
-}
-
 
 #Preview {
     OnboardingView(onSkip: {
