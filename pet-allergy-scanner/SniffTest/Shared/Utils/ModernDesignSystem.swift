@@ -341,10 +341,28 @@ struct ModernEmptyState: View {
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
-            Image(systemName: icon)
-                .font(.system(size: 60))
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-                .accessibilityLabel("Empty state icon")
+            // Handle both SF Symbols and custom asset images
+            Group {
+                if icon.contains(".") && !icon.contains("/") {
+                    // SF Symbol (contains dots but no slashes)
+                    Image(systemName: icon)
+                        .font(.system(size: 60))
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .onAppear {
+                            print("DEBUG: Using SF Symbol: \(icon)")
+                        }
+                } else {
+                    // Custom asset image (contains slashes or no dots)
+                    Image(icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 200, height: 200)
+                        .onAppear {
+                            print("DEBUG: Using custom asset: \(icon)")
+                        }
+                }
+            }
+            .accessibilityLabel("Empty state icon")
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
                 Text(title)

@@ -22,6 +22,8 @@ import SwiftUI
  */
 struct HistoryView: View {
     @StateObject private var scanService = ScanService.shared
+    @State private var petService = CachedPetService.shared
+    @StateObject private var settingsManager = SettingsManager.shared
     @EnvironmentObject var notificationManager: NotificationManager
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -79,10 +81,14 @@ struct HistoryView: View {
                     ModernLoadingView(message: "Loading your scan history...")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if scanService.recentScans.isEmpty {
-                    EmptyHistoryView(onStartScanning: {
-                        dismiss()
-                        notificationManager.handleNavigateToScan()
-                    })
+                    EmptyHistoryView(
+                        defaultPetId: settingsManager.defaultPetId,
+                        petService: petService,
+                        onStartScanning: {
+                            dismiss()
+                            notificationManager.handleNavigateToScan()
+                        }
+                    )
                 } else {
                     VStack(spacing: 0) {
                         // Search and Filter Header
@@ -488,19 +494,52 @@ struct EmptyFilterResultsView: View {
  * - Warm, inviting messaging that encourages action
  * - Proper spacing and accessibility
  * - Navigation callback to switch to scan tab
+ * - Pet-specific images based on default pet species
  */
 struct EmptyHistoryView: View {
+    let defaultPetId: String?
+    let petService: CachedPetService
     let onStartScanning: () -> Void
     
     var body: some View {
         ModernEmptyState(
-            icon: "clock.arrow.circlepath",
+            icon: emptyStateIcon,
             title: "No Scans Yet",
             message: "Start scanning pet food ingredients to build your nutrition history and keep your pets healthy.",
             actionTitle: "Start Scanning",
             action: onStartScanning
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    /**
+     * Determine the appropriate icon based on default pet species
+     * Returns pet-specific scanning image or default clock icon
+     */
+    private var emptyStateIcon: String {
+        // If no default pet is set, use the default clock icon
+        guard let petId = defaultPetId else {
+            print("DEBUG: No default pet ID, using clock icon")
+            return "clock.arrow.circlepath"
+        }
+        
+        // Get the default pet from the pet service
+        guard let pet = petService.getPet(id: petId) else {
+            print("DEBUG: Pet not found for ID: \(petId), using clock icon")
+            return "clock.arrow.circlepath"
+        }
+        
+        // Return pet-specific image based on species
+        let iconName: String
+        switch pet.species {
+        case .dog:
+            iconName = "Illustrations/dog-scanning"
+        case .cat:
+            iconName = "Illustrations/cat-scanning"
+        }
+        
+        print("DEBUG: Using icon: \(iconName) for pet species: \(pet.species)")
+        return iconName
     }
 }
 
