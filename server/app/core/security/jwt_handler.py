@@ -198,10 +198,20 @@ def get_current_user(
                     return User(**user_data)
                 else:
                     logger.error(f"Failed to create user: {create_response}")
-                    raise credentials_exception
+                    # Provide more specific error message for debugging
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"User creation failed: No data returned from database",
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
             except Exception as create_error:
                 logger.error(f"Failed to create user: {create_error}")
-                raise credentials_exception
+                # Provide more specific error message for debugging
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"User creation failed: {str(create_error)}",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
         
         user_data = response.data[0]
         logger.info(f"User found: {user_data.get('email', 'unknown')}")
@@ -209,7 +219,12 @@ def get_current_user(
         
     except Exception as e:
         logger.error(f"Error fetching user: {e}")
-        raise credentials_exception
+        # Provide more specific error message for debugging
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Database error: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 # Export for backward compatibility
