@@ -14,6 +14,7 @@ struct ContentView: View {
     @EnvironmentObject var notificationManager: NotificationManager
     @State private var hydrationService = CacheHydrationService.shared
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
+    @StateObject private var orientationManager = OrientationManager()
     
     var body: some View {
         Group {
@@ -64,6 +65,7 @@ struct ContentView: View {
         .dismissKeyboardOnTap()
         .environmentObject(authService)
         .environmentObject(notificationManager)
+        .environmentObject(orientationManager)
         .onChange(of: authService.authState) { _, newState in
             // Reset skip state when user logs out
             if case .unauthenticated = newState {
@@ -82,7 +84,7 @@ struct ContentView: View {
                     .ignoresSafeArea()
                     .overlay {
                         CacheHydrationProgressView()
-                            .frame(maxWidth: 300)
+                            .frame(maxWidth: orientationManager.isLandscape ? 400 : 300)
                     }
             }
         }

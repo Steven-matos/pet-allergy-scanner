@@ -34,6 +34,7 @@ struct OnboardingView: View {
     @State private var petImage: UIImage?
     @FocusState private var isNameFieldFocused: Bool
     @FocusState private var isBreedFieldFocused: Bool
+    @FocusState private var isWeightFieldFocused: Bool
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     private let totalSteps = 4
@@ -108,8 +109,9 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                }
-                .scrollDismissesKeyboard(.interactively)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .dismissKeyboardOnTap()
                 .onChange(of: isNameFieldFocused) { _, isFocused in
                     if isFocused {
                         // Scroll to the name field when it gets focus
@@ -130,10 +132,21 @@ struct OnboardingView: View {
                         }
                     }
                 }
+                .onChange(of: isWeightFieldFocused) { _, isFocused in
+                    if isFocused {
+                        // Scroll to the weight field when it gets focus
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo("weightField", anchor: UnitPoint.center)
+                            }
+                        }
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 // Navigation buttons using modern SwiftUI bottom placement
                 HStack(spacing: ModernDesignSystem.Spacing.md) {
+                    // Back/Skip button - 1/3 width
                     if currentStep > 0 {
                         Button("Back") {
                             withAnimation {
@@ -142,11 +155,15 @@ struct OnboardingView: View {
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
+                        )
                     }
                     
-                    Spacer()
-                    
-                    // Skip button (only show on first step)
+                    // Skip button (only show on first step) - 1/3 width
                     if currentStep == 0 {
                         Button("Skip for now") {
                             // Skip onboarding for this session only
@@ -155,9 +172,15 @@ struct OnboardingView: View {
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        .padding(.trailing, ModernDesignSystem.Spacing.md)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
+                        )
                     }
                     
+                    // Next/Complete button - 2/3 width
                     Button(action: {
                         if currentStep == totalSteps - 1 {
                             createPet()
@@ -200,7 +223,14 @@ struct OnboardingView: View {
                             }
                         }
                     }
-                    .modernButton(style: .primary)
+                    .font(ModernDesignSystem.Typography.bodyEmphasized)
+                    .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                            .fill(ModernDesignSystem.Colors.primary)
+                    )
                     .disabled(!canProceed || isCreatingPet)
                     .opacity((!canProceed || isCreatingPet) ? 0.5 : 1.0)
                 }
@@ -385,11 +415,18 @@ struct OnboardingView: View {
                 Text("Physical Information")
                     .font(ModernDesignSystem.Typography.title2)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+
+                Image("Illustrations/running")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 300, height: 300)
                 
-                Text("Help us understand your pet's physical characteristics for better health monitoring.")
+                Text("Help us track your pet's health and activity for personalized nutrition recommendations.")
                     .font(ModernDesignSystem.Typography.body)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .multilineTextAlignment(.center)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, ModernDesignSystem.Spacing.xxl)
             
@@ -447,10 +484,12 @@ struct OnboardingView: View {
                     HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         TextField("Weight (\(unitService.getUnitSymbol()))", value: $weightKg, format: .number)
                             .keyboardType(.decimalPad)
+                            .focused($isWeightFieldFocused)
                             .modernInputField()
                             .onChange(of: weightKg) { _, _ in
                                 validateForm()
                             }
+                            .id("weightField")
                         
                         Text(unitService.getUnitSymbol())
                             .font(ModernDesignSystem.Typography.body)
