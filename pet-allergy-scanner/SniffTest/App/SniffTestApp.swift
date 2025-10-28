@@ -27,7 +27,7 @@ struct SniffTestApp: App {
     }
 }
 
-/// App delegate to handle push notification registration
+/// App delegate to handle push notification registration and system configuration
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -35,6 +35,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         // Set up push notification delegate
         UNUserNotificationCenter.current().delegate = PushNotificationService.shared
+        
+        // Configure system warning suppression to reduce console noise
+        SystemWarningSuppressionHelper.shared.configure()
         
         return true
     }

@@ -61,6 +61,7 @@ struct ContentView: View {
                 AuthenticationView()
             }
         }
+        .dismissKeyboardOnTap()
         .environmentObject(authService)
         .environmentObject(petService)
         .environmentObject(notificationManager)
