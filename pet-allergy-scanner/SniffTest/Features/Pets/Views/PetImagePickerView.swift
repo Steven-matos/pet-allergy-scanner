@@ -2,7 +2,7 @@
 //  PetImagePickerView.swift
 //  SniffTest
 //
-//  Created by Steven Matos on 10/1/25.
+//  Created by Steven Matos on 10/1/2025.
 //
 
 import SwiftUI
@@ -16,6 +16,16 @@ struct PetImagePickerView: View {
     @State private var showingImagePicker = false
     @State private var showingActionSheet = false
     @State private var sourceType: UIImagePickerController.SourceType = .photoLibrary
+    
+    /// Computed property to get the appropriate placeholder image name based on species
+    private var placeholderImageName: String {
+        switch species {
+        case .cat:
+            return "Placeholders/cat-placeholder"
+        case .dog:
+            return "Placeholders/dog-placeholder"
+        }
+    }
     
     var body: some View {
         Button(action: {
@@ -31,28 +41,36 @@ struct PetImagePickerView: View {
                         .clipShape(Circle())
                         .overlay(
                             Circle()
-                                .stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 3)
+                                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 3)
                         )
                 } else {
-                    // Show species icon as placeholder
-                    Circle()
-                        .fill(ModernDesignSystem.Colors.deepForestGreen.opacity(0.1))
+                    // Show species-specific placeholder image
+                    ZStack {
+                        Circle()
+                            .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                            .frame(width: 120, height: 120)
+                        
+                        // Species-specific placeholder image
+                        Image(placeholderImageName)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 80, height: 80)
+                            .opacity(0.6)
+                        
+                        // Add Photo text overlay
+                        VStack {
+                            Spacer()
+                            Text("Add Photo")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .padding(.bottom, 8)
+                        }
                         .frame(width: 120, height: 120)
-                        .overlay(
-                            VStack(spacing: 12) {
-                                Image(systemName: species.icon)
-                                    .font(.system(size: 48))
-                                    .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
-                                
-                                Text("Add Photo")
-                                    .font(.caption)
-                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                            }
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(ModernDesignSystem.Colors.deepForestGreen, lineWidth: 2)
-                        )
+                    }
+                    .overlay(
+                        Circle()
+                            .stroke(ModernDesignSystem.Colors.primary, lineWidth: 2)
+                    )
                 }
                 
                 // Edit icon overlay (only when image exists)
@@ -63,7 +81,7 @@ struct PetImagePickerView: View {
                             Spacer()
                             Image(systemName: "pencil.circle.fill")
                                 .font(.system(size: 32))
-                                .foregroundColor(ModernDesignSystem.Colors.deepForestGreen)
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
                                 .background(Circle().fill(Color.white))
                                 .offset(x: -5, y: -5)
                         }

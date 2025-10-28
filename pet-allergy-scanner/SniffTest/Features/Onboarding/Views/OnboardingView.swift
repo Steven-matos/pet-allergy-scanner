@@ -2,7 +2,7 @@
 //  OnboardingView.swift
 //  SniffTest
 //
-//  Created by Steven Matos on 9/26/25.
+//  Created by Steven Matos on 9/26/2025.
 //
 
 import SwiftUI
@@ -31,6 +31,7 @@ struct OnboardingView: View {
     @State private var validationErrors: [String] = []
     @State private var isCreatingPet = false
     @State private var showNameValidationError = false
+    @State private var petImage: UIImage?
     @FocusState private var isNameFieldFocused: Bool
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
@@ -265,6 +266,23 @@ struct OnboardingView: View {
             .padding(.top, ModernDesignSystem.Spacing.xxl)
             
             VStack(spacing: ModernDesignSystem.Spacing.lg) {
+
+                // Pet Photo (optional)
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("Pet Photo (Optional)")
+                        .font(ModernDesignSystem.Typography.bodyEmphasized)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack {
+                        Spacer()
+                        PetImagePickerView(
+                            selectedImage: $petImage,
+                            species: species
+                        )
+                        Spacer()
+                    }
+                }
+
                 // Pet name
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
                     Text("Pet Name *")
@@ -689,21 +707,41 @@ struct OnboardingView: View {
         // Convert weight to kg for storage (backend expects kg)
         let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
         
-        let petCreate = PetCreate(
-            name: name,
-            species: species,
-            breed: breed.isEmpty ? nil : breed,
-            birthday: createBirthday(year: birthYear, month: birthMonth),
-            weightKg: weightInKg,
-            activityLevel: activityLevel,
-            imageUrl: nil,
-            knownSensitivities: knownSensitivities,
-            vetName: vetName.isEmpty ? nil : vetName,
-            vetPhone: vetPhone.isEmpty ? nil : vetPhone
-        )
-        
-        // Create the pet first
+        // Create the pet with image upload
         Task {
+            var imageUrl: String? = nil
+            
+            // Upload pet image if provided
+            if let petImage = petImage,
+               let userId = authService.currentUser?.id {
+                do {
+                    // Generate a temporary pet ID for image upload
+                    let tempPetId = UUID().uuidString
+                    imageUrl = try await StorageService.shared.uploadPetImage(
+                        image: petImage,
+                        userId: userId,
+                        petId: tempPetId
+                    )
+                    print("📸 Pet image uploaded successfully: \(imageUrl ?? "nil")")
+                } catch {
+                    print("⚠️ Failed to upload pet image: \(error)")
+                    // Continue with pet creation even if image upload fails
+                }
+            }
+            
+            let petCreate = PetCreate(
+                name: name,
+                species: species,
+                breed: breed.isEmpty ? nil : breed,
+                birthday: createBirthday(year: birthYear, month: birthMonth),
+                weightKg: weightInKg,
+                activityLevel: activityLevel,
+                imageUrl: imageUrl,
+                knownSensitivities: knownSensitivities,
+                vetName: vetName.isEmpty ? nil : vetName,
+                vetPhone: vetPhone.isEmpty ? nil : vetPhone
+            )
+            
             // Use the pet service's createPet method
             petService.createPet(petCreate)
             
