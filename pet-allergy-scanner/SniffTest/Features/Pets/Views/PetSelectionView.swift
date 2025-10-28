@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Pet selection view with Trust & Nature Design System styling
 struct PetSelectionView: View {
-    @EnvironmentObject var petService: CachedPetService
+    @State private var petService = CachedPetService.shared
     @Environment(\.dismiss) private var dismiss
     let onPetSelected: (Pet) -> Void
     let onAddPet: (() -> Void)?
@@ -134,5 +134,4 @@ struct PetSelectionCardView: View {
             print("Add pet tapped")
         }
     )
-    .environmentObject(CachedPetService.shared)
 }

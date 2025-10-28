@@ -12,7 +12,7 @@ import SwiftUI
 struct NotificationTestView: View {
     @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
     @StateObject private var notificationManager = NotificationManager.shared
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @State private var showingBirthdayCelebration = false
     @State private var testPet: Pet?
     

@@ -25,7 +25,6 @@ import SwiftUI
  * - Maintains accessibility standards
  */
 struct AddPetView: View {
-    @EnvironmentObject var petService: CachedPetService
     @Environment(\.dismiss) private var dismiss
     
     @State private var name = ""
@@ -92,9 +91,9 @@ struct AddPetView: View {
             .alert("Error", isPresented: $showingAlert) {
                 Button("OK") { }
             } message: {
-                Text(petService.errorMessage ?? "An error occurred")
+                Text(CachedPetService.shared.errorMessage ?? "An error occurred")
             }
-            .onChange(of: petService.errorMessage) { _, errorMessage in
+            .onChange(of: CachedPetService.shared.errorMessage) { _, errorMessage in
                 if errorMessage != nil {
                     showingAlert = true
                 }
@@ -578,7 +577,7 @@ struct AddPetView: View {
                 if let selectedImage = selectedImage {
                     // Get current user ID for folder organization
                     guard let userId = AuthService.shared.currentUser?.id else {
-                        petService.errorMessage = "User not authenticated"
+                        CachedPetService.shared.errorMessage = "User not authenticated"
                         return
                     }
                     
@@ -611,16 +610,16 @@ struct AddPetView: View {
                     vetPhone: vetPhone.isEmpty ? nil : vetPhone
                 )
                 
-                petService.createPet(petCreate)
+                CachedPetService.shared.createPet(petCreate)
                 
                 // Dismiss after successful creation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    if petService.errorMessage == nil {
+                    if CachedPetService.shared.errorMessage == nil {
                         dismiss()
                     }
                 }
             } catch {
-                petService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                CachedPetService.shared.errorMessage = "Failed to upload image: \(error.localizedDescription)"
             }
         }
     }
@@ -746,13 +745,10 @@ struct AddPetView: View {
 
 #Preview {
     AddPetView()
-        .environmentObject(CachedPetService.shared)
 }
 
 #Preview("With Mock Data") {
-    let petService = CachedPetService.shared
     // Note: Using shared instance for preview purposes
-    
-    return AddPetView()
-        .environmentObject(petService)
+    AddPetView()
 }
+

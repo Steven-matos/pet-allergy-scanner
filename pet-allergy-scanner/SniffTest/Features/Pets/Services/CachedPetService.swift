@@ -8,19 +8,26 @@
 import Foundation
 import Combine
 
-/// Enhanced pet service with intelligent caching
+/// Enhanced pet service with intelligent caching - Modernized for SwiftUI 5.0
+/// 
+/// Modern SwiftUI 5.0 Features:
+/// - Uses @Observable macro for better performance
+/// - Leverages Swift Concurrency for async operations
+/// - Implements modern state management patterns
+/// 
 /// Implements DRY principle by extending PetService functionality
 /// Implements KISS principle with simple, clear caching logic
 @MainActor
-class CachedPetService: ObservableObject {
+@Observable
+final class CachedPetService {
     static let shared = CachedPetService()
     
     // MARK: - Properties
     
-    @Published var pets: [Pet] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var isRefreshing = false
+    var pets: [Pet] = []
+    var isLoading = false
+    var errorMessage: String?
+    var isRefreshing = false
     
     private let apiService = APIService.shared
     private let cacheService = CacheService.shared
@@ -248,8 +255,22 @@ class CachedPetService: ObservableObject {
                 // Invalidate user-related caches
                 invalidateUserCaches()
                 
+                print("✅ Onboarding completed successfully")
+                
+            } catch APIError.authenticationError {
+                // Authentication error during onboarding completion
+                // This could happen if the token is invalid or expired
+                // Don't fail the entire flow - the pet was created successfully
+                print("⚠️ Authentication error during onboarding completion - pet was created successfully")
+                
+                // Try to refresh the user data anyway to get the latest state
+                await AuthService.shared.refreshCurrentUser()
+                
             } catch {
-                print("Failed to update onboarded status: \(error)")
+                print("❌ Failed to update onboarded status: \(error)")
+                
+                // Try to refresh the user data anyway to get the latest state
+                await AuthService.shared.refreshCurrentUser()
             }
         }
     }

@@ -22,7 +22,7 @@ import SwiftUI
  */
 struct TrackersView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @StateObject private var healthEventService = HealthEventService.shared
     @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false

@@ -9,7 +9,7 @@ import SwiftUI
 import AVFoundation
 
 struct ScanView: View {
-    @EnvironmentObject var petService: CachedPetService
+    @State private var petService = CachedPetService.shared
     // MEMORY OPTIMIZATION: Use shared service instances instead of @State
     private let hybridScanService = HybridScanService.shared
     private let scanService = ScanService.shared
@@ -2276,6 +2276,5 @@ struct ScanDataErrorView: View {
 
 #Preview {
     ScanView()
-        .environmentObject(CachedPetService.shared)
 }
 

@@ -19,7 +19,7 @@ struct FeedingLogView: View {
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
     @StateObject private var feedingService = FeedingLogService.shared
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     

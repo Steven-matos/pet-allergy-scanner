@@ -25,7 +25,7 @@ import Charts
 struct NutritionalTrendsView: View {
     @EnvironmentObject var authService: AuthService
     @StateObject private var trendsService = CachedNutritionalTrendsService.shared
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @Binding var selectedPeriod: TrendPeriod

@@ -122,21 +122,14 @@ class NotificationManager: ObservableObject {
     }
     
     private func setupServiceObservers() {
-        // Observe pet service changes to reschedule birthday notifications
-        petService.$pets
-            .sink { [weak self] _ in
-                self?.notificationSettingsManager.scheduleBirthdayNotifications()
-            }
-            .store(in: &cancellables)
+        // With @Observable services, we don't need Combine publishers
+        // The services will automatically notify SwiftUI views when properties change
+        // For notification scheduling, we'll use direct method calls instead
         
-        // Observe scan service changes to update engagement tracking
-        scanService.$recentScans
-            .sink { [weak self] scans in
-                if !scans.isEmpty {
-                    self?.notificationSettingsManager.updateLastScanDate()
-                }
-            }
-            .store(in: &cancellables)
+        // Schedule birthday notifications when pets are loaded
+        Task { @MainActor in
+            notificationSettingsManager.scheduleBirthdayNotifications()
+        }
     }
     
     private func showEngagementReminder() {

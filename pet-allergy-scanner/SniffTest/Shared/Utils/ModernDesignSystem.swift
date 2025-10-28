@@ -311,7 +311,7 @@ extension StatusIndicator {
 
 // MARK: - Loading States
 
-struct ModernLoadingView: View {
+struct ModernDesignLoadingView: View {
     let message: String
     
     var body: some View {

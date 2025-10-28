@@ -19,7 +19,7 @@ import Combine
  */
 struct NutritionDashboardView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var selectedPet: Pet?
     @State private var showingPremiumUpgrade = false
@@ -51,7 +51,6 @@ struct NutritionDashboardView: View {
                 }
             }
         }
-        .environmentObject(CachedPetService.shared)
         .onAppear {
             print("🔍 NutritionDashboardView: onAppear called")
             // Temporarily disable loadNutritionData to test

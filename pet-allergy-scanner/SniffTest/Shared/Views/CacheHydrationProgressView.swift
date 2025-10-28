@@ -18,7 +18,7 @@ import SwiftUI
  * Follows KISS by keeping the interface simple and informative
  */
 struct CacheHydrationProgressView: View {
-    @StateObject private var hydrationService = CacheHydrationService.shared
+    @State private var hydrationService = CacheHydrationService.shared
     
     var body: some View {
         if hydrationService.isHydrating {
@@ -86,7 +86,7 @@ struct CacheHydrationProgressView: View {
  * Compact view showing hydration status in navigation or other contexts
  */
 struct CacheHydrationStatusView: View {
-    @StateObject private var hydrationService = CacheHydrationService.shared
+    @State private var hydrationService = CacheHydrationService.shared
     
     var body: some View {
         if hydrationService.isHydrating {

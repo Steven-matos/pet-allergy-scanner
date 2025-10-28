@@ -481,12 +481,28 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 )
                 
                 // Update user to mark onboarding as complete
-                let updatedUser = try await apiService.updateUser(userUpdate)
-                print("AuthService: Onboarding auto-completed successfully")
-                return updatedUser
+                do {
+                    let updatedUser = try await apiService.updateUser(userUpdate)
+                    print("AuthService: Onboarding auto-completed successfully")
+                    return updatedUser
+                } catch APIError.authenticationError {
+                    // Authentication error during update - don't fail the entire flow
+                    print("AuthService: Authentication error during onboarding update - keeping original user")
+                    return user
+                } catch {
+                    // Other errors during update - don't fail the entire flow
+                    print("AuthService: Failed to update onboarding status: \(error)")
+                    return user
+                }
             }
+        } catch APIError.authenticationError {
+            // Authentication error during auto-onboarding check
+            // This could happen if the token is invalid or expired
+            // Don't clear tokens here as it might be a temporary issue
+            print("AuthService: Authentication error during auto-onboarding check - keeping tokens")
+            return user
         } catch {
-            // Silently fail - don't block login if this check fails
+            // Other errors - silently fail and don't block login
             print("AuthService: Failed to check pets for auto-onboarding: \(error)")
         }
         

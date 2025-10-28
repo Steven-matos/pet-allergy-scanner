@@ -10,9 +10,9 @@ import SwiftUI
 struct ContentView: View {
     // MEMORY OPTIMIZATION: Use shared service instances instead of @StateObject
     @EnvironmentObject var authService: AuthService
-    @EnvironmentObject var petService: CachedPetService
+    @State private var petService = CachedPetService.shared
     @EnvironmentObject var notificationManager: NotificationManager
-    @StateObject private var hydrationService = CacheHydrationService.shared
+    @State private var hydrationService = CacheHydrationService.shared
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     
     var body: some View {
@@ -63,7 +63,6 @@ struct ContentView: View {
         }
         .dismissKeyboardOnTap()
         .environmentObject(authService)
-        .environmentObject(petService)
         .environmentObject(notificationManager)
         .onChange(of: authService.authState) { _, newState in
             // Reset skip state when user logs out

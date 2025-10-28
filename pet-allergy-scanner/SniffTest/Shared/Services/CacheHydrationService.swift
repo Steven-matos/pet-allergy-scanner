@@ -9,23 +9,29 @@ import Foundation
 import Combine
 
 /**
- * Cache Hydration Service
+ * Cache Hydration Service - Modernized for SwiftUI 5.0
  * 
  * Coordinates the preloading of all user data into caches when they sign in.
  * This ensures instant access to data across the app without loading delays.
+ * 
+ * Modern SwiftUI 5.0 Features:
+ * - Uses @Observable macro for better performance
+ * - Leverages Swift Concurrency for async operations
+ * - Implements modern state management patterns
  * 
  * Follows SOLID principles with single responsibility for cache coordination
  * Implements DRY by reusing existing service methods
  * Follows KISS by keeping the hydration process simple and reliable
  */
 @MainActor
-class CacheHydrationService: ObservableObject {
+@Observable
+final class CacheHydrationService {
     static let shared = CacheHydrationService()
     
-    @Published var isHydrating = false
-    @Published var hydrationProgress: Double = 0.0
-    @Published var currentStep: String = ""
-    @Published var error: Error?
+    var isHydrating = false
+    var hydrationProgress: Double = 0.0
+    var currentStep: String = ""
+    var error: Error?
     
     // MARK: - Private Properties
     

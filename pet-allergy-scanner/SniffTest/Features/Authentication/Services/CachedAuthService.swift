@@ -358,14 +358,28 @@ class CachedAuthService: ObservableObject {
                     onboarded: true
                 )
                 
-                let updatedUser = try await apiService.updateUser(userUpdate)
-                print("CachedAuthService: Onboarding auto-completed successfully")
-                
-                // Update cache
-                await updateUserCache(updatedUser)
-                
-                return updatedUser
+                do {
+                    let updatedUser = try await apiService.updateUser(userUpdate)
+                    print("CachedAuthService: Onboarding auto-completed successfully")
+                    
+                    // Update cache
+                    await updateUserCache(updatedUser)
+                    
+                    return updatedUser
+                } catch APIError.authenticationError {
+                    // Authentication error during update - don't fail the entire flow
+                    print("CachedAuthService: Authentication error during onboarding update - keeping original user")
+                    return user
+                } catch {
+                    // Other errors during update - don't fail the entire flow
+                    print("CachedAuthService: Failed to update onboarding status: \(error)")
+                    return user
+                }
             }
+        } catch APIError.authenticationError {
+            // Authentication error during auto-onboarding check
+            // Don't clear tokens here as it might be a temporary issue
+            print("CachedAuthService: Authentication error during auto-onboarding check - keeping tokens")
         } catch {
             print("CachedAuthService: Failed to check pets for auto-onboarding: \(error)")
         }

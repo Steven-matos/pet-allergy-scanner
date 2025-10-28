@@ -10,7 +10,7 @@ import SwiftUI
 /// Main view for displaying and managing user's pets
 /// Follows Trust & Nature Design System for consistent styling
 struct PetsView: View {
-    @EnvironmentObject var petService: CachedPetService
+    @State private var petService = CachedPetService.shared
     @State private var showingAddPet = false
     @State private var showingEditPet: Pet?
     @State private var petToDelete: Pet?
@@ -28,22 +28,44 @@ struct PetsView: View {
                         showingAddPet = true
                     }
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
-                            ForEach(petService.pets) { pet in
-                                PetCardView(
-                                    pet: pet,
-                                    onEdit: {
-                                        showingEditPet = pet
-                                    },
-                                    onDelete: {
-                                        petToDelete = pet
-                                        showingDeleteAlert = true
-                                    }
-                                )
+                    if #available(iOS 18.0, *) {
+                        ModernScrollView {
+                            LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
+                                ForEach(petService.pets) { pet in
+                                    PetCardView(
+                                        pet: pet,
+                                        onEdit: {
+                                            showingEditPet = pet
+                                        },
+                                        onDelete: {
+                                            petToDelete = pet
+                                            showingDeleteAlert = true
+                                        }
+                                    )
+                                    .modernCardAnimation()
+                                }
                             }
+                            .padding(ModernDesignSystem.Spacing.md)
                         }
-                        .padding(ModernDesignSystem.Spacing.md)
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
+                                ForEach(petService.pets) { pet in
+                                    PetCardView(
+                                        pet: pet,
+                                        onEdit: {
+                                            showingEditPet = pet
+                                        },
+                                        onDelete: {
+                                            petToDelete = pet
+                                            showingDeleteAlert = true
+                                        }
+                                    )
+                                    .modernCardAnimation()
+                                }
+                            }
+                            .padding(ModernDesignSystem.Spacing.md)
+                        }
                     }
                 }
             }
@@ -396,5 +418,4 @@ struct PetTagFlowLayout: Layout {
 
 #Preview {
     PetsView()
-        .environmentObject(CachedPetService.shared)
 }

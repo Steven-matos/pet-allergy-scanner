@@ -21,7 +21,6 @@ struct SniffTestApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(authService)
-                .environmentObject(petService)
                 .environmentObject(notificationManager)
         }
     }

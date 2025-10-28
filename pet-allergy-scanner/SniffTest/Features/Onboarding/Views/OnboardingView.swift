@@ -9,7 +9,7 @@ import SwiftUI
 
 /// Onboarding view for new users to set up their first pet
 struct OnboardingView: View {
-    @EnvironmentObject var petService: CachedPetService
+    @State private var petService = CachedPetService.shared
     @StateObject private var authService = AuthService.shared
     
     /// Callback when user skips onboarding
@@ -704,15 +704,24 @@ struct OnboardingView: View {
         
         // Create the pet first
         Task {
+            // Use the pet service's createPet method
             petService.createPet(petCreate)
             
-            // Wait for the pet creation to complete
-            try? await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+            // Wait for the pet creation to complete by monitoring the service state
+            while petService.isLoading {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            }
             
             await MainActor.run {
                 if petService.errorMessage == nil {
                     // Pet created successfully - mark onboarding as complete
                     petService.completeOnboarding()
+                    
+                    // Even if onboarding completion fails, the pet was created successfully
+                    // The user can proceed to the main app
+                    print("✅ Pet created successfully - onboarding flow complete")
+                } else {
+                    print("❌ Pet creation failed: \(petService.errorMessage ?? "Unknown error")")
                 }
                 isCreatingPet = false
             }
@@ -803,5 +812,4 @@ struct FeatureRow: View {
     OnboardingView(onSkip: {
         print("Skipped onboarding")
     })
-    .environmentObject(CachedPetService.shared)
 }

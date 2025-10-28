@@ -96,7 +96,14 @@ class APIService: ObservableObject, @unchecked Sendable {
     var hasAuthToken: Bool {
         get async {
             let token = await authToken
-            return token != nil
+            let hasToken = token != nil
+            print("🔐 APIService: hasAuthToken = \(hasToken)")
+            if let token = token {
+                print("🔐 APIService: Token present: \(token.prefix(50))...")
+            } else {
+                print("❌ APIService: No token found")
+            }
+            return hasToken
         }
     }
     
@@ -104,9 +111,11 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Set authentication token for API requests
     func setAuthToken(_ token: String, refreshToken: String? = nil, expiresIn: Int? = nil) async {
+        print("🔐 APIService: Setting auth token: \(token.prefix(50))...")
         await setAuthTokenInternal(token)
         
         if let refreshToken = refreshToken {
+            print("🔐 APIService: Setting refresh token: \(refreshToken.prefix(50))...")
             await setRefreshTokenInternal(refreshToken)
         }
         
@@ -114,10 +123,12 @@ class APIService: ObservableObject, @unchecked Sendable {
             // Set expiry to expiresIn seconds from now
             let expiry = Date().addingTimeInterval(TimeInterval(expiresIn))
             await setTokenExpiryInternal(expiry)
+            print("🔐 APIService: Token expires in \(expiresIn) seconds")
         } else {
             // Default to 30 days if no expiry provided
             let expiry = Date().addingTimeInterval(30 * 24 * 60 * 60)
             await setTokenExpiryInternal(expiry)
+            print("🔐 APIService: Token expires in 30 days (default)")
         }
     }
     
@@ -568,6 +579,9 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         if let token = token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            print("🔐 APIService: Adding Authorization header with token: \(token.prefix(50))...")
+        } else {
+            print("❌ APIService: No auth token available for request to \(url)")
         }
         
         if let body = body {
@@ -616,13 +630,15 @@ class APIService: ObservableObject, @unchecked Sendable {
                     // Try to decode error message from response
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
                         // Clear invalid token only if this is a session/token error
-                        if errorResponse.message.lowercased().contains("invalid authentication") {
+                        if errorResponse.message.lowercased().contains("invalid authentication") ||
+                           errorResponse.message.lowercased().contains("token") ||
+                           errorResponse.message.lowercased().contains("expired") {
                             await clearAuthToken()
                         }
                         throw APIError.serverMessage(errorResponse.message)
                     }
                     // Fallback to generic authentication error
-                    await clearAuthToken()
+                    // Don't automatically clear tokens on generic 401 - let the caller decide
                     throw APIError.authenticationError
                 case 403:
                     // Try to refresh token before treating as error
@@ -706,7 +722,7 @@ class APIService: ObservableObject, @unchecked Sendable {
 extension APIService {
     /// Register a new user
     func register(user: UserCreate) async throws -> RegistrationResponse {
-        guard let url = URL(string: "\(baseURL)/auth/register") else {
+        guard let url = URL(string: "\(baseURL)/auth/register/") else {
             throw APIError.invalidURL
         }
         
@@ -723,7 +739,7 @@ extension APIService {
     
     /// Login user
     func login(email: String, password: String) async throws -> AuthResponse {
-        guard let url = URL(string: "\(baseURL)/auth/login") else {
+        guard let url = URL(string: "\(baseURL)/auth/login/") else {
             throw APIError.invalidURL
         }
         
@@ -740,7 +756,7 @@ extension APIService {
     
     /// Reset password for user
     func resetPassword(email: String) async throws {
-        guard let url = URL(string: "\(baseURL)/auth/reset-password") else {
+        guard let url = URL(string: "\(baseURL)/auth/reset-password/") else {
             throw APIError.invalidURL
         }
         
@@ -758,7 +774,7 @@ extension APIService {
     
     /// Get current user information
     func getCurrentUser() async throws -> User {
-        guard let url = URL(string: "\(baseURL)/auth/me") else {
+        guard let url = URL(string: "\(baseURL)/auth/me/") else {
             throw APIError.invalidURL
         }
         
@@ -768,7 +784,7 @@ extension APIService {
     
     /// Update current user
     func updateUser(_ userUpdate: UserUpdate) async throws -> User {
-        guard let url = URL(string: "\(baseURL)/auth/me") else {
+        guard let url = URL(string: "\(baseURL)/auth/me/") else {
             throw APIError.invalidURL
         }
         

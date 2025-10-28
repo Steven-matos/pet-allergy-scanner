@@ -17,7 +17,7 @@ import SwiftUI
  */
 struct CalorieGoalsView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var petService = CachedPetService.shared
+    @State private var petService = CachedPetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var calorieGoalsService = CalorieGoalsService.shared
     
