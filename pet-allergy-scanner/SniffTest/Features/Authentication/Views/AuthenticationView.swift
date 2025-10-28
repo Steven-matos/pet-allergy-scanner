@@ -57,6 +57,7 @@ struct AuthenticationView: View {
             }
             .padding(ModernDesignSystem.Spacing.lg)
         }
+        .formKeyboardAvoidance()
         .background(ModernDesignSystem.Colors.background)
         .ignoresSafeArea(.all)
         .alert("Error", isPresented: $showingAlert) {

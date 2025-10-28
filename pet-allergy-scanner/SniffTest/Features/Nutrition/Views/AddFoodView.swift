@@ -75,6 +75,7 @@ struct AddFoodView: View {
                     }
                     .padding(ModernDesignSystem.Spacing.lg)
                 }
+                .formKeyboardAvoidance()
                 
                 if isSubmitting {
                     LoadingOverlay(message: "Adding food...")

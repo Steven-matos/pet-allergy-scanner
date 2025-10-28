@@ -32,7 +32,7 @@ struct LaunchScreenView: View {
                     Image("Branding/app-logo")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 140, height: 140)
+                        .frame(width: 200, height: 200)
                         .cornerRadius(ModernDesignSystem.CornerRadius.extraLarge)
                         .shadow(
                             color: ModernDesignSystem.Shadows.medium.color,
@@ -101,7 +101,7 @@ struct StaticLaunchScreen: View {
                 Image("Branding/app-logo")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 140, height: 140)
+                    .frame(width: 200, height: 200)
                     .cornerRadius(24)
                 
                 // App Name

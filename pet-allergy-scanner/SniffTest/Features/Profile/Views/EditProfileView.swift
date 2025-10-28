@@ -55,6 +55,7 @@ struct EditProfileView: View {
                 }
                 .padding(ModernDesignSystem.Spacing.md)
             }
+            .formKeyboardAvoidance()
             .background(ModernDesignSystem.Colors.background)
             .navigationTitle("Edit Profile")
             .navigationBarTitleDisplayMode(.inline)

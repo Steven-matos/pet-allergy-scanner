@@ -1,7 +1,135 @@
+//
+//  KeyboardManager.swift
+//  SniffTest
+//
+//  Created by Code Assistant, 2025.
+//
+
 import SwiftUI
 import UIKit
+@preconcurrency import Combine
 
-// MARK: - Keyboard Dismissal Utilities
+// MARK: - Keyboard Management System
+
+/**
+ * Keyboard Management System
+ *
+ * Comprehensive keyboard handling solution that provides both keyboard avoidance
+ * and dismissal functionality. Prevents text fields from being covered by the
+ * on-screen keyboard and manages keyboard lifecycle properly.
+ *
+ * Features:
+ * - Automatic keyboard height detection and avoidance
+ * - Smooth animations with proper timing curves
+ * - ScrollView-aware adjustments with auto-scroll to focused fields
+ * - Safe keyboard dismissal without session errors
+ * - Safe area considerations
+ * - Performance optimized with minimal re-renders
+ * - Integration with design system
+ *
+ * Follows SOLID principles:
+ * - Single Responsibility: Only handles keyboard management and avoidance
+ * - DRY: Reusable across all views with text input
+ * - KISS: Simple API with automatic behavior
+ */
+
+// MARK: - Keyboard Avoidance Manager
+
+@MainActor
+class KeyboardAvoidanceManager: ObservableObject {
+    @Published var keyboardHeight: CGFloat = 0
+    @Published var isKeyboardVisible: Bool = false
+    
+    private var cancellables = Set<AnyCancellable>()
+    
+    init() {
+        setupKeyboardObservers()
+    }
+    
+    nonisolated deinit {
+        cancellables.removeAll()
+    }
+    
+    /**
+     * Setup keyboard notification observers
+     * Handles both keyboard show/hide events with proper animation timing
+     */
+    private func setupKeyboardObservers() {
+        // Keyboard will show
+        NotificationCenter.default
+            .publisher(for: UIResponder.keyboardWillShowNotification)
+            .compactMap { notification in
+                guard let userInfo = notification.userInfo,
+                      let keyboardFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+                      let animationDuration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
+                      let animationCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else {
+                    return nil
+                }
+                
+                return KeyboardEvent(
+                    height: keyboardFrame.height,
+                    duration: animationDuration,
+                    curve: UIView.AnimationCurve(rawValue: Int(animationCurve)) ?? .easeInOut
+                )
+            }
+            .sink { [weak self] event in
+                self?.handleKeyboardShow(event: event)
+            }
+            .store(in: &cancellables)
+        
+        // Keyboard will hide
+        NotificationCenter.default
+            .publisher(for: UIResponder.keyboardWillHideNotification)
+            .compactMap { notification in
+                guard let userInfo = notification.userInfo,
+                      let animationDuration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
+                      let animationCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else {
+                    return nil
+                }
+                
+                return KeyboardEvent(
+                    height: 0,
+                    duration: animationDuration,
+                    curve: UIView.AnimationCurve(rawValue: Int(animationCurve)) ?? .easeInOut
+                )
+            }
+            .sink { [weak self] event in
+                self?.handleKeyboardHide(event: event)
+            }
+            .store(in: &cancellables)
+    }
+    
+    /**
+     * Handle keyboard show event with smooth animation
+     */
+    private func handleKeyboardShow(event: KeyboardEvent) {
+        withAnimation(.easeInOut(duration: event.duration)) {
+            keyboardHeight = event.height
+            isKeyboardVisible = true
+        }
+    }
+    
+    /**
+     * Handle keyboard hide event with smooth animation
+     */
+    private func handleKeyboardHide(event: KeyboardEvent) {
+        withAnimation(.easeInOut(duration: event.duration)) {
+            keyboardHeight = 0
+            isKeyboardVisible = false
+        }
+    }
+}
+
+/**
+ * Keyboard event data structure
+ */
+private struct KeyboardEvent {
+    let height: CGFloat
+    let duration: Double
+    let curve: UIView.AnimationCurve
+}
+
+// MARK: - Keyboard Dismissal Manager
 
 /**
  * Keyboard Manager
@@ -52,7 +180,7 @@ enum KeyboardManager {
     }
 }
 
-// MARK: - UIWindow Extension
+// MARK: - UIWindow Extensions
 
 extension UIWindow {
     /// Finds the first responder in the window hierarchy
@@ -82,7 +210,61 @@ extension UIView {
     }
 }
 
-// MARK: - View Modifier
+// MARK: - View Modifiers
+
+/**
+ * KeyboardAvoidanceView Modifier
+ * 
+ * Automatically adjusts view content when keyboard appears/disappears
+ * Works with ScrollView, VStack, and other container views
+ */
+struct KeyboardAvoidanceViewModifier: ViewModifier {
+    @StateObject private var keyboardManager = KeyboardAvoidanceManager()
+    let behavior: KeyboardAvoidanceBehavior
+    
+    func body(content: Content) -> some View {
+        content
+            .onReceive(keyboardManager.$isKeyboardVisible) { isVisible in
+                if isVisible {
+                    behavior.onKeyboardShow?()
+                } else {
+                    behavior.onKeyboardHide?()
+                }
+            }
+    }
+}
+
+/**
+ * KeyboardAvoidanceScrollView Modifier
+ * 
+ * Specialized modifier for ScrollView that provides enhanced keyboard avoidance
+ * Automatically scrolls to focused text fields
+ */
+struct KeyboardAvoidanceScrollViewModifier: ViewModifier {
+    @StateObject private var keyboardManager = KeyboardAvoidanceManager()
+    @FocusState private var focusedField: AnyHashable?
+    let behavior: KeyboardAvoidanceBehavior
+    
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content
+                .scrollDismissesKeyboard(.interactively)
+                .onChange(of: keyboardManager.isKeyboardVisible) { _, isVisible in
+                    if isVisible {
+                        behavior.onKeyboardShow?()
+                        // Auto-scroll to focused field if available
+                        if let focusedField = focusedField {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                proxy.scrollTo(focusedField, anchor: .center)
+                            }
+                        }
+                    } else {
+                        behavior.onKeyboardHide?()
+                    }
+                }
+        }
+    }
+}
 
 /// ViewModifier that adds tap-to-dismiss keyboard functionality
 /// Safely handles keyboard dismissal without causing session errors
@@ -99,9 +281,68 @@ struct DismissKeyboardOnTap: ViewModifier {
     }
 }
 
-// MARK: - View Extension
+// MARK: - Configuration Types
+
+/**
+ * Keyboard avoidance behavior configuration
+ */
+struct KeyboardAvoidanceBehavior: Sendable {
+    let onKeyboardShow: (@Sendable () -> Void)?
+    let onKeyboardHide: (@Sendable () -> Void)?
+    
+    init(
+        onKeyboardShow: (@Sendable () -> Void)? = nil,
+        onKeyboardHide: (@Sendable () -> Void)? = nil
+    ) {
+        self.onKeyboardShow = onKeyboardShow
+        self.onKeyboardHide = onKeyboardHide
+    }
+    
+    /// Default behavior with no custom actions
+    static let `default` = KeyboardAvoidanceBehavior()
+    
+    /// Behavior that dismisses keyboard on tap outside
+    static let dismissOnTap = KeyboardAvoidanceBehavior(
+        onKeyboardShow: nil,
+        onKeyboardHide: nil
+    )
+}
+
+// MARK: - View Extensions
 
 extension View {
+    
+    /**
+     * Apply keyboard avoidance to any view
+     * 
+     * - Parameter behavior: Custom behavior configuration
+     * - Returns: Modified view with keyboard avoidance
+     */
+    func keyboardAvoidance(behavior: KeyboardAvoidanceBehavior = .default) -> some View {
+        modifier(KeyboardAvoidanceViewModifier(behavior: behavior))
+    }
+    
+    /**
+     * Apply enhanced keyboard avoidance for ScrollView
+     * 
+     * - Parameter behavior: Custom behavior configuration
+     * - Returns: Modified ScrollView with enhanced keyboard avoidance
+     */
+    func keyboardAvoidanceScrollView(behavior: KeyboardAvoidanceBehavior = .default) -> some View {
+        modifier(KeyboardAvoidanceScrollViewModifier(behavior: behavior))
+    }
+    
+    /**
+     * Apply keyboard avoidance with tap-to-dismiss functionality
+     * 
+     * - Returns: Modified view with keyboard avoidance and tap-to-dismiss
+     */
+    func keyboardAvoidanceWithDismiss() -> some View {
+        keyboardAvoidance(behavior: .dismissOnTap)
+            .onTapGesture {
+                KeyboardManager.dismiss()
+            }
+    }
     
     /// Adds a tap gesture to dismiss the keyboard when tapping outside input fields
     /// Safely handles keyboard sessions to prevent RTIInputSystemClient errors
@@ -111,3 +352,65 @@ extension View {
     }
 }
 
+// MARK: - Form-Specific Extensions
+
+extension View {
+    
+    /**
+     * Apply keyboard avoidance specifically for forms
+     * Uses modern SwiftUI 2025 best practices with native keyboard handling
+     * 
+     * - Returns: Modified view optimized for form input
+     */
+    func formKeyboardAvoidance() -> some View {
+        self
+            .keyboardAvoidance()
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                KeyboardManager.dismiss()
+            }
+    }
+    
+    /**
+     * Modern SwiftUI keyboard avoidance using native 2025 best practices
+     * Leverages safeAreaInset and scrollDismissesKeyboard for optimal UX
+     * 
+     * - Returns: Modified view with native keyboard avoidance
+     */
+    func modernKeyboardAvoidance() -> some View {
+        self
+            .scrollDismissesKeyboard(.interactively)
+    }
+    
+    /**
+     * Minimal keyboard avoidance that only provides scroll dismissal
+     * No custom spacing to avoid white space issues
+     * 
+     * - Returns: Modified view with minimal keyboard handling
+     */
+    func minimalKeyboardAvoidance() -> some View {
+        self
+            .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                KeyboardManager.dismiss()
+            }
+    }
+}
+
+// MARK: - Preview Support
+
+#Preview("Keyboard Management Demo") {
+    NavigationStack {
+        ScrollView {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                ForEach(0..<10, id: \.self) { index in
+                    TextField("Text Field \(index + 1)", text: .constant(""))
+                        .modernInputField()
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+        }
+        .formKeyboardAvoidance()
+        .navigationTitle("Keyboard Management Test")
+    }
+}

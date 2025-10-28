@@ -46,6 +46,7 @@ struct ForgotPasswordView: View {
                 }
                 .padding(ModernDesignSystem.Spacing.lg)
             }
+            .formKeyboardAvoidance()
             .background(ModernDesignSystem.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
