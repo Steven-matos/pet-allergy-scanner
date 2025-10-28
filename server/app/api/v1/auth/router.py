@@ -298,14 +298,14 @@ async def get_current_user_profile(current_user: UserResponse = Depends(get_curr
 @router.put("/me", response_model=UserResponse)
 async def update_user_profile(
     user_update: UserUpdate,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Update current user profile
     
     Args:
         user_update: Updated user data
-        credentials: JWT token credentials
+        current_user: Current authenticated user from JWT validation
         
     Returns:
         Updated user profile data
@@ -314,12 +314,6 @@ async def update_user_profile(
         HTTPException: If update fails
     """
     try:
-        if not credentials:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No authentication token provided"
-            )
-        
         # Validate input
         validator = InputValidator()
         validation_result = validator.validate_user_update(user_update)
@@ -329,59 +323,65 @@ async def update_user_profile(
                 detail=f"Validation failed: {', '.join(validation_result['errors'])}"
             )
         
-        supabase = get_supabase_client()
+        # Use service role client to bypass RLS policies
+        from supabase import create_client
+        from app.core.config import settings
         
-        # Set the session for the current request
-        supabase.auth.set_session(credentials.credentials, "")
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key
+        )
         
-        # Get current user
-        user = supabase.auth.get_user()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token"
-            )
+        # Get current user from our validated JWT
+        user_id = current_user.id
         
         # Update user metadata
         update_data = user_update.dict(exclude_unset=True)
         
-        # Remove fields that shouldn't be updated via metadata
-        metadata_update = {}
-        if "first_name" in update_data:
-            metadata_update["first_name"] = update_data["first_name"]
-        if "last_name" in update_data:
-            metadata_update["last_name"] = update_data["last_name"]
-        if "username" in update_data:
-            metadata_update["username"] = update_data["username"]
-        if "role" in update_data:
-            metadata_update["role"] = update_data["role"]
-        
-        if metadata_update:
-            supabase.auth.update_user({"data": metadata_update})
-        
-        # Update public.users table if needed
-        public_update = {}
-        if "onboarded" in update_data:
-            public_update["onboarded"] = update_data["onboarded"]
-        if "image_url" in update_data:
-            public_update["image_url"] = update_data["image_url"]
-        
-        if public_update:
-            service_supabase = get_supabase_client()
-            service_supabase.table("users").update(public_update).eq("id", user.id).execute()
+        # Update the users table directly with service role
+        if update_data:
+            # Convert field names to match database schema
+            db_update = {}
+            if "first_name" in update_data:
+                db_update["first_name"] = update_data["first_name"]
+            if "last_name" in update_data:
+                db_update["last_name"] = update_data["last_name"]
+            if "username" in update_data:
+                db_update["username"] = update_data["username"]
+            if "role" in update_data:
+                db_update["role"] = update_data["role"]
+            if "onboarded" in update_data:
+                db_update["onboarded"] = update_data["onboarded"]
+            if "image_url" in update_data:
+                db_update["image_url"] = update_data["image_url"]
+            
+            if db_update:
+                logger.info(f"Updating user {user_id} with data: {db_update}")
+                response = supabase.table("users").update(db_update).eq("id", user_id).execute()
+                logger.info(f"Update response: {response}")
+                
+                if not response.data:
+                    logger.error(f"Failed to update user {user_id}: {response}")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Failed to update user profile"
+                    )
         
         # Get updated user data
-        updated_user = supabase.auth.get_user()
-        updated_metadata = updated_user.user_metadata or {}
+        updated_response = supabase.table("users").select("*").eq("id", user_id).execute()
         
-        # Return merged user data
-        return await get_merged_user_data(updated_user.id, {
-            "email": updated_user.email,
-            "user_metadata": updated_metadata,
-            "created_at": updated_user.created_at,
-            "updated_at": updated_user.updated_at
-        })
+        if not updated_response.data:
+            logger.error(f"Failed to fetch updated user {user_id}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to fetch updated user profile"
+            )
+        
+        updated_user_data = updated_response.data[0]
+        logger.info(f"Successfully updated user: {updated_user_data.get('email', 'unknown')}")
+        
+        # Return the updated user data
+        return UserResponse(**updated_user_data)
         
     except HTTPException:
         raise
