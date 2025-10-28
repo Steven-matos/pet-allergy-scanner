@@ -81,7 +81,7 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
 router = APIRouter()
 logger = get_logger(__name__)
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register/", response_model=UserResponse)
 async def register_user(user_data: UserCreate):
     """
     Register a new user with Supabase Auth
@@ -163,7 +163,7 @@ async def register_user(user_data: UserCreate):
             detail="Internal server error during registration"
         )
 
-@router.post("/login", response_model=dict)
+@router.post("/login/", response_model=dict)
 async def login_user(login_data: UserLogin):
     """
     Login user with email and password
@@ -230,7 +230,7 @@ async def login_user(login_data: UserLogin):
             detail="Internal server error during login"
         )
 
-@router.post("/logout")
+@router.post("/logout/")
 async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
     Logout user and invalidate session
@@ -270,7 +270,7 @@ async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(securi
             detail="Internal server error during logout"
         )
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me/", response_model=UserResponse)
 async def get_current_user_profile(current_user: UserResponse = Depends(get_current_user)):
     """
     Get current user profile
@@ -295,7 +295,7 @@ async def get_current_user_profile(current_user: UserResponse = Depends(get_curr
             detail="Internal server error getting user profile"
         )
 
-@router.put("/me", response_model=UserResponse)
+@router.put("/me/", response_model=UserResponse)
 async def update_user_profile(
     user_update: UserUpdate,
     current_user: UserResponse = Depends(get_current_user)
@@ -392,7 +392,7 @@ async def update_user_profile(
             detail="Internal server error updating user profile"
         )
 
-@router.post("/refresh")
+@router.post("/refresh/")
 async def refresh_token(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security)
