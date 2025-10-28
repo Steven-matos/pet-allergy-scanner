@@ -444,7 +444,7 @@ async def refresh_token(
             # Create a client instance with anon key
             supabase = create_client(
                 settings.supabase_url,
-                settings.supabase_anon_key
+                settings.supabase_key  # Fixed: use supabase_key (not supabase_anon_key)
             )
             
             # Set session with refresh token (access token can be empty when expired)

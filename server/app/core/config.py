@@ -16,11 +16,6 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = Field(..., alias="SUPABASE_SERVICE_ROLE_KEY", description="Supabase service role key")
     supabase_jwt_secret: str = Field(..., alias="SUPABASE_JWT_SECRET", description="Supabase JWT secret for token validation")
     
-    @property
-    def supabase_anon_key(self) -> str:
-        """Alias for supabase_key for backward compatibility"""
-        return self.supabase_key
-    
     # Security Configuration
     secret_key: str = Field(..., alias="SECRET_KEY", min_length=32, description="Strong secret key for JWT signing")
     algorithm: str = Field(default="HS256", alias="ALGORITHM", description="JWT algorithm")
