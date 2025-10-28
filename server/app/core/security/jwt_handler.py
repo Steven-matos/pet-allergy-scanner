@@ -52,6 +52,7 @@ def get_current_user(
     if credentials is None:
         logger.error("❌ No Authorization header found in request")
         logger.error("🔍 DEBUG: HTTPBearer security instance: auto_error=False")
+        logger.error("🔍 DEBUG: This usually means the iOS app isn't sending the Authorization header")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated",
