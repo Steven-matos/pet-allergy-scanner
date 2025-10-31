@@ -22,12 +22,13 @@ def _parse_datetime(dt_str: str) -> datetime:
     """
     return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
 
-def _build_waitlist_response(entry: dict) -> WaitlistResponse:
+def _build_waitlist_response(entry: dict, is_duplicate: bool = False) -> WaitlistResponse:
     """
     Build WaitlistResponse from database entry
     
     Args:
         entry: Dictionary containing waitlist entry data
+        is_duplicate: Whether this is a duplicate email signup
         
     Returns:
         WaitlistResponse object
@@ -44,7 +45,8 @@ def _build_waitlist_response(entry: dict) -> WaitlistResponse:
         notified=entry.get("notified", False),
         notified_at=notified_at,
         created_at=created_at,
-        updated_at=updated_at
+        updated_at=updated_at,
+        is_duplicate=is_duplicate
     )
 
 @router.post("/", response_model=WaitlistResponse, status_code=status.HTTP_201_CREATED)
@@ -77,9 +79,9 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         ).eq("email", normalized_email).execute()
         
         if existing.data:
-            # Email already exists, return existing entry
+            # Email already exists, return existing entry with duplicate flag
             logger.info(f"Waitlist signup: Email {normalized_email} already exists")
-            return _build_waitlist_response(existing.data[0])
+            return _build_waitlist_response(existing.data[0], is_duplicate=True)
         
         # Email doesn't exist, insert new entry
         insert_response = supabase.table("waitlist").insert({
@@ -94,7 +96,7 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         
         logger.info(f"Waitlist signup successful: {normalized_email}")
         entry = insert_response.data[0]
-        return _build_waitlist_response(entry)
+        return _build_waitlist_response(entry, is_duplicate=False)
         
     except HTTPException:
         raise
@@ -119,7 +121,7 @@ async def signup_waitlist(signup_data: WaitlistSignup):
                 ).eq("email", normalized_email).execute()
                 
                 if existing.data:
-                    return _build_waitlist_response(existing.data[0])
+                    return _build_waitlist_response(existing.data[0], is_duplicate=True)
             except Exception as fetch_error:
                 logger.error(f"Failed to fetch existing waitlist entry: {fetch_error}")
         

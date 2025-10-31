@@ -37,6 +37,7 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
   const [email, setEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [isDuplicate, setIsDuplicate] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
 
@@ -44,10 +45,11 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
    * Reset form state when modal closes
    */
   useEffect(() => {
-    if (!isOpen) {
+      if (!isOpen) {
       setEmail('')
       setIsSubmitting(false)
       setIsSuccess(false)
+      setIsDuplicate(false)
       setError(null)
       setEmailError(null)
     }
@@ -118,10 +120,24 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
         throw new Error(errorData.detail || `Server error (${response.status}). Please try again.`)
       }
 
-      setIsSuccess(true)
-      setTimeout(() => {
-        onClose()
-      }, 2000)
+      // Parse response to check if email is duplicate
+      const responseData = await response.json()
+      
+      if (responseData.is_duplicate) {
+        // Email already exists in waitlist
+        setIsDuplicate(true)
+        setIsSubmitting(false)
+        // Clear duplicate message after 5 seconds
+        setTimeout(() => {
+          setIsDuplicate(false)
+        }, 5000)
+      } else {
+        // New signup successful
+        setIsSuccess(true)
+        setTimeout(() => {
+          onClose()
+        }, 2000)
+      }
     } catch (err) {
       // Enhanced error handling for network and CORS issues
       if (err instanceof TypeError && err.message.includes('fetch')) {
@@ -226,6 +242,12 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
                   </p>
                 )}
               </div>
+
+              {isDuplicate && (
+                <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg text-sm text-warning">
+                  This email is already on our waitlist. We'll notify you when SniffTest is ready!
+                </div>
+              )}
 
               {error && (
                 <div className="p-3 bg-error/10 border border-error/30 rounded-lg text-sm text-error">

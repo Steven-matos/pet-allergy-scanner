@@ -27,6 +27,7 @@ class WaitlistResponse(BaseModel):
     notified_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    is_duplicate: bool = False
     
     model_config = ConfigDict(from_attributes=True)
 
