@@ -24,6 +24,8 @@ ALTER TABLE public.waitlist ENABLE ROW LEVEL SECURITY;
 -- Drop existing policies if they exist (for idempotent migration)
 DROP POLICY IF EXISTS "Allow public waitlist signups" ON public.waitlist;
 DROP POLICY IF EXISTS "Service role can read all waitlist entries" ON public.waitlist;
+DROP POLICY IF EXISTS "Service role can insert waitlist entries" ON public.waitlist;
+DROP POLICY IF EXISTS "Allow public to check waitlist entries" ON public.waitlist;
 
 -- Policy: Allow anyone to insert (for public signup)
 CREATE POLICY "Allow public waitlist signups"
@@ -32,11 +34,25 @@ CREATE POLICY "Allow public waitlist signups"
     TO anon, authenticated
     WITH CHECK (true);
 
+-- Policy: Allow service role to insert (for backend API operations)
+CREATE POLICY "Service role can insert waitlist entries"
+    ON public.waitlist
+    FOR INSERT
+    TO service_role
+    WITH CHECK (true);
+
 -- Policy: Allow service role to read all entries (for admin use)
 CREATE POLICY "Service role can read all waitlist entries"
     ON public.waitlist
     FOR SELECT
     TO service_role
+    USING (true);
+
+-- Policy: Allow anon/authenticated to select their own email (for duplicate checking)
+CREATE POLICY "Allow public to check waitlist entries"
+    ON public.waitlist
+    FOR SELECT
+    TO anon, authenticated
     USING (true);
 
 -- Drop existing trigger and function if they exist (for idempotent migration)

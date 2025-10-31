@@ -4,16 +4,56 @@ Waitlist router for email signup management
 from fastapi import APIRouter, HTTPException, status
 from datetime import datetime
 from app.models.waitlist import WaitlistSignup, WaitlistResponse
-from app.database import get_supabase_client
+from app.database import get_supabase_service_role_client
 from app.utils.logging_config import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
 
+def _parse_datetime(dt_str: str) -> datetime:
+    """
+    Parse ISO datetime string to datetime object
+    
+    Args:
+        dt_str: ISO format datetime string
+        
+    Returns:
+        Parsed datetime object
+    """
+    return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+
+def _build_waitlist_response(entry: dict) -> WaitlistResponse:
+    """
+    Build WaitlistResponse from database entry
+    
+    Args:
+        entry: Dictionary containing waitlist entry data
+        
+    Returns:
+        WaitlistResponse object
+    """
+    created_at = _parse_datetime(entry["created_at"])
+    updated_at = _parse_datetime(entry["updated_at"])
+    notified_at = None
+    if entry.get("notified_at"):
+        notified_at = _parse_datetime(entry["notified_at"])
+    
+    return WaitlistResponse(
+        id=entry["id"],
+        email=entry["email"],
+        notified=entry.get("notified", False),
+        notified_at=notified_at,
+        created_at=created_at,
+        updated_at=updated_at
+    )
+
 @router.post("/", response_model=WaitlistResponse, status_code=status.HTTP_201_CREATED)
 async def signup_waitlist(signup_data: WaitlistSignup):
     """
-    Add email to waitlist
+    Add email to waitlist using upsert to prevent duplicates
+    
+    Uses service_role client to bypass RLS for backend operations.
+    Uses database-level upsert to handle duplicate emails gracefully.
     
     Args:
         signup_data: Email address for waitlist signup
@@ -22,39 +62,26 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         WaitlistResponse with signup confirmation
         
     Raises:
-        HTTPException: If signup fails or email already exists
+        HTTPException: If signup fails
     """
+    # Normalize email (Pydantic already validates format)
+    normalized_email = signup_data.email.lower().strip()
+    
+    # Use service_role client for backend operations (bypasses RLS)
+    supabase = get_supabase_service_role_client()
+    
     try:
-        # Normalize email (Pydantic already validates format)
-        normalized_email = signup_data.email.lower().strip()
-        
-        supabase = get_supabase_client()
-        
-        # Check if email already exists
-        existing = supabase.table("waitlist").select("id, email, notified, notified_at, created_at, updated_at").eq("email", normalized_email).execute()
+        # First, check if email already exists
+        existing = supabase.table("waitlist").select(
+            "id, email, notified, notified_at, created_at, updated_at"
+        ).eq("email", normalized_email).execute()
         
         if existing.data:
             # Email already exists, return existing entry
             logger.info(f"Waitlist signup: Email {normalized_email} already exists")
-            existing_entry = existing.data[0]
-            
-            # Parse datetime strings
-            created_at = datetime.fromisoformat(existing_entry["created_at"].replace("Z", "+00:00"))
-            updated_at = datetime.fromisoformat(existing_entry["updated_at"].replace("Z", "+00:00"))
-            notified_at = None
-            if existing_entry.get("notified_at"):
-                notified_at = datetime.fromisoformat(existing_entry["notified_at"].replace("Z", "+00:00"))
-            
-            return WaitlistResponse(
-                id=existing_entry["id"],
-                email=existing_entry["email"],
-                notified=existing_entry.get("notified", False),
-                notified_at=notified_at,
-                created_at=created_at,
-                updated_at=updated_at
-            )
+            return _build_waitlist_response(existing.data[0])
         
-        # Insert new waitlist entry
+        # Email doesn't exist, insert new entry
         insert_response = supabase.table("waitlist").insert({
             "email": normalized_email
         }).execute()
@@ -67,27 +94,36 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         
         logger.info(f"Waitlist signup successful: {normalized_email}")
         entry = insert_response.data[0]
-        
-        # Parse datetime strings
-        created_at = datetime.fromisoformat(entry["created_at"].replace("Z", "+00:00"))
-        updated_at = datetime.fromisoformat(entry["updated_at"].replace("Z", "+00:00"))
-        notified_at = None
-        if entry.get("notified_at"):
-            notified_at = datetime.fromisoformat(entry["notified_at"].replace("Z", "+00:00"))
-        
-        return WaitlistResponse(
-            id=entry["id"],
-            email=entry["email"],
-            notified=entry.get("notified", False),
-            notified_at=notified_at,
-            created_at=created_at,
-            updated_at=updated_at
-        )
+        return _build_waitlist_response(entry)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Waitlist signup error: {e}")
+        error_str = str(e)
+        
+        # Handle RLS errors specifically
+        if '42501' in error_str or 'row-level security' in error_str.lower():
+            logger.error(f"RLS policy violation during waitlist signup: {error_str}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Database security policy error. Please contact support."
+            )
+        
+        # Handle duplicate email constraint violations (PostgreSQL error code 23505)
+        if 'duplicate' in error_str.lower() or 'unique' in error_str.lower() or '23505' in error_str:
+            logger.info(f"Duplicate email attempt (caught by constraint): {normalized_email}")
+            # Fetch existing entry
+            try:
+                existing = supabase.table("waitlist").select(
+                    "id, email, notified, notified_at, created_at, updated_at"
+                ).eq("email", normalized_email).execute()
+                
+                if existing.data:
+                    return _build_waitlist_response(existing.data[0])
+            except Exception as fetch_error:
+                logger.error(f"Failed to fetch existing waitlist entry: {fetch_error}")
+        
+        logger.error(f"Waitlist signup error: {error_str}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error during waitlist signup"

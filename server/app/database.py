@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Global Supabase client with connection pooling
 supabase: Optional[Client] = None
+supabase_service_role: Optional[Client] = None
 connection_pool = None
 
 async def init_db():
@@ -26,10 +27,17 @@ async def init_db():
     try:
         logger.info("Initializing database connection...")
         
-        # Initialize Supabase client
+        # Initialize Supabase client with anon key
         supabase = create_client(
             settings.supabase_url, 
             settings.supabase_key
+        )
+        
+        # Initialize Supabase client with service role key for backend operations
+        global supabase_service_role
+        supabase_service_role = create_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key
         )
         
         # Test connection with retry logic and timeout
@@ -137,13 +145,16 @@ async def close_db():
     """
     Close database connections and cleanup
     """
-    global supabase, connection_pool
+    global supabase, supabase_service_role, connection_pool
     
     try:
         if supabase:
             # Supabase client doesn't have explicit close method
             # but we can clear the reference
             supabase = None
+        
+        if supabase_service_role:
+            supabase_service_role = None
         
         if connection_pool:
             connection_pool = None
@@ -187,3 +198,21 @@ def get_db():
     Dependency to get database client for FastAPI routes
     """
     return get_supabase_client()
+
+def get_supabase_service_role_client() -> Client:
+    """
+    Get Supabase client instance with service role key for backend operations
+    This client bypasses RLS and should be used for server-side operations only
+    
+    Returns:
+        Supabase client with service role permissions
+        
+    Raises:
+        RuntimeError: If database not initialized
+    """
+    global supabase_service_role
+    
+    if supabase_service_role is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    
+    return supabase_service_role
