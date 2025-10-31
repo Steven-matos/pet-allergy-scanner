@@ -31,6 +31,7 @@ from app.api.v1.advanced_nutrition.router import router as advanced_nutrition_ro
 from app.api.v1.nutrition import router as nutrition_router
 from app.api.v1.data_quality import router as data_quality_router
 from app.api.v1.health_events.router import router as health_events_router
+from app.api.v1.waitlist.router import router as waitlist_router
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
@@ -139,6 +140,7 @@ app.include_router(advanced_nutrition_router, prefix="/api/v1", tags=["advanced-
 app.include_router(food_management_router, prefix="/api/v1", tags=["food-management"])
 app.include_router(data_quality_router, prefix="/api/v1/data-quality", tags=["data-quality"])
 app.include_router(health_events_router, prefix="/api/v1", tags=["health-events"])
+app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
 
 @app.get("/")
 async def root():

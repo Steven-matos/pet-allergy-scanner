@@ -1,0 +1,4 @@
+"""
+Waitlist API endpoints
+"""
+
