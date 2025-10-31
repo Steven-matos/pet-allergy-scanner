@@ -2,13 +2,30 @@ import type { Metadata } from 'next'
 import Navigation from '@/components/navigation'
 import Footer from '@/components/footer'
 import BackToTop from '@/components/back-to-top'
+import StructuredData from '@/components/structured-data'
 
 /**
  * Terms of Service page metadata
+ * Enhanced SEO for legal documentation
  */
 export const metadata: Metadata = {
-  title: 'Terms of Service - SniffTest',
-  description: 'SniffTest Terms of Service - Read our terms and conditions for using the SniffTest app and services.',
+  title: 'Terms of Service',
+  description: 'SniffTest Terms of Service - Read our terms and conditions for using the SniffTest pet health tracking app and services.',
+  keywords: [
+    'snifftest terms of service',
+    'pet health app terms',
+    'pet tracking app terms',
+    'mobile app terms and conditions',
+  ],
+  openGraph: {
+    title: 'Terms of Service - SniffTest',
+    description: 'Terms and conditions for using the SniffTest pet health tracking application.',
+    url: '/terms',
+    type: 'article',
+  },
+  alternates: {
+    canonical: '/terms',
+  },
 }
 
 /**
@@ -174,6 +191,7 @@ export default function TermsPage() {
 
   return (
     <main>
+      <StructuredData type="terms" />
       <Navigation />
       <div className="min-h-screen bg-white pt-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">

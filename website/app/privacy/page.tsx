@@ -2,13 +2,30 @@ import type { Metadata } from 'next'
 import Navigation from '@/components/navigation'
 import Footer from '@/components/footer'
 import BackToTop from '@/components/back-to-top'
+import StructuredData from '@/components/structured-data'
 
 /**
  * Privacy Policy page metadata
+ * Enhanced SEO for legal documentation
  */
 export const metadata: Metadata = {
-  title: 'Privacy Policy - SniffTest',
-  description: 'SniffTest Privacy Policy - Learn how we collect, use, and protect your personal information and your pet\'s data.',
+  title: 'Privacy Policy',
+  description: 'SniffTest Privacy Policy - Learn how we collect, use, and protect your personal information and your pet\'s data in our pet health tracking application.',
+  keywords: [
+    'snifftest privacy policy',
+    'pet health app privacy',
+    'pet data protection',
+    'pet health tracking privacy',
+  ],
+  openGraph: {
+    title: 'Privacy Policy - SniffTest',
+    description: 'Learn how SniffTest protects your privacy and your pet\'s data.',
+    url: '/privacy',
+    type: 'article',
+  },
+  alternates: {
+    canonical: '/privacy',
+  },
 }
 
 /**
@@ -175,6 +192,7 @@ export default function PrivacyPage() {
 
   return (
     <main>
+      <StructuredData type="privacy" />
       <Navigation />
       <div className="min-h-screen bg-white pt-24">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">

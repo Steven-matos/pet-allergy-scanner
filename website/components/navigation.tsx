@@ -1,18 +1,17 @@
 'use client'
 
 import { Menu, X } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useWaitlist } from '@/contexts/waitlist-context'
 
 /**
- * Navigation component for SniffTest landing page
- * Features: Fixed header with backdrop blur, responsive mobile menu
- * Navigation links properly route to home page sections from any page
+ * Inner navigation component that uses searchParams
+ * Wrapped in Suspense to support static generation
  */
-export default function Navigation() {
+function NavigationContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -150,5 +149,35 @@ export default function Navigation() {
         )}
       </div>
     </nav>
+  )
+}
+
+/**
+ * Navigation component wrapper with Suspense boundary
+ * Required for useSearchParams() in Next.js static generation
+ */
+export default function Navigation() {
+  return (
+    <Suspense fallback={
+      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-md border-b border-border-primary z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+              <Image
+                src="/main-logo-transparent.png"
+                alt="SniffTest Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8 object-contain"
+                priority
+              />
+              <span className="text-lg font-semibold tracking-tight text-text-primary">SniffTest</span>
+            </Link>
+          </div>
+        </div>
+      </nav>
+    }>
+      <NavigationContent />
+    </Suspense>
   )
 }
