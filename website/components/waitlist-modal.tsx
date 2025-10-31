@@ -104,8 +104,18 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Failed to join waitlist' }))
-        throw new Error(errorData.detail || 'Failed to join waitlist')
+        // Handle CORS errors
+        if (response.status === 0 || response.type === 'opaque') {
+          throw new Error('Network error: Please check if the API server allows requests from this domain.')
+        }
+        
+        // Handle HTTP errors
+        const errorData = await response.json().catch(() => ({ 
+          detail: response.status === 400 
+            ? 'Invalid request. Please check your email address.' 
+            : 'Failed to join waitlist. Please try again later.'
+        }))
+        throw new Error(errorData.detail || `Server error (${response.status}). Please try again.`)
       }
 
       setIsSuccess(true)
@@ -113,7 +123,14 @@ export default function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
         onClose()
       }, 2000)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred. Please try again.')
+      // Enhanced error handling for network and CORS issues
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError('Network error: Unable to connect to the server. Please check your internet connection and try again.')
+      } else if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('An unexpected error occurred. Please try again.')
+      }
       setIsSubmitting(false)
     }
   }
