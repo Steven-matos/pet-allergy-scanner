@@ -1,0 +1,398 @@
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SniffTest - Pet Food Ingredient Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2D5016',
+                        'warm-coral': '#E67E22',
+                        'golden-yellow': '#F39C12',
+                        'soft-cream': '#F8F6F0',
+                        'text-primary': '#2C3E50',
+                        'text-secondary': '#BDC3C7',
+                        'border-primary': '#95A5A6',
+                        'safe': '#27AE60',
+                        'warning': '#F39C12',
+                        'error': '#E74C3C'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-white text-text-primary antialiased">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full bg-white/80 backdrop-blur-md border-b border-border-primary z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-2">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <span class="text-white font-semibold text-sm tracking-tight">ST</span>
+                    </div>
+                    <span class="text-lg font-semibold tracking-tight text-text-primary">SniffTest</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-sm font-medium text-text-primary/70 hover:text-text-primary transition-colors">Features</a>
+                    <a href="#how-it-works" class="text-sm font-medium text-text-primary/70 hover:text-text-primary transition-colors">How It Works</a>
+                    <a href="#pricing" class="text-sm font-medium text-text-primary/70 hover:text-text-primary transition-colors">Pricing</a>
+                    <button class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors">Download App</button>
+                </div>
+                <button class="md:hidden">
+                    <i data-lucide="menu" class="w-6 h-6 text-text-primary"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid lg:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="inline-flex items-center space-x-2 px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium mb-6">
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                        <span>On-Device Processing</span>
+                    </div>
+                    <h1 class="text-5xl sm:text-6xl font-semibold tracking-tight text-text-primary mb-6 leading-tight">
+                        Know what's in your pet's food
+                    </h1>
+                    <p class="text-xl text-text-primary/70 mb-8 leading-relaxed">
+                        Instantly scan and analyze pet food ingredients using advanced on-device processing. Identify allergens and safety concerns to keep your dogs and cats healthy with science-backed insights.
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button class="inline-flex items-center justify-center px-6 py-3 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors">
+                            <i data-lucide="download" class="w-5 h-5 mr-2"></i>
+                            Download for iOS
+                        </button>
+                        <button class="inline-flex items-center justify-center px-6 py-3 border border-border-primary hover:border-text-primary/50 text-text-primary font-medium rounded-lg transition-colors">
+                            <i data-lucide="play-circle" class="w-5 h-5 mr-2"></i>
+                            Watch Demo
+                        </button>
+                    </div>
+                    <div class="mt-8 flex items-center space-x-6 text-sm text-text-primary/70">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-safe"></i>
+                            <span>Free to download</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="shield-check" class="w-5 h-5 text-safe"></i>
+                            <span>Vet approved</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative">
+                    <div class="relative w-full aspect-square max-w-lg mx-auto">
+                        <img src="https://images.unsplash.com/photo-1583337130417-3346a1be7dee?w=800&amp;h=800&amp;fit=crop" alt="Happy pet" class="rounded-3xl shadow-2xl object-cover w-full h-full">
+                        <div class="absolute -bottom-6 -left-6 bg-soft-cream p-6 rounded-2xl shadow-xl border border-border-primary max-w-xs">
+                            <div class="flex items-center space-x-3 mb-3">
+                                <div class="w-10 h-10 bg-warm-coral/10 rounded-full flex items-center justify-center">
+                                    <i data-lucide="alert-triangle" class="w-5 h-5 text-warm-coral"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-semibold text-text-primary">Allergen Detected</p>
+                                    <p class="text-xs text-text-primary/70">Contains wheat gluten</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="py-16 px-4 sm:px-6 lg:px-8 bg-soft-cream border-y border-border-primary">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="text-center">
+                    <div class="text-4xl font-semibold tracking-tight text-text-primary mb-2">10K+</div>
+                    <div class="text-sm text-text-primary/70">Scans Completed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-semibold tracking-tight text-text-primary mb-2">5K+</div>
+                    <div class="text-sm text-text-primary/70">Ingredients Analyzed</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-semibold tracking-tight text-text-primary mb-2">98%</div>
+                    <div class="text-sm text-text-primary/70">Accuracy Rate</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-4xl font-semibold tracking-tight text-text-primary mb-2">4.9★</div>
+                    <div class="text-sm text-text-primary/70">App Store Rating</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-24 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-semibold tracking-tight text-text-primary mb-4">Everything you need to keep your pets safe</h2>
+                <p class="text-lg text-text-primary/70 max-w-2xl mx-auto">Comprehensive analysis powered by veterinary science and on-device processing</p>
+            </div>
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Feature 1 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="scan" class="w-6 h-6 text-primary"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Instant Scanning</h3>
+                    <p class="text-text-primary/70">Simply scan the ingredient label with your camera. Our on-device OCR instantly recognizes and analyzes all components.</p>
+                </div>
+                <!-- Feature 2 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-warm-coral/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="alert-circle" class="w-6 h-6 text-warm-coral"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Allergen Detection</h3>
+                    <p class="text-text-primary/70">Automatically identifies common allergens like chicken, beef, dairy, wheat, and more for your specific pet.</p>
+                </div>
+                <!-- Feature 3 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-safe/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="shield-check" class="w-6 h-6 text-safe"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Safety Scoring</h3>
+                    <p class="text-text-primary/70">Get a comprehensive safety score based on ingredient quality and potential health concerns.</p>
+                </div>
+                <!-- Feature 4 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="database" class="w-6 h-6 text-primary"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Ingredient Database</h3>
+                    <p class="text-text-primary/70">Access detailed information on 15,000+ ingredients with nutritional value and safety data.</p>
+                </div>
+                <!-- Feature 5 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-golden-yellow/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="bookmark" class="w-6 h-6 text-golden-yellow"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Scan History</h3>
+                    <p class="text-text-primary/70">Keep track of all your scanned products and easily compare different food options for your pets.</p>
+                </div>
+                <!-- Feature 6 -->
+                <div class="p-6 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <div class="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4">
+                        <i data-lucide="heart" class="w-6 h-6 text-primary"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-text-primary mb-2">Pet Profiles</h3>
+                    <p class="text-text-primary/70">Create profiles for multiple pets with their specific allergies, sensitivities, and dietary needs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section id="how-it-works" class="py-24 px-4 sm:px-6 lg:px-8 bg-soft-cream border-y border-border-primary">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-semibold tracking-tight text-text-primary mb-4">How it works</h2>
+                <p class="text-lg text-text-primary/70 max-w-2xl mx-auto">Three simple steps to safer pet food</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-12">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-primary text-white rounded-2xl flex items-center justify-center text-2xl font-semibold mx-auto mb-6">1</div>
+                    <h3 class="text-xl font-semibold text-text-primary mb-3">Scan the Label</h3>
+                    <p class="text-text-primary/70">Point your camera at the ingredient list on any pet food package. Our on-device OCR technology instantly captures the text using Apple's Neural Engine.</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-primary text-white rounded-2xl flex items-center justify-center text-2xl font-semibold mx-auto mb-6">2</div>
+                    <h3 class="text-xl font-semibold text-text-primary mb-3">Instant Analysis</h3>
+                    <p class="text-text-primary/70">Our FastAPI backend processes ingredients through our comprehensive database, checking for allergens and safety concerns specific to your pet.</p>
+                </div>
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-primary text-white rounded-2xl flex items-center justify-center text-2xl font-semibold mx-auto mb-6">3</div>
+                    <h3 class="text-xl font-semibold text-text-primary mb-3">Get Results</h3>
+                    <p class="text-text-primary/70">View a detailed report with safety scores, allergen warnings, and personalized recommendations for your pet.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-24 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-semibold tracking-tight text-text-primary mb-4">Simple, transparent pricing</h2>
+                <p class="text-lg text-text-primary/70 max-w-2xl mx-auto">Choose the plan that works for you and your pets</p>
+            </div>
+            <div class="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+                <!-- Free Plan -->
+                <div class="p-8 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <h3 class="text-xl font-semibold text-text-primary mb-2">Free</h3>
+                    <p class="text-text-primary/70 mb-6">Perfect for trying out</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-semibold tracking-tight text-text-primary">$0</span>
+                        <span class="text-text-primary/70">/month</span>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">5 scans per month</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">1 pet profile</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">Basic allergen detection</span>
+                        </li>
+                    </ul>
+                    <button class="w-full px-6 py-3 border border-border-primary hover:border-primary text-text-primary font-medium rounded-lg transition-colors">Get Started</button>
+                </div>
+                <!-- Pro Plan -->
+                <div class="p-8 rounded-2xl bg-primary text-white relative hover:shadow-2xl transition-all">
+                    <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-golden-yellow text-white text-xs font-semibold rounded-full">POPULAR</div>
+                    <h3 class="text-xl font-semibold mb-2">Pro</h3>
+                    <p class="text-white/80 mb-6">For pet parents</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-semibold tracking-tight">$9</span>
+                        <span class="text-white/80">/month</span>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 mt-0.5"></i>
+                            <span class="text-sm">Unlimited scans</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 mt-0.5"></i>
+                            <span class="text-sm">Up to 3 pet profiles</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 mt-0.5"></i>
+                            <span class="text-sm">Advanced analysis</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 mt-0.5"></i>
+                            <span class="text-sm">History tracking</span>
+                        </li>
+                    </ul>
+                    <button class="w-full px-6 py-3 bg-white text-primary hover:bg-soft-cream font-medium rounded-lg transition-colors">Get Started</button>
+                </div>
+                <!-- Premium Plan -->
+                <div class="p-8 bg-soft-cream rounded-2xl border border-border-primary hover:border-primary/50 hover:shadow-lg transition-all">
+                    <h3 class="text-xl font-semibold text-text-primary mb-2">Premium</h3>
+                    <p class="text-text-primary/70 mb-6">For multiple pets</p>
+                    <div class="mb-6">
+                        <span class="text-4xl font-semibold tracking-tight text-text-primary">$19</span>
+                        <span class="text-text-primary/70">/month</span>
+                    </div>
+                    <ul class="space-y-3 mb-8">
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">Everything in Pro</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">Unlimited pet profiles</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">Priority support</span>
+                        </li>
+                        <li class="flex items-start space-x-3">
+                            <i data-lucide="check" class="w-5 h-5 text-safe mt-0.5"></i>
+                            <span class="text-sm text-text-primary/70">Export reports</span>
+                        </li>
+                    </ul>
+                    <button class="w-full px-6 py-3 border border-border-primary hover:border-primary text-text-primary font-medium rounded-lg transition-colors">Get Started</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-24 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl font-semibold tracking-tight text-text-primary mb-4">Start protecting your pets today</h2>
+            <p class="text-xl text-text-primary/70 mb-8">Join thousands of pet parents who trust SniffTest</p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <button class="inline-flex items-center justify-center px-8 py-4 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-colors">
+                    <i data-lucide="download" class="w-5 h-5 mr-2"></i>
+                    Download for iOS
+                </button>
+                <button class="inline-flex items-center justify-center px-8 py-4 border border-border-primary hover:border-primary text-text-primary font-medium rounded-lg transition-colors">
+                    Learn More
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-border-primary py-12 px-4 sm:px-6 lg:px-8 bg-soft-cream">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div>
+                    <div class="flex items-center space-x-2 mb-4">
+                        <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                            <span class="text-white font-semibold text-sm tracking-tight">ST</span>
+                        </div>
+                        <span class="text-lg font-semibold tracking-tight text-text-primary">SniffTest</span>
+                    </div>
+                    <p class="text-sm text-text-primary/70">Keeping pets safe, one scan at a time.</p>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-text-primary mb-4">Product</h4>
+                    <ul class="space-y-2 text-sm text-text-primary/70">
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Features</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Pricing</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">FAQ</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Download</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-text-primary mb-4">Company</h4>
+                    <ul class="space-y-2 text-sm text-text-primary/70">
+                        <li><a href="#" class="hover:text-text-primary transition-colors">About</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Blog</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Careers</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Contact</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-text-primary mb-4">Legal</h4>
+                    <ul class="space-y-2 text-sm text-text-primary/70">
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Privacy</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Terms</a></li>
+                        <li><a href="#" class="hover:text-text-primary transition-colors">Security</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="pt-8 border-t border-border-primary flex flex-col sm:flex-row justify-between items-center">
+                <p class="text-sm text-text-primary/70">© 2024 SniffTest. All rights reserved.</p>
+                <div class="flex items-center space-x-6 mt-4 sm:mt-0">
+                    <a href="#" class="text-text-primary/70 hover:text-text-primary transition-colors">
+                        <i data-lucide="twitter" class="w-5 h-5"></i>
+                    </a>
+                    <a href="#" class="text-text-primary/70 hover:text-text-primary transition-colors">
+                        <i data-lucide="facebook" class="w-5 h-5"></i>
+                    </a>
+                    <a href="#" class="text-text-primary/70 hover:text-text-primary transition-colors">
+                        <i data-lucide="instagram" class="w-5 h-5"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+    </script>
+
+</body></html>
