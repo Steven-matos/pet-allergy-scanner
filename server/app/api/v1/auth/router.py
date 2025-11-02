@@ -198,16 +198,61 @@ async def login_user(login_data: UserLogin):
         supabase = get_supabase_client()
         
         # Authenticate with Supabase
-        auth_response = supabase.auth.sign_in_with_password({
-            "email": login_data.email_or_username,
-            "password": login_data.password
-        })
+        try:
+            auth_response = supabase.auth.sign_in_with_password({
+                "email": login_data.email_or_username,
+                "password": login_data.password
+            })
+        except Exception as auth_error:
+            # Check if this is an email verification error
+            error_str = str(auth_error).lower()
+            error_type = type(auth_error).__name__
+            
+            # Check for email not confirmed/verified errors
+            if "email" in error_str and ("not confirmed" in error_str or "not verified" in error_str or "confirmation" in error_str):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Please verify your email address before signing in. Check your email for the verification link."
+                )
+            # Check for invalid credentials
+            if "invalid" in error_str or "credentials" in error_str or "password" in error_str or "auth" in error_type.lower():
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password"
+                )
+            # Re-raise other auth errors with more context
+            logger.error(f"Supabase auth error: {auth_error} (type: {error_type})")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed. Please check your credentials."
+            )
         
+        # Check if user exists but no session (email not verified)
+        if auth_response.user and not auth_response.session:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email address before signing in. Check your email for the verification link."
+            )
+        
+        # Check if user or session is missing
         if not auth_response.user or not auth_response.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
+        
+        # Additional check for email verification status if available
+        try:
+            if hasattr(auth_response.user, 'email_confirmed_at') and auth_response.user.email_confirmed_at is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Please verify your email address before signing in. Check your email for the verification link."
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # If we can't check email_confirmed_at, continue (session check above should catch it)
+            pass
         
         # Get user data
         user_id = auth_response.user.id
