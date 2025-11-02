@@ -23,7 +23,7 @@ import SwiftUI
  */
 struct AuthenticationView: View {
     @EnvironmentObject var authService: AuthService
-    @State private var isLoginMode = false
+    @State private var isLoginMode = true // Default to login mode (most users have accounts)
     @State private var email = ""
     @State private var password = ""
     @State private var username = ""
@@ -43,42 +43,81 @@ struct AuthenticationView: View {
     @State private var showingForgotPassword = false
     @State private var justSwitchedToLogin = false
     
+    // MARK: - Focus Management
+    
+    /// Field identifiers for focus management
+    private enum Field: Hashable {
+        case username
+        case firstName
+        case lastName
+        case email
+        case confirmEmail
+        case password
+        case mfaToken
+    }
+    
+    @FocusState private var focusedField: Field?
+    @StateObject private var keyboardManager = KeyboardAvoidanceManager()
+    
     var body: some View {
-        ScrollView {
-            VStack(spacing: ModernDesignSystem.Spacing.xl) {
-                // Header Section with proper spacing
-                headerSection
-                
-                // Main Authentication Card
-                authenticationCard
-                
-                // Mode Toggle Section
-                modeToggleSection
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.xl) {
+                    // Header Section with proper spacing
+                    headerSection
+                    
+                    // Main Authentication Card
+                    authenticationCard
+                    
+                    // Mode Toggle Section
+                    modeToggleSection
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+                .padding(.bottom, keyboardManager.isKeyboardVisible ? max(keyboardManager.keyboardHeight + 40, 300) : 0) // Dynamic padding: show padding when keyboard is visible, remove when dismissed
             }
-            .padding(ModernDesignSystem.Spacing.lg)
+            .formKeyboardAvoidance()
+            .background(ModernDesignSystem.Colors.background)
+            .ignoresSafeArea(.all)
+            .onChange(of: focusedField) { _, newField in
+                // Scroll to focused field when keyboard appears
+                if let field = newField {
+                    // Small delay to ensure keyboard animation starts
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(field, anchor: .center)
+                        }
+                    }
+                }
+            }
         }
-        .formKeyboardAvoidance()
-        .background(ModernDesignSystem.Colors.background)
-        .ignoresSafeArea(.all)
         .alert("Error", isPresented: $showingAlert) {
             Button("OK") { }
         } message: {
             Text(authService.errorMessage ?? "An error occurred")
         }
-        .alert("Email Verification Required", isPresented: $showingEmailVerificationMessage) {
+        .alert("Registration Successful", isPresented: Binding(
+            get: { showingEmailVerificationMessage && !isLoginMode }, // Only show if in sign-up mode
+            set: { showingEmailVerificationMessage = $0 }
+        )) {
             Button("OK") { 
                 isLoginMode = true
                 justSwitchedToLogin = true
                 clearForm()
-                authService.clearError()
+                showingEmailVerificationMessage = false
+                // Don't clear error here - let it show in status section
             }
         } message: {
-            Text(authService.errorMessage ?? "Please check your email and click the verification link to activate your account. You can then sign in with your credentials.")
+            Text(authService.errorMessage ?? "Registration successful! Please check your email and click the verification link to activate your account. You can then sign in with your credentials.")
         }
         .onChange(of: authService.errorMessage) { _, errorMessage in
             if let message = errorMessage {
-                if message.contains("verify your email") || message.contains("verification link") || message.contains("check your email") {
-                    showingEmailVerificationMessage = true
+                if isEmailVerificationMessage(message) {
+                    // Only show alert for registration (sign up mode)
+                    // For login mode, show in status section instead
+                    if !isLoginMode {
+                        showingEmailVerificationMessage = true
+                    }
+                    // In login mode, message will appear in status section (no alert)
                 } else {
                     showingAlert = true
                 }
@@ -86,6 +125,24 @@ struct AuthenticationView: View {
         }
         .sheet(isPresented: $showingForgotPassword) {
             ForgotPasswordView()
+        }
+        .onChange(of: isLoginMode) { _, newValue in
+            // Auto-focus first field when switching modes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if newValue {
+                    focusedField = .email
+                } else {
+                    focusedField = .username
+                }
+            }
+        }
+        .onChange(of: isMFARequired) { _, newValue in
+            // Auto-focus MFA field when MFA is required
+            if newValue {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    focusedField = .mfaToken
+                }
+            }
         }
     }
     
@@ -167,19 +224,22 @@ struct AuthenticationView: View {
     
     private var statusMessagesSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
-            // Email verification success message
-            if justSwitchedToLogin {
+            // Email verification message (from registration or login)
+            if justSwitchedToLogin || isEmailVerificationMessage(authService.errorMessage) {
                 VStack(spacing: ModernDesignSystem.Spacing.sm) {
                     HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(ModernDesignSystem.Colors.safe)
                             .font(ModernDesignSystem.Typography.subheadline)
-                        Text("Email verification sent!")
+                        Text(justSwitchedToLogin ? "Email verification sent!" : 
+                             (isLoginMode ? "Email Verification Required" : "Registration successful!"))
                             .font(ModernDesignSystem.Typography.subheadline)
                             .fontWeight(.medium)
                             .foregroundColor(ModernDesignSystem.Colors.safe)
                     }
-                    Text("Please check your email and click the verification link, then sign in below.")
+                    Text(isEmailVerificationMessage(authService.errorMessage) ? 
+                         (authService.errorMessage ?? "Please check your email and click the verification link to activate your account. You can then sign in with your credentials.") :
+                         "Please check your email and click the verification link, then sign in below.")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -188,16 +248,19 @@ struct AuthenticationView: View {
                 .background(ModernDesignSystem.Colors.safe.opacity(0.1))
                 .cornerRadius(ModernDesignSystem.CornerRadius.medium)
                 .onAppear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
                         justSwitchedToLogin = false
+                        // Clear the email verification message after showing
+                        if isEmailVerificationMessage(authService.errorMessage) {
+                            authService.clearError()
+                        }
                     }
                 }
             }
             
-            // Error message
+            // Error message (non-email verification errors)
             if let errorMessage = authService.errorMessage, 
-               !errorMessage.contains("verify your email") && 
-               !errorMessage.contains("verification link") {
+               !isEmailVerificationMessage(errorMessage) {
                 HStack(spacing: ModernDesignSystem.Spacing.sm) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(ModernDesignSystem.Colors.unsafe)
@@ -214,6 +277,18 @@ struct AuthenticationView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+    }
+    
+    /// Helper to check if error message is about email verification
+    private func isEmailVerificationMessage(_ message: String?) -> Bool {
+        guard let message = message else { return false }
+        let lowerMessage = message.lowercased()
+        return lowerMessage.contains("verify your email") ||
+               lowerMessage.contains("verification link") ||
+               lowerMessage.contains("check your email") ||
+               lowerMessage.contains("registration successful") ||
+               (lowerMessage.contains("email") && lowerMessage.contains("verification")) ||
+               (lowerMessage.contains("verify") && lowerMessage.contains("email"))
     }
     
     // MARK: - Authentication Form Section
@@ -248,8 +323,11 @@ struct AuthenticationView: View {
                     .modernInputField()
                     .autocapitalization(.none)
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .username)
+                    .id(Field.username)
                     .onSubmit {
                         // Move focus to first name field
+                        focusedField = .firstName
                     }
                     .onChange(of: username) { _, newUsername in
                         isUsernameValid = InputValidator.isValidUsername(newUsername)
@@ -268,15 +346,21 @@ struct AuthenticationView: View {
                 TextField("First Name", text: $firstName)
                     .modernInputField()
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .firstName)
+                    .id(Field.firstName)
                     .onSubmit {
                         // Move focus to last name field
+                        focusedField = .lastName
                     }
                 
                 TextField("Last Name", text: $lastName)
                     .modernInputField()
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .lastName)
+                    .id(Field.lastName)
                     .onSubmit {
                         // Move focus to email field
+                        focusedField = .email
                     }
             }
         }
@@ -291,10 +375,14 @@ struct AuthenticationView: View {
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
                 .submitLabel(.next)
+                .focused($focusedField, equals: .email)
+                .id(Field.email)
                 .onSubmit {
-                    // Move focus to password field or submit if login mode
-                    if isLoginMode && isFormValid {
-                        handleSubmit()
+                    // Move focus to confirm email or password field
+                    if isLoginMode {
+                        focusedField = .password
+                    } else {
+                        focusedField = .confirmEmail
                     }
                 }
                 .onChange(of: email) { _, newEmail in
@@ -321,8 +409,11 @@ struct AuthenticationView: View {
                     .keyboardType(.emailAddress)
                     .autocapitalization(.none)
                     .submitLabel(.next)
+                    .focused($focusedField, equals: .confirmEmail)
+                    .id(Field.confirmEmail)
                     .onSubmit {
                         // Move focus to password field
+                        focusedField = .password
                     }
                     .onChange(of: confirmEmail) { _, newConfirmEmail in
                         doEmailsMatch = email == newConfirmEmail && !newConfirmEmail.isEmpty && !email.isEmpty
@@ -347,9 +438,12 @@ struct AuthenticationView: View {
                     TextField("Password", text: $password)
                         .modernInputField()
                         .submitLabel(isLoginMode ? .done : .next)
+                        .focused($focusedField, equals: .password)
+                        .id(Field.password)
                         .onSubmit {
-                            // Submit form if valid
+                            // Submit form if valid or dismiss keyboard
                             if isFormValid {
+                                focusedField = nil
                                 handleSubmit()
                             }
                         }
@@ -357,9 +451,12 @@ struct AuthenticationView: View {
                     SecureField("Password", text: $password)
                         .modernInputField()
                         .submitLabel(isLoginMode ? .done : .next)
+                        .focused($focusedField, equals: .password)
+                        .id(Field.password)
                         .onSubmit {
-                            // Submit form if valid
+                            // Submit form if valid or dismiss keyboard
                             if isFormValid {
+                                focusedField = nil
                                 handleSubmit()
                             }
                         }
@@ -490,6 +587,14 @@ struct AuthenticationView: View {
                 .multilineTextAlignment(.center)
                 .font(ModernDesignSystem.Typography.title2)
                 .monospacedDigit()
+                .focused($focusedField, equals: .mfaToken)
+                .id(Field.mfaToken)
+                .onSubmit {
+                    if mfaToken.count == 6 {
+                        focusedField = nil
+                        handleMFAVerification()
+                    }
+                }
             
             Button("Verify MFA") {
                 handleMFAVerification()
@@ -507,6 +612,8 @@ struct AuthenticationView: View {
     private var modeToggleSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
             Button(action: {
+                // Dismiss keyboard first
+                focusedField = nil
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isLoginMode.toggle()
                     clearForm()
@@ -596,6 +703,7 @@ struct AuthenticationView: View {
         isUsernameValid = false
         passwordValidation = PasswordValidationResult(isValid: false, issues: [])
         justSwitchedToLogin = false
+        focusedField = nil
         authService.clearError()
     }
 }

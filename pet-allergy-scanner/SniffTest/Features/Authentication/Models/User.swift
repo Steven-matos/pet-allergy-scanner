@@ -165,7 +165,9 @@ struct AuthResponse: Codable {
 }
 
 /// Registration response model for email verification scenarios
-struct RegistrationResponse: Codable {
+/// Can decode from both RegistrationResponse format (with nested user) 
+/// and UserResponse format (with user fields at top level)
+struct RegistrationResponse: Decodable {
     let message: String?
     let emailVerificationRequired: Bool?
     let accessToken: String?
@@ -182,5 +184,60 @@ struct RegistrationResponse: Codable {
         case tokenType = "token_type"
         case expiresIn = "expires_in"
         case user
+        // Top-level user fields (for UserResponse format)
+        case id
+        case email
+        case username
+        case firstName = "first_name"
+        case lastName = "last_name"
+        case imageUrl = "image_url"
+        case role
+        case onboarded
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+    
+    /// Custom decoder to handle both nested user format and top-level user format
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        // Decode registration-specific fields
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        emailVerificationRequired = try container.decodeIfPresent(Bool.self, forKey: .emailVerificationRequired)
+        accessToken = try container.decodeIfPresent(String.self, forKey: .accessToken)
+        refreshToken = try container.decodeIfPresent(String.self, forKey: .refreshToken)
+        tokenType = try container.decodeIfPresent(String.self, forKey: .tokenType)
+        expiresIn = try container.decodeIfPresent(Int.self, forKey: .expiresIn)
+        
+        // Try to decode nested user first
+        if let nestedUser = try? container.decodeIfPresent(User.self, forKey: .user) {
+            user = nestedUser
+        } else if let userId = try? container.decodeIfPresent(String.self, forKey: .id) {
+            // Decode top-level user fields (UserResponse format)
+            let userEmail = try container.decodeIfPresent(String.self, forKey: .email) ?? ""
+            let userUsername = try container.decodeIfPresent(String.self, forKey: .username)
+            let userFirstName = try container.decodeIfPresent(String.self, forKey: .firstName)
+            let userLastName = try container.decodeIfPresent(String.self, forKey: .lastName)
+            let userImageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
+            let userRole = try container.decodeIfPresent(UserRole.self, forKey: .role) ?? .free
+            let userOnboarded = try container.decodeIfPresent(Bool.self, forKey: .onboarded) ?? false
+            let userCreatedAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+            let userUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+            
+            user = User(
+                id: userId,
+                email: userEmail,
+                username: userUsername,
+                firstName: userFirstName,
+                lastName: userLastName,
+                imageUrl: userImageUrl,
+                role: userRole,
+                onboarded: userOnboarded,
+                createdAt: userCreatedAt,
+                updatedAt: userUpdatedAt
+            )
+        } else {
+            user = nil
+        }
     }
 }

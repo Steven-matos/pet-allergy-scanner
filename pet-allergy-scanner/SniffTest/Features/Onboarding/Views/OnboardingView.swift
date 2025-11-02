@@ -419,7 +419,7 @@ struct OnboardingView: View {
                 Image("Illustrations/running")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 300, height: 300)
+                    .frame(maxWidth: 250, maxHeight: 250)
                 
                 Text("Help us track your pet's health and activity for personalized nutrition recommendations.")
                     .font(ModernDesignSystem.Typography.body)
@@ -441,7 +441,7 @@ struct OnboardingView: View {
                         Picker("Year", selection: $birthYear) {
                             Text("Year").tag(nil as Int?)
                             ForEach(availableYears, id: \.self) { year in
-                                Text("\(year)").tag(year as Int?)
+                                Text(String(format: "%d", year)).tag(year as Int?)
                             }
                         }
                         .pickerStyle(MenuPickerStyle())
@@ -521,6 +521,7 @@ struct OnboardingView: View {
             
             Spacer()
         }
+        .padding(.bottom, ModernDesignSystem.Spacing.lg)
     }
     
     private var allergiesAndVetStep: some View {

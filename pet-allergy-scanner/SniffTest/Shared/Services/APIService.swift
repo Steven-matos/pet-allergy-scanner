@@ -581,7 +581,14 @@ class APIService: ObservableObject, @unchecked Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             print("🔐 APIService: Adding Authorization header with token: \(token.prefix(50))...")
         } else {
-            print("❌ APIService: No auth token available for request to \(url)")
+            // Only log warning for endpoints that require auth (not registration/login endpoints)
+            let requiresAuth = !url.absoluteString.contains("/auth/register") && 
+                              !url.absoluteString.contains("/auth/login") &&
+                              !url.absoluteString.contains("/auth/reset-password") &&
+                              !url.absoluteString.contains("/notifications/register-device-anonymous")
+            if requiresAuth {
+                print("⚠️ APIService: No auth token available for request to \(url)")
+            }
         }
         
         if let body = body {
@@ -596,7 +603,7 @@ class APIService: ObservableObject, @unchecked Sendable {
     }
     
     /// Perform network request with error handling using async/await
-    private func performRequest<T: Codable>(_ request: URLRequest, responseType: T.Type) async throws -> T {
+    private func performRequest<T: Decodable>(_ request: URLRequest, responseType: T.Type) async throws -> T {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             
@@ -663,10 +670,41 @@ class APIService: ObservableObject, @unchecked Sendable {
                     }
                     
                     // Check if this is an email verification error
+                    // First, try to get the error message from the response
+                    var errorMessage: String? = nil
+                    
+                    // Try decoding as APIErrorResponse first (has 'detail' field - FastAPI standard)
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
-                        if errorResponse.message.contains("verify your email") {
-                            throw APIError.emailNotVerified(errorResponse.message)
+                        errorMessage = errorResponse.detail
+                    }
+                    // Also check raw JSON for both 'error' and 'detail' fields (different error formats)
+                    else if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        // Check 'error' field first (custom error handler format)
+                        if let errorField = errorDict["error"] as? String {
+                            errorMessage = errorField
                         }
+                        // Fall back to 'detail' field (FastAPI HTTPException format)
+                        else if let detailMessage = errorDict["detail"] as? String {
+                            errorMessage = detailMessage
+                        }
+                    }
+                    
+                    // Check if it's an email verification error
+                    if let message = errorMessage {
+                        let lowerMessage = message.lowercased()
+                        let isEmailVerificationError = lowerMessage.contains("verify your email") || 
+                                                       lowerMessage.contains("check your email") ||
+                                                       (lowerMessage.contains("email") && lowerMessage.contains("verification")) ||
+                                                       (lowerMessage.contains("verify") && lowerMessage.contains("email"))
+                        
+                        if isEmailVerificationError {
+                            throw APIError.emailNotVerified(message)
+                        }
+                    }
+                    
+                    // If we get here and it's a 403, log the response for debugging
+                    if let responseString = String(data: data, encoding: .utf8) {
+                        print("⚠️ APIService: 403 error response (not email verification): \(responseString)")
                     }
                     throw APIError.authenticationError
                 case 429:

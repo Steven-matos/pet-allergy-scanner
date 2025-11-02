@@ -237,11 +237,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
     
     /// Handle registration response
     private func handleRegistrationResponse(_ registrationResponse: RegistrationResponse) async {
+        // Check if email verification is explicitly required
         if let emailVerificationRequired = registrationResponse.emailVerificationRequired, emailVerificationRequired {
             // Email verification required - show message instead of error
             await MainActor.run {
                 authState = .unauthenticated
-                errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account."
+                errorMessage = registrationResponse.message ?? "Please check your email and click the verification link to activate your account. You can then sign in with your credentials."
             }
         } else if let accessToken = registrationResponse.accessToken {
             // Email already verified - proceed with login flow
@@ -284,8 +285,16 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     }
                 }
             }
+        } else if registrationResponse.user != nil {
+            // Successfully registered but no access token - email verification required
+            // This happens when Supabase requires email verification before login
+            await MainActor.run {
+                authState = .unauthenticated
+                // Set success message that will be displayed as green banner
+                errorMessage = registrationResponse.message ?? "Registration successful! Please check your email and click the verification link to activate your account. You can then sign in with your credentials."
+            }
         } else {
-            // Fallback error
+            // Fallback error - no user data and no access token
             await MainActor.run {
                 authState = .unauthenticated
                 errorMessage = "Registration failed. Please try again."

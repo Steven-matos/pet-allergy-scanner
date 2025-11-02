@@ -31,6 +31,15 @@ struct ForgotPasswordView: View {
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
     
+    // MARK: - Focus Management
+    
+    /// Field identifiers for focus management
+    private enum Field: Hashable {
+        case email
+    }
+    
+    @FocusState private var focusedField: Field?
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -70,6 +79,12 @@ struct ForgotPasswordView: View {
             Button("OK") { }
         } message: {
             Text(errorMessage)
+        }
+        .onAppear {
+            // Auto-focus email field when view appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                focusedField = .email
+            }
         }
     }
     
@@ -150,6 +165,14 @@ struct ForgotPasswordView: View {
                 .modernInputField()
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
+                .submitLabel(.done)
+                .focused($focusedField, equals: .email)
+                .onSubmit {
+                    if isFormValid {
+                        focusedField = nil
+                        handleResetPassword()
+                    }
+                }
                 .onChange(of: email) { _, newEmail in
                     isEmailValid = InputValidator.isValidEmail(newEmail)
                 }

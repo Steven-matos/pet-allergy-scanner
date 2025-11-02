@@ -281,7 +281,7 @@ struct EditPetView: View {
                             Picker("Year", selection: $birthYear) {
                                 Text("Select Year").tag(nil as Int?)
                                 ForEach(availableYears, id: \.self) { year in
-                                    Text("\(year, specifier: "%d")").tag(year as Int?)
+                                    Text(String(format: "%d", year)).tag(year as Int?)
                                 }
                             }
                             .pickerStyle(.menu)
