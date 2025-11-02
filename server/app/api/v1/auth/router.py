@@ -131,11 +131,17 @@ async def register_user(user_data: UserCreate):
         user_id = auth_response.user.id
         user_metadata = auth_response.user.user_metadata or {}
         
-        # Create user record in public.users table
+        # Create user record in public.users table using service role to bypass RLS
         try:
-            service_supabase = get_supabase_client()
+            from app.database import get_supabase_service_role_client
+            service_supabase = get_supabase_service_role_client()
             user_record_response = service_supabase.table("users").insert({
                 "id": user_id,
+                "email": user_data.email,
+                "username": user_data.username,
+                "first_name": user_data.first_name,
+                "last_name": user_data.last_name,
+                "role": user_data.role,
                 "onboarded": False,
                 "image_url": None
             }).execute()
@@ -145,6 +151,8 @@ async def register_user(user_data: UserCreate):
         
         except Exception as e:
             logger.error(f"Error creating user record: {e}")
+            # Continue with registration flow even if user record creation fails
+            # The auth user was created successfully, which is the primary concern
         
         # Return merged user data
         return await get_merged_user_data(user_id, {
