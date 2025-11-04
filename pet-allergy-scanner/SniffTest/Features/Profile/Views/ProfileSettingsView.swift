@@ -1069,7 +1069,14 @@ struct EmailSupportView: View {
     }
     
     private func sendEmail() {
-        // Implement email sending
+        // Create mailto URL with subject and body
+        let encodedSubject = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encodedBody = message.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let mailtoString = "mailto:support@snifftestapp.com?subject=\(encodedSubject)&body=\(encodedBody)"
+        
+        if let url = URL(string: mailtoString) {
+            UIApplication.shared.open(url)
+        }
         dismiss()
     }
 }

@@ -135,7 +135,7 @@ struct HelpSupportView: View {
                     description: "Get help from our support team",
                     iconColor: ModernDesignSystem.Colors.primary
                         ) {
-                            if let url = URL(string: "mailto:support@petallergycheck.com") {
+                            if let url = URL(string: "mailto:support@snifftestapp.com") {
                                 UIApplication.shared.open(url)
                             }
                         }

@@ -690,41 +690,33 @@ struct EmptyWeightChartCard: View {
             }
             
             VStack(alignment: .center, spacing: ModernDesignSystem.Spacing.lg) {
-                // Chart placeholder with sample data visualization
-                VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                    Text("📊")
-                        .font(.system(size: 40))
-                    
-                    Text("No weight data yet")
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    
-                    Text("Record your first weight to see trends and charts")
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(height: 200)
-                .frame(maxWidth: .infinity)
-                .background(
+                // Chart placeholder with species-specific image
+                ZStack {
+                    // Background for the chart area
                     RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
                         .fill(ModernDesignSystem.Colors.lightGray)
-                        .overlay(
-                            // Sample chart visualization
-                            VStack {
-                                Spacer()
-                                HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                                    ForEach(0..<7, id: \.self) { index in
-                                        RoundedRectangle(cornerRadius: 2)
-                                            .fill(ModernDesignSystem.Colors.primary.opacity(0.3))
-                                            .frame(width: 8, height: CGFloat(20 + (index * 8)))
-                                    }
-                                }
-                                .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                                Spacer()
-                            }
-                        )
-                )
+                        .frame(height: 200)
+                    
+                    // Centered content
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // Show species-specific scale image centered
+                        Image(pet.species == .dog ? "Illustrations/dog-scale" : "Illustrations/cat-scale")
+                            .resizable()
+                            .renderingMode(.original)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 140)
+                        
+                        Text("No weight data yet")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        Text("Record your first weight to see trends and charts")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
