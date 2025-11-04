@@ -56,7 +56,7 @@ function getHomepageStructuredData() {
       contactPoint: {
         '@type': 'ContactPoint',
         contactType: 'Customer Support',
-        email: 'support@snifftest.app',
+        email: 'support@snifftestapp.com',
       },
     },
     {
