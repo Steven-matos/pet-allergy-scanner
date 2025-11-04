@@ -41,7 +41,7 @@ class CacheManager: ObservableObject {
         ),
         CacheWarmingStrategy(
             priority: .medium,
-            keys: [.scans, .scanHistory, .mfaStatus],
+            keys: [.scans, .scanHistory],
             dependencies: [.scans: [.pets]],
             maxConcurrent: 2
         ),
@@ -269,8 +269,6 @@ class CacheManager: ObservableObject {
             await warmCommonAllergensCache()
         case .safeAlternatives:
             await warmSafeAlternativesCache()
-        case .mfaStatus:
-            await warmMFAStatusCache(userId: userId)
         default:
             break
         }
@@ -345,16 +343,6 @@ class CacheManager: ObservableObject {
             cacheService.store(alternatives, forKey: CacheKey.safeAlternatives.rawValue)
         } catch {
             print("❌ Failed to warm safe alternatives cache: \(error)")
-        }
-    }
-    
-    /// Warm MFA status cache
-    private func warmMFAStatusCache(userId: String) async {
-        do {
-            let mfaStatus = try await APIService.shared.getMFAStatus()
-            cacheService.storeUserData(mfaStatus, forKey: .mfaStatus, userId: userId)
-        } catch {
-            print("❌ Failed to warm MFA status cache: \(error)")
         }
     }
     

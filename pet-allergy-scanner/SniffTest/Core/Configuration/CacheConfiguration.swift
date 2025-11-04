@@ -40,7 +40,6 @@ class CacheConfiguration: @unchecked Sendable {
         .scanHistory: 1800,        // 30 minutes
         .commonAllergens: 86400,   // 24 hours
         .safeAlternatives: 86400,  // 24 hours
-        .mfaStatus: 1800,          // 30 minutes
         .healthStatus: 300,        // 5 minutes
         .systemMetrics: 600        // 10 minutes
     ]
@@ -55,7 +54,6 @@ class CacheConfiguration: @unchecked Sendable {
         .scanHistory: .timeBased(1800),
         .commonAllergens: .timeBased(86400),
         .safeAlternatives: .timeBased(86400),
-        .mfaStatus: .timeBased(1800),
         .healthStatus: .timeBased(300),
         .systemMetrics: .timeBased(600)
     ]
@@ -76,7 +74,7 @@ class CacheConfiguration: @unchecked Sendable {
     
     /// Cache invalidation rules
     let invalidationRules: [CacheInvalidationTrigger: [CacheKey]] = [
-        .userLogout: [.currentUser, .userProfile, .pets, .scans, .scanHistory, .mfaStatus],
+        .userLogout: [.currentUser, .userProfile, .pets, .scans, .scanHistory],
         .userDataChanged: [.currentUser, .userProfile],
         .petDataChanged: [.pets, .petDetails, .scans, .scanHistory],
         .scanDataChanged: [.scans, .scanHistory],

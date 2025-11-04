@@ -1105,66 +1105,6 @@ extension APIService {
     }
 }
 
-// MARK: - MFA Endpoints
-
-extension APIService {
-    /// Setup MFA for current user
-    func setupMFA() async throws -> MFASetupResponse {
-        guard let url = URL(string: "\(baseURL)/mfa/setup") else {
-            throw APIError.invalidURL
-        }
-        
-        let request = await createRequest(url: url, method: "POST")
-        return try await performRequest(request, responseType: MFASetupResponse.self)
-    }
-    
-    /// Enable MFA with verification token
-    func enableMFA(token: String) async throws {
-        guard let url = URL(string: "\(baseURL)/mfa/enable") else {
-            throw APIError.invalidURL
-        }
-        
-        var request = await createRequest(url: url, method: "POST")
-        
-        let mfaData = ["token": token]
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: mfaData)
-        } catch {
-            throw APIError.encodingError
-        }
-        
-        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
-    }
-    
-    /// Verify MFA token
-    func verifyMFA(token: String) async throws {
-        guard let url = URL(string: "\(baseURL)/mfa/verify") else {
-            throw APIError.invalidURL
-        }
-        
-        var request = await createRequest(url: url, method: "POST")
-        
-        let mfaData = ["token": token]
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: mfaData)
-        } catch {
-            throw APIError.encodingError
-        }
-        
-        let _: [String: String] = try await performRequest(request, responseType: [String: String].self)
-    }
-    
-    /// Get MFA status
-    func getMFAStatus() async throws -> MFAStatus {
-        guard let url = URL(string: "\(baseURL)/mfa/status") else {
-            throw APIError.invalidURL
-        }
-        
-        let request = await createRequest(url: url)
-        return try await performRequest(request, responseType: MFAStatus.self)
-    }
-}
-
 // MARK: - GDPR Endpoints
 
 extension APIService {

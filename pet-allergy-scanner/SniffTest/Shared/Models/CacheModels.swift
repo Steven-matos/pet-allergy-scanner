@@ -73,13 +73,6 @@ struct CacheConfig: Sendable {
             maxAge: 86400,
             refreshThreshold: 3600
         ),
-        .mfaStatus: CacheConfig(
-            key: .mfaStatus,
-            policy: .timeBased(1800), // 30 minutes
-            shouldPersist: false,
-            maxAge: 1800,
-            refreshThreshold: 180
-        ),
         .healthStatus: CacheConfig(
             key: .healthStatus,
             policy: .timeBased(300), // 5 minutes

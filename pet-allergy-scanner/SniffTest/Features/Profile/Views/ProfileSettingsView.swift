@@ -34,7 +34,6 @@ struct ProfileSettingsView: View {
     @State private var showingSignOutAlert = false
     @State private var showingDeleteAccountAlert = false
     @State private var cacheSize = "0 MB"
-    @State private var showingMFASetup = false
     @State private var showingGDPRView = false
     @State private var showingSubscriptionView = false
     @State private var showingEditProfile = false
@@ -42,7 +41,6 @@ struct ProfileSettingsView: View {
     // MARK: - Service Dependencies
     @EnvironmentObject var authService: AuthService
     @State private var petService = CachedPetService.shared
-    @StateObject private var mfaService = MFAService.shared
     @StateObject private var gdprService = GDPRService.shared
     @StateObject private var analyticsManager = AnalyticsManager.shared
     @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
@@ -86,13 +84,6 @@ struct ProfileSettingsView: View {
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
                 calculateCacheSize()
-                Task {
-                    await mfaService.checkMFAStatus()
-                }
-            }
-            .sheet(isPresented: $showingMFASetup) {
-                MFASetupView()
-                    .environmentObject(mfaService)
             }
             .sheet(isPresented: $showingGDPRView) {
                 GDPRView()
@@ -264,29 +255,6 @@ struct ProfileSettingsView: View {
                             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         Spacer()
                         Text(authService.currentUser?.role.rawValue.capitalized ?? "Free")
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Multi-Factor Authentication
-                Button(action: { showingMFASetup = true }) {
-                    HStack {
-                        Image(systemName: mfaService.isMFAEnabled ? "checkmark.shield.fill" : "shield")
-                            .foregroundColor(mfaService.isMFAEnabled ? ModernDesignSystem.Colors.safe : ModernDesignSystem.Colors.textSecondary)
-                        Text("Two-Factor Authentication")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                        Spacer()
-                        Text(mfaService.isMFAEnabled ? "Enabled" : "Disabled")
                             .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         Image(systemName: "chevron.right")

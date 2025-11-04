@@ -69,10 +69,6 @@ enum CacheKey: String, CaseIterable {
     case commonAllergens = "common_allergens"
     case safeAlternatives = "safe_alternatives"
     
-    // MFA data
-    case mfaStatus = "mfa_status"
-    case mfaSetup = "mfa_setup"
-    
     // System data
     case healthStatus = "health_status"
     case systemMetrics = "system_metrics"
@@ -119,7 +115,6 @@ class CacheService: ObservableObject {
         CacheKey.scanHistory.rawValue: .timeBased(1800), // 30 minutes
         CacheKey.commonAllergens.rawValue: .timeBased(86400), // 24 hours
         CacheKey.safeAlternatives.rawValue: .timeBased(86400), // 24 hours
-        CacheKey.mfaStatus.rawValue: .timeBased(1800), // 30 minutes
         CacheKey.healthStatus.rawValue: .timeBased(300), // 5 minutes
         CacheKey.systemMetrics.rawValue: .timeBased(600), // 10 minutes
         
