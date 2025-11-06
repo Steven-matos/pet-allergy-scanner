@@ -10,7 +10,7 @@ interface StructuredDataProps {
 
 /**
  * Generates structured data for the homepage
- * Includes SoftwareApplication, Organization, and FAQ schema
+ * Includes SoftwareApplication, Organization, BreadcrumbList, and FAQ schema
  */
 function getHomepageStructuredData() {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://snifftest.app'
@@ -87,6 +87,18 @@ function getHomepageStructuredData() {
         },
         'query-input': 'required name=search_term_string',
       },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'Home',
+          item: baseUrl,
+        },
+      ],
     },
   ]
 }
