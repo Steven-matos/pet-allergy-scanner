@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import UIKit
 
 /// Enhanced pet service with intelligent caching - Modernized for SwiftUI 5.0
 /// 
@@ -40,11 +41,15 @@ final class CachedPetService {
     /// Cache refresh timer for background updates
     private var refreshTimer: Timer?
     
+    /// Cancellable subscriptions for Combine observers
+    private var cancellables = Set<AnyCancellable>()
+    
     // MARK: - Initialization
     
     private init() {
         setupCacheRefreshTimer()
         observeAuthChanges()
+        observeAppLifecycle()
     }
     
     // MARK: - Public Interface
@@ -59,16 +64,28 @@ final class CachedPetService {
             return
         }
         
+        // If pets are already loaded in memory and not forcing refresh, skip
+        if !forceRefresh && !pets.isEmpty {
+            // Still trigger background refresh if cache is stale
+            refreshPetsInBackground()
+            return
+        }
+        
         // Try cache first unless force refresh is requested
         if !forceRefresh {
             if let cachedPets = cacheService.retrieveUserData([Pet].self, forKey: .pets, userId: userId) {
-                self.pets = cachedPets
-                self.isLoading = false
-                self.errorMessage = nil
-                
-                // Trigger background refresh if cache is stale
-                refreshPetsInBackground()
-                return
+                // Only update if we got pets from cache
+                if !cachedPets.isEmpty {
+                    self.pets = cachedPets
+                    self.isLoading = false
+                    self.errorMessage = nil
+                    
+                    print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+                    
+                    // Trigger background refresh if cache is stale
+                    refreshPetsInBackground()
+                    return
+                }
             }
         }
         
@@ -409,10 +426,45 @@ final class CachedPetService {
         }
     }
     
-    /// Observe authentication changes
+    /// Observe authentication changes to clear data on logout
     private func observeAuthChanges() {
-        // This would typically use Combine or NotificationCenter
-        // For now, we'll handle it in the loadPets method
+        // Observe logout notifications to clear pet data
+        NotificationCenter.default.publisher(for: .userDidLogout)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.clearPets()
+                    print("🔄 Cleared pets data after logout")
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Observe login notifications to reload pet data
+        NotificationCenter.default.publisher(for: .userDidLogin)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.loadPets(forceRefresh: false)
+                    print("🔄 Reloading pets after login")
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
+    /// Observe app lifecycle to handle background/foreground transitions
+    private func observeAppLifecycle() {
+        // Reload pets when app becomes active after being in background
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    // Only reload if we have a user and no pets in memory
+                    guard let self = self else { return }
+                    
+                    if self.currentUserId != nil && self.pets.isEmpty {
+                        print("🔄 App became active with no pets in memory - loading from cache")
+                        self.loadPets(forceRefresh: false)
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     /// Invalidate related caches when pets change

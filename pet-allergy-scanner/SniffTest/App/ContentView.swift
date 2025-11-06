@@ -48,6 +48,10 @@ struct ContentView: View {
                                 
                                 // Refresh user data to ensure session is valid
                                 await authService.refreshCurrentUser()
+                                
+                                // Reload pets from cache when app becomes active
+                                // This ensures pets are always available even after long inactivity
+                                petService.loadPets()
                             }
                         }
                 } else {

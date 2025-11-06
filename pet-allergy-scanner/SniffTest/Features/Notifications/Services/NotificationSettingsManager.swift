@@ -544,4 +544,6 @@ extension NotificationSettingsManager: @MainActor UNUserNotificationCenterDelega
 extension Notification.Name {
     static let showBirthdayCelebration = Notification.Name("showBirthdayCelebration")
     static let navigateToScan = Notification.Name("navigateToScan")
+    static let userDidLogin = Notification.Name("userDidLogin")
+    static let userDidLogout = Notification.Name("userDidLogout")
 }

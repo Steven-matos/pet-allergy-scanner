@@ -199,6 +199,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             errorMessage = nil
         }
         
+        // Post logout notification for services to clear their data
+        NotificationCenter.default.post(name: .userDidLogout, object: nil)
+        
         // Clear all caches
         cacheHydrationService.clearAllCaches()
     }
@@ -334,6 +337,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
             await MainActor.run {
                 authState = .authenticated(finalUser)
             }
+            
+            // Post login notification for services to reload their data
+            NotificationCenter.default.post(name: .userDidLogin, object: nil)
+            
         } catch {
             // Fallback to auth response user if getCurrentUser fails
             // Still hydrate caches even on fallback
@@ -342,6 +349,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             await MainActor.run {
                 authState = .authenticated(authResponse.user)
             }
+            
+            // Post login notification for services to reload their data
+            NotificationCenter.default.post(name: .userDidLogin, object: nil)
         }
     }
     
@@ -375,6 +385,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(finalUser)
                 }
+                
+                // Post login notification for services to reload their data
+                NotificationCenter.default.post(name: .userDidLogin, object: nil)
+                
                 print("AuthService: Email confirmation successful")
             } catch {
                 print("AuthService: Email confirmation failed - \(error)")
@@ -404,6 +418,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(user)
                 }
+                
+                // Post login notification for services to reload their data
+                NotificationCenter.default.post(name: .userDidLogin, object: nil)
+                
                 print("AuthService: Password reset token validated")
             } catch {
                 print("AuthService: Password reset validation failed - \(error)")
@@ -441,6 +459,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(finalUser)
                 }
+                
+                // Post login notification for services to reload their data
+                NotificationCenter.default.post(name: .userDidLogin, object: nil)
                 
                 print("AuthService: Auth callback successful")
             } catch {
