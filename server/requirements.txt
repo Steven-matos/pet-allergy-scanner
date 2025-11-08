@@ -1,5 +1,5 @@
 # Core Framework
-fastapi>=0.118.0  # Updated for latest features and security
+fastapi==0.115.6  # Pinned for httpx 0.27.2 compatibility
 uvicorn[standard]>=0.37.0  # Updated for performance improvements
 python-dotenv>=1.1.0  # Updated
 
@@ -29,7 +29,7 @@ pyotp>=2.9.0
 
 # HTTP & Networking
 # httpx pinned to 0.27.2 above for postgrest compatibility
-aiohttp>=3.13.0  # Updated to latest
+aiohttp==3.11.11  # Pinned for httpx 0.27.2 compatibility
 
 # File Upload & Processing
 python-multipart>=0.0.20  # Updated
