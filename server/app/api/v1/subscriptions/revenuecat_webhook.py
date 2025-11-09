@@ -27,7 +27,8 @@ router = APIRouter()
 async def revenuecat_webhook(
     request: Request,
     supabase: Client = Depends(get_supabase_client),
-    x_revenuecat_signature: Optional[str] = Header(None)
+    x_revenuecat_signature: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
 ):
     """
     Handle RevenueCat webhook events
@@ -62,7 +63,7 @@ async def revenuecat_webhook(
         body_str = body.decode('utf-8')
         
         # Verify webhook signature (CRITICAL for security)
-        if not _verify_webhook_signature(body_str, x_revenuecat_signature):
+        if not _verify_webhook_signature(body_str, x_revenuecat_signature, authorization):
             logger.warning("Invalid RevenueCat webhook signature")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -124,21 +125,22 @@ async def revenuecat_webhook(
         return {"status": "error", "message": str(e)}
 
 
-def _verify_webhook_signature(body: str, signature: Optional[str]) -> bool:
+def _verify_webhook_signature(
+    body: str,
+    signature: Optional[str],
+    authorization_header: Optional[str]
+) -> bool:
     """
-    Verify RevenueCat webhook signature using HMAC-SHA256
+    Verify RevenueCat webhook signature or shared secret
     
     Args:
         body: Raw request body as string
         signature: Signature from X-RevenueCat-Signature header
+        authorization_header: Optional Authorization header containing shared secret
         
     Returns:
         True if signature is valid
     """
-    if not signature:
-        logger.warning("No signature provided in webhook request")
-        return False
-    
     # Get webhook secret from environment
     webhook_secret = getattr(settings, 'REVENUECAT_WEBHOOK_SECRET', None)
     
@@ -146,15 +148,21 @@ def _verify_webhook_signature(body: str, signature: Optional[str]) -> bool:
         logger.error("REVENUECAT_WEBHOOK_SECRET not configured")
         return False
     
-    # Compute expected signature
-    expected_signature = hmac.new(
-        webhook_secret.encode('utf-8'),
-        body.encode('utf-8'),
-        hashlib.sha256
-    ).hexdigest()
+    # Prefer HMAC signature if provided (X-RevenueCat-Signature)
+    if signature:
+        expected_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            body.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(signature, expected_signature)
     
-    # Compare signatures (constant-time comparison)
-    return hmac.compare_digest(signature, expected_signature)
+    # Fall back to Authorization header shared-secret comparison
+    if authorization_header:
+        return hmac.compare_digest(authorization_header.strip(), webhook_secret.strip())
+    
+    logger.warning("No signature or authorization header provided in webhook request")
+    return False
 
 
 @router.get("/subscription-info/{user_id}", status_code=status.HTTP_200_OK)
