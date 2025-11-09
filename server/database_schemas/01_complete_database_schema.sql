@@ -784,6 +784,226 @@ CREATE POLICY "Users can delete their own medication reminders" ON public.medica
         )
     );
 
+-- =============================================================================
+-- SUBSCRIPTIONS TABLE (App Store Subscriptions)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.subscriptions (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    tier TEXT NOT NULL CHECK (tier IN ('weekly', 'monthly', 'yearly')),
+    status TEXT NOT NULL CHECK (status IN ('active', 'expired', 'grace_period', 'billing_retry', 'cancelled', 'revoked')),
+    purchase_date TIMESTAMPTZ NOT NULL,
+    expiration_date TIMESTAMPTZ,
+    auto_renew BOOLEAN DEFAULT true,
+    original_transaction_id TEXT NOT NULL UNIQUE,
+    latest_transaction_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON public.subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON public.subscriptions(status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_original_transaction_id ON public.subscriptions(original_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_expiration_date ON public.subscriptions(expiration_date);
+
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own subscriptions" ON public.subscriptions;
+CREATE POLICY "Users can view own subscriptions"
+    ON public.subscriptions
+    FOR SELECT
+    USING ((select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS "Service role can manage all subscriptions" ON public.subscriptions;
+CREATE POLICY "Service role can manage all subscriptions"
+    ON public.subscriptions
+    FOR ALL
+    USING ((select auth.jwt())->>'role' = 'service_role')
+    WITH CHECK ((select auth.jwt())->>'role' = 'service_role');
+
+DROP TRIGGER IF EXISTS update_subscriptions_updated_at ON public.subscriptions;
+CREATE TRIGGER update_subscriptions_updated_at
+    BEFORE UPDATE ON public.subscriptions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE public.subscriptions IS 'Stores App Store subscription data for users';
+COMMENT ON COLUMN public.subscriptions.product_id IS 'App Store product identifier (e.g., sniffweekly, sniffmonthly, sniffyearly)';
+COMMENT ON COLUMN public.subscriptions.tier IS 'Subscription tier: weekly, monthly, or yearly';
+COMMENT ON COLUMN public.subscriptions.status IS 'Current subscription status';
+COMMENT ON COLUMN public.subscriptions.original_transaction_id IS 'Original transaction ID from App Store (unique per subscription)';
+COMMENT ON COLUMN public.subscriptions.latest_transaction_id IS 'Most recent renewal transaction ID';
+
+-- =============================================================================
+-- STORAGE SETUP (Buckets and Policies)
+-- =============================================================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'user-images',
+  'user-images',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'pet-images',
+  'pet-images',
+  true,
+  5242880,
+  ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
+DROP POLICY IF EXISTS "Users can upload their profile image" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their profile image" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their profile image" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their profile image" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view user profile images" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their pet images" ON storage.objects;
+DROP POLICY IF EXISTS "Users can view their pet images" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their pet images" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their pet images" ON storage.objects;
+DROP POLICY IF EXISTS "Public can view pet images" ON storage.objects;
+
+CREATE POLICY "Users can upload their profile image"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'user-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can view their profile image"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'user-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can update their profile image"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'user-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can delete their profile image"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'user-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Public can view user profile images"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'user-images');
+
+CREATE POLICY "Users can upload their pet images"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (
+  bucket_id = 'pet-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can view their pet images"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (
+  bucket_id = 'pet-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can update their pet images"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (
+  bucket_id = 'pet-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Users can delete their pet images"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'pet-images' AND
+  (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+CREATE POLICY "Public can view pet images"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'pet-images');
+
+-- =============================================================================
+-- WAITLIST TABLE
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.waitlist (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL CHECK (LENGTH(email) > 0 AND LENGTH(email) <= 255),
+    notified BOOLEAN DEFAULT FALSE,
+    notified_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_waitlist_email ON public.waitlist(email);
+CREATE INDEX IF NOT EXISTS idx_waitlist_created_at ON public.waitlist(created_at);
+
+ALTER TABLE public.waitlist ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public waitlist signups" ON public.waitlist;
+DROP POLICY IF EXISTS "Service role can insert waitlist entries" ON public.waitlist;
+DROP POLICY IF EXISTS "Service role can read all waitlist entries" ON public.waitlist;
+DROP POLICY IF EXISTS "Allow public to check waitlist entries" ON public.waitlist;
+
+CREATE POLICY "Allow public waitlist signups"
+    ON public.waitlist
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK (true);
+
+CREATE POLICY "Service role can insert waitlist entries"
+    ON public.waitlist
+    FOR INSERT
+    TO service_role
+    WITH CHECK (true);
+
+CREATE POLICY "Service role can read all waitlist entries"
+    ON public.waitlist
+    FOR SELECT
+    TO service_role
+    USING (true);
+
+CREATE POLICY "Allow public to check waitlist entries"
+    ON public.waitlist
+    FOR SELECT
+    TO anon, authenticated
+    USING (true);
+
+DROP TRIGGER IF EXISTS update_waitlist_updated_at ON public.waitlist;
+CREATE TRIGGER update_waitlist_updated_at
+    BEFORE UPDATE ON public.waitlist
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- Insert initial ingredient data
 INSERT INTO public.ingredients (name, aliases, safety_level, species_compatibility, description, common_allergen) VALUES
 ('chicken', ARRAY['chicken meat', 'chicken breast', 'chicken thigh'], 'caution', 'both', 'Common protein source, but frequent allergen', true),

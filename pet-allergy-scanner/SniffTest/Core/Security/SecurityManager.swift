@@ -16,31 +16,72 @@ class SecurityManager: @unchecked Sendable {
     
     private init() {}
     
-    /// Encrypt sensitive data using AES-256-GCM
+    /// **WARNING**: Encryption is currently NOT FUNCTIONAL
+    /// These methods generate a new key each time, making decryption impossible.
+    /// 
+    /// To fix this, you must:
+    /// 1. Generate or derive a persistent encryption key
+    /// 2. Store it securely in Keychain using SecureDataManager
+    /// 3. Retrieve the same key for both encryption and decryption
+    /// 
+    /// DO NOT use these methods in production until properly implemented.
+    
+    /// Encrypt sensitive data using AES-256-GCM (PLACEHOLDER - NOT FUNCTIONAL)
     /// - Parameter data: Data to encrypt
     /// - Returns: Encrypted data with authentication tag
+    /// - Throws: SecurityError if encryption fails or key is not configured
     func encryptData(_ data: Data) throws -> Data {
-        let key = SymmetricKey(size: .bits256)
+        // TODO: Implement proper key derivation and storage
+        throw SecurityError.encryptionFailed
+        
+        // Example implementation (commented out until key storage is implemented):
+        /*
+        guard let key = try? getOrCreateEncryptionKey() else {
+            throw SecurityError.encryptionFailed
+        }
         let sealedBox = try AES.GCM.seal(data, using: key)
-        
-        // Store the key securely in Keychain (simplified for example)
-        // In production, use proper key derivation and storage
-        
         return sealedBox.combined ?? Data()
+        */
     }
     
-    /// Decrypt sensitive data using AES-256-GCM
+    /// Decrypt sensitive data using AES-256-GCM (PLACEHOLDER - NOT FUNCTIONAL)
     /// - Parameter encryptedData: Encrypted data
     /// - Returns: Decrypted data
+    /// - Throws: SecurityError if decryption fails or key is not configured
     func decryptData(_ encryptedData: Data) throws -> Data {
-        // Retrieve key from Keychain (simplified for example)
-        let key = SymmetricKey(size: .bits256)
+        // TODO: Implement proper key retrieval from Keychain
+        throw SecurityError.decryptionFailed
         
+        // Example implementation (commented out until key storage is implemented):
+        /*
+        guard let key = try? getOrCreateEncryptionKey() else {
+            throw SecurityError.decryptionFailed
+        }
         let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
-        let decryptedData = try AES.GCM.open(sealedBox, using: key)
-        
-        return decryptedData
+        return try AES.GCM.open(sealedBox, using: key)
+        */
     }
+    
+    // TODO: Implement key management
+    /*
+    private func getOrCreateEncryptionKey() throws -> SymmetricKey {
+        let keyIdentifier = "com.snifftest.encryption.key"
+        
+        // Try to retrieve existing key from Keychain
+        if let keyData = SecureDataManager.shared.loadData(forKey: keyIdentifier) {
+            return SymmetricKey(data: keyData)
+        }
+        
+        // Generate new key
+        let key = SymmetricKey(size: .bits256)
+        let keyData = key.withUnsafeBytes { Data($0) }
+        
+        // Store in Keychain
+        SecureDataManager.shared.saveData(keyData, forKey: keyIdentifier)
+        
+        return key
+    }
+    */
     
     /// Hash sensitive data using SHA-256
     /// - Parameter data: Data to hash

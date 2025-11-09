@@ -7,5 +7,9 @@
 	<!-- Change to "production" when deploying to App Store -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<key>com.apple.developer.in-app-payments</key>
+	<array>
+		<string>merchant.com.snifftest.app</string>
+	</array>
 </dict>
 </plist>

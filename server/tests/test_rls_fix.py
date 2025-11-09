@@ -7,12 +7,25 @@ import requests
 import json
 import time
 
-BASE_URL = "https://snifftest-api-production.up.railway.app"
-EMAIL = "steven_matos@ymail.com"
-PASSWORD = "Nissan@1990"
+import os
+
+BASE_URL = os.getenv("TEST_BASE_URL", "https://snifftest-api-production.up.railway.app")
+EMAIL = os.getenv("TEST_EMAIL")
+PASSWORD = os.getenv("TEST_PASSWORD")
 
 def test_food_creation_rls_fix():
-    """Test that food creation now works without RLS errors"""
+    """Test that food creation now works without RLS errors
+    
+    Required environment variables:
+    - TEST_EMAIL: Test user email
+    - TEST_PASSWORD: Test user password
+    """
+    
+    # Check for required credentials
+    if not EMAIL or not PASSWORD:
+        print("❌ ERROR: TEST_EMAIL and TEST_PASSWORD environment variables must be set")
+        print("   Set them with: export TEST_EMAIL='your@email.com' TEST_PASSWORD='your_password'")
+        return
     
     # Login
     print("🔐 Logging in...")

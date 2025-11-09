@@ -2,14 +2,16 @@
 //  SubscriptionView.swift
 //  SniffTest
 //
-//  Created by Steven Matos on 10/1/25.
+//  View for managing user subscription and premium features
 //
 
 import SwiftUI
+import StoreKit
 
 /// View for managing user subscription and premium features
 struct SubscriptionView: View {
     @EnvironmentObject var authService: AuthService
+    @StateObject private var viewModel = SubscriptionViewModel()
     
     var body: some View {
         NavigationStack {
@@ -22,7 +24,7 @@ struct SubscriptionView: View {
                     featuresCard
                     
                     // MARK: - Premium Options or Management
-                    if authService.currentUser?.role != .premium {
+                    if !viewModel.hasActiveSubscription {
                         premiumUpgradeCard
                     } else {
                         subscriptionManagementCard
@@ -35,15 +37,39 @@ struct SubscriptionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
+            .overlay {
+                if viewModel.isLoading {
+                    LoadingOverlay(message: "Loading...")
+                }
+            }
+            .alert("Success", isPresented: $viewModel.showingPurchaseSuccess) {
+                Button("OK") { }
+            } message: {
+                Text(viewModel.alertMessage)
+            }
+            .alert("Purchases Restored", isPresented: $viewModel.showingRestoreSuccess) {
+                Button("OK") { }
+            } message: {
+                Text(viewModel.alertMessage)
+            }
+            .alert("Error", isPresented: $viewModel.showingError) {
+                Button("OK") { }
+            } message: {
+                Text(viewModel.alertMessage)
+            }
+        }
+        .task {
+            await viewModel.refreshStatus()
         }
     }
     
     // MARK: - Current Plan Status Card
+    
     private var currentPlanStatusCard: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
             HStack {
-                Image(systemName: authService.currentUser?.role == .premium ? "crown.fill" : "person.circle.fill")
+                Image(systemName: viewModel.hasActiveSubscription ? "crown.fill" : "person.circle.fill")
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(ModernDesignSystem.Typography.title3)
                 
@@ -57,19 +83,25 @@ struct SubscriptionView: View {
             
             // Plan Status
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                Image(systemName: authService.currentUser?.role == .premium ? "crown.fill" : "person.circle.fill")
+                Image(systemName: viewModel.hasActiveSubscription ? "crown.fill" : "person.circle.fill")
                     .font(.system(size: 50))
-                    .foregroundColor(authService.currentUser?.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.primary)
+                    .foregroundColor(viewModel.hasActiveSubscription ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.primary)
                 
-                Text(authService.currentUser?.role.displayName ?? "Free")
+                Text(viewModel.hasActiveSubscription ? "Premium" : "Free")
                     .font(ModernDesignSystem.Typography.title2)
                     .fontWeight(.bold)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                     .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                    .background(authService.currentUser?.role == .premium ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.textSecondary)
-                    .foregroundColor(authService.currentUser?.role == .premium ? ModernDesignSystem.Colors.textPrimary : ModernDesignSystem.Colors.textPrimary)
+                    .background(viewModel.hasActiveSubscription ? ModernDesignSystem.Colors.goldenYellow : ModernDesignSystem.Colors.textSecondary)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                
+                if let expirationDate = viewModel.expirationDateText {
+                    Text("Renews on \(expirationDate)")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -88,6 +120,7 @@ struct SubscriptionView: View {
     }
     
     // MARK: - Features Card
+    
     private var featuresCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
@@ -105,12 +138,12 @@ struct SubscriptionView: View {
             }
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                SubscriptionFeatureRow(icon: "camera.fill", title: "Unlimited Scans", isIncluded: authService.currentUser?.role == .premium)
-                SubscriptionFeatureRow(icon: "checkmark.shield.fill", title: "Advanced Allergen Detection", isIncluded: authService.currentUser?.role == .premium)
-                SubscriptionFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Detailed Analytics", isIncluded: authService.currentUser?.role == .premium)
-                SubscriptionFeatureRow(icon: "pawprint.fill", title: "Unlimited Pets", isIncluded: authService.currentUser?.role == .premium)
-                SubscriptionFeatureRow(icon: "bell.badge.fill", title: "Priority Support", isIncluded: authService.currentUser?.role == .premium)
-                SubscriptionFeatureRow(icon: "star.fill", title: "Early Access to Features", isIncluded: authService.currentUser?.role == .premium)
+                SubscriptionFeatureRow(icon: "camera.fill", title: "Unlimited Scans", isIncluded: viewModel.hasActiveSubscription)
+                SubscriptionFeatureRow(icon: "checkmark.shield.fill", title: "Advanced Allergen Detection", isIncluded: viewModel.hasActiveSubscription)
+                SubscriptionFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Detailed Analytics", isIncluded: viewModel.hasActiveSubscription)
+                SubscriptionFeatureRow(icon: "pawprint.fill", title: "Unlimited Pets", isIncluded: viewModel.hasActiveSubscription)
+                SubscriptionFeatureRow(icon: "bell.badge.fill", title: "Priority Support", isIncluded: viewModel.hasActiveSubscription)
+                SubscriptionFeatureRow(icon: "star.fill", title: "Early Access to Features", isIncluded: viewModel.hasActiveSubscription)
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -129,6 +162,7 @@ struct SubscriptionView: View {
     }
     
     // MARK: - Premium Upgrade Card
+    
     private var premiumUpgradeCard: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
@@ -146,35 +180,44 @@ struct SubscriptionView: View {
             }
             
             // Description
-            Text("Unlock all features and get the most out of your pet's health")
-                .font(ModernDesignSystem.Typography.subheadline)
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+            VStack(spacing: ModernDesignSystem.Spacing.xs) {
+                Text("Unlock all features and get the most out of your pet's health")
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                
+                Text("Cancel anytime")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary.opacity(0.7))
+            }
+            .padding(.horizontal, ModernDesignSystem.Spacing.sm)
             
             // Pricing Options
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                PricingOption(
-                    title: "Monthly",
-                    price: "$4.99",
-                    period: "per month",
-                    isSelected: false
-                )
-                
-                PricingOption(
-                    title: "Annual",
-                    price: "$49.99",
-                    period: "per year",
-                    savings: "Save 17%",
-                    isSelected: true
-                )
+            if !viewModel.products.isEmpty {
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    ForEach(viewModel.products) { product in
+                        PricingOptionButton(
+                            product: product,
+                            isSelected: viewModel.isSelected(product),
+                            savings: viewModel.savings(for: product)
+                        ) {
+                            viewModel.selectProduct(product)
+                        }
+                    }
+                }
+            } else {
+                Text("Loading subscription options...")
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .padding()
             }
             
             // Upgrade Button
-            Button(action: {
-                // TODO: Implement subscription purchase flow
-                HapticFeedback.medium()
-            }) {
+            Button {
+                Task {
+                    await viewModel.purchaseSubscription()
+                }
+            } label: {
                 Text("Upgrade Now")
                     .font(ModernDesignSystem.Typography.title3)
                     .fontWeight(.semibold)
@@ -184,6 +227,15 @@ struct SubscriptionView: View {
                     .background(ModernDesignSystem.Colors.primary)
                     .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             }
+            .disabled(viewModel.selectedProductID == nil)
+            .opacity(viewModel.selectedProductID == nil ? 0.5 : 1.0)
+            
+            // Terms
+            Text("Subscription automatically renews. Cancel anytime in Settings.")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, ModernDesignSystem.Spacing.xs)
         }
         .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.softCream)
@@ -201,6 +253,7 @@ struct SubscriptionView: View {
     }
     
     // MARK: - Subscription Management Card
+    
     private var subscriptionManagementCard: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
             // Card Header
@@ -219,10 +272,9 @@ struct SubscriptionView: View {
             
             // Management Actions
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                Button(action: {
-                    // TODO: Implement subscription management
-                    HapticFeedback.medium()
-                }) {
+                Button {
+                    viewModel.manageSubscription()
+                } label: {
                     HStack {
                         Image(systemName: "gear")
                             .foregroundColor(ModernDesignSystem.Colors.primary)
@@ -239,10 +291,11 @@ struct SubscriptionView: View {
                     .cornerRadius(ModernDesignSystem.CornerRadius.small)
                 }
                 
-                Button(action: {
-                    // TODO: Implement restore purchases
-                    HapticFeedback.medium()
-                }) {
+                Button {
+                    Task {
+                        await viewModel.restorePurchases()
+                    }
+                } label: {
                     HStack {
                         Image(systemName: "arrow.clockwise")
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -276,6 +329,8 @@ struct SubscriptionView: View {
     }
 }
 
+// MARK: - Supporting Views
+
 /// Feature row component for subscription features
 struct SubscriptionFeatureRow: View {
     let icon: String
@@ -303,66 +358,60 @@ struct SubscriptionFeatureRow: View {
     }
 }
 
-/// Pricing option component
-struct PricingOption: View {
-    let title: String
-    let price: String
-    let period: String
-    let savings: String?
+/// Pricing option button component
+struct PricingOptionButton: View {
+    let product: SubscriptionProduct
     let isSelected: Bool
-    
-    init(title: String, price: String, period: String, savings: String? = nil, isSelected: Bool = false) {
-        self.title = title
-        self.price = price
-        self.period = period
-        self.savings = savings
-        self.isSelected = isSelected
-    }
+    let savings: String?
+    let action: () -> Void
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                Text(title)
-                    .font(ModernDesignSystem.Typography.title3)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                
-                HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                    Text(price)
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text(product.planLabel)
                         .font(ModernDesignSystem.Typography.title3)
-                        .fontWeight(.bold)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text(period)
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Text(product.price)
+                            .font(ModernDesignSystem.Typography.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text(product.duration)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    if let savings = savings {
+                        Text(savings)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .fontWeight(.semibold)
+                    }
                 }
                 
-                if let savings = savings {
-                    Text(savings)
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                        .fontWeight(.semibold)
-                }
+                Spacer()
+                
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundColor(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
+                    .font(ModernDesignSystem.Typography.title3)
             }
-            
-            Spacer()
-            
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
-                .font(ModernDesignSystem.Typography.title3)
+            .padding(ModernDesignSystem.Spacing.md)
+            .background(isSelected ? ModernDesignSystem.Colors.primary.opacity(0.1) : ModernDesignSystem.Colors.textSecondary.opacity(0.05))
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(isSelected ? ModernDesignSystem.Colors.primary : Color.clear, lineWidth: 2)
+            )
         }
-        .padding(ModernDesignSystem.Spacing.md)
-        .background(isSelected ? ModernDesignSystem.Colors.primary.opacity(0.1) : ModernDesignSystem.Colors.textSecondary.opacity(0.05))
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(isSelected ? ModernDesignSystem.Colors.primary : Color.clear, lineWidth: 2)
-        )
     }
 }
+
+// MARK: - Preview
 
 #Preview {
     SubscriptionView()
         .environmentObject(AuthService.shared)
 }
-

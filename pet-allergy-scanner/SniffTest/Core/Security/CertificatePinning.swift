@@ -9,23 +9,45 @@ import Foundation
 import Security
 
 /// Certificate pinning utility for enhanced security
+/// 
+/// **IMPORTANT**: Certificate pinning is currently DISABLED in production.
+/// To enable it, you must:
+/// 1. Obtain your server's SSL certificate in DER format
+/// 2. Convert it to base64: `base64 -i certificate.der`
+/// 3. Add the base64 string to pinnedCertificates array below
+/// 4. Test thoroughly before deploying
+///
+/// Without proper certificates, this provides NO security enhancement.
 class CertificatePinning {
     
-    /// Pinned certificate data (base64 encoded)
+    /// Pinned certificate data (base64 encoded DER format)
+    /// **WARNING**: Empty array means certificate pinning is DISABLED
     private static let pinnedCertificates: [String] = [
-        // Add your server's certificate data here
-        // This should be the actual certificate data from your server
+        // TODO: Add your Railway/production server's certificate data here
         // Example: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
     ]
+    
+    /// Certificate pinning is disabled when no certificates are provided
+    private static var isPinningEnabled: Bool {
+        return !pinnedCertificates.isEmpty
+    }
     
     /// Validate server certificate against pinned certificates
     /// - Parameters:
     ///   - serverTrust: Server trust object
     ///   - host: Host name
-    /// - Returns: True if certificate is valid
+    /// - Returns: True if certificate is valid or pinning is disabled
     static func validateCertificate(_ serverTrust: SecTrust, host: String) -> Bool {
+        // Certificate pinning is disabled if no certificates are pinned
+        guard isPinningEnabled else {
+            #if DEBUG
+            print("⚠️ Certificate pinning is DISABLED (no certificates configured)")
+            #endif
+            return true
+        }
+        
         #if DEBUG
-        // Skip certificate pinning in debug builds
+        // Skip certificate pinning validation in debug builds for easier development
         return true
         #else
         

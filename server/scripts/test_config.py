@@ -74,7 +74,7 @@ def test_config():
     # Test database connection (optional)
     print("\n🗄️  Testing Database Connection...")
     try:
-        from app.database import create_client
+        from supabase import create_client
         from app.core.config import settings
         
         client = create_client(settings.supabase_url, settings.supabase_key)

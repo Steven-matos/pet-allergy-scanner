@@ -1,0 +1,4 @@
+"""
+Subscriptions API module
+"""
+

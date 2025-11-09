@@ -97,12 +97,9 @@ class APIService: ObservableObject, @unchecked Sendable {
         get async {
             let token = await authToken
             let hasToken = token != nil
+            #if DEBUG
             print("🔐 APIService: hasAuthToken = \(hasToken)")
-            if let token = token {
-                print("🔐 APIService: Token present: \(token.prefix(50))...")
-            } else {
-                print("❌ APIService: No token found")
-            }
+            #endif
             return hasToken
         }
     }
@@ -111,11 +108,15 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Set authentication token for API requests
     func setAuthToken(_ token: String, refreshToken: String? = nil, expiresIn: Int? = nil) async {
-        print("🔐 APIService: Setting auth token: \(token.prefix(50))...")
+        #if DEBUG
+        print("🔐 APIService: Setting auth token")
+        #endif
         await setAuthTokenInternal(token)
         
         if let refreshToken = refreshToken {
-            print("🔐 APIService: Setting refresh token: \(refreshToken.prefix(50))...")
+            #if DEBUG
+            print("🔐 APIService: Setting refresh token")
+            #endif
             await setRefreshTokenInternal(refreshToken)
         }
         
@@ -123,12 +124,16 @@ class APIService: ObservableObject, @unchecked Sendable {
             // Set expiry to expiresIn seconds from now
             let expiry = Date().addingTimeInterval(TimeInterval(expiresIn))
             await setTokenExpiryInternal(expiry)
+            #if DEBUG
             print("🔐 APIService: Token expires in \(expiresIn) seconds")
+            #endif
         } else {
             // Default to 30 days if no expiry provided
             let expiry = Date().addingTimeInterval(30 * 24 * 60 * 60)
             await setTokenExpiryInternal(expiry)
+            #if DEBUG
             print("🔐 APIService: Token expires in 30 days (default)")
+            #endif
         }
     }
     
@@ -574,21 +579,25 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
-        // Add authorization header with debug logging
+        // Add authorization header
         let token = await authToken
         
         if let token = token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            print("🔐 APIService: Adding Authorization header with token: \(token.prefix(50))...")
+            #if DEBUG
+            print("🔐 APIService: Authorization header added")
+            #endif
         } else {
+            #if DEBUG
             // Only log warning for endpoints that require auth (not registration/login endpoints)
             let requiresAuth = !url.absoluteString.contains("/auth/register") && 
                               !url.absoluteString.contains("/auth/login") &&
                               !url.absoluteString.contains("/auth/reset-password") &&
                               !url.absoluteString.contains("/notifications/register-device-anonymous")
             if requiresAuth {
-                print("⚠️ APIService: No auth token available for request to \(url)")
+                print("⚠️ APIService: No auth token available for request")
             }
+            #endif
         }
         
         if let body = body {
@@ -1252,31 +1261,6 @@ extension APIService {
         }
         
         var request = await createRequest(url: url, method: "POST")
-        
-        // Debug authentication
-        if let token = await authToken {
-            print("🔍 DEBUG: Creating food item with auth token: \(String(token.prefix(20)))...")
-            
-            // Decode JWT token to see its contents (for debugging)
-            let components = token.components(separatedBy: ".")
-            if components.count == 3 {
-                // Decode header
-                if let headerData = Data(base64Encoded: components[0] + "==") {
-                    if let header = try? JSONSerialization.jsonObject(with: headerData) as? [String: Any] {
-                        print("🔍 DEBUG: JWT Header: \(header)")
-                    }
-                }
-                
-                // Decode payload
-                if let payloadData = Data(base64Encoded: components[1] + "==") {
-                    if let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] {
-                        print("🔍 DEBUG: JWT Payload: \(payload)")
-                    }
-                }
-            }
-        } else {
-            print("⚠️ DEBUG: No auth token available for food item creation")
-        }
         
         // Build request body
         var foodData: [String: Any] = [

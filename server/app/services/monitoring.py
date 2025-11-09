@@ -173,53 +173,98 @@ class MonitoringService:
         Check system health
         
         Returns:
-            Health status
+            Health status compatible with iOS HealthStatus model
+            Expected format:
+            {
+                "status": "healthy|degraded|unhealthy",
+                "version": "1.0.0",
+                "environment": "production",
+                "debug_mode": false,
+                "database": {
+                    "status": "healthy",
+                    "connection_count": 10,
+                    "response_time": 0.05,
+                    "last_check": "2025-11-09T12:00:00Z"
+                },
+                "timestamp": 1699536000.0
+            }
         """
         try:
+            from app.core.config import settings
+            import time
+            
             health_status = {
                 "status": "healthy",
-                "timestamp": datetime.utcnow().isoformat(),
-                "checks": {}
+                "version": settings.api_version,
+                "environment": settings.environment,
+                "debug_mode": settings.debug,
+                "timestamp": time.time()
             }
             
             # Check database connection
-            try:
-                self.supabase.table("users").select("id").limit(1).execute()
-                health_status["checks"]["database"] = "healthy"
-            except Exception as e:
-                health_status["checks"]["database"] = f"unhealthy: {str(e)}"
-                health_status["status"] = "unhealthy"
+            db_status = "healthy"
+            db_response_time = 0.0
+            connection_count = settings.database_pool_size
             
-            # Check memory usage
+            try:
+                start_time = time.time()
+                self.supabase.table("users").select("id").limit(1).execute()
+                db_response_time = time.time() - start_time
+                
+                if db_response_time > 1.0:
+                    health_status["status"] = "degraded"
+                    
+            except Exception as e:
+                db_status = "unhealthy"
+                health_status["status"] = "unhealthy"
+                logger.error(f"Database health check failed: {e}")
+            
+            health_status["database"] = {
+                "status": db_status,
+                "connection_count": connection_count,
+                "response_time": round(db_response_time, 3),
+                "last_check": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            # Check memory usage (optional, won't fail if psutil not available)
             try:
                 import psutil
                 memory_percent = psutil.virtual_memory().percent
-                health_status["checks"]["memory"] = f"{memory_percent}%"
                 
                 if memory_percent > 90:
                     health_status["status"] = "degraded"
             except ImportError:
-                health_status["checks"]["memory"] = "unknown"
+                pass
             
-            # Check disk usage
+            # Check disk usage (optional)
             try:
                 import psutil
                 disk_percent = psutil.disk_usage('/').percent
-                health_status["checks"]["disk"] = f"{disk_percent}%"
                 
                 if disk_percent > 90:
                     health_status["status"] = "degraded"
             except ImportError:
-                health_status["checks"]["disk"] = "unknown"
+                pass
             
             return health_status
             
         except Exception as e:
             logger.error(f"Failed to check health: {e}")
+            from app.core.config import settings
+            import time
+            
             return {
                 "status": "unhealthy",
-                "error": str(e),
-                "timestamp": datetime.utcnow().isoformat()
+                "version": settings.api_version,
+                "environment": settings.environment,
+                "debug_mode": settings.debug,
+                "database": {
+                    "status": "unhealthy",
+                    "connection_count": 0,
+                    "response_time": 0.0,
+                    "last_check": datetime.utcnow().isoformat() + "Z"
+                },
+                "timestamp": time.time()
             }
     
     def _send_alert(self, event_data: Dict[str, Any]):

@@ -50,16 +50,12 @@ def get_current_user(
     """
     # Check if credentials were provided
     if credentials is None:
-        logger.error("❌ No Authorization header found in request")
-        logger.error("🔍 DEBUG: HTTPBearer security instance: auto_error=False")
-        logger.error("🔍 DEBUG: This usually means the iOS app isn't sending the Authorization header")
+        logger.error("No Authorization header found in request")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    logger.info(f"🔍 JWT Handler called with credentials: {credentials.credentials[:50]}...")
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -68,82 +64,64 @@ def get_current_user(
     )
     
     try:
-        # First, try Supabase JWT validation with signature verification only
-        # This is more lenient and should work with valid Supabase tokens
-        logger.info(f"🔍 Validating Supabase JWT token: {credentials.credentials[:50]}...")
+        # Validate Supabase JWT with full security checks
+        # This enforces expiration, audience, and issuer validation per 2025 security best practices
+        expected_issuer = f"{settings.supabase_url}/auth/v1"
         
         payload = jwt.decode(
             credentials.credentials, 
             settings.supabase_jwt_secret, 
             algorithms=["HS256"],
+            audience="authenticated",
+            issuer=expected_issuer,
             options={
                 "verify_signature": True,
-                "verify_exp": False,  # Allow expired tokens temporarily
-                "verify_aud": False,  # Don't verify audience
-                "verify_iss": False   # Don't verify issuer
+                "verify_exp": True,      # Enforce token expiration
+                "verify_aud": True,      # Enforce audience validation
+                "verify_iss": True       # Enforce issuer validation
             }
         )
         user_id: str = payload.get("sub")
         
         if user_id is None:
-            logger.error("❌ No user ID found in JWT payload")
+            logger.error("No user ID found in JWT payload")
             raise credentials_exception
-            
-        logger.info(f"✅ Supabase JWT validation successful. User ID: {user_id}")
         
+    except jwt.ExpiredSignatureError:
+        logger.warning("Token has expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidAudienceError:
+        logger.warning("Invalid token audience")
+        raise credentials_exception
+    except jwt.InvalidIssuerError:
+        logger.warning("Invalid token issuer")
+        raise credentials_exception
     except InvalidTokenError as e:
-        logger.warning(f"⚠️ Supabase JWT validation failed: {e}")
+        logger.warning(f"JWT validation failed: {type(e).__name__}")
         
-        # Fallback to server secret validation
+        # Fallback to server secret validation (without logging token details)
         try:
-            logger.info(f"🔍 Trying server secret validation...")
-            
             payload = jwt.decode(
                 credentials.credentials, 
                 settings.secret_key, 
                 algorithms=[settings.algorithm],
-                options={"verify_signature": True}
+                options={
+                    "verify_signature": True,
+                    "verify_exp": True
+                }
             )
             user_id: str = payload.get("sub")
             
             if user_id is None:
-                logger.error("❌ No user ID found in server JWT payload")
+                logger.error("No user ID found in server JWT payload")
                 raise credentials_exception
-                
-            logger.info(f"✅ Server JWT validation successful. User ID: {user_id}")
             
         except InvalidTokenError as e2:
-            logger.error(f"❌ All JWT validation attempts failed:")
-            logger.error(f"   Supabase validation: {e}")
-            logger.error(f"   Server validation: {e2}")
-            
-            # Log token analysis for debugging
-            try:
-                unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
-                logger.error(f"🔍 Token analysis:")
-                logger.error(f"   Payload: {unverified_payload}")
-                
-                # Check expiration
-                exp = unverified_payload.get("exp")
-                if exp:
-                    import time
-                    current_time = int(time.time())
-                    if exp < current_time:
-                        logger.error(f"   ⚠️ Token expired {current_time - exp} seconds ago")
-                    else:
-                        logger.error(f"   ✅ Token expires in {exp - current_time} seconds")
-                
-                # Check issuer
-                iss = unverified_payload.get("iss")
-                expected_iss = f"{settings.supabase_url}/auth/v1"
-                if iss != expected_iss:
-                    logger.error(f"   ⚠️ Issuer mismatch - Expected: {expected_iss}, Got: {iss}")
-                else:
-                    logger.error(f"   ✅ Issuer matches: {iss}")
-                    
-            except Exception as decode_error:
-                logger.error(f"   ❌ Failed to analyze token: {decode_error}")
-            
+            logger.error(f"All JWT validation attempts failed: {type(e).__name__}, {type(e2).__name__}")
             raise credentials_exception
     
     # Get user from database
@@ -154,24 +132,11 @@ def get_current_user(
             settings.supabase_url,
             settings.supabase_service_role_key
         )
-        logger.info(f"Looking up user with ID: {user_id}")
-        logger.info(f"Supabase service client created successfully")
         
         response = supabase.table("users").select("*").eq("id", user_id).execute()
-        logger.info(f"Database query response: {response}")
-        logger.info(f"Response data: {response.data}")
-        logger.info(f"Response count: {response.count if hasattr(response, 'count') else 'N/A'}")
         
         if not response.data:
-            logger.warning(f"User not found in database with ID: {user_id}")
-            # Let's check if there are any users in the database at all
-            try:
-                all_users_response = supabase.table("users").select("id, email").limit(5).execute()
-                logger.info(f"Sample users in database: {all_users_response.data}")
-            except Exception as e:
-                logger.error(f"Failed to query all users: {e}")
-            
-            logger.warning(f"Attempting to create user with ID: {user_id}")
+            logger.warning(f"User not found in database, attempting to create")
             # Try to create the user in the database using JWT payload data
             try:
                 # Extract user data from the JWT payload we already decoded
@@ -186,43 +151,35 @@ def get_current_user(
                     "onboarded": False
                 }
                 
-                logger.info(f"Creating user with data: {create_data}")
                 create_response = supabase.table("users").insert(create_data).execute()
-                logger.info(f"Create response: {create_response}")
-                logger.info(f"Create response data: {create_response.data}")
-                logger.info(f"Create response error: {getattr(create_response, 'error', None)}")
                 
                 if create_response.data:
-                    logger.info(f"Successfully created user: {user_id}")
+                    logger.info("Successfully created user from JWT")
                     user_data = create_response.data[0]
                     return User(**user_data)
                 else:
-                    logger.error(f"Failed to create user: {create_response}")
-                    # Provide more specific error message for debugging
+                    logger.error("User creation failed: No data returned")
                     raise HTTPException(
                         status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=f"User creation failed: No data returned from database",
+                        detail="User creation failed",
                         headers={"WWW-Authenticate": "Bearer"},
                     )
             except Exception as create_error:
-                logger.error(f"Failed to create user: {create_error}")
-                # Provide more specific error message for debugging
+                logger.error(f"User creation error: {type(create_error).__name__}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail=f"User creation failed: {str(create_error)}",
+                    detail="User creation failed",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
         
         user_data = response.data[0]
-        logger.info(f"User found: {user_data.get('email', 'unknown')}")
         return User(**user_data)
         
     except Exception as e:
-        logger.error(f"Error fetching user: {e}")
-        # Provide more specific error message for debugging
+        logger.error(f"Database error: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Database error: {str(e)}",
+            detail="Database error",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
