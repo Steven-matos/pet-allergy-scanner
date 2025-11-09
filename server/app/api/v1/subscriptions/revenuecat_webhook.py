@@ -142,7 +142,7 @@ def _verify_webhook_signature(
         True if signature is valid
     """
     # Get webhook secret from environment
-    webhook_secret = getattr(settings, 'REVENUECAT_WEBHOOK_SECRET', None)
+    webhook_secret = settings.revenuecat_webhook_secret
     
     if not webhook_secret:
         logger.error("REVENUECAT_WEBHOOK_SECRET not configured")
