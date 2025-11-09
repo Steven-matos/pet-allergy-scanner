@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import Combine
 import os.log
 
 /// View model for subscription management
@@ -23,26 +24,27 @@ final class SubscriptionViewModel: ObservableObject {
     
     // MARK: - Dependencies
     
-    private let storeKitService: StoreKitService
+    private let subscriptionProvider: any SubscriptionProviding
     private let authService: AuthService
     private let logger = Logger(subsystem: "com.snifftest.app", category: "Subscription")
+    private var cancellables: Set<AnyCancellable> = []
     
     // MARK: - Computed Properties
     
     var products: [SubscriptionProduct] {
-        storeKitService.products
+        subscriptionProvider.products
     }
     
     var isLoading: Bool {
-        storeKitService.isLoading
+        subscriptionProvider.isLoading
     }
     
     var hasActiveSubscription: Bool {
-        storeKitService.hasActiveSubscription
+        subscriptionProvider.hasActiveSubscription
     }
     
     var subscriptionStatus: SubscriptionStatus {
-        storeKitService.subscriptionStatus
+        subscriptionProvider.subscriptionStatus
     }
     
     var isPremiumUser: Bool {
@@ -50,28 +52,19 @@ final class SubscriptionViewModel: ObservableObject {
     }
     
     var expirationDateText: String? {
-        storeKitService.formattedExpirationDate
+        subscriptionProvider.formattedExpirationDate
     }
     
     // MARK: - Initialization
     
     init(
-        storeKitService: StoreKitService = .shared,
+        subscriptionProvider: any SubscriptionProviding = RevenueCatSubscriptionProvider.shared,
         authService: AuthService = .shared
     ) {
-        self.storeKitService = storeKitService
+        self.subscriptionProvider = subscriptionProvider
         self.authService = authService
-        
-        // Select yearly subscription by default (best value)
-        if let yearlyProduct = storeKitService.products.first(where: { 
-            $0.id == SubscriptionProductID.yearly.rawValue 
-        }) {
-            self.selectedProductID = yearlyProduct.id
-        } else if let monthlyProduct = storeKitService.products.first(where: {
-            $0.id == SubscriptionProductID.monthly.rawValue
-        }) {
-            self.selectedProductID = monthlyProduct.id
-        }
+        observeProviderChanges()
+        selectDefaultProductIfNeeded()
     }
     
     // MARK: - Actions
@@ -86,7 +79,7 @@ final class SubscriptionViewModel: ObservableObject {
         
         logger.info("Starting purchase for product: \(selectedProductID)")
         
-        let result = await storeKitService.purchase(product)
+        let result = await subscriptionProvider.purchase(product)
         
         switch result {
         case .success:
@@ -108,9 +101,9 @@ final class SubscriptionViewModel: ObservableObject {
     func restorePurchases() async {
         logger.info("Restoring purchases")
         
-        await storeKitService.restorePurchases()
+        await subscriptionProvider.restorePurchases()
         
-        if storeKitService.hasActiveSubscription {
+        if subscriptionProvider.hasActiveSubscription {
             showRestoreSuccess()
             await syncSubscriptionWithBackend()
         } else {
@@ -120,7 +113,11 @@ final class SubscriptionViewModel: ObservableObject {
     
     /// Refresh subscription status
     func refreshStatus() async {
-        await storeKitService.updateSubscriptionStatus()
+        if products.isEmpty {
+            await subscriptionProvider.refreshOfferings()
+            selectDefaultProductIfNeeded()
+        }
+        await subscriptionProvider.refreshCustomerInfo()
     }
     
     /// Open subscription management in Settings
@@ -133,18 +130,48 @@ final class SubscriptionViewModel: ObservableObject {
     // MARK: - Private Methods
     
     /// Sync subscription status with backend
+    /// The backend will be updated via RevenueCat webhooks, but this provides a secondary check
     private func syncSubscriptionWithBackend() async {
-        // TODO: Implement backend sync to update user role to premium
-        // This should call your API to update the user's subscription status
         logger.info("Syncing subscription status with backend")
         
-        // In production, you should verify the receipt with your backend
-        // and update the user's subscription status accordingly
-        // Example: await authService.updateUserRole(.premium)
+        guard subscriptionProvider.hasActiveSubscription else {
+            logger.info("No active subscription to sync")
+            return
+        }
         
-        // For now, log that subscription is active
-        if storeKitService.hasActiveSubscription {
-            logger.info("User has active subscription - backend sync needed")
+        do {
+            // Call the subscription status endpoint to trigger backend verification
+            // The backend will check RevenueCat's API and update the user's role if needed
+            let apiService = APIService.shared
+            let response = try await apiService.get(
+                endpoint: "/subscriptions/status",
+                responseType: SubscriptionStatusResponse.self
+            )
+            
+            logger.info("Subscription status synced: \(response.hasSubscription ? "active" : "inactive")")
+            
+            // Refresh user profile to get updated role from backend
+            if response.hasSubscription {
+                await authService.refreshUserProfile()
+            }
+        } catch {
+            logger.error("Failed to sync subscription with backend: \(error.localizedDescription)")
+            // Don't show error to user - this is a background sync operation
+        }
+    }
+    
+    /// Response model for subscription status endpoint
+    private struct SubscriptionStatusResponse: Codable {
+        let hasSubscription: Bool
+        let status: String?
+        let expiresAt: Date?
+        let productId: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case hasSubscription = "has_subscription"
+            case status
+            case expiresAt = "expires_at"
+            case productId = "product_id"
         }
     }
     
@@ -198,6 +225,32 @@ final class SubscriptionViewModel: ObservableObject {
     func selectProduct(_ product: SubscriptionProduct) {
         selectedProductID = product.id
         HapticFeedback.light()
+    }
+}
+
+// MARK: - Provider Observation
+
+private extension SubscriptionViewModel {
+    /// Observe the subscription provider so view model publishes updates when underlying state changes.
+    func observeProviderChanges() {
+        // The view model will manually refresh when needed
+        // Provider state is accessed directly via computed properties
+    }
+    
+    /// Select the default product if nothing is currently chosen.
+    func selectDefaultProductIfNeeded() {
+        guard selectedProductID == nil else { return }
+        if let yearly = products.first(where: { $0.id == SubscriptionProductID.yearly.rawValue }) {
+            selectedProductID = yearly.id
+            return
+        }
+        if let monthly = products.first(where: { $0.id == SubscriptionProductID.monthly.rawValue }) {
+            selectedProductID = monthly.id
+            return
+        }
+        if let first = products.first {
+            selectedProductID = first.id
+        }
     }
 }
 

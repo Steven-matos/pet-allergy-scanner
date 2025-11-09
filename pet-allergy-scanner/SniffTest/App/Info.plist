@@ -11,6 +11,10 @@
 	</array>
 	<key>API_BASE_URL</key>
 	<string>https://snifftest-api-production.up.railway.app/api/v1</string>
+	<key>REVENUECAT_ENTITLEMENT_ID</key>
+	<string>pro_user</string>
+	<key>REVENUECAT_PUBLIC_SDK_KEY</key>
+	<string>test_MOlfphEwuRvEwGfgBdUDfjZFgVJ</string>
 	<key>CFBundleDisplayName</key>
 	<string>SniffTest</string>
 	<key>CFBundleExecutable</key>

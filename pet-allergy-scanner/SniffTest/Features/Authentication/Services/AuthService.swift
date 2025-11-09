@@ -107,6 +107,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
         do {
             let user = try await apiService.getCurrentUser()
             
+            // Identify user with RevenueCat to restore subscription state
+            await RevenueCatConfigurator.identifyUser(user.id)
+            
             // Auto-complete onboarding if user has pets but onboarded is false
             let finalUser = await checkAndCompleteOnboardingIfNeeded(user: user)
             
@@ -193,6 +196,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
     /// Logout current user
     /// Clears authentication state and all user-related data
     func logout() async {
+        // Log out from RevenueCat (clears user association but keeps anonymous purchase history)
+        await RevenueCatConfigurator.logoutUser()
+        
         await apiService.clearAuthToken()
         await MainActor.run {
             authState = .unauthenticated
@@ -235,6 +241,22 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 authState = .authenticated(currentUser)
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+    
+    /// Refresh user profile from backend
+    /// Used after subscription changes to update user role
+    func refreshUserProfile() async {
+        guard case .authenticated = authState else { return }
+        
+        do {
+            let user = try await apiService.getCurrentUser()
+            await MainActor.run {
+                authState = .authenticated(user)
+            }
+        } catch {
+            // Don't logout on refresh error, just log it
+            print("Failed to refresh user profile: \(error.localizedDescription)")
         }
     }
     
@@ -323,6 +345,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
         do {
             let freshUser = try await apiService.getCurrentUser()
             
+            // Identify user with RevenueCat to link purchases across devices
+            await RevenueCatConfigurator.identifyUser(freshUser.id)
+            
             // Only run auto-onboarding check if user is not already onboarded
             let finalUser = if !freshUser.onboarded {
                 await checkAndCompleteOnboardingIfNeeded(user: freshUser)
@@ -345,6 +370,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             // Fallback to auth response user if getCurrentUser fails
             // Still hydrate caches even on fallback
             await cacheHydrationService.hydrateAllCaches()
+            
+            // Identify user with RevenueCat even on fallback
+            await RevenueCatConfigurator.identifyUser(authResponse.user.id)
             
             await MainActor.run {
                 authState = .authenticated(authResponse.user)
@@ -371,6 +399,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             // Fetch user information
             do {
                 let user = try await apiService.getCurrentUser()
+                
+                // Identify user with RevenueCat after email confirmation
+                await RevenueCatConfigurator.identifyUser(user.id)
                 
                 // Only run auto-onboarding check if user is not already onboarded
                 let finalUser = if !user.onboarded {

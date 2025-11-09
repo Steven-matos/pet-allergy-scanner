@@ -38,6 +38,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Configure system warning suppression to reduce console noise
         SystemWarningSuppressionHelper.shared.configure()
         
+        // Configure RevenueCat subscriptions using Info.plist values
+        RevenueCatConfigurator.configure()
+
         return true
     }
     

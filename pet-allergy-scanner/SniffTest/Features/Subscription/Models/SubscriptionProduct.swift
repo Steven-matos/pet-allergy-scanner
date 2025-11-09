@@ -6,31 +6,38 @@
 //
 
 import Foundation
-import StoreKit
+import RevenueCat
 
 /// Represents a subscription product available for purchase
 struct SubscriptionProduct: Identifiable {
     let id: String
-    let product: Product
+    let package: Package
     
+    private var storeProduct: StoreProduct { package.storeProduct }
+
     /// Display title for the subscription
-    var title: String { product.displayName }
+    var title: String { storeProduct.localizedTitle }
     
     /// User-friendly plan label derived from the product identifier
     var planLabel: String {
-        SubscriptionProductID(rawValue: id)?.displayName ?? product.displayName
+        if let mapped = SubscriptionProductID(rawValue: id)?.displayName {
+            return mapped
+        }
+        if let suggested = displayName(for: package.packageType) {
+            return suggested
+        }
+        return storeProduct.localizedTitle
     }
     
     /// Formatted price string
     var price: String {
-        product.displayPrice
+        storeProduct.localizedPriceString
     }
     
     /// Subscription duration description
     var duration: String {
-        guard let subscription = product.subscription else { return "" }
+        guard let period = storeProduct.subscriptionPeriod else { return "" }
         
-        let period = subscription.subscriptionPeriod
         switch period.unit {
         case .day:
             return period.value == 1 ? "per day" : "per \(period.value) days"
@@ -49,13 +56,13 @@ struct SubscriptionProduct: Identifiable {
     /// - Parameter other: The product to compare against
     /// - Returns: Formatted savings string or nil
     func savings(comparedTo other: SubscriptionProduct) -> String? {
-        guard product.subscription != nil,
-              other.product.subscription != nil else {
+        guard storeProduct.subscriptionPeriod != nil,
+              other.storeProduct.subscriptionPeriod != nil else {
             return nil
         }
         
-        let thisMonthlyPrice = monthlyEquivalentPrice(for: product)
-        let otherMonthlyPrice = monthlyEquivalentPrice(for: other.product)
+        let thisMonthlyPrice = monthlyEquivalentPrice(for: storeProduct)
+        let otherMonthlyPrice = monthlyEquivalentPrice(for: other.storeProduct)
         
         guard otherMonthlyPrice > 0 else { return nil }
         
@@ -74,10 +81,9 @@ struct SubscriptionProduct: Identifiable {
     }
     
     /// Calculate monthly equivalent price for comparison
-    private func monthlyEquivalentPrice(for product: Product) -> Decimal {
-        guard let subscription = product.subscription else { return 0 }
+    private func monthlyEquivalentPrice(for product: StoreProduct) -> Decimal {
+        guard let period = product.subscriptionPeriod else { return 0 }
         
-        let period = subscription.subscriptionPeriod
         let price = product.price
         
         switch period.unit {
@@ -91,6 +97,32 @@ struct SubscriptionProduct: Identifiable {
             return price / (12 * Decimal(period.value))
         @unknown default:
             return price
+        }
+    }
+
+    /// Provide a readable plan name from the RevenueCat package type when possible.
+    /// - Parameter packageType: RevenueCat package type derived from the dashboard setup.
+    /// - Returns: Optional display string for the plan.
+    private func displayName(for packageType: PackageType) -> String? {
+        switch packageType {
+        case .weekly:
+            return "Weekly"
+        case .monthly:
+            return "Monthly"
+        case .annual:
+            return "Yearly"
+        case .lifetime:
+            return "Lifetime"
+        case .sixMonth:
+            return "6 Months"
+        case .threeMonth:
+            return "3 Months"
+        case .twoMonth:
+            return "2 Months"
+        case .unknown, .custom:
+            return nil
+        @unknown default:
+            return nil
         }
     }
 }

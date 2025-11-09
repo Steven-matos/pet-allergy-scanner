@@ -39,7 +39,19 @@ struct Configuration {
     static var apiBaseURL: String {
         Bundle.main.object(forInfoDictionaryKey: "API_BASE_URL") as? String ?? "http://localhost:8000/api/v1"
     }
-    
+
+    // MARK: - RevenueCat Configuration
+
+    /// RevenueCat public SDK key used to initialize purchases
+    static var revenueCatAPIKey: String {
+        Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_PUBLIC_SDK_KEY") as? String ?? ""
+    }
+
+    /// RevenueCat entitlement identifier representing premium access
+    static var revenueCatEntitlementID: String {
+        Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_ENTITLEMENT_ID") as? String ?? "pro_user"
+    }
+ 
     // MARK: - Security Configuration
     
     /// Maximum file size for uploads (in bytes)
@@ -106,7 +118,8 @@ extension Configuration {
         let requiredValues = [
             supabaseURL,
             supabaseAnonKey,
-            apiBaseURL
+            apiBaseURL,
+            revenueCatAPIKey
         ]
         
         return requiredValues.allSatisfy { !$0.isEmpty }
@@ -123,7 +136,9 @@ extension Configuration {
             "petBucketName": petBucketName,
             "userBucketName": userBucketName,
             "maxUploadSize": maxUploadSize,
-            "allowedImageTypes": allowedImageTypes
+            "allowedImageTypes": allowedImageTypes,
+            "hasRevenueCatAPIKey": !revenueCatAPIKey.isEmpty,
+            "revenueCatEntitlementID": revenueCatEntitlementID
         ]
     }
 }
