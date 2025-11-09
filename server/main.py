@@ -3,7 +3,7 @@ SniffTest Backend API
 Main FastAPI application with Supabase integration and enhanced security
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -148,7 +148,7 @@ async def root():
     return {"message": "SniffTest API is running", "version": "1.0.0"}
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     """
     Simple health check endpoint for Railway deployment
     
@@ -160,6 +160,11 @@ async def health_check():
         "version": "1.0.0",
         "service": "SniffTest API"
     }
+
+@app.head("/health")
+async def health_check_head() -> Response:
+    """Minimal HEAD responder for Railway health probes"""
+    return Response(status_code=status.HTTP_200_OK)
 
 
 if __name__ == "__main__":

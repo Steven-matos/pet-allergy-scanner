@@ -36,6 +36,9 @@ async def test_health_endpoint():
         # Add proper host header to bypass TrustedHostMiddleware
         response = client.get("/health", headers={"Host": "localhost"})
         elapsed = time.time() - start_time
+
+        # Test HEAD request (Railway uses HEAD pings)
+        head_response = client.head("/health", headers={"Host": "localhost"})
         
         print("\n" + "=" * 60)
         print("RESULTS")
@@ -47,6 +50,7 @@ async def test_health_endpoint():
             print(f"Response JSON: {response.json()}")
         
         print(f"Time to respond: {elapsed:.2f}s")
+        print(f"HEAD Status Code: {head_response.status_code}")
         
         # Verify response
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -57,6 +61,10 @@ async def test_health_endpoint():
         assert "service" in data, "Missing 'service' in response"
         
         # Check response time
+        if head_response.status_code != 200:
+            print("\n❌ HEAD request failed; healthcheck will fail on Railway")
+            return False
+
         if elapsed > 5.0:
             print(f"\n⚠️  WARNING: Slow response ({elapsed:.2f}s)")
             print("   Health endpoint should respond in < 2 seconds")
