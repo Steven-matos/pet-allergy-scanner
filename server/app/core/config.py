@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     enable_data_export: bool = Field(default=True, description="Enable data export for GDPR")
     enable_data_deletion: bool = Field(default=True, description="Enable data deletion for GDPR")
     
+    # RevenueCat Integration
+    revenuecat_webhook_secret: Optional[str] = Field(
+        default=None,
+        alias="REVENUECAT_WEBHOOK_SECRET",
+        description="RevenueCat webhook shared secret for signature verification"
+    )
+    
     # Push Notification Configuration (APNs)
     apns_url: str = Field(
         default="https://api.push.apple.com",

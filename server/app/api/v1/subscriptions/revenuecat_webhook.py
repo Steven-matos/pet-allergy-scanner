@@ -73,8 +73,8 @@ async def revenuecat_webhook(
         # Parse the webhook payload
         payload = await request.json()
         
-        event_type = payload.get("type")
         event_data = payload.get("event", {})
+        event_type = payload.get("type") or event_data.get("type")
         
         logger.info(f"Received RevenueCat webhook: {event_type}")
         
