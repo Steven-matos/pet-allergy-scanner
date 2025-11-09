@@ -18,53 +18,84 @@ connection_pool = None
 
 async def init_db():
     """
-    Initialize database connection and verify connectivity with connection pooling
+    Initialize database connection with non-blocking startup
     
-    Returns False instead of raising exceptions to allow app to start in degraded mode
+    Server starts immediately, database connection happens in background.
+    This ensures Railway healthchecks pass even if database is slow to connect.
+    
+    Returns True immediately to allow server to start
     """
-    global supabase, connection_pool
+    global supabase, supabase_service_role
     
     try:
-        logger.info("Initializing database connection...")
+        logger.info("Initializing database clients...")
         
-        # Initialize Supabase client with anon key
+        # Initialize Supabase clients immediately (no blocking operations)
         supabase = create_client(
             settings.supabase_url, 
             settings.supabase_key
         )
         
-        # Initialize Supabase client with service role key for backend operations
-        global supabase_service_role
         supabase_service_role = create_client(
             settings.supabase_url,
             settings.supabase_service_role_key
         )
         
-        # Test connection with retry logic and timeout
-        max_retries = 2  # Reduced retries for faster startup
-        timeout = 10  # Total timeout for connection test
+        logger.info("✅ Database clients created")
+        
+        # Test connection in background (non-blocking)
+        asyncio.create_task(_test_database_connection())
+        
+        # Always return True so server starts immediately
+        return True
+        
+    except Exception as e:
+        logger.error(f"Database client creation error: {e}")
+        logger.warning("Application will start without database clients")
+        return True  # Still return True to let server start
+
+
+async def _test_database_connection():
+    """
+    Test database connection in background without blocking server startup
+    """
+    try:
+        max_retries = 3
+        retry_delay = 3  # seconds
         
         for attempt in range(max_retries):
             try:
-                # Quick connection test with timeout
                 logger.info(f"Testing database connection (attempt {attempt + 1}/{max_retries})...")
-                response = supabase.table("users").select("id").limit(1).execute()
-                logger.info("✅ Database connection established successfully")
-
-                # Initialize connection pool monitoring (non-blocking) - only in development
+                
+                # Use asyncio.to_thread to make sync call non-blocking
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        lambda: supabase.table("users").select("id").limit(1).execute()
+                    ),
+                    timeout=5.0  # 5 second timeout per attempt
+                )
+                
+                logger.info("✅ Database connection verified successfully")
+                
+                # Start monitoring in non-production only
                 if settings.environment != "production":
                     asyncio.create_task(_start_connection_monitoring())
-
-                return True
-
+                
+                return
+                
+            except asyncio.TimeoutError:
+                logger.warning(f"Database connection attempt {attempt + 1} timed out")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    
             except Exception as e:
                 error_msg = str(e)
                 logger.error(f"Database connection attempt {attempt + 1} failed: {error_msg}")
                 
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2)  # Short delay before retry
+                    await asyncio.sleep(retry_delay)
                 else:
-                    # Log helpful troubleshooting info on final failure
+                    # Log troubleshooting info on final failure
                     if "nodename nor servname provided" in error_msg or "DNS" in error_msg:
                         logger.error("CRITICAL: DNS resolution failed - check SUPABASE_URL")
                     elif "401" in error_msg or "403" in error_msg:
@@ -72,26 +103,37 @@ async def init_db():
                     else:
                         logger.error(f"CRITICAL: Connection failed: {error_msg}")
         
-        return False
+        logger.warning("⚠️  Database connection test failed, but server is running")
+        logger.warning("    API endpoints requiring database will fail until connection is restored")
         
     except Exception as e:
-        logger.error(f"Database initialization error: {e}")
-        logger.warning("Application will start in degraded mode without database")
-        return False
+        logger.error(f"Database connection test error: {e}")
+        logger.warning("Server running in degraded mode")
 
 async def _start_connection_monitoring():
     """
-    Start monitoring database connection health
+    Start monitoring database connection health (non-production only)
     """
     async def monitor_connections():
+        global supabase
         consecutive_failures = 0
         max_consecutive_failures = 5
         
+        # Wait a bit before starting to ensure connection is established
+        await asyncio.sleep(10)
+        
         while True:
             try:
+                if supabase is None:
+                    logger.warning("Database client not initialized, skipping health check")
+                    await asyncio.sleep(30)
+                    continue
+                
                 # Test connection health
                 start_time = time.time()
-                supabase.table("users").select("id").limit(1).execute()
+                await asyncio.to_thread(
+                    lambda: supabase.table("users").select("id").limit(1).execute()
+                )
                 response_time = time.time() - start_time
                 
                 # Reset failure counter on success
@@ -164,9 +206,9 @@ async def close_db():
     except Exception as e:
         logger.error(f"Error closing database connections: {e}")
 
-def get_connection_stats() -> dict:
+async def get_connection_stats() -> dict:
     """
-    Get database connection statistics
+    Get database connection statistics (non-blocking)
     
     Returns:
         Dictionary with connection statistics
@@ -175,9 +217,14 @@ def get_connection_stats() -> dict:
         if not supabase:
             return {"status": "not_initialized"}
         
-        # Test connection performance
+        # Test connection performance (non-blocking)
         start_time = time.time()
-        supabase.table("users").select("id").limit(1).execute()
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: supabase.table("users").select("id").limit(1).execute()
+            ),
+            timeout=5.0
+        )
         response_time = time.time() - start_time
         
         return {
@@ -187,6 +234,11 @@ def get_connection_stats() -> dict:
             "timeout_seconds": settings.database_timeout
         }
         
+    except asyncio.TimeoutError:
+        return {
+            "status": "timeout",
+            "error": "Connection test timed out after 5s"
+        }
     except Exception as e:
         return {
             "status": "error",
