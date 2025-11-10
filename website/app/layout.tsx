@@ -4,6 +4,7 @@ import './globals.css'
 import { WaitlistProvider } from '@/contexts/waitlist-context'
 import WaitlistModalWrapper from '@/components/waitlist-modal-wrapper'
 import StructuredData from '@/components/structured-data'
+import { getAbsoluteUrl, getBaseUrl } from '@/lib/metadata'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -12,8 +13,9 @@ const inter = Inter({ subsets: ['latin'] })
  * Sets up metadata, fonts, and global styles
  * Enhanced with comprehensive SEO for Pet Health Tracking applications
  */
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://snifftest.app'),
+  metadataBase: new URL(getBaseUrl()),
   title: {
     default: 'SniffTest - Pet Food Ingredient Scanner & Health Tracker',
     template: '%s | SniffTest',
@@ -36,7 +38,7 @@ export const metadata: Metadata = {
     'pet food label scanner',
     'pet wellness tracker',
   ],
-  authors: [{ name: 'SniffTest', url: 'https://snifftest.app' }],
+  authors: [{ name: 'SniffTest', url: getBaseUrl() }],
   creator: 'SniffTest',
   publisher: 'SniffTest',
   formatDetection: {
@@ -64,9 +66,9 @@ export const metadata: Metadata = {
     description: 'Scan pet food labels instantly to track ingredients, allergens, and nutrition. The ultimate pet health tracking app for dogs and cats.',
     images: [
       {
-        url: '/main-logo-transparent.png',
-        width: 1200,
-        height: 630,
+        url: getAbsoluteUrl('/main-logo-transparent.png'),
+        width: 1024,
+        height: 1024,
         alt: 'SniffTest - Pet Food Ingredient Scanner',
       },
     ],
@@ -75,14 +77,21 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'SniffTest - Pet Food Ingredient Scanner & Health Tracker',
     description: 'Scan pet food labels instantly to track ingredients, allergens, and nutrition. Keep your pets healthy with AI-powered analysis.',
-    images: ['/main-logo-transparent.png'],
+    images: [getAbsoluteUrl('/main-logo-transparent.png')],
     creator: '@snifftest',
+    site: '@snifftest',
   },
   alternates: {
     canonical: '/',
   },
   category: 'Pet Health',
   classification: 'Mobile Application',
+  // Add verification meta tags here when available
+  // verification: {
+  //   google: 'your-google-verification-code',
+  //   yandex: 'your-yandex-verification-code',
+  //   yahoo: 'your-yahoo-verification-code',
+  // },
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

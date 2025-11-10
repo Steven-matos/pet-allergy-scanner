@@ -52,6 +52,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: website/lib/ contains TypeScript utilities, not Python libraries
+!website/lib/
 parts/
 sdist/
 var/

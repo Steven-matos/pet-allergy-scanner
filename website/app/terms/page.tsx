@@ -3,6 +3,7 @@ import Navigation from '@/components/navigation'
 import Footer from '@/components/footer'
 import BackToTop from '@/components/back-to-top'
 import StructuredData from '@/components/structured-data'
+import { getAbsoluteUrl } from '@/lib/metadata'
 
 /**
  * Terms of Service page metadata
@@ -22,6 +23,20 @@ export const metadata: Metadata = {
     description: 'Terms and conditions for using the SniffTest pet health tracking application.',
     url: '/terms',
     type: 'article',
+    images: [
+      {
+        url: getAbsoluteUrl('/main-logo-transparent.png'),
+        width: 1024,
+        height: 1024,
+        alt: 'SniffTest Terms of Service',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Terms of Service - SniffTest',
+    description: 'Terms and conditions for using the SniffTest pet health tracking application.',
+    images: [getAbsoluteUrl('/main-logo-transparent.png')],
   },
   alternates: {
     canonical: '/terms',

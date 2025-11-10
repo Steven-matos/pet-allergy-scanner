@@ -7,6 +7,7 @@ import HowItWorks from '@/components/how-it-works'
 import CTA from '@/components/cta'
 import Footer from '@/components/footer'
 import ScrollHandler from '@/components/scroll-handler'
+import { getAbsoluteUrl } from '@/lib/metadata'
 
 /**
  * SEO metadata for homepage
@@ -34,9 +35,9 @@ export const metadata: Metadata = {
     siteName: 'SniffTest',
     images: [
       {
-        url: '/main-logo-transparent.png',
-        width: 1200,
-        height: 630,
+        url: getAbsoluteUrl('/main-logo-transparent.png'),
+        width: 1024,
+        height: 1024,
         alt: 'SniffTest - Pet Health Tracking App',
       },
     ],
@@ -47,7 +48,9 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Pet Food Scanner & Health Tracker App - SniffTest',
     description: 'Track your pet\'s health with SniffTest. Scan pet food labels to analyze ingredients, detect allergens, and monitor nutrition.',
-    images: ['/main-logo-transparent.png'],
+    images: [getAbsoluteUrl('/main-logo-transparent.png')],
+    creator: '@snifftest',
+    site: '@snifftest',
   },
   alternates: {
     canonical: '/',

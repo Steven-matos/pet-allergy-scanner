@@ -3,6 +3,7 @@ import Navigation from '@/components/navigation'
 import Footer from '@/components/footer'
 import BackToTop from '@/components/back-to-top'
 import StructuredData from '@/components/structured-data'
+import { getAbsoluteUrl } from '@/lib/metadata'
 
 /**
  * Privacy Policy page metadata
@@ -22,6 +23,20 @@ export const metadata: Metadata = {
     description: 'Learn how SniffTest protects your privacy and your pet\'s data.',
     url: '/privacy',
     type: 'article',
+    images: [
+      {
+        url: getAbsoluteUrl('/main-logo-transparent.png'),
+        width: 1024,
+        height: 1024,
+        alt: 'SniffTest Privacy Policy',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Privacy Policy - SniffTest',
+    description: 'Learn how SniffTest protects your privacy and your pet\'s data.',
+    images: [getAbsoluteUrl('/main-logo-transparent.png')],
   },
   alternates: {
     canonical: '/privacy',
