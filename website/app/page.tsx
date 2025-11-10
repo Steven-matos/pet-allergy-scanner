@@ -7,7 +7,7 @@ import HowItWorks from '@/components/how-it-works'
 import CTA from '@/components/cta'
 import Footer from '@/components/footer'
 import ScrollHandler from '@/components/scroll-handler'
-import { getAbsoluteUrl } from '@/app/utils/metadata'
+import { getAbsoluteUrl } from '@/lib/metadata'
 
 /**
  * SEO metadata for homepage

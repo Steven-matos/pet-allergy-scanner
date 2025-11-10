@@ -3,7 +3,7 @@ import Navigation from '@/components/navigation'
 import Footer from '@/components/footer'
 import BackToTop from '@/components/back-to-top'
 import StructuredData from '@/components/structured-data'
-import { getAbsoluteUrl } from '@/app/utils/metadata'
+import { getAbsoluteUrl } from '@/lib/metadata'
 
 /**
  * Terms of Service page metadata

@@ -4,7 +4,7 @@ import './globals.css'
 import { WaitlistProvider } from '@/contexts/waitlist-context'
 import WaitlistModalWrapper from '@/components/waitlist-modal-wrapper'
 import StructuredData from '@/components/structured-data'
-import { getAbsoluteUrl, getBaseUrl } from '@/app/utils/metadata'
+import { getAbsoluteUrl, getBaseUrl } from '@/lib/metadata'
 
 const inter = Inter({ subsets: ['latin'] })
 
