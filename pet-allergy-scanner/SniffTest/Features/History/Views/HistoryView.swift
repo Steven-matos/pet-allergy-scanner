@@ -381,10 +381,10 @@ struct ModernScanHistoryCard: View {
             )
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .shadow(
-                color: Color.black.opacity(0.05),
-                radius: 4,
-                x: 0,
-                y: 2
+                color: ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
             )
         }
         .buttonStyle(PlainButtonStyle())
@@ -435,7 +435,7 @@ struct EmptyFilterResultsView: View {
             // Empty state icon
             Image(systemName: emptyStateIcon)
                 .font(.system(size: 60))
-                .foregroundColor(ModernDesignSystem.Colors.primary.opacity(0.4))
+                .foregroundColor(ModernDesignSystem.Colors.primary.opacity(0.3))
             
             // Empty state content
             VStack(spacing: ModernDesignSystem.Spacing.md) {
@@ -593,6 +593,12 @@ struct ScanDetailView: View {
 
 /**
  * Scan Detail Header - Trust & Nature Design System
+ * 
+ * Features:
+ * - Prominent product name and scan date
+ * - Large safety status indicator
+ * - Consistent card styling with shadow
+ * - Trust & Nature color palette
  */
 struct ScanDetailHeader: View {
     let scan: Scan
@@ -606,9 +612,15 @@ struct ScanDetailHeader: View {
                         .fontWeight(.bold)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
-                    Text(scan.createdAt, style: .date)
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Image(systemName: "calendar")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        Text(scan.createdAt, style: .date)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
                 }
                 
                 Spacer()
@@ -628,39 +640,61 @@ struct ScanDetailHeader: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
 /**
  * Safety Summary Card - Trust & Nature Design System
+ * 
+ * Features:
+ * - Visual summary of scan results with icons
+ * - Color-coded metrics for quick comprehension
+ * - Trust & Nature palette for semantic meaning
+ * - Enhanced readability with proper spacing
  */
 struct SafetySummaryCard: View {
     let result: ScanResult
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Safety Summary")
-                .font(ModernDesignSystem.Typography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            HStack {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Safety Summary")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
             
             HStack(spacing: ModernDesignSystem.Spacing.lg) {
                 SafetyMetric(
+                    icon: "list.bullet.circle.fill",
                     title: "Ingredients",
                     count: result.ingredientsFound.count,
                     color: ModernDesignSystem.Colors.primary
                 )
                 
                 SafetyMetric(
+                    icon: "star.circle.fill",
                     title: "Confidence",
                     count: Int(result.confidenceScore * 100),
-                    color: ModernDesignSystem.Colors.goldenYellow
+                    color: ModernDesignSystem.Colors.goldenYellow,
+                    suffix: "%"
                 )
                 
                 SafetyMetric(
+                    icon: safetyIcon,
                     title: "Status",
-                    count: 1,
-                    color: safetyColor
+                    count: nil,
+                    color: safetyColor,
+                    customText: safetyStatus
                 )
             }
         }
@@ -671,8 +705,41 @@ struct SafetySummaryCard: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
     
+    /**
+     * Safety icon based on overall safety status
+     */
+    private var safetyIcon: String {
+        switch result.overallSafety {
+        case "safe": return "checkmark.shield.fill"
+        case "caution": return "exclamationmark.shield.fill"
+        case "unsafe": return "xmark.shield.fill"
+        default: return "questionmark.circle.fill"
+        }
+    }
+    
+    /**
+     * Safety status text for display
+     */
+    private var safetyStatus: String {
+        switch result.overallSafety {
+        case "safe": return "Safe"
+        case "caution": return "Caution"
+        case "unsafe": return "Unsafe"
+        default: return "Unknown"
+        }
+    }
+    
+    /**
+     * Color based on safety status
+     */
     private var safetyColor: Color {
         switch result.overallSafety {
         case "safe": return ModernDesignSystem.Colors.safe
@@ -685,18 +752,38 @@ struct SafetySummaryCard: View {
 
 /**
  * Safety Metric - Trust & Nature Design System
+ * 
+ * Features:
+ * - Icon-based visual indicators
+ * - Flexible display with optional count or custom text
+ * - Color-coded for semantic meaning
+ * - Optional suffix for units (e.g., "%")
  */
 struct SafetyMetric: View {
+    let icon: String
     let title: String
-    let count: Int
+    let count: Int?
     let color: Color
+    var suffix: String = ""
+    var customText: String?
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.xs) {
-            Text("\(count)")
+            Image(systemName: icon)
                 .font(ModernDesignSystem.Typography.title2)
-                .fontWeight(.bold)
                 .foregroundColor(color)
+            
+            if let customText = customText {
+                Text(customText)
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(color)
+            } else if let count = count {
+                Text("\(count)\(suffix)")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(color)
+            }
             
             Text(title)
                 .font(ModernDesignSystem.Typography.caption)
@@ -708,16 +795,41 @@ struct SafetyMetric: View {
 
 /**
  * Ingredients List Card - Trust & Nature Design System
+ * 
+ * Features:
+ * - Enhanced header with count badge
+ * - Clean list of ingredients with icons
+ * - Trust & Nature color palette
+ * - Proper spacing and visual hierarchy
  */
 struct IngredientsListCard: View {
     let ingredients: [String]
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Ingredients Found")
-                .font(ModernDesignSystem.Typography.title3)
-                .fontWeight(.semibold)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            HStack {
+                Image(systemName: "leaf.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Ingredients Found")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Text("\(ingredients.count)")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                    .background(ModernDesignSystem.Colors.primary)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+            }
+            
+            Divider()
+                .background(ModernDesignSystem.Colors.borderPrimary)
             
             LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
                 ForEach(ingredients, id: \.self) { ingredient in
@@ -732,43 +844,61 @@ struct IngredientsListCard: View {
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                 .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
 /**
  * Ingredient Row - Trust & Nature Design System
+ * 
+ * Features:
+ * - Clean layout with ingredient icon
+ * - Proper text styling and spacing
+ * - Trust & Nature color palette
+ * - Subtle visual separation
  */
 struct IngredientRow: View {
     let ingredient: String
     
     var body: some View {
-        HStack(spacing: ModernDesignSystem.Spacing.md) {
-            // Ingredient icon
-            Image(systemName: "leaf.fill")
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-                .font(ModernDesignSystem.Typography.caption)
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            Image(systemName: "circle.fill")
+                .foregroundColor(ModernDesignSystem.Colors.primary.opacity(0.6))
+                .font(.system(size: 6))
             
-            // Ingredient name
-            Text(ingredient)
+            Text(ingredient.capitalized)
                 .font(ModernDesignSystem.Typography.body)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             Spacer()
         }
+        .padding(.vertical, ModernDesignSystem.Spacing.xs)
     }
 }
 
 /**
  * Scan Recommendations Card - Trust & Nature Design System
+ * 
+ * Features:
+ * - Enhanced visual hierarchy with recommendation icon
+ * - Color-coded border based on safety level
+ * - Trust & Nature palette for semantic meaning
+ * - Clear, actionable recommendation text
  */
 struct ScanRecommendationsCard: View {
     let result: ScanResult
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            HStack {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: recommendationIcon)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(recommendationColor)
                 
                 Text("Recommendations")
                     .font(ModernDesignSystem.Typography.title3)
@@ -782,24 +912,62 @@ struct ScanRecommendationsCard: View {
                 .multilineTextAlignment(.leading)
         }
         .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
+        .background(recommendationColor.opacity(0.05))
         .cornerRadius(ModernDesignSystem.CornerRadius.medium)
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                .stroke(recommendationColor, lineWidth: 2)
         )
+        .shadow(
+            color: ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
+        )
+    }
+    
+    /**
+     * Icon for recommendation based on safety level
+     */
+    private var recommendationIcon: String {
+        switch result.overallSafety {
+        case "unsafe":
+            return "exclamationmark.triangle.fill"
+        case "caution":
+            return "exclamationmark.shield.fill"
+        case "safe":
+            return "checkmark.shield.fill"
+        default:
+            return "questionmark.circle.fill"
+        }
+    }
+    
+    /**
+     * Color for recommendation based on safety level
+     */
+    private var recommendationColor: Color {
+        switch result.overallSafety {
+        case "unsafe":
+            return ModernDesignSystem.Colors.error
+        case "caution":
+            return ModernDesignSystem.Colors.warning
+        case "safe":
+            return ModernDesignSystem.Colors.safe
+        default:
+            return ModernDesignSystem.Colors.textSecondary
+        }
     }
     
     private var recommendationText: String {
         switch result.overallSafety {
         case "unsafe":
-            return "⚠️ This product contains unsafe ingredients. We recommend avoiding this product for your pet's safety."
+            return "This product contains unsafe ingredients. We recommend avoiding this product for your pet's safety."
         case "caution":
-            return "⚠️ This product may cause issues for some pets. Monitor your pet closely if feeding this product."
+            return "This product may cause issues for some pets. Monitor your pet closely if feeding this product."
         case "safe":
-            return "✅ This product appears safe for your pet. All ingredients are within safe parameters."
+            return "This product appears safe for your pet. All ingredients are within safe parameters."
         default:
-            return "❓ Unable to determine safety status. Please consult with your veterinarian."
+            return "Unable to determine safety status. Please consult with your veterinarian."
         }
     }
 }

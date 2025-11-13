@@ -73,6 +73,9 @@ struct ProfileSettingsView: View {
                         
                         // Support & About
                         supportAboutCard
+                        
+                        // Account Actions
+                        accountActionsCard
                     }
                 }
                 .padding(ModernDesignSystem.Spacing.md)
@@ -260,23 +263,6 @@ struct ProfileSettingsView: View {
                         Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Sign Out
-                Button(action: { showingSignOutAlert = true }) {
-                    HStack {
-                        Image(systemName: "arrow.right.square")
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Text("Sign Out")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.error)
-                        Spacer()
                     }
                     .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
@@ -820,6 +806,38 @@ struct ProfileSettingsView: View {
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Account Actions Card
+    private var accountActionsCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            // Sign Out Button
+            Button(action: { showingSignOutAlert = true }) {
+                HStack {
+                    Image(systemName: "arrow.right.square")
+                        .foregroundColor(ModernDesignSystem.Colors.error)
+                    Text("Sign Out")
+                        .font(ModernDesignSystem.Typography.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(ModernDesignSystem.Colors.error)
+                    Spacer()
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
         .background(ModernDesignSystem.Colors.softCream)
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
