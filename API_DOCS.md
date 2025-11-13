@@ -1,6 +1,6 @@
-# Pet Allergy Scanner API Documentation
+# SniffTest API Documentation
 
-Complete API reference for the Pet Allergy Scanner backend service.
+Complete API reference for the SniffTest backend service.
 
 ## Table of Contents
 
@@ -17,8 +17,11 @@ Complete API reference for the Pet Allergy Scanner backend service.
 - [Food Management](#food-management)
 - [Advanced Nutrition](#advanced-nutrition)
 - [Health Events](#health-events)
+- [Medication Reminders](#medication-reminders)
 - [Multi-Factor Authentication](#multi-factor-authentication)
 - [Push Notifications](#push-notifications)
+- [Subscriptions](#subscriptions)
+- [Waitlist](#waitlist)
 - [GDPR Compliance](#gdpr-compliance)
 - [Monitoring & Health](#monitoring--health)
 - [Data Models](#data-models)
@@ -48,8 +51,11 @@ The API is organized into the following main domains:
 - **Food Management** (`/api/v1/food-management`) - Food database and barcode lookup
 - **Advanced Nutrition** (`/api/v1/advanced-nutrition`) - Weight tracking, trends, comparisons
 - **Health Events** (`/api/v1/health-events`) - Pet health event tracking
+- **Medication Reminders** (`/api/v1/medication-reminders`) - Medication tracking and scheduling
 - **MFA** (`/api/v1/mfa`) - Multi-factor authentication
 - **Notifications** (`/api/v1/notifications`) - Push notification management
+- **Subscriptions** (`/api/v1/subscriptions`) - Premium subscription management with App Store integration
+- **Waitlist** (`/api/v1/waitlist`) - Email waitlist signup
 - **GDPR** (`/api/v1/gdpr`) - Data export and deletion
 - **Monitoring** (`/api/v1/monitoring`) - Health checks and metrics
 
@@ -1239,6 +1245,171 @@ Authorization: Bearer <jwt_token>
 
 ---
 
+## Medication Reminders
+
+### Create Medication Reminder
+
+Create a medication reminder for a pet.
+
+```http
+POST /api/v1/medication-reminders/
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "pet_id": "pet-uuid-here",
+  "health_event_id": "event-uuid-here",
+  "medication_name": "Allergy Medication",
+  "dosage": "5mg",
+  "frequency": "daily",
+  "time_of_day": "09:00",
+  "start_date": "2025-11-13",
+  "end_date": "2025-12-13",
+  "notes": "Give with food"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "reminder-uuid-here",
+  "user_id": "user-uuid-here",
+  "pet_id": "pet-uuid-here",
+  "health_event_id": "event-uuid-here",
+  "medication_name": "Allergy Medication",
+  "dosage": "5mg",
+  "frequency": "daily",
+  "time_of_day": "09:00",
+  "start_date": "2025-11-13",
+  "end_date": "2025-12-13",
+  "is_active": true,
+  "notes": "Give with food",
+  "created_at": "2025-11-13T10:30:00Z",
+  "updated_at": "2025-11-13T10:30:00Z"
+}
+```
+
+### Get Medication Reminders by Pet
+
+Retrieve medication reminders for a specific pet.
+
+```http
+GET /api/v1/medication-reminders/pet/{pet_id}?active_only=true&limit=50&offset=0
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "reminders": [
+    {
+      "id": "reminder-uuid-here",
+      "pet_id": "pet-uuid-here",
+      "medication_name": "Allergy Medication",
+      "dosage": "5mg",
+      "frequency": "daily",
+      "time_of_day": "09:00",
+      "is_active": true
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### Get Medication Reminders by Health Event
+
+Retrieve medication reminders for a specific health event.
+
+```http
+GET /api/v1/medication-reminders/health-event/{health_event_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Get Specific Medication Reminder
+
+Retrieve a specific medication reminder.
+
+```http
+GET /api/v1/medication-reminders/{reminder_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Update Medication Reminder
+
+Update a medication reminder.
+
+```http
+PUT /api/v1/medication-reminders/{reminder_id}
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "dosage": "10mg",
+  "notes": "Increased dosage per vet"
+}
+```
+
+### Delete Medication Reminder
+
+Delete a medication reminder.
+
+```http
+DELETE /api/v1/medication-reminders/{reminder_id}
+Authorization: Bearer <jwt_token>
+```
+
+### Activate Medication Reminder
+
+Activate a deactivated reminder.
+
+```http
+POST /api/v1/medication-reminders/{reminder_id}/activate
+Authorization: Bearer <jwt_token>
+```
+
+### Deactivate Medication Reminder
+
+Deactivate an active reminder.
+
+```http
+POST /api/v1/medication-reminders/{reminder_id}/deactivate
+Authorization: Bearer <jwt_token>
+```
+
+### Get Available Frequencies
+
+Get list of available medication frequencies.
+
+```http
+GET /api/v1/medication-reminders/frequencies/list
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+[
+  {
+    "frequency": "daily",
+    "display_name": "Daily",
+    "description": "Once per day"
+  },
+  {
+    "frequency": "twice_daily",
+    "display_name": "Twice Daily",
+    "description": "Two times per day"
+  },
+  {
+    "frequency": "weekly",
+    "display_name": "Weekly",
+    "description": "Once per week"
+  }
+]
+```
+
+---
+
 ## Multi-Factor Authentication
 
 ### Enable MFA
@@ -1348,6 +1519,149 @@ Content-Type: application/json
   }
 }
 ```
+
+---
+
+## Subscriptions
+
+### Verify App Store Receipt
+
+Verify and activate subscription with App Store receipt.
+
+```http
+POST /api/v1/subscriptions/verify
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "receipt_data": "base64_encoded_receipt_data",
+  "password": "app_specific_shared_secret"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "subscription": {
+    "product_id": "premium_monthly",
+    "transaction_id": "1000000123456789",
+    "expires_date": "2025-12-13T10:30:00Z",
+    "is_trial": false,
+    "auto_renew_status": true
+  },
+  "user_role": "premium"
+}
+```
+
+### Get Subscription Status
+
+Get current user's subscription status.
+
+```http
+GET /api/v1/subscriptions/status
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "has_subscription": true,
+  "subscription": {
+    "id": "sub-uuid-here",
+    "user_id": "user-uuid-here",
+    "product_id": "premium_monthly",
+    "transaction_id": "1000000123456789",
+    "expires_at": "2025-12-13T10:30:00Z",
+    "is_active": true,
+    "auto_renew": true,
+    "is_trial": false
+  },
+  "user_role": "premium"
+}
+```
+
+### Restore Purchases
+
+Restore user's purchases from App Store.
+
+```http
+POST /api/v1/subscriptions/restore
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "receipt_data": "base64_encoded_receipt_data",
+  "password": "app_specific_shared_secret"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Purchases restored successfully",
+  "subscription": {
+    "product_id": "premium_monthly",
+    "expires_date": "2025-12-13T10:30:00Z",
+    "is_active": true
+  }
+}
+```
+
+### App Store Webhook
+
+Handle App Store Server Notifications (internal endpoint, not for client use).
+
+```http
+POST /api/v1/subscriptions/webhook
+Content-Type: application/json
+```
+
+This endpoint receives notifications from Apple for subscription events like renewals, cancellations, and refunds.
+
+### RevenueCat Webhook
+
+Handle RevenueCat webhook events.
+
+```http
+POST /api/v1/subscriptions/revenuecat/webhook
+Content-Type: application/json
+```
+
+This endpoint processes subscription events from RevenueCat integration.
+
+---
+
+## Waitlist
+
+### Signup to Waitlist
+
+Add email to the waitlist.
+
+```http
+POST /api/v1/waitlist/
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "waitlist-uuid-here",
+  "email": "user@example.com",
+  "notified": false,
+  "notified_at": null,
+  "created_at": "2025-11-13T10:30:00Z",
+  "updated_at": "2025-11-13T10:30:00Z",
+  "is_duplicate": false
+}
+```
+
+**Note**: If email already exists, returns existing entry with `is_duplicate: true`.
 
 ---
 
@@ -1574,11 +1888,14 @@ class PetAllergyScannerAPI:
 - Complete authentication system with MFA
 - Pet management with birthday tracking
 - Ingredient scanning and analysis
-- **NEW**: Comprehensive nutrition tracking API
-- **NEW**: Food database with barcode scanning
-- **NEW**: Advanced nutrition (weight tracking, trends, comparisons)
-- **NEW**: Calorie goals and feeding logs
-- **NEW**: Health insights and analytics
+- Comprehensive nutrition tracking API
+- Food database with barcode scanning
+- Advanced nutrition (weight tracking, trends, comparisons)
+- Calorie goals and feeding logs
+- Health insights and analytics
+- **NEW**: Medication reminders and scheduling
+- **NEW**: Subscription management (App Store & RevenueCat integration)
+- **NEW**: Waitlist signup functionality
 - **FIXED**: Robust JWT validation with multi-strategy support
 - **FIXED**: Row Level Security (RLS) policy violations
 - **FIXED**: Trailing slash routing issues across all endpoints
@@ -1623,6 +1940,6 @@ All endpoints support both trailing slash and non-trailing slash formats:
 
 ---
 
-*Last updated: January 2025*
+*Last updated: November 2025*
 *API Version: 1.0.0*
 *Production API: https://snifftest-api-production.up.railway.app*

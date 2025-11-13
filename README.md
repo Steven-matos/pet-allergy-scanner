@@ -86,6 +86,7 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 ### Notifications & Engagement
 - 🔔 **Push Notifications**: Birthday reminders and important updates
 - 🎉 **Birthday Celebrations**: Special celebration views for pet birthdays
+- 💊 **Medication Reminders**: Schedule and track pet medications with customizable frequencies
 - 📱 **Smart Notifications**: Context-aware notification scheduling
 - 🔄 **Background Sync**: Automatic data synchronization when app becomes active
 
@@ -98,7 +99,9 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 - 🔑 **Secure Storage**: Keychain integration for sensitive data
 
 ### Advanced Features
-- 💳 **Subscription Management**: Premium features and subscription handling
+- 💳 **Subscription Management**: Premium features with App Store & RevenueCat integration
+- 📧 **Waitlist System**: Pre-launch email signup and notification system
+- 💊 **Medication Tracking**: Comprehensive medication reminder scheduling
 - 🌍 **Localization Ready**: Multi-language support infrastructure
 - 📊 **Analytics**: User behavior tracking and performance monitoring
 - 🔧 **Settings Management**: Comprehensive app configuration options
@@ -288,10 +291,13 @@ app/
 │   │   └── analytics/            # Health insights and patterns
 │   ├── food_management/      # Food database management with barcode
 │   ├── health_events/        # Pet health event tracking
+│   ├── medication_reminders/ # Medication scheduling and tracking
 │   ├── mfa/                  # Multi-factor authentication
 │   ├── gdpr/                 # GDPR compliance and data management
 │   ├── monitoring/           # Health monitoring and metrics
-│   ├── notifications/         # Push notification management
+│   ├── notifications/        # Push notification management
+│   ├── subscriptions/        # Subscription management (App Store, RevenueCat)
+│   ├── waitlist/             # Waitlist signup management
 │   └── images/               # Image processing and optimization
 ├── services/
 │   ├── gdpr_service.py       # Data export and deletion services
@@ -303,7 +309,9 @@ app/
 │   ├── food_comparison_service.py # Food comparison logic
 │   ├── weight_tracking_service.py # Weight tracking service
 │   ├── advanced_analytics_service.py # AI-powered insights
-│   └── health_event_service.py # Health event management
+│   ├── health_event_service.py # Health event management
+│   ├── medication_reminder_service.py # Medication reminder scheduling
+│   └── subscription_service.py # Subscription verification and management
 ├── middleware/
 │   ├── security.py           # Security headers and protection
 │   ├── audit.py              # Comprehensive audit logging
@@ -721,6 +729,9 @@ Complete API reference is available in [API_DOCS.md](API_DOCS.md).
 - **Food Management**: Searchable food database with barcode lookup
 - **Advanced Nutrition**: Weight tracking, trends, and food comparisons
 - **Health Events**: Pet health tracking and medical event logging
+- **Medication Reminders**: Schedule and track pet medications
+- **Subscriptions**: App Store and RevenueCat subscription management
+- **Waitlist**: Email signup for pre-launch users
 - **Push Notifications**: Birthday reminders and updates
 - **GDPR Compliance**: Data export and deletion
 - **Health Monitoring**: System status and metrics
@@ -757,6 +768,9 @@ Built on **Supabase (PostgreSQL)** with Row Level Security (RLS) for data protec
 | `pet_weight_goals` | Weight targets | Weight loss/gain goals |
 | `food_comparisons` | Product comparisons | Side-by-side food analysis |
 | `health_events` | Health tracking | Vet visits, medical events, health notes |
+| `medication_reminders` | Medication tracking | Scheduled medication reminders |
+| `subscriptions` | User subscriptions | Premium subscription management |
+| `waitlist` | Email waitlist | Pre-launch email signups |
 
 ### Key Features
 - **Row Level Security**: Users can only access their own data
@@ -884,6 +898,9 @@ SniffTest/
 - Food comparison feature
 - Health trend analysis
 - Multi-pet nutrition insights
+- **NEW**: Medication reminders and scheduling system
+- **NEW**: Subscription management (App Store & RevenueCat integration)
+- **NEW**: Waitlist signup for pre-launch users
 - Improved camera and barcode scanning
 - **FIXED**: Authentication system with robust JWT validation
 - **FIXED**: Row Level Security (RLS) policy violations
@@ -901,6 +918,6 @@ SniffTest/
 
 **Built with ❤️ for pet owners everywhere**
 
-*Last updated: January 2025*
+*Last updated: November 2025*
 *iOS App Version: 5.1 (Build 6)*
 *API Version: 1.0.0*
