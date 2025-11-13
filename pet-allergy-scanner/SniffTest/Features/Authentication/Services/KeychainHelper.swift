@@ -27,7 +27,9 @@ struct KeychainHelper {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrAccount as String: key,
-                kSecValueData as String: data
+                kSecAttrService as String: "com.snifftest.app",
+                kSecValueData as String: data,
+                kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             ]
             
             // Delete existing item first
@@ -45,10 +47,12 @@ struct KeychainHelper {
                 // Try to update instead
                 let updateQuery: [String: Any] = [
                     kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrAccount as String: key
+                    kSecAttrAccount as String: key,
+                    kSecAttrService as String: "com.snifftest.app"
                 ]
                 let updateData: [String: Any] = [
-                    kSecValueData as String: data
+                    kSecValueData as String: data,
+                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
                 ]
                 let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateData as CFDictionary)
                 print("🔐 KeychainHelper: Update status for \(key): \(updateStatus)")
@@ -68,6 +72,7 @@ struct KeychainHelper {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrAccount as String: key,
+                kSecAttrService as String: "com.snifftest.app",
                 kSecReturnData as String: true,
                 kSecMatchLimit as String: kSecMatchLimitOne
             ]
@@ -102,7 +107,8 @@ struct KeychainHelper {
         await Task.detached {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
-                kSecAttrAccount as String: key
+                kSecAttrAccount as String: key,
+                kSecAttrService as String: "com.snifftest.app"
             ]
             
             let status = SecItemDelete(query as CFDictionary)
