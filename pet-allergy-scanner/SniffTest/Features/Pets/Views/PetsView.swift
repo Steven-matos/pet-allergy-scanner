@@ -125,6 +125,11 @@ struct PetCardView: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @State private var isExportingPDF = false
+    @State private var showExportError = false
+    @State private var exportErrorMessage: String?
+    @State private var pdfURL: URL?
+    @State private var showShareSheet = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -309,6 +314,45 @@ struct PetCardView: View {
                         }
                     }
                 }
+                
+                // Export for Vet Button
+                Button(action: {
+                    Task {
+                        await exportForVet()
+                    }
+                }) {
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        if isExportingPDF {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "doc.text.fill")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                        }
+                        Text(isExportingPDF ? "Generating PDF..." : "Export for Vet")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    .background(ModernDesignSystem.Colors.primary)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                }
+                .disabled(isExportingPDF)
+                .accessibilityLabel("Export pet data for veterinarian")
+                .accessibilityHint("Generates a PDF document with pet health information")
+                .sheet(isPresented: $showShareSheet) {
+                    if let pdfURL = pdfURL {
+                        ShareSheet(activityItems: [pdfURL])
+                    }
+                }
+                .alert("Export Error", isPresented: $showExportError) {
+                    Button("OK") { }
+                } message: {
+                    Text(exportErrorMessage ?? "Failed to generate PDF report")
+                }
             }
             .padding(ModernDesignSystem.Spacing.lg)
         }
@@ -329,6 +373,60 @@ struct PetCardView: View {
         .accessibilityLabel("Pet card for \(pet.name)")
     }
     
+    /**
+     * Export pet data as PDF for veterinarian
+     * Aggregates all pet data and generates a professional PDF report
+     */
+    private func exportForVet() async {
+        isExportingPDF = true
+        exportErrorMessage = nil
+        
+        do {
+            // Aggregate all pet data
+            let reportData = try await PetDataAggregator.shared.aggregatePetData(for: pet)
+            
+            // Generate PDF
+            let pdfData = try PetDataPDFService.shared.generateVetReport(data: reportData)
+            
+            // Save PDF to temporary file
+            let fileName = "\(pet.name)_Vet_Report_\(Date().timeIntervalSince1970).pdf"
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+            
+            try pdfData.write(to: tempURL)
+            
+            // Present share sheet
+            await MainActor.run {
+                self.pdfURL = tempURL
+                self.isExportingPDF = false
+                self.showShareSheet = true
+            }
+        } catch {
+            await MainActor.run {
+                self.isExportingPDF = false
+                self.exportErrorMessage = error.localizedDescription
+                self.showExportError = true
+            }
+        }
+    }
+}
+
+/**
+ * Share Sheet wrapper for PDF export
+ * Enables sharing PDF via email, Files app, or other sharing options
+ */
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: applicationActivities
+        )
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 /// Reusable info pill component for displaying pet details

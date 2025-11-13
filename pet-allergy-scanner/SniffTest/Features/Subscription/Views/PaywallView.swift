@@ -115,11 +115,11 @@ struct PaywallView: View {
     private var featuresSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.sm) {
             PaywallFeatureRow(icon: "camera.fill", title: "Unlimited Scans", subtitle: "Scan as many products as you need")
-            PaywallFeatureRow(icon: "checkmark.shield.fill", title: "Advanced Detection", subtitle: "Get detailed allergen analysis")
+            PaywallFeatureRow(icon: "checkmark.shield.fill", title: "Advanced Detection", subtitle: "Get detailed sensitivity analysis")
             PaywallFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Health Analytics", subtitle: "Track your pet's nutrition trends")
-            PaywallFeatureRow(icon: "pawprint.fill", title: "Multiple Pets", subtitle: "Manage unlimited pet profiles")
-            PaywallFeatureRow(icon: "bell.badge.fill", title: "Priority Support", subtitle: "Get help when you need it")
-            PaywallFeatureRow(icon: "star.fill", title: "Early Access", subtitle: "Be first to try new features")
+            PaywallFeatureRow(icon: "chart.xyaxis.line", title: "Nutrition Trends", subtitle: "See diet changes over time")
+            PaywallFeatureRow(icon: "pawprint.fill", title: "Unlimited Pets", subtitle: "Manage unlimited pet profiles")
+            PaywallFeatureRow(icon: "heart.text.square.fill", title: "Health Tracking", subtitle: "Monitor weight and wellness")
         }
         .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.softCream)

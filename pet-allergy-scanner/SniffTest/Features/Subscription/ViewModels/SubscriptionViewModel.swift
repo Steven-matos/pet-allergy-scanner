@@ -177,7 +177,7 @@ final class SubscriptionViewModel: ObservableObject {
     
     /// Show purchase success alert
     private func showPurchaseSuccess() {
-        alertMessage = "Welcome to Premium! 🎉\nYou now have access to all premium features."
+        alertMessage = "Welcome to Premium! 🎉\n\nYou now have:\n• Unlimited daily scans\n• Unlimited pets\n• Health tracking & analytics\n• Nutrition trends"
         showingPurchaseSuccess = true
         HapticFeedback.success()
     }
