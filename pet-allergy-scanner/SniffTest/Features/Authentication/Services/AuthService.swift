@@ -115,14 +115,14 @@ class AuthService: ObservableObject, @unchecked Sendable {
             
             // Hydrate all caches before transitioning to authenticated state
             await cacheHydrationService.hydrateAllCaches()
+            cacheAuthenticatedUser(finalUser)
             
             // Only transition to authenticated once cache hydration is complete
             await MainActor.run {
                 authState = .authenticated(finalUser)
             }
         } catch {
-            // Failed to restore session, logout
-            await logout()
+            await handleSessionRestorationFailure(error)
         }
     }
     
@@ -200,6 +200,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
         await RevenueCatConfigurator.logoutUser()
         
         await apiService.clearAuthToken()
+        clearPersistedUserId()
         await MainActor.run {
             authState = .unauthenticated
             errorMessage = nil
@@ -232,6 +233,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
         
         do {
             let user = try await apiService.updateUser(userUpdate)
+            cacheAuthenticatedUser(user)
             await MainActor.run {
                 authState = .authenticated(user)
             }
@@ -251,6 +253,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
         
         do {
             let user = try await apiService.getCurrentUser()
+            cacheAuthenticatedUser(user)
             await MainActor.run {
                 authState = .authenticated(user)
             }
@@ -294,6 +297,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 
                 // Hydrate all caches before transitioning to authenticated state
                 await cacheHydrationService.hydrateAllCaches()
+                cacheAuthenticatedUser(finalUser)
                 
                 // Only transition to authenticated once cache hydration is complete
                 await MainActor.run {
@@ -301,6 +305,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 }
             } catch {
                 // Fallback to registration response user if getCurrentUser fails
+                if let user = registrationResponse.user {
+                    cacheAuthenticatedUser(user)
+                }
+                
                 await MainActor.run {
                     if let user = registrationResponse.user {
                         authState = .authenticated(user)
@@ -357,6 +365,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
             
             // Hydrate all caches before transitioning to authenticated state
             await cacheHydrationService.hydrateAllCaches()
+            cacheAuthenticatedUser(finalUser)
             
             // Only transition to authenticated once cache hydration is complete
             await MainActor.run {
@@ -373,6 +382,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
             
             // Identify user with RevenueCat even on fallback
             await RevenueCatConfigurator.identifyUser(authResponse.user.id)
+            cacheAuthenticatedUser(authResponse.user)
             
             await MainActor.run {
                 authState = .authenticated(authResponse.user)
@@ -412,6 +422,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 
                 // Hydrate all caches before transitioning to authenticated state
                 await cacheHydrationService.hydrateAllCaches()
+                cacheAuthenticatedUser(finalUser)
                 
                 await MainActor.run {
                     authState = .authenticated(finalUser)
@@ -445,6 +456,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 
                 // Hydrate all caches before transitioning to authenticated state
                 await cacheHydrationService.hydrateAllCaches()
+                cacheAuthenticatedUser(user)
                 
                 await MainActor.run {
                     authState = .authenticated(user)
@@ -486,6 +498,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 
                 // Hydrate all caches before transitioning to authenticated state
                 await cacheHydrationService.hydrateAllCaches()
+                cacheAuthenticatedUser(finalUser)
                 
                 await MainActor.run {
                     authState = .authenticated(finalUser)
