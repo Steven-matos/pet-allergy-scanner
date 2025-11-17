@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var hydrationService = CacheHydrationService.shared
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     @StateObject private var orientationManager = OrientationManager()
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
         Group {
@@ -37,23 +38,6 @@ struct ContentView: View {
                                 await PushNotificationService.shared.requestPushNotificationPermission()
                             }
                         }
-                        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-                            // Handle app becoming active
-                            notificationManager.handleAppBecameActive()
-                            
-                            // Refresh token if needed and validate session
-                            Task {
-                                // Check if token needs refresh and refresh if necessary
-                                await APIService.shared.ensureValidToken()
-                                
-                                // Refresh user data to ensure session is valid
-                                await authService.refreshCurrentUser()
-                                
-                                // Reload pets from cache when app becomes active
-                                // This ensures pets are always available even after long inactivity
-                                petService.loadPets()
-                            }
-                        }
                 } else {
                     OnboardingView(onSkip: {
                         // Allow user to skip onboarding temporarily for this session
@@ -70,6 +54,14 @@ struct ContentView: View {
         .environmentObject(authService)
         .environmentObject(notificationManager)
         .environmentObject(orientationManager)
+          .onChange(of: scenePhase) { _, newPhase in
+              SessionLifecycleManager.shared.handleScenePhase(newPhase)
+              
+              if newPhase == .active {
+                  notificationManager.handleAppBecameActive()
+                  petService.loadPets()
+              }
+          }
         .onChange(of: authService.authState) { _, newState in
             // Reset skip state when user logs out
             if case .unauthenticated = newState {

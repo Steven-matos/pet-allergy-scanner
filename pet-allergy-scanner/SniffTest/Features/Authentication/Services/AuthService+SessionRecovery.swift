@@ -31,6 +31,7 @@ extension AuthService {
         )
         CacheService.shared.storeUserData(userProfile, forKey: .userProfile, userId: user.id)
         persistAuthenticatedUserId(user.id)
+        SessionLifecycleManager.shared.recordSessionValidation()
     }
     
     /// Handle failures that occur while restoring a persisted session.

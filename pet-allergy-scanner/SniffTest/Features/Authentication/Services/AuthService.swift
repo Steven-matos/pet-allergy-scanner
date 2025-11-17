@@ -126,6 +126,27 @@ class AuthService: ObservableObject, @unchecked Sendable {
         }
     }
     
+    /// Resume or refresh the authenticated session when the app returns to the foreground.
+    /// - Parameter forceRefresh: When true, bypasses the staleness interval (used after app updates).
+    func resumeSessionIfNeeded(forceRefresh: Bool = false) async {
+        if case .authenticated = authState {
+            await refreshSessionIfNeeded(force: forceRefresh)
+            return
+        }
+        
+        guard await apiService.hasAuthToken else { return }
+        await restoreUserSession()
+    }
+    
+    /// Refresh the authenticated session if the last validation exceeds Apple's recommended interval.
+    /// - Parameter force: When true, always refresh.
+    func refreshSessionIfNeeded(force: Bool = false) async {
+        guard case .authenticated = authState else { return }
+        guard SessionLifecycleManager.shared.shouldRefreshSession(force: force) else { return }
+        
+        await refreshCurrentUser()
+    }
+    
     /// Register a new user
     func register(
         email: String,

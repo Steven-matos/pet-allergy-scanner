@@ -24,4 +24,14 @@ struct SessionRecoveryPolicyTests {
         #expect(!AuthService.shouldInvalidateSession(for: APIError.networkError("offline")))
         #expect(!AuthService.shouldInvalidateSession(for: APIError.serverError(503)))
     }
+    
+    /// Ensure the lifecycle manager honors the refresh interval unless forced.
+    @Test("Session validation interval gating")
+    func sessionRefreshIntervalGating() {
+        let manager = SessionLifecycleManager.shared
+        manager.recordSessionValidation()
+        
+        #expect(!manager.shouldRefreshSession())
+        #expect(manager.shouldRefreshSession(force: true))
+    }
 }
