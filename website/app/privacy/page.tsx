@@ -70,7 +70,7 @@ export default function PrivacyPage() {
         'Account information (name, email address, password)',
         'Pet information (name, species, breed, weight, age, known sensitivities, health conditions)',
         'Scan data (food label images, OCR-extracted text, ingredient analysis results, nutritional calculations)',
-        'Usage data (app interactions, feature usage, preferences, scan history, search queries)',
+        'Usage data (app interactions, feature usage, preferences, scan history, search queries, analytics events)',
         'Device information (device type, operating system, app version, device identifiers, IP address)',
         'Image metadata (timestamp, geolocation if enabled, image properties)',
       ],
@@ -95,7 +95,7 @@ export default function PrivacyPage() {
       icon: '👥',
       content: 'We may share your information with:',
       points: [
-        'Service providers (cloud hosting, analytics, customer support, email delivery)',
+        'Service providers (cloud hosting, analytics including PostHog, customer support, email delivery)',
         'Third-party OCR and image processing services to analyze food labels',
         'Third-party ingredient and nutritional databases for analysis',
         'Legal authorities when required by law, court order, or to protect rights and safety',
@@ -169,9 +169,89 @@ export default function PrivacyPage() {
       content: "Our app is not intended for children under 13. We do not knowingly collect personal information from children. If we discover that we have collected information from a child under 13, we will delete it immediately. Parents or guardians who believe their child has provided information should contact us at privacy@snifftestapp.com.",
     },
     {
+      title: 'Analytics and Usage Tracking',
+      icon: '📊',
+      content: 'We use analytics services, including PostHog, to understand how you use our app, improve functionality, and enhance user experience. This section provides detailed information about our analytics practices.',
+      points: [
+        'We use PostHog, a product analytics platform, to collect and analyze usage data',
+        'PostHog helps us understand user behavior, identify bugs, and improve app performance',
+        'Analytics data is collected automatically when you use the app',
+        'We do not use analytics data to personally identify individual users',
+        'Analytics data may be aggregated and anonymized for analysis purposes',
+      ],
+      additionalContent: 'For more information about PostHog\'s data practices, please visit their privacy policy at https://posthog.com/privacy.',
+    },
+    {
+      title: 'What Analytics Data We Collect',
+      icon: '📈',
+      content: 'Through our analytics service (PostHog), we collect the following types of usage data:',
+      points: [
+        'Event data: User interactions such as button clicks, screen views, feature usage, and navigation patterns',
+        'Session data: App session information including session duration, start and end times, and session identifiers',
+        'Device information: Device type, operating system version, app version, and device identifiers',
+        'Feature usage: Which features are used most frequently, scan completion rates, and user flows through the app',
+        'Performance data: App performance metrics, error logs, and crash reports to help us identify and fix issues',
+        'Custom events: Specific events we track such as scan completions, health event additions, and nutrition dashboard views',
+      ],
+      additionalContent: 'This data is collected to help us understand how users interact with the app, identify areas for improvement, and ensure the app functions properly.',
+    },
+    {
+      title: 'Session Replay',
+      icon: '🎥',
+      content: 'SniffTest uses session replay technology provided by PostHog to record and replay user sessions. This helps us:',
+      points: [
+        'Understand how users navigate through the app',
+        'Identify and reproduce bugs and technical issues',
+        'Improve user experience by analyzing user interactions',
+        'Provide better customer support by understanding user problems',
+        'Enhance app design and functionality based on real user behavior',
+      ],
+      additionalContent: 'Session replays capture user interactions, screen content, and navigation patterns. Sensitive information such as passwords, payment details, and personal data entered in forms may be masked or excluded from recordings. Session replays are stored securely and accessed only by authorized personnel for the purposes stated above. You can learn more about PostHog\'s session replay practices at https://posthog.com/docs/session-replay/privacy.',
+    },
+    {
+      title: 'How We Use Analytics Data',
+      icon: '⚙️',
+      content: 'We use analytics data to:',
+      points: [
+        'Improve app functionality and user experience',
+        'Identify and fix bugs and technical issues',
+        'Understand which features are most valuable to users',
+        'Make data-driven decisions about product development',
+        'Optimize app performance and reduce crashes',
+        'Provide better customer support',
+        'Ensure app security and prevent fraud',
+      ],
+      additionalContent: 'Analytics data is used in aggregated and anonymized form for analysis. We do not use analytics data to personally identify individual users or to make decisions about individual users.',
+    },
+    {
+      title: 'Analytics Data Sharing',
+      icon: '👥',
+      content: 'Analytics data is shared with PostHog, our analytics service provider, in accordance with their privacy policy. PostHog:',
+      points: [
+        'Processes analytics data on our behalf to provide analytics services',
+        'Is contractually obligated to protect your data and use it only for providing analytics services',
+        'Does not use your data for their own marketing purposes',
+        'Stores data securely in accordance with industry standards',
+        'May process data in various jurisdictions as disclosed in their privacy policy',
+      ],
+      additionalContent: 'We do not sell analytics data to third parties. Analytics data may be shared with other service providers only as necessary to provide our services, and all such providers are contractually bound to protect your data.',
+    },
+    {
+      title: 'Your Rights Regarding Analytics',
+      icon: '✋',
+      content: 'You have certain rights regarding analytics data collection:',
+      points: [
+        'You can request information about what analytics data we collect about you',
+        'You can request deletion of your analytics data (subject to technical limitations)',
+        'You can opt-out of certain analytics tracking through app settings (where available)',
+        'You can contact us to exercise your rights regarding analytics data',
+      ],
+      additionalContent: 'Please note that disabling analytics may limit our ability to improve the app and provide support. To exercise your rights regarding analytics data, contact us at privacy@snifftestapp.com. For information about PostHog\'s data practices and your rights, please visit https://posthog.com/privacy.',
+    },
+    {
       title: 'Cookies and Tracking',
       icon: '📡',
-      content: 'We use analytics tools and tracking technologies to understand how you use our app, improve functionality, and provide personalized experiences. You can manage your preferences in the app settings. We use third-party analytics services that may collect data about your usage patterns.',
+      content: 'In addition to analytics services, we may use cookies and similar tracking technologies in our web-based services. You can manage your preferences in the app settings. Our mobile app uses device identifiers and analytics SDKs rather than traditional cookies.',
     },
     {
       title: 'Third-Party Links',
@@ -217,7 +297,7 @@ export default function PrivacyPage() {
               <span className="text-4xl" aria-hidden="true">🛡️</span>
               <div>
                 <h1 className="text-4xl font-bold text-text-primary mb-2">Privacy Policy</h1>
-                <p className="text-base text-text-secondary">Last updated: October, 2025</p>
+                <p className="text-base text-text-secondary">Last updated: November, 2025</p>
               </div>
             </div>
             <p className="text-lg text-text-primary leading-relaxed max-w-3xl">

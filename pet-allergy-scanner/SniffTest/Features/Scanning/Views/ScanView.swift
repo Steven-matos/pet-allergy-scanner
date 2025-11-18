@@ -208,7 +208,10 @@ struct ScanView: View {
                         HStack {
                             Spacer()
                             
-                            Button(action: { showingHistory = true }) {
+                            Button(action: {
+                                PostHogAnalytics.trackScanHistoryViewed()
+                                showingHistory = true
+                            }) {
                                 Image(systemName: "clock.arrow.circlepath")
                                     .font(ModernDesignSystem.Typography.title3)
                                     .foregroundColor(.white)
@@ -417,6 +420,7 @@ struct ScanView: View {
         .sheet(isPresented: $showingPetSelection) {
             PetSelectionView(
                 onPetSelected: { pet in
+                    PostHogAnalytics.trackPetSelectedForScan(petId: pet.id, petSpecies: pet.species.rawValue)
                     selectedPet = pet
                     showingPetSelection = false
                     analyzeIngredients()
@@ -650,6 +654,7 @@ struct ScanView: View {
             // Handle scanning state updates
         }
         .onAppear {
+            PostHogAnalytics.trackScanViewOpened()
             checkCameraPermission()
             // Don't resume camera here - it will be handled when sheets are dismissed
             // This prevents camera resume while sheets are still showing
@@ -746,6 +751,9 @@ struct ScanView: View {
                 hybridScanResult = result
                 if let barcode = result.barcode {
                     detectedBarcode = barcode
+                    PostHogAnalytics.trackImageCaptured(hasBarcode: true)
+                } else {
+                    PostHogAnalytics.trackImageCaptured(hasBarcode: false)
                 }
             }
         }
@@ -758,6 +766,8 @@ struct ScanView: View {
         if showingProductFound || showingProductNotFound || showingOCRResults || showingNutritionalLabelScan {
             return
         }
+        
+        PostHogAnalytics.trackBarcodeDetected(barcodeType: barcode.type)
         
         withAnimation(.easeInOut(duration: 0.3)) {
             detectedBarcode = barcode
@@ -896,6 +906,16 @@ struct ScanView: View {
                 
                 // Use async/await to ensure data is fully loaded
                 await presentScanResult(scan)
+                
+                // Track successful scan completion
+                if let result = scan.result {
+                    PostHogAnalytics.trackScanCompleted(
+                        scanId: scan.id,
+                        hasAllergens: !result.unsafeIngredients.isEmpty,
+                        allergenCount: result.unsafeIngredients.count,
+                        productFound: foundProduct != nil
+                    )
+                }
                 
                 print("🔍 [SCAN_ANALYSIS] Results sheet should now be showing")
                 // Don't resume camera here - the results sheet will handle camera management

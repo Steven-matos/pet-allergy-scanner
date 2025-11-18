@@ -40,6 +40,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Configure RevenueCat subscriptions using Info.plist values
         RevenueCatConfigurator.configure()
+        
+        // Configure PostHog analytics using Info.plist values
+        PostHogConfigurator.configure()
 
         return true
     }
