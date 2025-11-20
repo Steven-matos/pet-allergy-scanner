@@ -153,6 +153,7 @@ struct HealthEventListView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button("Add Event") {
+                    PostHogAnalytics.trackAddHealthEventTapped(petId: pet.id)
                     showingAddEvent = true
                 }
                 .font(ModernDesignSystem.Typography.body)
@@ -171,11 +172,18 @@ struct HealthEventListView: View {
         }
         .sheet(item: $selectedEvent) { event in
             HealthEventDetailView(event: event, pet: pet)
+                .onAppear {
+                    PostHogAnalytics.trackHealthEventViewed(
+                        eventId: event.id,
+                        eventCategory: event.eventCategory.rawValue
+                    )
+                }
         }
         .task {
             await loadHealthEvents()
         }
         .onAppear {
+            PostHogAnalytics.trackHealthEventsViewOpened(petId: pet.id)
             // Ensure data is loaded when view appears
             Task {
                 await loadHealthEvents()
@@ -183,6 +191,7 @@ struct HealthEventListView: View {
         }
         .refreshable {
             // Allow pull-to-refresh to reload data
+            PostHogAnalytics.trackHealthEventsRefreshed(petId: pet.id)
             await loadHealthEvents()
         }
         .onChange(of: selectedCategory) { _, _ in
@@ -203,6 +212,7 @@ struct HealthEventListView: View {
                     isSelected: selectedCategory == nil,
                     count: healthEventService.healthEvents[pet.id]?.count ?? 0
                 ) {
+                    PostHogAnalytics.trackHealthEventFilterChanged(category: nil)
                     selectedCategory = nil
                 }
                 
@@ -214,6 +224,7 @@ struct HealthEventListView: View {
                         isSelected: selectedCategory == category,
                         count: count
                     ) {
+                        PostHogAnalytics.trackHealthEventFilterChanged(category: category.rawValue)
                         selectedCategory = category
                     }
                 }

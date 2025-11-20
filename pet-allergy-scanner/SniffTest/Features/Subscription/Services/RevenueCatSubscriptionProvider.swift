@@ -164,9 +164,20 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
     }
 
     private func applyCustomerInfo(_ info: CustomerInfo) {
+        let wasSubscribedBefore = hasActiveSubscription
         activeEntitlementIDs = Set(info.entitlements.active.keys)
         updateSubscriptionStatus(using: info)
         logger.debug("Customer info updated. Active entitlements: \(self.activeEntitlementIDs.joined(separator: ", "))")
+        
+        // Track subscription status changes
+        if hasActiveSubscription && !wasSubscribedBefore {
+            // Subscription just became active (could be new purchase or restore)
+            // Note: Specific purchase tracking happens in purchase() method
+            PostHogAnalytics.updateUserRole("premium")
+        } else if !hasActiveSubscription && wasSubscribedBefore {
+            // Subscription just expired or was cancelled
+            PostHogAnalytics.updateUserRole("free")
+        }
         
         // Sync subscription status with backend when customer info changes
         Task {
@@ -225,7 +236,15 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
                 return .failed(NSError(domain: "RevenueCatSubscriptionProvider", code: -3, userInfo: [NSLocalizedDescriptionKey: "Missing customer info after purchase."]))
             }
 
+            let wasSubscribedBefore = hasActiveSubscription
             applyCustomerInfo(info)
+            
+            // Track premium upgrade if subscription just became active
+            if hasActiveSubscription && !wasSubscribedBefore {
+                let tier = determineTier(from: product.id)
+                PostHogAnalytics.trackPremiumUpgrade(tier: tier, productId: product.id)
+            }
+            
             logger.info("RevenueCat purchase successful for package \(product.id, privacy: .public).")
             return .success
         } catch {
@@ -334,6 +353,20 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             return nil
         }
         return dateFormatter.string(from: expirationDate)
+    }
+    
+    /// Determine subscription tier from product ID
+    /// - Parameter productId: Product identifier
+    /// - Returns: Tier string (weekly, monthly, yearly)
+    private func determineTier(from productId: String) -> String {
+        let lowercased = productId.lowercased()
+        if lowercased.contains("weekly") {
+            return "weekly"
+        } else if lowercased.contains("yearly") || lowercased.contains("annual") {
+            return "yearly"
+        } else {
+            return "monthly" // Default
+        }
     }
 }
 

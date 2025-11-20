@@ -54,13 +54,15 @@ async def create_nutritional_requirements_with_slash(
         await verify_pet_ownership(requirements.pet_id, current_user.id)
         
         # Create nutritional requirements
+        # Note: nutritional_requirements table only has pet_id, not user_id
+        # Authorization is handled via RLS policies checking pet ownership
         db_requirements = requirements.dict()
-        db_requirements['user_id'] = current_user.id
         
         # Upsert to nutritional_requirements table
+        # Using pet_id as unique constraint (per schema: UNIQUE(pet_id))
         response = supabase.table("nutritional_requirements").upsert(
             db_requirements,
-            on_conflict="pet_id,user_id"
+            on_conflict="pet_id"
         ).execute()
         
         if not response.data:
@@ -106,10 +108,10 @@ async def get_nutritional_requirements(
         await verify_pet_ownership(pet_id, current_user.id)
         
         # Get nutritional requirements
+        # Note: nutritional_requirements table only has pet_id, not user_id
+        # Authorization is handled via RLS policies checking pet ownership
         response = supabase.table("nutritional_requirements").select("*").eq(
             "pet_id", pet_id
-        ).eq(
-            "user_id", current_user.id
         ).execute()
         
         if not response.data:

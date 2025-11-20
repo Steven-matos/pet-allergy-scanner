@@ -129,14 +129,28 @@ export default function TermsPage() {
     {
       title: 'Third-Party Services',
       icon: '🔗',
-      content: 'SniffTest may integrate with third-party services, APIs, and databases for functionality such as OCR processing, ingredient analysis, and nutritional data. You acknowledge that:',
+      content: 'SniffTest may integrate with third-party services, APIs, and databases for functionality such as OCR processing, ingredient analysis, nutritional data, and analytics. You acknowledge that:',
       points: [
         'These third-party services have their own terms of service and privacy policies',
         'We are not responsible for the availability, accuracy, or practices of third-party services',
         'Your use of third-party services is subject to their respective terms',
         'We may share necessary data with third-party services to provide app functionality',
+        'We use analytics services (including PostHog) to understand app usage, improve functionality, and enhance user experience',
       ],
-      additionalContent: 'For information about how third-party services handle your data, please review their respective privacy policies.',
+      additionalContent: 'For information about how third-party services handle your data, please review their respective privacy policies. PostHog\'s privacy policy can be found at https://posthog.com/privacy.',
+    },
+    {
+      title: 'Analytics and Usage Tracking',
+      icon: '📊',
+      content: 'SniffTest uses analytics services, including PostHog, to collect and analyze usage data to improve our app and services. By using the app, you acknowledge and consent to:',
+      points: [
+        'Collection of usage analytics including app interactions, feature usage, screen views, and user flows',
+        'Session replay technology that records user interactions for product improvement and debugging purposes',
+        'Automatic capture of certain events such as scans, feature usage, and navigation patterns',
+        'Aggregation and analysis of anonymized usage data to identify trends and improve app performance',
+        'Sharing of usage data with our analytics provider (PostHog) in accordance with their privacy policy',
+      ],
+      additionalContent: 'Analytics data helps us understand how users interact with the app, identify bugs, and improve the overall user experience. This data is collected automatically when you use the app. For more details about what data is collected and how it is used, please refer to our Privacy Policy.',
     },
     {
       title: 'Indemnification',
@@ -216,7 +230,7 @@ export default function TermsPage() {
               <span className="text-4xl" aria-hidden="true">📄</span>
               <div>
                 <h1 className="text-4xl font-bold text-text-primary mb-2">Terms of Service</h1>
-                <p className="text-base text-text-secondary">Last updated: October, 2025</p>
+                <p className="text-base text-text-secondary">Last updated: November, 2025</p>
               </div>
             </div>
             <p className="text-lg text-text-primary leading-relaxed max-w-3xl">

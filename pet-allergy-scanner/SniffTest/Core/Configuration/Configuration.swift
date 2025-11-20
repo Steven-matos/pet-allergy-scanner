@@ -51,6 +51,18 @@ struct Configuration {
     static var revenueCatEntitlementID: String {
         Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_ENTITLEMENT_ID") as? String ?? "pro_user"
     }
+    
+    // MARK: - PostHog Configuration
+    
+    /// PostHog API key for analytics tracking
+    static var postHogAPIKey: String {
+        Bundle.main.object(forInfoDictionaryKey: "POSTHOG_API_KEY") as? String ?? ""
+    }
+    
+    /// PostHog host URL for event tracking
+    static var postHogHost: String {
+        Bundle.main.object(forInfoDictionaryKey: "POSTHOG_HOST") as? String ?? "https://us.i.posthog.com"
+    }
  
     // MARK: - Security Configuration
     
@@ -119,7 +131,8 @@ extension Configuration {
             supabaseURL,
             supabaseAnonKey,
             apiBaseURL,
-            revenueCatAPIKey
+            revenueCatAPIKey,
+            postHogAPIKey
         ]
         
         return requiredValues.allSatisfy { !$0.isEmpty }
@@ -138,7 +151,9 @@ extension Configuration {
             "maxUploadSize": maxUploadSize,
             "allowedImageTypes": allowedImageTypes,
             "hasRevenueCatAPIKey": !revenueCatAPIKey.isEmpty,
-            "revenueCatEntitlementID": revenueCatEntitlementID
+            "revenueCatEntitlementID": revenueCatEntitlementID,
+            "hasPostHogAPIKey": !postHogAPIKey.isEmpty,
+            "postHogHost": postHogHost
         ]
     }
 }

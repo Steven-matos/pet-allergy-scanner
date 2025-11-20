@@ -42,6 +42,7 @@ struct NutritionDashboardView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
+                        PostHogAnalytics.trackNutritionPremiumUpgradeTapped()
                         showingPremiumUpgrade = true
                     }) {
                         Image(systemName: "crown.fill")
@@ -52,6 +53,7 @@ struct NutritionDashboardView: View {
             }
         }
         .onAppear {
+            PostHogAnalytics.trackNutritionDashboardOpened()
             print("🔍 NutritionDashboardView: onAppear called")
             // Temporarily disable loadNutritionData to test
             // loadNutritionData()
@@ -80,6 +82,14 @@ struct NutritionDashboardView: View {
                                 pets: petService.pets,
                                 selectedPet: $selectedPet
                             )
+                            .onChange(of: selectedPet) { oldValue, newValue in
+                                if let pet = newValue {
+                                    PostHogAnalytics.trackNutritionPetSelected(
+                                        petId: pet.id,
+                                        petSpecies: pet.species.rawValue
+                                    )
+                                }
+                            }
                         }
                         
                         // Nutrition Overview
