@@ -6,6 +6,7 @@ Extracted from advanced_nutrition.py for better organization.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from datetime import datetime, date, timedelta
 
@@ -14,7 +15,7 @@ from app.models.advanced_nutrition import (
     NutritionalTrendResponse, NutritionalTrendsDashboard
 )
 from app.models.user import User
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.services.nutritional_trends_service import NutritionalTrendsService
 
 router = APIRouter(prefix="/trends", tags=["advanced-nutrition-trends"])
@@ -35,7 +36,8 @@ async def get_nutritional_trends(
     pet_id: str,
     days: int = Query(30, description="Number of days to analyze"),
     trend_type: str = Query("all", description="Type of trends to analyze"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get nutritional trends for a pet
@@ -53,9 +55,19 @@ async def get_nutritional_trends(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Verify pet ownership
+        # Create authenticated Supabase client for RLS policies
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
+        # Verify pet ownership with authenticated client
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get nutritional trends
         service = get_trends_service()
@@ -74,7 +86,8 @@ async def get_nutritional_trends(
 async def get_trends_dashboard(
     pet_id: str,
     days: int = Query(30, description="Number of days for dashboard"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get nutritional trends dashboard for a pet
@@ -91,9 +104,19 @@ async def get_trends_dashboard(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Verify pet ownership
+        # Create authenticated Supabase client for RLS policies
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
+        # Verify pet ownership with authenticated client
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get trends dashboard
         service = get_trends_service()

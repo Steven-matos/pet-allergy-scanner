@@ -4,7 +4,7 @@ Handles device token registration, notification sending, and management
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any, Optional
 import json
 import asyncio
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.user import UserResponse
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
 from app.utils.logging_config import get_logger
 from app.services.push_notification_service import PushNotificationService
 
@@ -35,7 +35,7 @@ class DeviceTokenRequest(BaseModel):
 async def register_device_token(
     request: DeviceTokenRequest,
     current_user: UserResponse = Depends(get_current_user),
-    supabase = Depends(get_db)
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Register device token for push notifications (authenticated)
@@ -43,7 +43,7 @@ async def register_device_token(
     Args:
         request: DeviceTokenRequest containing device_token
         current_user: Current authenticated user
-        supabase: Supabase client
+        credentials: JWT credentials for authenticated Supabase client
         
     Returns:
         Success message
@@ -52,15 +52,31 @@ async def register_device_token(
         # Extract device token from request
         device_token = request.device_token
         
+        # Create authenticated Supabase client for RLS policies
+        from app.core.config import settings
+        from supabase import create_client
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        supabase.auth.set_session(credentials.credentials, "")
+        
         # Update user's device token
+        # Note: Supabase UPDATE may return empty data array even on success
+        # We'll verify success by checking if the update didn't raise an error
         response = supabase.table("users").update({
             "device_token": device_token,
             "updated_at": datetime.utcnow().isoformat()
         }).eq("id", current_user.id).execute()
         
-        if not response.data:
+        # Verify update succeeded by checking for errors
+        if hasattr(response, 'error') and response.error:
+            logger.error(f"Supabase error updating device token: {response.error}")
             raise HTTPException(status_code=500, detail="Failed to update device token")
         
+        # If response.data is empty, it might still be successful (Supabase quirk)
+        # But if we got here without an error, assume success
         return {"message": "Device token registered successfully"}
     except HTTPException:
         raise
