@@ -217,8 +217,14 @@ class AuthService: ObservableObject, @unchecked Sendable {
     /// Logout current user
     /// Clears authentication state and all user-related data
     func logout() async {
+        // Track logout event
+        PostHogAnalytics.trackUserLoggedOut()
+        
         // Log out from RevenueCat (clears user association but keeps anonymous purchase history)
         await RevenueCatConfigurator.logoutUser()
+        
+        // Reset PostHog user identification
+        PostHogAnalytics.resetUser()
         
         await apiService.clearAuthToken()
         clearPersistedUserId()
@@ -377,6 +383,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
             // Identify user with RevenueCat to link purchases across devices
             await RevenueCatConfigurator.identifyUser(freshUser.id)
             
+            // Identify user with PostHog and get pet count
+            let petsCount = CachedPetService.shared.pets.count
+            PostHogAnalytics.identifyUser(freshUser, petsCount: petsCount)
+            PostHogAnalytics.trackUserLoggedIn(userId: freshUser.id, role: freshUser.role.rawValue)
+            
             // Only run auto-onboarding check if user is not already onboarded
             let finalUser = if !freshUser.onboarded {
                 await checkAndCompleteOnboardingIfNeeded(user: freshUser)
@@ -433,6 +444,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 
                 // Identify user with RevenueCat after email confirmation
                 await RevenueCatConfigurator.identifyUser(user.id)
+                
+                // Identify user with PostHog
+                let petsCount = CachedPetService.shared.pets.count
+                PostHogAnalytics.identifyUser(user, petsCount: petsCount)
+                PostHogAnalytics.trackUserLoggedIn(userId: user.id, role: user.role.rawValue)
                 
                 // Only run auto-onboarding check if user is not already onboarded
                 let finalUser = if !user.onboarded {
@@ -510,6 +526,14 @@ class AuthService: ObservableObject, @unchecked Sendable {
             do {
                 let user = try await apiService.getCurrentUser()
                 
+                // Identify user with RevenueCat
+                await RevenueCatConfigurator.identifyUser(user.id)
+                
+                // Identify user with PostHog
+                let petsCount = CachedPetService.shared.pets.count
+                PostHogAnalytics.identifyUser(user, petsCount: petsCount)
+                PostHogAnalytics.trackUserLoggedIn(userId: user.id, role: user.role.rawValue)
+                
                 // Only run auto-onboarding check if user is not already onboarded
                 let finalUser = if !user.onboarded {
                     await checkAndCompleteOnboardingIfNeeded(user: user)
@@ -542,6 +566,16 @@ class AuthService: ObservableObject, @unchecked Sendable {
         
         do {
             let user = try await apiService.getCurrentUser()
+            
+            // Update PostHog user properties if role changed
+            if let currentUser = currentUser, currentUser.role != user.role {
+                PostHogAnalytics.updateUserRole(user.role.rawValue)
+            }
+            
+            // Update pet count
+            let petsCount = CachedPetService.shared.pets.count
+            PostHogAnalytics.updatePetCount(petsCount)
+            
             await MainActor.run {
                 authState = .authenticated(user)
             }
@@ -578,6 +612,10 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 // Update user to mark onboarding as complete
                 do {
                     let updatedUser = try await apiService.updateUser(userUpdate)
+                    
+                    // Track onboarding completion
+                    PostHogAnalytics.trackOnboardingCompleted(petsCount: pets.count)
+                    
                     print("AuthService: Onboarding auto-completed successfully")
                     return updatedUser
                 } catch APIError.authenticationError {

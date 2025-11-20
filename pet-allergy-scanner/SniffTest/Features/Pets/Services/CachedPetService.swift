@@ -107,6 +107,10 @@ final class CachedPetService {
                 self.pets.append(newPet)
                 self.isLoading = false
                 
+                // Track pet creation
+                PostHogAnalytics.trackPetCreated(petId: newPet.id, species: newPet.species.rawValue)
+                PostHogAnalytics.updatePetCount(self.pets.count)
+                
                 // Update cache
                 await updatePetsCache()
                 
@@ -137,6 +141,9 @@ final class CachedPetService {
                     self.pets[index] = updatedPet
                 }
                 self.isLoading = false
+                
+                // Track pet update
+                PostHogAnalytics.trackPetUpdated(petId: updatedPet.id, species: updatedPet.species.rawValue)
                 
                 // Update cache
                 await updatePetsCache()
@@ -173,12 +180,20 @@ final class CachedPetService {
                     }
                 }
                 
+                // Get pet info before deletion for tracking
+                let deletedPet = pets.first(where: { $0.id == id })
+                let petSpecies = deletedPet?.species.rawValue ?? "unknown"
+                
                 // Delete from server
                 try await apiService.deletePet(id: id)
                 
                 // Update local state
                 self.pets.removeAll { $0.id == id }
                 self.isLoading = false
+                
+                // Track pet deletion
+                PostHogAnalytics.trackPetDeleted(petId: id, species: petSpecies)
+                PostHogAnalytics.updatePetCount(self.pets.count)
                 
                 // Update cache
                 await updatePetsCache()
@@ -265,6 +280,9 @@ final class CachedPetService {
                     onboarded: true
                 )
                 _ = try await apiService.updateUser(userUpdate)
+                
+                // Track onboarding completion
+                PostHogAnalytics.trackOnboardingCompleted(petsCount: self.pets.count)
                 
                 // Refresh user data
                 await AuthService.shared.refreshCurrentUser()

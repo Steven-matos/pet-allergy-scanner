@@ -32,7 +32,7 @@ async def record_feeding_no_slash(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Record feeding (without trailing slash)"""
-    return await record_feeding_with_slash(feeding_record, supabase, current_user)
+    return await record_feeding_with_slash(feeding_record, current_user, credentials)
 
 @router.post("/", response_model=FeedingRecordResponse)
 async def record_feeding_with_slash(
@@ -70,8 +70,9 @@ async def record_feeding_with_slash(
         await verify_pet_ownership(feeding_record.pet_id, current_user.id, supabase)
         
         # Create feeding record
+        # Note: feeding_records table only has pet_id, not user_id
+        # Authorization is handled via RLS policies checking pet ownership
         record_data = feeding_record.dict()
-        record_data['user_id'] = current_user.id
         record_data['id'] = str(uuid.uuid4())
         
         # Insert into database
@@ -129,7 +130,9 @@ async def get_feeding_records(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get feeding records
-        response = supabase.table("feeding_records").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).order("created_at", desc=True).execute()
+        # Note: feeding_records table only has pet_id, not user_id
+        # Authorization is handled via RLS policies checking pet ownership
+        response = supabase.table("feeding_records").select("*").eq("pet_id", pet_id).order("created_at", desc=True).execute()
         
         if not response.data:
             return []
