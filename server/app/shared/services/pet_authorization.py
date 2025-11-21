@@ -49,12 +49,52 @@ async def verify_pet_ownership(
     
     # Query pet by ID
     # If db is an authenticated client, RLS will automatically filter by auth.uid()
-    # We also filter by user_id for additional security and compatibility
-    response = supabase.table("pets")\
-        .select("*")\
-        .eq("id", pet_id)\
-        .eq("user_id", user_id)\
-        .execute()
+    # Try querying with RLS first (without explicit user_id filter) if authenticated client
+    # This ensures RLS policies are properly enforced
+    if db is not None:
+        # Authenticated client - rely on RLS to filter by auth.uid()
+        # RLS policy: (select auth.uid()) = user_id
+        logger.debug(f"Verifying pet ownership with authenticated client: pet_id={pet_id}, user_id={user_id}")
+        try:
+            response = supabase.table("pets")\
+                .select("*")\
+                .eq("id", pet_id)\
+                .execute()
+            
+            logger.debug(f"RLS query returned {len(response.data) if response.data else 0} results")
+            
+            # Verify the pet belongs to the expected user (double-check)
+            if response.data:
+                found_user_id = response.data[0].get("user_id")
+                if found_user_id != user_id:
+                    logger.warning(
+                        f"Pet {pet_id} found via RLS but belongs to different user. "
+                        f"Expected: {user_id}, Found: {found_user_id}. "
+                        f"This suggests RLS auth.uid() != expected user_id"
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Pet not found or access denied"
+                    )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error querying pet with authenticated client: {e}")
+            # Fall back to explicit user_id filter
+            logger.debug("Falling back to explicit user_id filter")
+            response = supabase.table("pets")\
+                .select("*")\
+                .eq("id", pet_id)\
+                .eq("user_id", user_id)\
+                .execute()
+    else:
+        # Unauthenticated client - must filter explicitly
+        logger.debug(f"Verifying pet ownership with unauthenticated client: pet_id={pet_id}, user_id={user_id}")
+        response = supabase.table("pets")\
+            .select("*")\
+            .eq("id", pet_id)\
+            .eq("user_id", user_id)\
+            .execute()
     
     if not response.data:
         # Log for debugging - check if pet exists at all
