@@ -107,7 +107,33 @@ class APIService: ObservableObject, @unchecked Sendable {
     private init() {}
     
     /// Set authentication token for API requests
+    /// Only saves if tokens have actually changed to avoid unnecessary keychain writes
     func setAuthToken(_ token: String, refreshToken: String? = nil, expiresIn: Int? = nil) async {
+        // Check if token is already set to avoid unnecessary saves
+        let currentToken = await authToken
+        let currentRefreshTokenValue = await self.refreshToken
+        let currentExpiry = await tokenExpiry
+        
+        // Calculate new expiry
+        let newExpiry: Date
+        if let expiresIn = expiresIn {
+            newExpiry = Date().addingTimeInterval(TimeInterval(expiresIn))
+        } else {
+            newExpiry = Date().addingTimeInterval(30 * 24 * 60 * 60) // Default to 30 days
+        }
+        
+        // Only save if tokens have changed
+        let tokenChanged = currentToken != token
+        let refreshTokenChanged = refreshToken != nil && currentRefreshTokenValue != refreshToken
+        let expiryChanged = abs((currentExpiry?.timeIntervalSince1970 ?? 0) - newExpiry.timeIntervalSince1970) > 60 // 1 minute tolerance
+        
+        guard tokenChanged || refreshTokenChanged || expiryChanged else {
+            #if DEBUG
+            print("🔐 APIService: Tokens unchanged - skipping save")
+            #endif
+            return
+        }
+        
         #if DEBUG
         print("🔐 APIService: Setting auth token")
         #endif
@@ -115,26 +141,47 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         if let refreshToken = refreshToken {
             #if DEBUG
-            print("🔐 APIService: Setting refresh token")
+            print("🔐 APIService: Setting refresh token (length: \(refreshToken.count) chars)")
             #endif
             await setRefreshTokenInternal(refreshToken)
+        } else {
+            #if DEBUG
+            let existingRefreshToken = await self.refreshToken
+            if existingRefreshToken != nil {
+                print("ℹ️ APIService: No refresh token provided - preserving existing refresh token in keychain")
+            } else {
+                print("⚠️ APIService: No refresh token provided and none exists - token refresh will not be possible")
+            }
+            #endif
         }
         
         if let expiresIn = expiresIn {
             // Set expiry to expiresIn seconds from now
-            let expiry = Date().addingTimeInterval(TimeInterval(expiresIn))
-            await setTokenExpiryInternal(expiry)
+            await setTokenExpiryInternal(newExpiry)
             #if DEBUG
             print("🔐 APIService: Token expires in \(expiresIn) seconds")
             #endif
         } else {
             // Default to 30 days if no expiry provided
-            let expiry = Date().addingTimeInterval(30 * 24 * 60 * 60)
-            await setTokenExpiryInternal(expiry)
+            await setTokenExpiryInternal(newExpiry)
             #if DEBUG
             print("🔐 APIService: Token expires in 30 days (default)")
             #endif
         }
+        
+        // Verify all tokens are accessible after saving (only once to reduce logging)
+        #if DEBUG
+        let verification = await KeychainHelper.verifyAuthTokens()
+        let allAccessible = verification.values.allSatisfy { $0 }
+        if allAccessible {
+            print("✅ APIService: All auth tokens verified and accessible in keychain")
+        } else {
+            print("⚠️ APIService: Some auth tokens may not be accessible:")
+            for (key, accessible) in verification where !accessible {
+                print("   - \(key): NOT accessible")
+            }
+        }
+        #endif
     }
     
     /// Clear authentication token
@@ -172,12 +219,20 @@ class APIService: ObservableObject, @unchecked Sendable {
         isRefreshing = true
         
         let task = Task<Void, Error> {
+            // Check if refresh token exists before attempting refresh
             guard let refreshToken = await self.refreshToken else {
+                #if DEBUG
+                print("❌ APIService: Cannot refresh - no refresh token found in keychain")
+                #endif
                 self.isRefreshing = false
                 throw APIError.authenticationError
             }
             
-            guard let url = URL(string: "\(baseURL)/auth/refresh") else {
+            #if DEBUG
+            print("🔐 APIService: Attempting token refresh with refresh token (length: \(refreshToken.count) chars)")
+            #endif
+            
+            guard let url = URL(string: "\(baseURL)/auth/refresh/") else {
                 self.isRefreshing = false
                 throw APIError.invalidURL
             }
@@ -200,13 +255,31 @@ class APIService: ObservableObject, @unchecked Sendable {
             }
             
             guard httpResponse.statusCode == 200 else {
-                // Refresh token is invalid or expired (older than 30 days)
-                // Only clear tokens if it's a 401/403 error, not other errors
-                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
-                    await self.clearAuthToken()
+                // Try to parse error response for better debugging
+                if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                    #if DEBUG
+                    print("⚠️ APIService: Refresh failed with error: \(errorResponse.detail)")
+                    #endif
                 }
-                self.isRefreshing = false
-                throw APIError.authenticationError
+                
+                // Refresh token is invalid or expired (older than 30 days)
+                // Only clear tokens if it's a 401/403 error, not other errors (like network errors)
+                if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    #if DEBUG
+                    print("⚠️ APIService: Refresh token expired or invalid (status: \(httpResponse.statusCode)) - clearing tokens")
+                    #endif
+                    await self.clearAuthToken()
+                    self.isRefreshing = false
+                    throw APIError.authenticationError
+                } else {
+                    // For other errors (network, server errors), don't clear tokens
+                    // The token might still be valid, just the refresh endpoint had an issue
+                    #if DEBUG
+                    print("⚠️ APIService: Refresh failed with status \(httpResponse.statusCode) - keeping tokens")
+                    #endif
+                    self.isRefreshing = false
+                    throw APIError.serverError(httpResponse.statusCode)
+                }
             }
             
             // Parse response
@@ -214,14 +287,55 @@ class APIService: ObservableObject, @unchecked Sendable {
             decoder.dateDecodingStrategy = .iso8601
             let authResponse = try decoder.decode(AuthResponse.self, from: data)
             
+            // Check if refresh token was returned - if not, preserve existing one
+            let refreshTokenToSave = authResponse.refreshToken
+            if refreshTokenToSave == nil {
+                #if DEBUG
+                let existingRefreshToken = await self.refreshToken
+                if existingRefreshToken != nil {
+                    print("⚠️ APIService: Server did not return refresh token - preserving existing refresh token")
+                } else {
+                    print("⚠️ APIService: Server did not return refresh token and none exists - future refreshes may fail")
+                }
+                #endif
+            } else {
+                #if DEBUG
+                print("✅ APIService: Server returned new refresh token - will save to keychain")
+                #endif
+            }
+            
             // Store new tokens with proper expiry
             // Supabase tokens typically expire in 3600 seconds (1 hour)
             // But refresh tokens last 30 days, so we'll refresh every hour automatically
+            // CRITICAL: Always pass refresh token from response to ensure we save the new rotated refresh token
+            // If server doesn't return one, preserve existing refresh token (handled in setAuthToken)
+            let existingRefreshToken = await self.refreshToken
+            let finalRefreshToken = refreshTokenToSave ?? existingRefreshToken
+            
+            if finalRefreshToken == nil {
+                #if DEBUG
+                print("❌ APIService: CRITICAL - No refresh token available after refresh! Future refreshes will fail.")
+                #endif
+            }
+            
             await self.setAuthToken(
                 authResponse.accessToken,
-                refreshToken: authResponse.refreshToken,
+                refreshToken: refreshTokenToSave, // Pass the new refresh token if provided, nil otherwise
                 expiresIn: authResponse.expiresIn ?? 3600 // Default to 1 hour if not provided
             )
+            
+            // Verify refresh token was saved correctly after refresh
+            #if DEBUG
+            let savedRefreshToken = await self.refreshToken
+            if savedRefreshToken != nil {
+                print("✅ APIService: Refresh successful - refresh token saved to keychain (length: \(savedRefreshToken?.count ?? 0) chars)")
+                if let refreshTokenToSave = refreshTokenToSave, refreshTokenToSave != savedRefreshToken {
+                    print("⚠️ APIService: WARNING - Refresh token from server doesn't match saved token!")
+                }
+            } else {
+                print("❌ APIService: CRITICAL - Refresh token NOT saved to keychain after successful refresh!")
+            }
+            #endif
             
             self.isRefreshing = false
         }
@@ -366,6 +480,18 @@ class APIService: ObservableObject, @unchecked Sendable {
     func ensureValidToken() async {
         // Check if we have any tokens
         guard await hasAuthToken else {
+            #if DEBUG
+            print("🔐 APIService: No auth token found - skipping token refresh")
+            #endif
+            return
+        }
+        
+        // Check if we have a refresh token before attempting refresh
+        let hasRefreshToken = await self.refreshToken != nil
+        guard hasRefreshToken else {
+            #if DEBUG
+            print("🔐 APIService: No refresh token found - cannot refresh")
+            #endif
             return
         }
         
@@ -373,11 +499,21 @@ class APIService: ObservableObject, @unchecked Sendable {
         if await shouldRefreshToken() {
             do {
                 try await refreshAuthToken()
+                #if DEBUG
+                print("✅ APIService: Token refreshed successfully on app activation")
+                #endif
             } catch {
-                // If refresh fails, token may be expired (>30 days)
-                // Don't clear tokens here - let the normal error handling handle it
-                print("Failed to refresh token on app activation: \(error)")
+                // If refresh fails, log but don't clear tokens here
+                // The refresh endpoint will handle clearing if refresh token is expired
+                #if DEBUG
+                print("⚠️ APIService: Failed to refresh token on app activation: \(error)")
+                print("   This may be normal if refresh token is expired (>30 days)")
+                #endif
             }
+        } else {
+            #if DEBUG
+            print("ℹ️ APIService: Token is still valid - no refresh needed")
+            #endif
         }
     }
     

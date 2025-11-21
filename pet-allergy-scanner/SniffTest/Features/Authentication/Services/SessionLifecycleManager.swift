@@ -70,10 +70,16 @@ final class SessionLifecycleManager: ObservableObject {
     // MARK: - Private Helpers
     
     private func processAppDidBecomeActive() async {
-        await enforceInactivityPolicyIfRequired()
-        let forceRefresh = detectAppUpdate()
-        
+        // CRITICAL: Try to refresh tokens BEFORE checking inactivity policy
+        // This allows us to refresh even if access token is expired (up to 30 days)
+        // Only logout if refresh token itself is expired (30+ days of inactivity)
         await apiService.ensureValidToken()
+        
+        // After attempting token refresh, check inactivity policy
+        // If tokens were cleared during refresh, inactivity check will see we're already logged out
+        await enforceInactivityPolicyIfRequired()
+        
+        let forceRefresh = detectAppUpdate()
         await authService.resumeSessionIfNeeded(forceRefresh: forceRefresh)
     }
     
@@ -91,6 +97,15 @@ final class SessionLifecycleManager: ObservableObject {
     }
     
     private func enforceInactivityPolicyIfRequired() async {
+        // Only enforce inactivity logout if we don't have valid tokens
+        // This ensures we try to refresh first (in processAppDidBecomeActive) before logging out
+        // If refresh succeeds, tokens are valid and we don't need to logout
+        // If refresh fails (refresh token expired >30 days), tokens will be cleared and we're already logged out
+        guard await apiService.hasAuthToken else {
+            // No tokens - already logged out, no need to enforce inactivity policy
+            return
+        }
+        
         guard let lastBackground = userDefaults.object(forKey: Keys.lastBackgroundTimestamp.rawValue) as? TimeInterval else {
             recordBackgroundTimestamp()
             return
@@ -98,6 +113,9 @@ final class SessionLifecycleManager: ObservableObject {
         
         let elapsed = Date().timeIntervalSince1970 - lastBackground
         if elapsed > Constants.inactivityLogoutInterval {
+            #if DEBUG
+            print("🔐 SessionLifecycleManager: Enforcing inactivity logout - app inactive for \(Int(elapsed / (24 * 60 * 60))) days (>30 days)")
+            #endif
             await authService.logout()
         }
     }

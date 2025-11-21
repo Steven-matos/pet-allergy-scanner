@@ -37,6 +37,13 @@ enum RevenueCatConfigurator {
     /// - Parameter userId: The unique user identifier from your backend
     @MainActor
     static func identifyUser(_ userId: String) async {
+        // Check if user is already identified to avoid duplicate calls
+        let currentAppUserId = Purchases.shared.appUserID
+        if currentAppUserId == userId {
+            logger.debug("User \(userId) already identified - skipping duplicate identifyUser call")
+            return
+        }
+        
         do {
             let (customerInfo, _) = try await Purchases.shared.logIn(userId)
             logger.info("RevenueCat user identified: \(userId)")

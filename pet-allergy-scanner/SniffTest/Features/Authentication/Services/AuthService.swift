@@ -104,8 +104,23 @@ class AuthService: ObservableObject, @unchecked Sendable {
         // First, ensure token is valid by refreshing if needed
         await apiService.ensureValidToken()
         
+        // Check if tokens still exist after refresh attempt
+        // Tokens might have been cleared if refresh token was expired
+        guard await apiService.hasAuthToken else {
+            #if DEBUG
+            print("🔐 AuthService: No auth token available after refresh attempt - session cannot be restored")
+            #endif
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = nil
+            }
+            return
+        }
+        
         do {
-            let user = try await apiService.getCurrentUser()
+            // Use cached service which checks cache first before hitting server
+            // This prevents unnecessary server calls when restoring session after token refresh
+            let user = try await CachedProfileService.shared.getCurrentUser(forceRefresh: false)
             
             // Identify user with RevenueCat to restore subscription state
             await RevenueCatConfigurator.identifyUser(user.id)
@@ -114,6 +129,7 @@ class AuthService: ObservableObject, @unchecked Sendable {
             let finalUser = await checkAndCompleteOnboardingIfNeeded(user: user)
             
             // Hydrate all caches before transitioning to authenticated state
+            // This will use cached data if available, only fetching what's missing
             await cacheHydrationService.hydrateAllCaches()
             cacheAuthenticatedUser(finalUser)
             
@@ -273,13 +289,16 @@ class AuthService: ObservableObject, @unchecked Sendable {
         }
     }
     
-    /// Refresh user profile from backend
+    /// Refresh user profile from backend with cache-first approach
     /// Used after subscription changes to update user role
+    /// Only fetches from server if cache is stale or missing
     func refreshUserProfile() async {
         guard case .authenticated = authState else { return }
         
         do {
-            let user = try await apiService.getCurrentUser()
+            // Use cached service which checks cache first before hitting server
+            // This prevents unnecessary server calls when data is already cached
+            let user = try await CachedProfileService.shared.getCurrentUser(forceRefresh: false)
             cacheAuthenticatedUser(user)
             await MainActor.run {
                 authState = .authenticated(user)
@@ -560,12 +579,16 @@ class AuthService: ObservableObject, @unchecked Sendable {
         }
     }
     
-    /// Refresh current user data from server
+    /// Refresh current user data with cache-first approach
+    /// Only fetches from server if cache is stale or missing
+    /// This prevents unnecessary data reloads when refresh token logic is triggered
     func refreshCurrentUser() async {
         guard case .authenticated = authState else { return }
         
         do {
-            let user = try await apiService.getCurrentUser()
+            // Use cached service which checks cache first before hitting server
+            // This prevents unnecessary server calls when data is already cached
+            let user = try await CachedProfileService.shared.getCurrentUser(forceRefresh: false)
             
             // Update PostHog user properties if role changed
             if let currentUser = currentUser, currentUser.role != user.role {

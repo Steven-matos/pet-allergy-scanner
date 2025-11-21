@@ -11,6 +11,57 @@ import Security
 /// Thread-safe Keychain operations using async/await to prevent main thread blocking
 struct KeychainHelper {
     
+    /// Map Security Framework status codes to human-readable descriptions
+    /// - Parameter status: The OSStatus code from Security Framework
+    /// - Returns: Human-readable description of the status code
+    private static func statusDescription(_ status: OSStatus) -> String {
+        switch status {
+        case errSecSuccess:
+            return "Success"
+        case errSecItemNotFound:
+            return "Item Not Found"
+        case errSecDuplicateItem:
+            return "Duplicate Item"
+        case errSecAuthFailed:
+            return "Authentication Failed"
+        case errSecInteractionNotAllowed:
+            return "Interaction Not Allowed"
+        default:
+            return "Error (code: \(status))"
+        }
+    }
+    
+    /// Verify that a value can be saved and read back from keychain
+    /// This is useful for debugging keychain access issues
+    /// - Parameter key: The key to test
+    /// - Returns: True if save/read cycle works, false otherwise
+    static func verifyKeychainAccess(forKey key: String) async -> Bool {
+        let testValue = "keychain_verification_test_\(UUID().uuidString)"
+        
+        // Try to save
+        await save(testValue, forKey: key)
+        
+        // Try to read back
+        if let readValue = await read(forKey: key) {
+            // Clean up test value
+            await delete(forKey: key)
+            
+            // Verify it matches
+            let matches = readValue == testValue
+            if matches {
+                print("✅ KeychainHelper: Verification passed for key: \(key)")
+            } else {
+                print("❌ KeychainHelper: Verification failed - read value doesn't match for key: \(key)")
+            }
+            return matches
+        } else {
+            // Clean up if it was saved but can't be read
+            await delete(forKey: key)
+            print("❌ KeychainHelper: Verification failed - cannot read value for key: \(key)")
+            return false
+        }
+    }
+    
     /// Save a value to the keychain asynchronously
     /// - Parameters:
     ///   - value: The string value to save
@@ -41,7 +92,22 @@ struct KeychainHelper {
             // Handle specific error codes
             switch status {
             case errSecSuccess:
-                print("🔐 KeychainHelper: Successfully saved value for \(key)")
+                print("✅ KeychainHelper: Successfully saved value for \(key)")
+                // Verify the save by reading it back
+                let verifyQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrAccount as String: key,
+                    kSecAttrService as String: "com.snifftest.app",
+                    kSecReturnData as String: true,
+                    kSecMatchLimit as String: kSecMatchLimitOne
+                ]
+                var verifyResult: AnyObject?
+                let verifyStatus = SecItemCopyMatching(verifyQuery as CFDictionary, &verifyResult)
+                if verifyStatus == errSecSuccess {
+                    print("✅ KeychainHelper: Verified saved value for \(key) - readback successful")
+                } else {
+                    print("⚠️ KeychainHelper: Save succeeded but readback failed for \(key) - status: \(statusDescription(verifyStatus))")
+                }
             case errSecDuplicateItem:
                 print("🔐 KeychainHelper: Duplicate item for \(key) - attempting update")
                 // Try to update instead
@@ -55,11 +121,15 @@ struct KeychainHelper {
                     kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
                 ]
                 let updateStatus = SecItemUpdate(updateQuery as CFDictionary, updateData as CFDictionary)
-                print("🔐 KeychainHelper: Update status for \(key): \(updateStatus)")
+                if updateStatus == errSecSuccess {
+                    print("✅ KeychainHelper: Successfully updated value for \(key)")
+                } else {
+                    print("❌ KeychainHelper: Update failed for \(key) - status: \(statusDescription(updateStatus))")
+                }
             case errSecAuthFailed:
-                print("🔐 KeychainHelper: Authentication failed for \(key)")
+                print("❌ KeychainHelper: Authentication failed for \(key) - may need device unlock")
             default:
-                print("❌ KeychainHelper: Failed to save value for \(key) with status: \(status)")
+                print("❌ KeychainHelper: Failed to save value for \(key) - status: \(statusDescription(status))")
             }
         }.value
     }
@@ -80,21 +150,27 @@ struct KeychainHelper {
             var result: AnyObject?
             let status = SecItemCopyMatching(query as CFDictionary, &result)
             
-            print("🔐 KeychainHelper: Read status for \(key): \(status)")
-            
             if status == errSecSuccess, let data = result as? Data {
                 let value = String(data: data, encoding: .utf8)
-                print("🔐 KeychainHelper: Successfully read value for \(key): \(value?.prefix(20) ?? "nil")...")
-                return value
+                if let value = value {
+                    print("✅ KeychainHelper: Successfully read value for \(key) (length: \(value.count) chars)")
+                    return value
+                } else {
+                    print("❌ KeychainHelper: Read data but failed to decode as string for key: \(key)")
+                    return nil
+                }
             } else {
                 // Handle specific error codes
                 switch status {
                 case errSecItemNotFound:
-                    print("🔐 KeychainHelper: Item not found for key: \(key)")
+                    // This is expected when item doesn't exist yet - not an error
+                    print("ℹ️ KeychainHelper: Item not found for key: \(key) (status: \(statusDescription(status)))")
                 case errSecAuthFailed:
-                    print("🔐 KeychainHelper: Authentication failed for key: \(key)")
+                    print("❌ KeychainHelper: Authentication failed for key: \(key) - may need device unlock")
+                case errSecInteractionNotAllowed:
+                    print("❌ KeychainHelper: Interaction not allowed for key: \(key) - device may be locked")
                 default:
-                    print("❌ KeychainHelper: Failed to read value for \(key) with status: \(status)")
+                    print("❌ KeychainHelper: Failed to read value for \(key) - status: \(statusDescription(status))")
                 }
                 return nil
             }
@@ -112,7 +188,33 @@ struct KeychainHelper {
             ]
             
             let status = SecItemDelete(query as CFDictionary)
-            print("🔐 KeychainHelper: Delete status for \(key): \(status)")
+            if status == errSecSuccess || status == errSecItemNotFound {
+                print("✅ KeychainHelper: Successfully deleted value for \(key) (status: \(statusDescription(status)))")
+            } else {
+                print("❌ KeychainHelper: Failed to delete value for \(key) - status: \(statusDescription(status))")
+            }
         }.value
+    }
+    
+    /// Verify all authentication tokens are properly stored and accessible
+    /// This is useful for debugging keychain issues after login
+    /// - Returns: Dictionary with verification results for each auth key
+    static func verifyAuthTokens() async -> [String: Bool] {
+        let authKeys = ["authToken", "refreshToken", "tokenExpiry"]
+        var results: [String: Bool] = [:]
+        
+        print("🔍 KeychainHelper: Verifying all auth tokens...")
+        
+        for key in authKeys {
+            let hasValue = await read(forKey: key) != nil
+            results[key] = hasValue
+            if hasValue {
+                print("✅ KeychainHelper: \(key) is accessible")
+            } else {
+                print("❌ KeychainHelper: \(key) is NOT accessible")
+            }
+        }
+        
+        return results
     }
 }
