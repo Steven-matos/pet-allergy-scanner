@@ -23,7 +23,12 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 security = HTTPBearer()
 
 # Initialize push notification service
-push_service = PushNotificationService()
+try:
+    push_service = PushNotificationService()
+except Exception as e:
+    logger.warning(f"Failed to initialize PushNotificationService: {e}")
+    logger.warning("Push notifications will not be available until configuration is fixed")
+    push_service = None
 
 
 class DeviceTokenRequest(BaseModel):
@@ -207,6 +212,9 @@ async def send_push_notification(
                 logger.warning(f"Invalid delay value: {payload.get('delay')}, using 0. Error: {e}")
                 delay = 0
         
+        if push_service is None:
+            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+        
         if delay > 0:
             # Schedule notification for later
             background_tasks.add_task(
@@ -250,6 +258,9 @@ async def cancel_all_notifications(
         Success message
     """
     try:
+        if push_service is None:
+            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+        
         # Cancel all scheduled notifications for this user
         await push_service.cancel_user_notifications(current_user.id)
         
@@ -366,6 +377,9 @@ async def send_birthday_notification(
             "action": "show_birthday_celebration"
         }
         
+        if push_service is None:
+            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+        
         # Send immediately
         await push_service.send_notification(current_user.device_token, birthday_payload)
         
@@ -388,6 +402,10 @@ async def send_delayed_notification(device_token: str, payload: Dict[str, Any], 
     
     await asyncio.sleep(delay)
     try:
+        if push_service is None:
+            logger.error("Push notification service is not configured - cannot send delayed notification")
+            return
+        
         await push_service.send_notification(device_token, payload_without_delay)
         logger.info(f"Delayed notification sent successfully to {device_token[:20]}...")
     except Exception as e:
