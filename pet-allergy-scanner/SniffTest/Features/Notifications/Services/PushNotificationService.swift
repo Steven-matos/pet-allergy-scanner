@@ -215,7 +215,26 @@ class PushNotificationService: NSObject, ObservableObject {
     }
     
     private func setupNotificationCenter() {
+        // Set this service as the notification center delegate
+        // This ensures push notifications are properly displayed in the notification bar
         UNUserNotificationCenter.current().delegate = self
+        
+        // Request notification authorization if not already granted
+        Task {
+            await checkAuthorizationStatus()
+        }
+    }
+    
+    /// Check current notification authorization status
+    private func checkAuthorizationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        isAuthorized = settings.authorizationStatus == .authorized
+        
+        if isAuthorized {
+            print("✅ Push notifications authorized - notifications will appear in notification bar")
+        } else {
+            print("⚠️ Push notifications not authorized - notifications won't appear in notification bar")
+        }
     }
     
     /// Register device token with the server
@@ -305,7 +324,7 @@ class PushNotificationService: NSObject, ObservableObject {
     /// - Parameters:
     ///   - payload: Notification payload
     ///   - deviceToken: Target device token
-    private func sendPushNotification(payload: [String: Any], deviceToken: String) async throws {
+    func sendPushNotification(payload: [String: Any], deviceToken: String) async throws {
         try await apiService.sendPushNotification(payload: payload, deviceToken: deviceToken)
     }
 }
@@ -334,15 +353,24 @@ enum EngagementNotificationType: String, CaseIterable {
 @MainActor
 extension PushNotificationService: @MainActor UNUserNotificationCenterDelegate {
     /// Handle notification when app is in foreground
+    /// This ensures notifications appear in the notification bar even when app is open
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Show notification even when app is in foreground
+        print("📱 Notification will present - showing in notification bar")
+        
+        // Show notification in notification bar/banner with badge and sound
+        // .banner = shows at top of screen as banner notification
+        // .list = shows in notification center
+        // .badge = updates app badge number
+        // .sound = plays notification sound
         if #available(iOS 14.0, *) {
-            completionHandler([.banner, .badge, .sound])
+            // iOS 14+: Use .banner to show notification banner at top of screen
+            completionHandler([.banner, .list, .badge, .sound])
         } else {
+            // iOS 13 and below: Use .alert for notification banner
             completionHandler([.alert, .badge, .sound])
         }
     }

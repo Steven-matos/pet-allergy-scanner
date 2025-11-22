@@ -430,19 +430,67 @@ class APIService: ObservableObject, @unchecked Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
+        // Ensure delay is an integer if present
+        var sanitizedPayload = payload
+        if let delayValue = payload["delay"] {
+            if let delayDouble = delayValue as? Double {
+                sanitizedPayload["delay"] = Int(delayDouble)
+            } else if let delayInt = delayValue as? Int {
+                sanitizedPayload["delay"] = delayInt
+            }
+        }
+        
         let requestPayload: [String: Any] = [
             "device_token": deviceToken,
-            "payload": payload
+            "payload": sanitizedPayload
         ]
+        
+        // Validate request payload before sending
+        guard !deviceToken.isEmpty else {
+            throw APIError.serverMessage("device_token cannot be empty")
+        }
+        
+        guard !sanitizedPayload.isEmpty else {
+            throw APIError.serverMessage("payload cannot be empty")
+        }
+        
         request.httpBody = try JSONSerialization.data(withJSONObject: requestPayload)
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
         
-        guard httpResponse.statusCode == 200 else {
+        if httpResponse.statusCode != 200 {
+            // Log response body for debugging
+            if let responseBody = String(data: data, encoding: .utf8) {
+                print("❌ Push notification error (\(httpResponse.statusCode)): \(responseBody)")
+            }
+            
+            if httpResponse.statusCode == 422 {
+                // Parse validation error details from FastAPI
+                if let errorResponse = try? JSONDecoder().decode(APIErrorResponse.self, from: data) {
+                    throw APIError.serverMessage(errorResponse.detail)
+                } else if let errorData = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    // Try to extract error details from response
+                    if let detail = errorData["detail"] as? String {
+                        throw APIError.serverMessage(detail)
+                    } else if let message = errorData["message"] as? String {
+                        throw APIError.serverMessage(message)
+                    } else if let errors = errorData["errors"] as? [[String: Any]] {
+                        // Parse Pydantic validation errors
+                        let errorMessages = errors.compactMap { error -> String? in
+                            guard let loc = error["loc"] as? [String], let msg = error["msg"] as? String else {
+                                return nil
+                            }
+                            return "\(loc.joined(separator: ".")): \(msg)"
+                        }
+                        throw APIError.serverMessage(errorMessages.joined(separator: "; "))
+                    }
+                }
+            }
+            
             throw APIError.serverError(httpResponse.statusCode)
         }
     }

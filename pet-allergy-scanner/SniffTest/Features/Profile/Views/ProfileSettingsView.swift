@@ -440,6 +440,25 @@ struct ProfileSettingsView: View {
             }
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Notification Settings Link
+                NavigationLink(destination: NotificationSettingsView()) {
+                    HStack {
+                        Image(systemName: "bell.badge")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        Text("Notification Settings")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
                 // Master Notification Toggle
                 HStack {
                     Text("Push Notifications")

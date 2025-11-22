@@ -204,18 +204,31 @@ class MedicationReminderService: NSObject, ObservableObject {
     // MARK: - Private Methods
     
     private func setupNotificationCenter() {
-        notificationCenter.delegate = self
+        // NOTE: Do NOT set delegate here - PushNotificationService is the primary delegate
+        // set in AppDelegate. This prevents delegate conflicts.
+        // PushNotificationService will handle all notification presentation in notification bar
     }
     
     private func scheduleMedicationNotifications(for reminder: MedicationReminder) async {
         guard reminder.isActive else { return }
         
+        // Get pet name for better notification message
+        let petName = getPetName(for: reminder.petId) ?? "your pet"
+        
         for (index, reminderTime) in reminder.reminderTimes.enumerated() {
             let content = UNMutableNotificationContent()
             content.title = "💊 Medication Reminder"
-            content.body = "Time to give \(reminder.medicationName) (\(reminder.dosage)) to your pet"
+            content.body = "Time to give \(reminder.medicationName) (\(reminder.dosage)) to \(petName)"
             content.sound = .default
             content.badge = 1
+            content.userInfo = [
+                "type": "medication_reminder",
+                "medication_id": reminder.id,
+                "pet_id": reminder.petId,
+                "medication_name": reminder.medicationName,
+                "dosage": reminder.dosage,
+                "action": "view_medication"
+            ]
             
             // Create unique identifier for each reminder time
             let identifier = "\(NotificationIdentifiers.medicationPrefix)\(reminder.id)_\(index)"
@@ -291,11 +304,119 @@ class MedicationReminderService: NSObject, ObservableObject {
             
             do {
                 try await notificationCenter.add(request)
-                print("✅ Scheduled medication reminder: \(reminder.medicationName) at \(reminderTime.displayTime)")
+                print("✅ Scheduled local medication reminder: \(reminder.medicationName) at \(reminderTime.displayTime)")
+                
+                // Also send push notification if available
+                await sendPushNotificationForMedication(reminder: reminder, reminderTime: reminderTime, index: index, petName: petName)
+                
             } catch {
                 print("❌ Failed to schedule medication reminder: \(error)")
             }
         }
+    }
+    
+    /**
+     * Send push notification for medication reminder
+     * - Parameters:
+     *   - reminder: The medication reminder
+     *   - reminderTime: The reminder time
+     *   - index: The index of the reminder time
+     *   - petName: The pet's name
+     */
+    private func sendPushNotificationForMedication(
+        reminder: MedicationReminder,
+        reminderTime: MedicationReminderTime,
+        index: Int,
+        petName: String
+    ) async {
+        // Get push notification service
+        let pushService = PushNotificationService.shared
+        
+        // Only send push notification if authorized and device token exists
+        guard pushService.isAuthorized,
+              let deviceToken = pushService.deviceToken else {
+            print("⚠️ Push notifications not available - skipping push notification for medication reminder")
+            return
+        }
+        
+        // Create push notification payload
+        let payload: [String: Any] = [
+            "aps": [
+                "alert": [
+                    "title": "💊 Medication Reminder",
+                    "body": "Time to give \(reminder.medicationName) (\(reminder.dosage)) to \(petName)"
+                ],
+                "sound": "default",
+                "badge": 1,
+                "category": "medication_reminder"
+            ],
+            "type": "medication_reminder",
+            "medication_id": reminder.id,
+            "pet_id": reminder.petId,
+            "medication_name": reminder.medicationName,
+            "dosage": reminder.dosage,
+            "reminder_time": reminderTime.time,
+            "reminder_label": reminderTime.label,
+            "action": "view_medication"
+        ]
+        
+        // Calculate delay for push notification based on reminder time
+        let delay: TimeInterval = calculateDelayForReminder(reminder: reminder, reminderTime: reminderTime)
+        
+        if delay > 0 {
+            // Schedule push notification with delay
+            var delayedPayload = payload
+            delayedPayload["delay"] = delay
+            
+            do {
+                try await pushService.sendPushNotification(payload: delayedPayload, deviceToken: deviceToken)
+                print("✅ Scheduled push medication reminder: \(reminder.medicationName) at \(reminderTime.displayTime) (delay: \(Int(delay))s)")
+            } catch {
+                print("❌ Failed to schedule push medication reminder: \(error)")
+            }
+        } else {
+            // Send immediately if time has already passed
+            do {
+                try await pushService.sendPushNotification(payload: payload, deviceToken: deviceToken)
+                print("✅ Sent immediate push medication reminder: \(reminder.medicationName)")
+            } catch {
+                print("❌ Failed to send push medication reminder: \(error)")
+            }
+        }
+    }
+    
+    /**
+     * Calculate delay in seconds until the next reminder time
+     * - Parameters:
+     *   - reminder: The medication reminder
+     *   - reminderTime: The reminder time
+     * - Returns: Delay in seconds, or 0 if time has passed
+     */
+    private func calculateDelayForReminder(reminder: MedicationReminder, reminderTime: MedicationReminderTime) -> TimeInterval {
+        let now = Date()
+        let calendar = Calendar.current
+        
+        // Get next occurrence of this reminder time
+        let timeComponents = reminderTime.timeComponents
+        let nextDate = calendar.nextDate(after: now, matching: timeComponents, matchingPolicy: .nextTime)
+        
+        guard let next = nextDate else {
+            return 0 // Time has passed or can't determine next time
+        }
+        
+        let delay = next.timeIntervalSince(now)
+        return max(0, delay) // Return 0 if negative (time has passed)
+    }
+    
+    /**
+     * Get pet name for medication reminder
+     * - Parameter petId: The pet's ID
+     * - Returns: The pet's name or nil if not found
+     */
+    private func getPetName(for petId: String) -> String? {
+        // Import pet service to get pet name
+        let petService = CachedPetService.shared
+        return petService.getPet(id: petId)?.name
     }
     
     private func cancelMedicationNotifications(for reminder: MedicationReminder) async {
@@ -348,7 +469,23 @@ extension MedicationReminderService: UNUserNotificationCenterDelegate {
         
         if identifier.hasPrefix(NotificationIdentifiers.medicationPrefix) {
             // Handle medication reminder tap
-            print("📱 User tapped medication reminder: \(identifier)")
+            let userInfo = response.notification.request.content.userInfo
+            
+            if let petId = userInfo["pet_id"] as? String,
+               let medicationId = userInfo["medication_id"] as? String {
+                
+                // Post notification to navigate to medication/health event view
+                NotificationCenter.default.post(
+                    name: .navigateToMedication,
+                    object: nil,
+                    userInfo: [
+                        "pet_id": petId,
+                        "medication_id": medicationId
+                    ]
+                )
+                
+                print("📱 User tapped medication reminder: \(medicationId) for pet: \(petId)")
+            }
         }
         
         completionHandler()

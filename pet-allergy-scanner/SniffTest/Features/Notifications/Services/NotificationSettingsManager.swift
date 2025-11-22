@@ -336,7 +336,9 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     // MARK: - Private Methods
     
     private func setupNotificationCenter() {
-        UNUserNotificationCenter.current().delegate = self
+        // NOTE: Do NOT set delegate here - PushNotificationService is the primary delegate
+        // set in AppDelegate. This prevents delegate conflicts.
+        // PushNotificationService will handle all notification presentation in notification bar
     }
     
     /// Schedule birthday easter egg notification for a specific pet
@@ -544,6 +546,8 @@ extension NotificationSettingsManager: @MainActor UNUserNotificationCenterDelega
 extension Notification.Name {
     static let showBirthdayCelebration = Notification.Name("showBirthdayCelebration")
     static let navigateToScan = Notification.Name("navigateToScan")
+    static let navigateToMealLogging = Notification.Name("navigateToMealLogging")
+    static let navigateToMedication = Notification.Name("navigateToMedication")
     static let userDidLogin = Notification.Name("userDidLogin")
     static let userDidLogout = Notification.Name("userDidLogout")
 }

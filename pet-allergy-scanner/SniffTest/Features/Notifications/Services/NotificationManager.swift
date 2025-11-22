@@ -20,6 +20,7 @@ class NotificationManager: ObservableObject {
     @Published var navigateToScan = false
     
     private let notificationSettingsManager = NotificationSettingsManager.shared
+    private let mealReminderService = MealReminderService.shared
     private let petService = CachedPetService.shared
     private let scanService = ScanService.shared
     private var cancellables = Set<AnyCancellable>()
@@ -37,6 +38,9 @@ class NotificationManager: ObservableObject {
             await notificationSettingsManager.checkAuthorizationStatus()
             notificationSettingsManager.scheduleAllNotifications()
             checkForBirthdayCelebrations()
+            
+            // Initialize meal reminder service
+            mealReminderService.scheduleDailyCheck()
         }
     }
     

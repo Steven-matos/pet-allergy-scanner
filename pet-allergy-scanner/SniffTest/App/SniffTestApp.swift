@@ -64,13 +64,51 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
     
     /// Handle push notification received while app is running
+    /// This method is called when a remote notification arrives
+    /// iOS will automatically display it in the notification bar if:
+    /// 1. App is in background/terminated - automatically shown
+    /// 2. App is in foreground - shown via UNUserNotificationCenterDelegate
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        // Handle push notification data
         print("📱 Received push notification: \(userInfo)")
+        
+        // Extract notification content from userInfo
+        if let aps = userInfo["aps"] as? [String: Any],
+           let alert = aps["alert"] as? [String: Any] {
+            
+            // Create a local notification to ensure it appears in notification bar
+            // This is especially important if the remote notification doesn't trigger properly
+            let content = UNMutableNotificationContent()
+            content.title = alert["title"] as? String ?? "Notification"
+            content.body = alert["body"] as? String ?? ""
+            content.sound = .default
+            content.badge = aps["badge"] as? NSNumber
+            content.userInfo = userInfo
+            
+            // Add category for actions if present
+            if let category = aps["category"] as? String {
+                content.categoryIdentifier = category
+            }
+            
+            // Schedule immediate notification to appear in notification bar
+            let request = UNNotificationRequest(
+                identifier: "remote_\(UUID().uuidString)",
+                content: content,
+                trigger: nil // nil trigger = immediate delivery
+            )
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("❌ Failed to present notification in notification bar: \(error)")
+                } else {
+                    print("✅ Notification scheduled to appear in notification bar")
+                }
+            }
+        }
+        
         completionHandler(.newData)
     }
 }
