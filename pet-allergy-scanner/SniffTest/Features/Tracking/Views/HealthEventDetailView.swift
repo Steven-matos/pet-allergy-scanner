@@ -565,7 +565,8 @@ struct HealthEventDetailView: View {
                     title: editedTitle,
                     notes: editedNotes.isEmpty ? nil : editedNotes,
                     severityLevel: editedSeverityLevel,
-                    eventDate: editedEventDate
+                    eventDate: editedEventDate,
+                    documents: event.documents
                 )
                 
                 _ = try await healthEventService.updateHealthEvent(event.id, updates: update)
