@@ -185,6 +185,5 @@ project.pbxproj.backup
 server/database_migrations/*.sql
 server/scripts/*.py
 
-
 Info.plist
 PrivacyInfo.xcprivacy
