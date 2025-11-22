@@ -43,6 +43,10 @@ struct AddHealthEventView: View {
     @State private var hasEndDate = false
     @State private var createReminder = false
     
+    // Vet visit-specific fields
+    @State private var vetDocuments: [VetDocument] = []
+    @State private var temporaryEventId = UUID().uuidString // Temporary ID for document uploads
+    
     // Performance optimization: Cache computed values
     private var isFormValid: Bool {
         // For single pet users, selectedPet will be auto-selected
@@ -187,6 +191,11 @@ struct AddHealthEventView: View {
             } else {
                 // Notes (for non-medication events)
                 notesSection
+            }
+            
+            // Vet visit document upload section
+            if selectedEventType == .vetVisit {
+                vetDocumentSection
             }
         }
     }
@@ -666,6 +675,17 @@ struct AddHealthEventView: View {
         )
     }
     
+    // MARK: - Vet Document Section
+    
+    private var vetDocumentSection: some View {
+        DocumentPickerView(
+            selectedDocuments: $vetDocuments,
+            userId: AuthService.shared.currentUser?.id ?? "",
+            petId: selectedPet?.id ?? petService.pets.first?.id ?? "",
+            healthEventId: temporaryEventId // Temporary ID for folder structure
+        )
+    }
+    
     // MARK: - Helper Methods
     
     private func setupInitialValues() {
@@ -738,11 +758,23 @@ struct AddHealthEventView: View {
             return
         }
         
+        // Get current user ID for document uploads
+        guard let userId = AuthService.shared.currentUser?.id else {
+            errorMessage = "Please log in to save health events"
+            showingError = true
+            return
+        }
+        
         isSubmitting = true
         
         Task {
             do {
                 let finalTitle = selectedEventType == .other ? customEventName : title
+                
+                // Extract document URLs from uploaded documents (already uploaded when selected)
+                let documentUrls: [String] = selectedEventType == .vetVisit 
+                    ? vetDocuments.map { $0.url }
+                    : []
                 
                 let healthEvent = try await healthEventService.createHealthEvent(
                     for: pet.id,
@@ -750,7 +782,8 @@ struct AddHealthEventView: View {
                     title: finalTitle,
                     notes: notes.isEmpty ? nil : notes,
                     severityLevel: severityLevel,
-                    eventDate: eventDate
+                    eventDate: eventDate,
+                    documents: documentUrls.isEmpty ? nil : documentUrls
                 )
                 
                 // Create medication reminder if medication event and reminder is enabled

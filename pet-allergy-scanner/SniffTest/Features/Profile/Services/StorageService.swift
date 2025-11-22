@@ -295,6 +295,95 @@ class StorageService: ObservableObject {
         try await deleteImage(path: path, bucket: Configuration.userBucketName)
     }
     
+    /// Upload document (PDF or image) for vet paperwork
+    /// - Parameters:
+    ///   - data: The document data to upload
+    ///   - userId: The user ID for folder organization
+    ///   - petId: The pet ID for folder organization
+    ///   - healthEventId: The health event ID for folder organization
+    ///   - contentType: The MIME type of the document (e.g., "application/pdf", "image/jpeg")
+    ///   - fileName: Optional custom filename
+    /// - Returns: The public URL of the uploaded document
+    func uploadVetDocument(
+        data: Data,
+        userId: String,
+        petId: String,
+        healthEventId: String,
+        contentType: String,
+        fileName: String? = nil
+    ) async throws -> String {
+        isUploading = true
+        uploadProgress = 0.0
+        errorMessage = nil
+        
+        defer {
+            isUploading = false
+            uploadProgress = 0.0
+        }
+        
+        uploadProgress = 0.2
+        
+        // Generate unique filename
+        let fileExtension: String
+        let mimeType: String
+        if contentType == "application/pdf" {
+            fileExtension = "pdf"
+            mimeType = contentType
+        } else if contentType.hasPrefix("image/") {
+            fileExtension = "jpg"
+            mimeType = "image/jpeg"
+        } else {
+            throw StorageError.invalidConfiguration
+        }
+        
+        let finalFileName = fileName ?? "\(UUID().uuidString).\(fileExtension)"
+        let filePath = "\(userId)/\(petId)/health-events/\(healthEventId)/\(finalFileName)"
+        
+        uploadProgress = 0.5
+        
+        // Upload document - use pet images bucket for now (we'll create a documents bucket later)
+        let uploadedPath = try await uploadFile(
+            data: data,
+            path: filePath,
+            contentType: mimeType,
+            bucket: Configuration.petBucketName
+        )
+        
+        uploadProgress = 0.9
+        
+        // Get public URL
+        let publicURL = getPublicURL(path: uploadedPath, bucket: Configuration.petBucketName)
+        
+        uploadProgress = 1.0
+        
+        return publicURL
+    }
+    
+    /// Upload UIImage as a document (for vet paperwork)
+    /// - Parameters:
+    ///   - image: The UIImage to upload
+    ///   - userId: The user ID for folder organization
+    ///   - petId: The pet ID for folder organization
+    ///   - healthEventId: The health event ID for folder organization
+    /// - Returns: The public URL of the uploaded document
+    func uploadVetDocumentImage(
+        image: UIImage,
+        userId: String,
+        petId: String,
+        healthEventId: String
+    ) async throws -> String {
+        // Optimize image first
+        let optimizedResult = try ImageOptimizer.optimizeForUpload(image: image)
+        
+        return try await uploadVetDocument(
+            data: optimizedResult.data,
+            userId: userId,
+            petId: petId,
+            healthEventId: healthEventId,
+            contentType: "image/jpeg"
+        )
+    }
+    
     /// Clear error message
     func clearError() {
         errorMessage = nil

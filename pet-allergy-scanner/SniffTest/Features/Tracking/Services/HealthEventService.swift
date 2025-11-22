@@ -46,7 +46,8 @@ class HealthEventService: ObservableObject {
         title: String,
         notes: String? = nil,
         severityLevel: Int = 1,
-        eventDate: Date = Date()
+        eventDate: Date = Date(),
+        documents: [String]? = nil
     ) async throws -> HealthEvent {
         
         isLoading = true
@@ -70,7 +71,8 @@ class HealthEventService: ObservableObject {
                 title: title,
                 notes: notes,
                 severityLevel: severityLevel,
-                eventDate: eventDate
+                eventDate: eventDate,
+                documents: documents
             )
             
             let createdEvent = try await apiService.post(

@@ -53,6 +53,7 @@ class HealthEventBase(BaseModel):
     notes: Optional[str] = None
     severity_level: int = Field(default=1, ge=1, le=5)
     event_date: datetime = Field(default_factory=datetime.utcnow)
+    documents: Optional[List[str]] = None  # Array of document URLs for vet paperwork
     
     @field_validator('event_type')
     @classmethod
@@ -111,6 +112,7 @@ class HealthEventUpdate(BaseModel):
     notes: Optional[str] = None
     severity_level: Optional[int] = Field(None, ge=1, le=5)
     event_date: Optional[datetime] = None
+    documents: Optional[List[str]] = None  # Array of document URLs for vet paperwork
     
     model_config = ConfigDict(
         json_schema_extra={

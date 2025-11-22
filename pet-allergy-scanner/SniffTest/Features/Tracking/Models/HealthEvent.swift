@@ -28,6 +28,7 @@ struct HealthEvent: Codable, Identifiable, Equatable, Hashable {
     let eventDate: Date
     let createdAt: Date
     let updatedAt: Date
+    let documents: [String]? // Array of document URLs for vet paperwork
     
     /// Validation for health event data
     var isValid: Bool {
@@ -70,6 +71,7 @@ struct HealthEvent: Codable, Identifiable, Equatable, Hashable {
         case eventDate = "event_date"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case documents
     }
 }
 
@@ -201,6 +203,7 @@ struct HealthEventCreate: Codable {
     let notes: String?
     let severityLevel: Int
     let eventDate: Date
+    let documents: [String]? // Array of document URLs for vet paperwork
     
     /// Validation for health event creation
     var isValid: Bool {
@@ -235,6 +238,7 @@ struct HealthEventCreate: Codable {
         case notes
         case severityLevel = "severity_level"
         case eventDate = "event_date"
+        case documents
     }
 }
 
@@ -248,10 +252,11 @@ struct HealthEventUpdate: Codable {
     let notes: String?
     let severityLevel: Int?
     let eventDate: Date?
+    let documents: [String]? // Array of document URLs for vet paperwork
     
     /// Check if any fields are being updated
     var hasUpdates: Bool {
-        return title != nil || notes != nil || severityLevel != nil || eventDate != nil
+        return title != nil || notes != nil || severityLevel != nil || eventDate != nil || documents != nil
     }
     
     enum CodingKeys: String, CodingKey {
@@ -259,6 +264,7 @@ struct HealthEventUpdate: Codable {
         case notes
         case severityLevel = "severity_level"
         case eventDate = "event_date"
+        case documents
     }
 }
 

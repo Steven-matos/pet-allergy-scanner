@@ -54,6 +54,12 @@ class HealthEventService:
             "event_date": event_data.event_date.isoformat()
         }
         
+        # Add documents if provided (convert to PostgreSQL array format)
+        if hasattr(event_data, 'documents') and event_data.documents:
+            db_event["documents"] = event_data.documents
+        else:
+            db_event["documents"] = []
+        
         # Insert into database
         response = supabase.table("health_events").insert(db_event).execute()
         

@@ -52,6 +52,11 @@ struct HealthEventDetailView: View {
                         
                         // Notes Section
                         notesSection
+                        
+                        // Documents Section (for vet visits)
+                        if event.eventType == .vetVisit, let documents = event.documents, !documents.isEmpty {
+                            documentsSection
+                        }
                     }
                     .padding(ModernDesignSystem.Spacing.lg)
                 }
@@ -488,6 +493,47 @@ struct HealthEventDetailView: View {
         )
     }
     
+    // MARK: - Documents Section
+    
+    private var documentsSection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            Text("Vet Paperwork")
+                .font(ModernDesignSystem.Typography.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            if let documents = event.documents, !documents.isEmpty {
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    ForEach(documents, id: \.self) { documentUrl in
+                        DocumentLinkView(url: documentUrl)
+                    }
+                }
+            } else {
+                Text("No documents uploaded")
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .italic()
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .fill(ModernDesignSystem.Colors.background)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .shadow(
+                    color: ModernDesignSystem.Shadows.small.color,
+                    radius: ModernDesignSystem.Shadows.small.radius,
+                    x: ModernDesignSystem.Shadows.small.x,
+                    y: ModernDesignSystem.Shadows.small.y
+                )
+        )
+    }
+    
     // MARK: - Helper Functions
     
     private var isFormValid: Bool {
@@ -572,7 +618,68 @@ struct HealthEventDetailView: View {
         case 3: return "Moderate"
         case 4: return "High"
         case 5: return "Severe"
-        default: return "Unknown"
+        default:         return "Unknown"
+        }
+    }
+}
+
+// MARK: - Document Link View
+
+struct DocumentLinkView: View {
+    let url: String
+    
+    private var documentType: String {
+        if url.lowercased().hasSuffix(".pdf") {
+            return "PDF"
+        } else if url.lowercased().contains("image") || url.lowercased().hasSuffix(".jpg") || url.lowercased().hasSuffix(".jpeg") || url.lowercased().hasSuffix(".png") {
+            return "Image"
+        }
+        return "Document"
+    }
+    
+    private var iconName: String {
+        if documentType == "PDF" {
+            return "doc.fill"
+        } else {
+            return "photo.fill"
+        }
+    }
+    
+    var body: some View {
+        Link(destination: URL(string: url)!) {
+            HStack(spacing: ModernDesignSystem.Spacing.md) {
+                Image(systemName: iconName)
+                    .font(.system(size: 24))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                    )
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(documentType)
+                        .font(ModernDesignSystem.Typography.body)
+                        .fontWeight(.medium)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Text("Tap to view")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 20))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            .padding(ModernDesignSystem.Spacing.sm)
+            .background(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                    .fill(ModernDesignSystem.Colors.background)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
         }
     }
 }
