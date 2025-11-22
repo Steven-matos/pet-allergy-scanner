@@ -759,7 +759,7 @@ struct AddHealthEventView: View {
         }
         
         // Get current user ID for document uploads
-        guard let userId = AuthService.shared.currentUser?.id else {
+        guard (AuthService.shared.currentUser?.id) != nil else {
             errorMessage = "Please log in to save health events"
             showingError = true
             return

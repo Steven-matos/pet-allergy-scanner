@@ -16,72 +16,44 @@ class SecurityManager: @unchecked Sendable {
     
     private init() {}
     
-    /// **WARNING**: Encryption is currently NOT FUNCTIONAL
-    /// These methods generate a new key each time, making decryption impossible.
-    /// 
-    /// To fix this, you must:
-    /// 1. Generate or derive a persistent encryption key
-    /// 2. Store it securely in Keychain using SecureDataManager
-    /// 3. Retrieve the same key for both encryption and decryption
-    /// 
-    /// DO NOT use these methods in production until properly implemented.
+    // MARK: - Encryption (Deprecated - Use SecureDataManager)
     
-    /// Encrypt sensitive data using AES-256-GCM (PLACEHOLDER - NOT FUNCTIONAL)
+    /// ⚠️ DEPRECATED: This method is not implemented and throws an error.
+    /// 
+    /// For encryption needs, use `SecureDataManager` instead, which provides:
+    /// - Proper key management via Keychain
+    /// - AES-256-GCM encryption
+    /// - Automatic expiration handling
+    /// - Memory-safe storage
+    /// 
+    /// **Recommended Usage:**
+    /// ```swift
+    /// // Store encrypted string data
+    /// SecureDataManager.shared.storeSensitiveData("sensitive data", forKey: "myKey")
+    /// 
+    /// // Retrieve decrypted string data
+    /// let data = SecureDataManager.shared.retrieveSensitiveData(forKey: "myKey")
+    /// ```
+    /// 
     /// - Parameter data: Data to encrypt
-    /// - Returns: Encrypted data with authentication tag
-    /// - Throws: SecurityError if encryption fails or key is not configured
+    /// - Returns: Never returns (always throws)
+    /// - Throws: SecurityError.encryptionFailed
+    @available(*, deprecated, message: "Use SecureDataManager.storeSensitiveData instead")
     func encryptData(_ data: Data) throws -> Data {
-        // TODO: Implement proper key derivation and storage
         throw SecurityError.encryptionFailed
-        
-        // Example implementation (commented out until key storage is implemented):
-        /*
-        guard let key = try? getOrCreateEncryptionKey() else {
-            throw SecurityError.encryptionFailed
-        }
-        let sealedBox = try AES.GCM.seal(data, using: key)
-        return sealedBox.combined ?? Data()
-        */
     }
     
-    /// Decrypt sensitive data using AES-256-GCM (PLACEHOLDER - NOT FUNCTIONAL)
+    /// ⚠️ DEPRECATED: This method is not implemented and throws an error.
+    /// 
+    /// For decryption needs, use `SecureDataManager` instead (see `encryptData` documentation).
+    /// 
     /// - Parameter encryptedData: Encrypted data
-    /// - Returns: Decrypted data
-    /// - Throws: SecurityError if decryption fails or key is not configured
+    /// - Returns: Never returns (always throws)
+    /// - Throws: SecurityError.decryptionFailed
+    @available(*, deprecated, message: "Use SecureDataManager.retrieveSensitiveData instead")
     func decryptData(_ encryptedData: Data) throws -> Data {
-        // TODO: Implement proper key retrieval from Keychain
         throw SecurityError.decryptionFailed
-        
-        // Example implementation (commented out until key storage is implemented):
-        /*
-        guard let key = try? getOrCreateEncryptionKey() else {
-            throw SecurityError.decryptionFailed
-        }
-        let sealedBox = try AES.GCM.SealedBox(combined: encryptedData)
-        return try AES.GCM.open(sealedBox, using: key)
-        */
     }
-    
-    // TODO: Implement key management
-    /*
-    private func getOrCreateEncryptionKey() throws -> SymmetricKey {
-        let keyIdentifier = "com.snifftest.encryption.key"
-        
-        // Try to retrieve existing key from Keychain
-        if let keyData = SecureDataManager.shared.loadData(forKey: keyIdentifier) {
-            return SymmetricKey(data: keyData)
-        }
-        
-        // Generate new key
-        let key = SymmetricKey(size: .bits256)
-        let keyData = key.withUnsafeBytes { Data($0) }
-        
-        // Store in Keychain
-        SecureDataManager.shared.saveData(keyData, forKey: keyIdentifier)
-        
-        return key
-    }
-    */
     
     /// Hash sensitive data using SHA-256
     /// - Parameter data: Data to hash
