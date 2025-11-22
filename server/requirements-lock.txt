@@ -81,7 +81,11 @@ slowapi==0.1.9
 sniffio==1.3.1
 sortedcontainers==2.4.0
 SQLAlchemy==2.0.44
-starlette==0.49.1
+# NOTE: Starlette 0.41.3 is vulnerable to CVE-2025-62727 (Range header ReDoS)
+# Cannot upgrade to 0.49.1+ due to FastAPI 0.115.6 requirement (starlette<0.42.0)
+# Mitigation: RangeHeaderValidationMiddleware validates Range headers before parsing
+# TODO: Upgrade entire stack (FastAPI, starlette, httpx, postgrest, supabase) to fix
+starlette==0.41.3
 storage3==0.8.2
 StrEnum==0.4.15
 supabase==2.9.1

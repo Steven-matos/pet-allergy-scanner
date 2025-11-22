@@ -36,7 +36,12 @@ from app.api.v1.subscriptions.revenuecat_webhook import router as revenuecat_web
 from app.core.config import settings
 from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
-from app.middleware.request_limits import RequestSizeMiddleware, APIVersionMiddleware, RequestTimeoutMiddleware
+from app.middleware.request_limits import (
+    RangeHeaderValidationMiddleware,
+    RequestSizeMiddleware,
+    APIVersionMiddleware,
+    RequestTimeoutMiddleware
+)
 
 # Load environment variables
 load_dotenv()
@@ -92,6 +97,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 if settings.environment != "production":
     app.add_middleware(AuditLogMiddleware)  # Only in dev/staging
 app.add_middleware(RateLimitMiddleware)
+# Range header validation mitigates CVE-2025-62727 (Starlette ReDoS)
+# Must be early in stack to intercept before Starlette parsing
+app.add_middleware(RangeHeaderValidationMiddleware)
 app.add_middleware(RequestSizeMiddleware)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(RequestTimeoutMiddleware)
