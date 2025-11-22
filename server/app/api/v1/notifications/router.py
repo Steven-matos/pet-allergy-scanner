@@ -3,7 +3,7 @@ Push notification router for handling APNs integration
 Handles device token registration, notification sending, and management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict, Any, Optional
 import json
@@ -162,7 +162,7 @@ async def register_device_token_anonymous(
 
 @router.post("/send")
 async def send_push_notification(
-    request: SendNotificationRequest = Body(...),
+    request: SendNotificationRequest,
     current_user: UserResponse = Depends(get_current_user),
     background_tasks: BackgroundTasks = Depends()
 ):
