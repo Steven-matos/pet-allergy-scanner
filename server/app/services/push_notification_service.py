@@ -7,9 +7,10 @@ import asyncio
 import json
 import ssl
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import aiohttp
 import logging
+import jwt
 
 from app.core.config import settings
 
@@ -60,12 +61,49 @@ class PushNotificationService:
                     ssl=self._create_ssl_context()
                 ) as response:
                     if response.status == 200:
-                        logger.info(f"Push notification sent successfully to {device_token}")
+                        logger.info(f"Push notification sent successfully to {device_token[:20]}...")
                         return True
                     else:
-                        error_text = await response.text()
-                        logger.error(f"Failed to send push notification: {response.status} - {error_text}")
-                        return False
+                        # APNs returns detailed error information in JSON format
+                        try:
+                            error_data = await response.json()
+                            error_reason = error_data.get("reason", "Unknown error")
+                            
+                            # Handle specific APNs error codes
+                            if error_reason == "BadDeviceToken":
+                                logger.warning(f"Invalid device token: {device_token[:20]}...")
+                                # TODO: Remove invalid token from database
+                            elif error_reason == "BadTopic":
+                                logger.error(f"Bundle ID mismatch. Expected: {self.apns_bundle_id}")
+                            elif error_reason == "ExpiredProviderToken":
+                                logger.error("APNs JWT token expired - should regenerate")
+                            elif error_reason == "MissingTopic":
+                                logger.error(f"Missing apns-topic header. Bundle ID: {self.apns_bundle_id}")
+                            elif error_reason == "PayloadTooLarge":
+                                logger.error(f"Notification payload too large for {device_token[:20]}...")
+                            elif error_reason == "TopicDisallowed":
+                                logger.error(f"Topic not allowed for bundle ID: {self.apns_bundle_id}")
+                            elif error_reason == "BadMessageId":
+                                logger.error("Bad APNs message ID")
+                            elif error_reason == "BadExpirationDate":
+                                logger.error("Bad expiration date in APNs request")
+                            elif error_reason == "BadPriority":
+                                logger.error("Bad priority in APNs request")
+                            elif error_reason == "MissingDeviceToken":
+                                logger.error("Missing device token in APNs request")
+                            elif error_reason == "Unregistered":
+                                logger.warning(f"Device token unregistered: {device_token[:20]}...")
+                                # TODO: Remove unregistered token from database
+                            else:
+                                logger.error(f"APNs error ({response.status}): {error_reason}")
+                            
+                            logger.error(f"APNs error response: {error_data}")
+                            return False
+                        except Exception as parse_error:
+                            error_text = await response.text()
+                            logger.error(f"Failed to parse APNs error response: {parse_error}")
+                            logger.error(f"Raw error response ({response.status}): {error_text}")
+                            return False
                         
         except Exception as e:
             logger.error(f"Error sending push notification: {e}")
@@ -143,21 +181,32 @@ class PushNotificationService:
             return {}
     
     async def _generate_jwt_token(self) -> str:
-        """Generate JWT token for APNs authentication"""
+        """
+        Generate JWT token for APNs authentication
+        Uses ES256 algorithm with APNs private key
+        """
         try:
-            import jwt
-            from datetime import datetime, timedelta
+            # Validate required configuration
+            if not self.apns_team_id:
+                logger.error("APNS_TEAM_ID not configured")
+                return ""
+            if not self.apns_key_id:
+                logger.error("APNS_KEY_ID not configured")
+                return ""
+            if not self.apns_private_key:
+                logger.error("APNS_PRIVATE_KEY not configured")
+                return ""
             
-            # JWT payload
-            payload = {
+            # JWT payload with issuer, issued at, and expiration
+            jwt_payload = {
                 "iss": self.apns_team_id,
                 "iat": int(datetime.utcnow().timestamp()),
                 "exp": int((datetime.utcnow() + timedelta(hours=1)).timestamp())
             }
             
-            # Generate JWT token
+            # Generate JWT token with ES256 algorithm
             token = jwt.encode(
-                payload,
+                jwt_payload,
                 self.apns_private_key,
                 algorithm="ES256",
                 headers={"kid": self.apns_key_id}
@@ -166,13 +215,19 @@ class PushNotificationService:
             return token
         except Exception as e:
             logger.error(f"Error generating JWT token: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return ""
     
     def _create_ssl_context(self) -> ssl.SSLContext:
-        """Create SSL context for APNs connection"""
+        """
+        Create SSL context for APNs connection
+        APNs uses valid certificates, so we enable proper SSL verification
+        """
         context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
+        # APNs uses valid SSL certificates, enable verification
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
         return context
     
     async def validate_device_token(self, device_token: str) -> bool:

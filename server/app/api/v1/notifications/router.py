@@ -31,6 +31,30 @@ class DeviceTokenRequest(BaseModel):
     device_token: str
 
 
+class SendNotificationRequest(BaseModel):
+    """Request model for sending push notifications"""
+    device_token: str
+    payload: Dict[str, Any]
+    
+    class Config:
+        """Pydantic configuration"""
+        json_schema_extra = {
+            "example": {
+                "device_token": "abc123...",
+                "payload": {
+                    "aps": {
+                        "alert": {
+                            "title": "Test",
+                            "body": "Test notification"
+                        },
+                        "sound": "default",
+                        "badge": 1
+                    }
+                }
+            }
+        }
+
+
 @router.post("/register-device")
 async def register_device_token(
     request: DeviceTokenRequest,
@@ -93,6 +117,7 @@ async def register_device_token_anonymous(
     """
     Register device token for push notifications (anonymous)
     This endpoint allows device registration before user authentication
+    Stores token temporarily until user authenticates
     
     Args:
         request: DeviceTokenRequest containing device_token
@@ -105,9 +130,26 @@ async def register_device_token_anonymous(
         # Extract device token from request
         device_token = request.device_token
         
-        # Store device token in a temporary table or cache
-        # For now, we'll just return success and let the authenticated endpoint handle it later
-        logger.info(f"Anonymous device token registration: {device_token[:20]}...")
+        # Store device token in a temporary table with expiration
+        # Token will be linked to user after authentication
+        expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        
+        try:
+            # Try to insert into device_tokens_temp table
+            # If table doesn't exist, we'll store in a simpler way
+            response = supabase.table("device_tokens_temp").insert({
+                "device_token": device_token,
+                "created_at": datetime.utcnow().isoformat(),
+                "expires_at": expires_at,
+                "user_id": None  # Will be linked after authentication
+            }).execute()
+            
+            logger.info(f"Anonymous device token registered and stored: {device_token[:20]}...")
+        except Exception as table_error:
+            # Table might not exist - log and continue
+            # Token will be registered again after authentication
+            logger.warning(f"Could not store anonymous device token in table: {table_error}")
+            logger.info(f"Anonymous device token registration (not stored): {device_token[:20]}...")
         
         return {
             "message": "Device token registered successfully. Please complete authentication to enable notifications.",
@@ -120,17 +162,15 @@ async def register_device_token_anonymous(
 
 @router.post("/send")
 async def send_push_notification(
-    device_token: str,
-    payload: Dict[str, Any],
+    request: SendNotificationRequest,
     current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = Depends()
 ):
     """
     Send push notification to device
     
     Args:
-        device_token: Target device token
-        payload: Notification payload
+        request: SendNotificationRequest containing device_token and payload
         current_user: Current authenticated user
         background_tasks: Background tasks handler
         
@@ -138,8 +178,32 @@ async def send_push_notification(
         Success message
     """
     try:
-        # Add delay if specified in payload
-        delay = payload.get("delay", 0)
+        # Validate request fields
+        if not request.device_token:
+            raise HTTPException(status_code=400, detail="device_token is required")
+        
+        if not request.payload:
+            raise HTTPException(status_code=400, detail="payload is required")
+        
+        if not isinstance(request.payload, dict):
+            raise HTTPException(status_code=400, detail="payload must be a dictionary")
+        
+        device_token = request.device_token
+        payload = request.payload
+        
+        logger.info(f"Sending push notification to device {device_token[:20]}...")
+        logger.debug(f"Payload: {json.dumps(payload, default=str)}")
+        
+        # Extract delay if specified in payload - convert to int
+        delay = 0
+        if "delay" in payload:
+            try:
+                delay = int(payload.get("delay", 0))
+                # Remove delay from payload as it's not part of APNs payload
+                payload = {k: v for k, v in payload.items() if k != "delay"}
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Invalid delay value: {payload.get('delay')}, using 0. Error: {e}")
+                delay = 0
         
         if delay > 0:
             # Schedule notification for later
@@ -149,13 +213,22 @@ async def send_push_notification(
                 payload,
                 delay
             )
+            logger.info(f"Notification scheduled for {delay} seconds")
             return {"message": "Notification scheduled successfully"}
         else:
             # Send immediately
-            await push_service.send_notification(device_token, payload)
-            return {"message": "Notification sent successfully"}
+            success = await push_service.send_notification(device_token, payload)
+            if success:
+                logger.info(f"Notification sent successfully to {device_token[:20]}...")
+                return {"message": "Notification sent successfully"}
+            else:
+                logger.error(f"Failed to send notification to {device_token[:20]}...")
+                raise HTTPException(status_code=500, detail="Failed to send notification to APNs")
             
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Failed to send notification: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to send notification: {str(e)}")
 
 
@@ -187,7 +260,7 @@ async def cancel_all_notifications(
 @router.post("/schedule-engagement")
 async def schedule_engagement_notifications(
     current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = Depends()
 ):
     """
     Schedule engagement reminder notifications
@@ -258,7 +331,7 @@ async def send_birthday_notification(
     pet_name: str,
     pet_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = Depends()
 ):
     """
     Send birthday celebration notification
@@ -306,10 +379,14 @@ async def send_delayed_notification(device_token: str, payload: Dict[str, Any], 
     Args:
         device_token: Target device token
         payload: Notification payload
-        delay: Delay in seconds
+        delay: Delay in seconds (integer)
     """
+    # Remove delay from payload before sending (it's not part of APNs payload)
+    payload_without_delay = {k: v for k, v in payload.items() if k != "delay"}
+    
     await asyncio.sleep(delay)
     try:
-        await push_service.send_notification(device_token, payload)
+        await push_service.send_notification(device_token, payload_without_delay)
+        logger.info(f"Delayed notification sent successfully to {device_token[:20]}...")
     except Exception as e:
-        logger.error(f"Failed to send delayed notification: {e}")
+        logger.error(f"Failed to send delayed notification to {device_token[:20]}...: {e}")

@@ -191,7 +191,22 @@ def create_error_response(
 
 def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle Pydantic validation errors"""
+    import json
     user_id = _extract_user_id_from_request(request)
+    
+    # Log detailed validation errors
+    error_details = exc.errors()
+    logger.error(f"Validation error on {request.method} {request.url.path}")
+    logger.error(f"Validation errors: {json.dumps(error_details, indent=2, default=str)}")
+    
+    # Try to log request body if available
+    try:
+        body = getattr(request, '_body', None)
+        if body:
+            logger.debug(f"Request body: {body.decode('utf-8') if isinstance(body, bytes) else body}")
+    except Exception:
+        pass
+    
     return create_error_response(exc, request, user_id=user_id, include_details=True)
 
 def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
