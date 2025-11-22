@@ -84,6 +84,10 @@ final class SubscriptionViewModel: ObservableObject {
         switch result {
         case .success:
             showPurchaseSuccess()
+            // Give RevenueCat a moment to update internal state after purchase
+            // The subscription provider's applyCustomerInfo() will also sync via delegate
+            // We sync here as a secondary check after ensuring status is updated
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 second
             await syncSubscriptionWithBackend()
             
         case .userCancelled:

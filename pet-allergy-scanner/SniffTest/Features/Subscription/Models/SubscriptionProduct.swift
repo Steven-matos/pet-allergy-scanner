@@ -146,7 +146,7 @@ enum SubscriptionProductID: String, CaseIterable {
 }
 
 /// Subscription status
-enum SubscriptionStatus: Equatable {
+enum SubscriptionStatus: Equatable, CustomStringConvertible {
     case notSubscribed
     case subscribed(expirationDate: Date?)
     case expired
@@ -159,6 +159,27 @@ enum SubscriptionStatus: Equatable {
             return true
         case .notSubscribed, .expired:
             return false
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .notSubscribed:
+            return "notSubscribed"
+        case .subscribed(let expirationDate):
+            if let date = expirationDate {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .short
+                formatter.timeStyle = .short
+                return "subscribed(expires: \(formatter.string(from: date)))"
+            }
+            return "subscribed"
+        case .expired:
+            return "expired"
+        case .inGracePeriod:
+            return "inGracePeriod"
+        case .inBillingRetry:
+            return "inBillingRetry"
         }
     }
 }

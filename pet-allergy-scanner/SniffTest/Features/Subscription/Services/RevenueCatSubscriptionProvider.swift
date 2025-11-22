@@ -167,22 +167,24 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         let wasSubscribedBefore = hasActiveSubscription
         activeEntitlementIDs = Set(info.entitlements.active.keys)
         updateSubscriptionStatus(using: info)
-        logger.debug("Customer info updated. Active entitlements: \(self.activeEntitlementIDs.joined(separator: ", "))")
+        logger.debug("Customer info updated. Active entitlements: \(self.activeEntitlementIDs.joined(separator: ", ")), Status: \(self.subscriptionStatus)")
         
         // Track subscription status changes
         if hasActiveSubscription && !wasSubscribedBefore {
             // Subscription just became active (could be new purchase or restore)
             // Note: Specific purchase tracking happens in purchase() method
             PostHogAnalytics.updateUserRole("premium")
+            logger.info("Subscription became active. Syncing with backend...")
+            
+            // Sync subscription status with backend when subscription becomes active
+            Task {
+                await syncSubscriptionWithBackend()
+            }
         } else if !hasActiveSubscription && wasSubscribedBefore {
             // Subscription just expired or was cancelled
             PostHogAnalytics.updateUserRole("free")
         }
-        
-        // Sync subscription status with backend when customer info changes
-        Task {
-            await syncSubscriptionWithBackend()
-        }
+        // Only sync when subscription becomes active to avoid unnecessary API calls
     }
     
     /// Sync subscription status with backend API
