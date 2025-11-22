@@ -80,6 +80,11 @@ def validate_environment():
 
 def main():
     """Main startup function with error handling"""
+    # Force output immediately to ensure logs appear
+    print("=" * 60, flush=True)
+    print("🚀 Starting SniffTest API on Railway", flush=True)
+    print("=" * 60, flush=True)
+    
     try:
         logger.info("=" * 60)
         logger.info("🚀 Starting SniffTest API on Railway")
@@ -88,10 +93,12 @@ def main():
         # Get PORT from Railway (defaults to 8000 for local testing)
         port = int(os.getenv("PORT", "8000"))
         logger.info(f"📡 Port: {port}")
+        print(f"📡 Port: {port}", flush=True)
         
         # Get environment
         environment = os.getenv("ENVIRONMENT", "production")
         logger.info(f"🌍 Environment: {environment}")
+        print(f"🌍 Environment: {environment}", flush=True)
         
         # Validate environment variables
         logger.info("🔍 Validating configuration...")
@@ -140,6 +147,34 @@ def main():
         # Change to server directory so uvicorn can find main.py
         logger.info(f"📂 Changing to server directory: {server_dir}")
         os.chdir(server_dir)
+        
+        # Test if we can import main:app before starting uvicorn
+        logger.info("🔍 Testing if main:app can be imported...")
+        print("🔍 Testing if main:app can be imported...", flush=True)
+        try:
+            import sys
+            sys.path.insert(0, server_dir)
+            from main import app
+            logger.info("✅ Successfully imported main:app")
+            print("✅ Successfully imported main:app", flush=True)
+        except ImportError as e:
+            error_msg = f"❌ Failed to import main:app: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(tb)
+            print(tb, flush=True)
+            sys.exit(1)
+        except Exception as e:
+            error_msg = f"❌ Error importing main:app: {e}"
+            logger.error(error_msg)
+            print(error_msg, flush=True)
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(tb)
+            print(tb, flush=True)
+            sys.exit(1)
         
         # Start the server
         logger.info(f"🎬 Starting uvicorn server on 0.0.0.0:{port}")
@@ -196,15 +231,20 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("\n👋 Shutting down gracefully...")
+        print("\n👋 Shutting down gracefully...", flush=True)
         sys.exit(0)
     except Exception as e:
+        error_msg = f"❌ FATAL ERROR: Application failed to start\n   Error: {e}\n   Type: {type(e).__name__}"
         logger.error("=" * 60)
-        logger.error(f"❌ FATAL ERROR: Application failed to start")
-        logger.error(f"   Error: {e}")
-        logger.error(f"   Type: {type(e).__name__}")
+        logger.error(error_msg)
         logger.error("=" * 60)
+        print("=" * 60, flush=True)
+        print(error_msg, flush=True)
+        print("=" * 60, flush=True)
         import traceback
-        logger.error(traceback.format_exc())
+        tb = traceback.format_exc()
+        logger.error(tb)
+        print(tb, flush=True)
         sys.exit(1)
 
 if __name__ == "__main__":
