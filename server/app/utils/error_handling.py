@@ -15,6 +15,55 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_user_id_from_request(request: Request) -> Optional[str]:
+    """
+    Extract user ID from JWT token in request headers for error logging
+    
+    Args:
+        request: FastAPI request object
+        
+    Returns:
+        User ID if token is valid and contains user_id, None otherwise
+    """
+    try:
+        # Get authorization header
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+        
+        # Extract token
+        token = auth_header.replace("Bearer ", "").strip()
+        if not token:
+            return None
+        
+        # Decode JWT token (without verification for error logging only)
+        import jwt
+        from app.core.config import settings
+        
+        try:
+            # Try to decode without verification first (faster for error logging)
+            # Note: We skip signature verification and expiration checks for error logging only
+            payload = jwt.decode(
+                token,
+                options={
+                    "verify_signature": False,  # Skip verification for logging
+                    "verify_exp": False,        # Allow expired tokens for logging
+                    "verify_aud": False,        # Skip audience check for logging
+                    "verify_iss": False         # Skip issuer check for logging
+                }
+            )
+            user_id = payload.get("sub")
+            return str(user_id) if user_id else None
+        except Exception as decode_error:
+            # If decoding fails, return None (fail silently for error logging)
+            logger.debug(f"Failed to extract user_id from token: {type(decode_error).__name__}")
+            return None
+            
+    except Exception:
+        # If anything fails, return None (fail silently for error logging)
+        return None
+
 class SecurityError(Exception):
     """Custom security-related error"""
     pass
@@ -142,15 +191,18 @@ def create_error_response(
 
 def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Handle Pydantic validation errors"""
-    return create_error_response(exc, request, include_details=True)
+    user_id = _extract_user_id_from_request(request)
+    return create_error_response(exc, request, user_id=user_id, include_details=True)
 
 def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle HTTP exceptions"""
-    return create_error_response(exc, request)
+    user_id = _extract_user_id_from_request(request)
+    return create_error_response(exc, request, user_id=user_id)
 
 def handle_generic_exception(request: Request, exc: Exception) -> JSONResponse:
     """Handle generic exceptions"""
-    return create_error_response(exc, request, include_details=settings.debug)
+    user_id = _extract_user_id_from_request(request)
+    return create_error_response(exc, request, user_id=user_id, include_details=settings.debug)
 
 def validate_request_size(request: Request) -> None:
     """
