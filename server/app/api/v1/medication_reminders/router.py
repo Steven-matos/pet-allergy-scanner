@@ -9,7 +9,9 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.models.user import UserResponse
+from supabase import Client
 from app.models.medication_reminder import (
     MedicationReminder,
     MedicationReminderCreate,
@@ -28,31 +30,20 @@ router = APIRouter(prefix="/medication-reminders", tags=["medication-reminders"]
 async def create_medication_reminder_no_slash(
     reminder: MedicationReminderCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create medication reminder (without trailing slash)"""
-    return await create_medication_reminder_with_slash(reminder, current_user, credentials)
+    return await create_medication_reminder_with_slash(reminder, current_user, supabase)
 
 @router.post("/", response_model=MedicationReminderResponse)
 async def create_medication_reminder_with_slash(
     reminder: MedicationReminderCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a new medication reminder for a pet
     """
-    # Create authenticated Supabase client with user's JWT token
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    
-    # Set the session with the user's JWT token
-    supabase.auth.set_session(credentials.credentials, "")
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(reminder.pet_id, current_user.id, supabase)
@@ -78,22 +69,11 @@ async def get_pet_medication_reminders(
     offset: int = Query(0, ge=0),
     active_only: bool = Query(True),
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get medication reminders for a specific pet with optional filtering
     """
-    # Create authenticated Supabase client with user's JWT token
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    
-    # Set the session with the user's JWT token
-    supabase.auth.set_session(credentials.credentials, "")
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(pet_id, current_user.id, supabase)
@@ -121,8 +101,8 @@ async def get_health_event_medication_reminders(
     health_event_id: str,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get medication reminders for a specific health event
@@ -154,8 +134,8 @@ async def get_health_event_medication_reminders(
 @router.get("/{reminder_id}", response_model=MedicationReminderResponse)
 async def get_medication_reminder(
     reminder_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get a specific medication reminder by ID
@@ -174,8 +154,8 @@ async def get_medication_reminder(
 async def update_medication_reminder(
     reminder_id: str,
     updates: MedicationReminderUpdate,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Update a medication reminder
@@ -193,8 +173,8 @@ async def update_medication_reminder(
 @router.delete("/{reminder_id}")
 async def delete_medication_reminder(
     reminder_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Delete a medication reminder
@@ -227,8 +207,8 @@ async def get_medication_frequencies():
 @router.post("/{reminder_id}/activate")
 async def activate_medication_reminder(
     reminder_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Activate a medication reminder
@@ -246,8 +226,8 @@ async def activate_medication_reminder(
 @router.post("/{reminder_id}/deactivate")
 async def deactivate_medication_reminder(
     reminder_id: str,
-    supabase = Depends(get_db),
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Deactivate a medication reminder

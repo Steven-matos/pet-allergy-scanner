@@ -14,7 +14,9 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.utils.logging_config import get_logger
+from supabase import Client
 from app.services.push_notification_service import PushNotificationService
 
 logger = get_logger(__name__)
@@ -64,7 +66,7 @@ class SendNotificationRequest(BaseModel):
 async def register_device_token(
     request: DeviceTokenRequest,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Register device token for push notifications (authenticated)
@@ -72,7 +74,7 @@ async def register_device_token(
     Args:
         request: DeviceTokenRequest containing device_token
         current_user: Current authenticated user
-        credentials: JWT credentials for authenticated Supabase client
+        supabase: Authenticated Supabase client
         
     Returns:
         Success message
@@ -80,16 +82,6 @@ async def register_device_token(
     try:
         # Extract device token from request
         device_token = request.device_token
-        
-        # Create authenticated Supabase client for RLS policies
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Update user's device token
         # Note: Supabase UPDATE may return empty data array even on success

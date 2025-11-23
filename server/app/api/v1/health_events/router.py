@@ -9,7 +9,9 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.models.user import UserResponse
+from supabase import Client
 from app.models.health_event import (
     HealthEvent,
     HealthEventCreate,
@@ -28,31 +30,20 @@ router = APIRouter(prefix="/health-events", tags=["health-events"])
 async def create_health_event_no_slash(
     event: HealthEventCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create health event (without trailing slash)"""
-    return await create_health_event_with_slash(event, current_user, credentials)
+    return await create_health_event_with_slash(event, current_user, supabase)
 
 @router.post("/", response_model=HealthEventResponse)
 async def create_health_event_with_slash(
     event: HealthEventCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a new health event for a pet
     """
-    # Create authenticated Supabase client with user's JWT token
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    
-    # Set the session with the user's JWT token
-    supabase.auth.set_session(credentials.credentials, "")
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(event.pet_id, current_user.id, supabase)
@@ -72,22 +63,11 @@ async def get_pet_health_events(
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get health events for a specific pet with optional filtering
     """
-    # Create authenticated Supabase client with user's JWT token
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    
-    # Set the session with the user's JWT token
-    supabase.auth.set_session(credentials.credentials, "")
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(pet_id, current_user.id, supabase)
@@ -126,20 +106,11 @@ async def get_pet_health_events(
 async def get_health_event(
     event_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get a specific health event by ID
     """
-    # Create authenticated Supabase client
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    supabase.auth.set_session(credentials.credentials, "")
     
     event = await HealthEventService.get_health_event_by_id(
         event_id, current_user.id, supabase
@@ -156,20 +127,11 @@ async def update_health_event(
     event_id: str,
     updates: HealthEventUpdate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Update a health event
     """
-    # Create authenticated Supabase client
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    supabase.auth.set_session(credentials.credentials, "")
     
     event = await HealthEventService.update_health_event(
         event_id, updates, current_user.id, supabase
@@ -185,20 +147,11 @@ async def update_health_event(
 async def delete_health_event(
     event_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Delete a health event
     """
-    # Create authenticated Supabase client
-    from app.core.config import settings
-    from supabase import create_client
-    
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
-    supabase.auth.set_session(credentials.credentials, "")
     
     success = await HealthEventService.delete_health_event(
         event_id, current_user.id, supabase

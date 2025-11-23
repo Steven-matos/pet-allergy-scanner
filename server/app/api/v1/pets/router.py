@@ -9,6 +9,7 @@ from typing import List
 from app.models.pet import PetCreate, PetResponse, PetUpdate
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
@@ -20,16 +21,16 @@ logger = get_logger(__name__)
 async def create_pet_no_slash(
     pet_data: PetCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create pet (without trailing slash)"""
-    return await create_pet_with_slash(pet_data, current_user, credentials)
+    return await create_pet_with_slash(pet_data, current_user, supabase)
 
 @router.post("/", response_model=PetResponse)
 async def create_pet_with_slash(
     pet_data: PetCreate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a new pet profile
@@ -37,18 +38,6 @@ async def create_pet_with_slash(
     Creates a new pet profile for the authenticated user with species-specific validation
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Validate species-specific requirements
         if pet_data.species == "cat" and pet_data.weight_kg and pet_data.weight_kg > 15:
@@ -128,7 +117,7 @@ async def create_pet_with_slash(
 @router.get("/", response_model=List[PetResponse])
 async def get_user_pets(
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get all pets for the current user
@@ -136,18 +125,6 @@ async def get_user_pets(
     Returns a list of all pet profiles belonging to the authenticated user
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Get pets for the current user
         response = supabase.table("pets").select("*").eq("user_id", current_user.id).execute()
@@ -187,7 +164,7 @@ async def get_user_pets(
 async def get_pet(
     pet_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get a specific pet by ID
@@ -195,18 +172,6 @@ async def get_pet(
     Returns the pet profile if it belongs to the authenticated user
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Get pet by ID and verify ownership
         response = supabase.table("pets").select("*").eq("id", pet_id).eq("user_id", current_user.id).execute()
@@ -250,7 +215,7 @@ async def update_pet(
     pet_id: str,
     pet_update: PetUpdate,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Update a pet profile
@@ -258,18 +223,6 @@ async def update_pet(
     Updates the pet profile if it belongs to the authenticated user
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet exists and belongs to user
         existing_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
@@ -347,7 +300,7 @@ async def update_pet(
 async def delete_pet(
     pet_id: str,
     current_user: UserResponse = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Delete a pet profile
@@ -355,18 +308,6 @@ async def delete_pet(
     Deletes the pet profile if it belongs to the authenticated user
     """
     try:
-        # Create authenticated Supabase client with user's JWT token
-        from app.core.config import settings
-        from supabase import create_client
-        
-        # Create an authenticated Supabase client using the JWT token
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set the session with the user's JWT token
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet exists and belongs to user
         existing_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
