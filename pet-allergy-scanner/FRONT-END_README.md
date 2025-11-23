@@ -36,20 +36,21 @@ SniffTest/                           # iOS App Root
 │   │   │   └── MFAModels.swift     # Multi-factor auth models
 │   │   ├── Services/               # Authentication business logic
 │   │   │   ├── AuthService.swift   # Core authentication service
+│   │   │   ├── AuthService+SessionRecovery.swift # Session recovery
 │   │   │   ├── CachedAuthService.swift # Cached auth operations
-│   │   │   ├── MFAService.swift    # MFA implementation
-│   │   │   └── KeychainHelper.swift # Secure credential storage
+│   │   │   ├── KeychainHelper.swift # Secure credential storage
+│   │   │   └── SessionLifecycleManager.swift # Session lifecycle management
 │   │   └── Views/                  # Authentication UI
 │   │       ├── AuthenticationView.swift # Login/signup interface
-│   │       ├── ForgotPasswordView.swift # Password recovery
-│   │       └── MFASetupView.swift  # MFA configuration
+│   │       └── ForgotPasswordView.swift # Password recovery
 │   │
 │   ├── Pets/                       # Pet management feature
 │   │   ├── Models/                 # Pet data models
 │   │   │   └── Pet.swift           # Pet profile & allergy data
 │   │   ├── Services/               # Pet business logic
-│   │   │   ├── PetService.swift    # Core pet operations
-│   │   │   └── CachedPetService.swift # Cached pet operations
+│   │   │   ├── CachedPetService.swift # Cached pet operations
+│   │   │   ├── PetDataAggregator.swift # Pet data aggregation
+│   │   │   └── PetDataPDFService.swift # PDF export service
 │   │   └── Views/                  # Pet management UI
 │   │       ├── PetsView.swift      # Pet list & management
 │   │       ├── AddPetView.swift    # Add new pet
@@ -68,20 +69,30 @@ SniffTest/                           # iOS App Root
 │   │   │   ├── CameraPermissionService.swift # Camera access
 │   │   │   ├── BarcodeService.swift # Barcode scanning
 │   │   │   └── HybridScanService.swift # Hybrid OCR/Barcode scanning
+│   │   ├── Utils/                  # Scanning utilities
+│   │   │   └── OCRSpellChecker.swift # OCR text correction
 │   │   └── Views/                  # Scanning UI
 │   │       ├── ScanView.swift      # Main scanning interface
 │   │       ├── CameraView.swift    # Camera capture
 │   │       ├── ModernCameraView.swift # Modern camera UI
+│   │       ├── SimpleCameraView.swift # Simple camera interface
 │   │       ├── CameraControlsView.swift # Camera controls
 │   │       ├── ScanResultView.swift # Scan results display
 │   │       ├── ScanOverlayView.swift # Scanning overlay UI
 │   │       ├── ScanComponents.swift # Reusable scan components
 │   │       ├── ScanAccessibility.swift # Accessibility helpers
-│   │       └── ImagePickerView.swift # Image selection
+│   │       ├── ImagePickerView.swift # Image selection
+│   │       ├── NutritionalLabelScanView.swift # Nutrition label scanning
+│   │       ├── NutritionalLabelResultView.swift # Nutrition label results
+│   │       ├── ProductFoundView.swift # Product found display
+│   │       ├── ProductNotFoundView.swift # Product not found display
+│   │       └── SensitivityAssessmentCard.swift # Sensitivity assessment UI
 │   │
 │   ├── Nutrition/                  # Nutritional analysis feature
 │   │   ├── Models/                 # Nutrition data models
-│   │   │   └── NutritionModels.swift # Nutrition & dietary data
+│   │   │   ├── NutritionModels.swift # Nutrition & dietary data
+│   │   │   ├── FoodComparisonModels.swift # Food comparison models
+│   │   │   └── NutritionTrendsModels.swift # Trends and analytics models
 │   │   ├── Services/               # Nutrition business logic
 │   │   │   ├── NutritionService.swift # Core nutrition API integration
 │   │   │   ├── CachedNutritionService.swift # Cached nutrition operations
@@ -91,8 +102,8 @@ SniffTest/                           # iOS App Root
 │   │   │   ├── CachedFoodService.swift # Cached food operations
 │   │   │   ├── CalorieGoalsService.swift # Calorie goal management
 │   │   │   ├── FeedingLogService.swift # Feeding log tracking
-│   │   │   ├── FoodComparisonService.swift # Food comparison analytics
-│   │   │   ├── NutritionalTrendsService.swift # Nutrition trends analysis
+│   │   │   ├── CachedFoodComparisonService.swift # Cached food comparison
+│   │   │   ├── CachedNutritionalTrendsService.swift # Cached trends
 │   │   │   └── NutritionPetSelectionService.swift # Pet selection for nutrition
 │   │   ├── ViewModels/             # Nutrition view models
 │   │   │   └── NutritionActivityViewModel.swift # Activity tracking
@@ -104,14 +115,17 @@ SniffTest/                           # iOS App Root
 │   │       ├── FeedingLogView.swift # Feeding log interface
 │   │       ├── FoodComparisonView.swift # Food comparison UI
 │   │       ├── FoodSelectionView.swift # Food selection interface
-│   │       └── NutritionalTrendsView.swift # Trends visualization
+│   │       ├── NutritionalTrendsView.swift # Trends visualization
+│   │       ├── AddFoodView.swift # Add food item interface
+│   │       └── EnhancedFoodSearchView.swift # Enhanced food search
 │   │
 │   ├── Notifications/              # Push & local notifications
 │   │   ├── Services/               # Notification business logic
 │   │   │   ├── NotificationManager.swift # Central notification manager
 │   │   │   ├── NotificationService.swift # Core notification service
 │   │   │   ├── NotificationSettingsManager.swift # Settings management
-│   │   │   └── PushNotificationService.swift # Push notification handling
+│   │   │   ├── PushNotificationService.swift # Push notification handling
+│   │   │   └── MealReminderService.swift # Meal reminder scheduling
 │   │   └── Views/                  # Notification UI
 │   │       ├── NotificationSettingsView.swift # Settings interface
 │   │       ├── NotificationTestView.swift # Testing interface
@@ -119,7 +133,8 @@ SniffTest/                           # iOS App Root
 │   │
 │   ├── Profile/                    # User profile management
 │   │   ├── Services/               # Profile business logic
-│   │   │   └── StorageService.swift # Profile data storage
+│   │   │   ├── StorageService.swift # Profile data storage
+│   │   │   └── CachedProfileService.swift # Cached profile operations
 │   │   └── Views/                  # Profile UI
 │   │       ├── ProfileSettingsView.swift # Profile settings
 │   │       ├── EditProfileView.swift # Profile editing
@@ -134,10 +149,38 @@ SniffTest/                           # iOS App Root
 │   │       └── HelpSupportView.swift # Help interface
 │   │
 │   ├── Subscription/               # Subscription management
-│   │   └── Views/
-│   │       └── SubscriptionView.swift # Subscription interface
+│   │   ├── Models/                 # Subscription data models
+│   │   │   ├── SubscriptionProduct.swift # Product model
+│   │   │   └── SubscriptionTier.swift # Subscription tier model
+│   │   ├── Services/               # Subscription business logic
+│   │   │   ├── RevenueCatSubscriptionProvider.swift # RevenueCat integration
+│   │   │   └── DailyScanCounter.swift # Scan limit tracking
+│   │   ├── ViewModels/             # Subscription view models
+│   │   │   └── SubscriptionViewModel.swift # Subscription state management
+│   │   └── Views/                  # Subscription UI
+│   │       ├── SubscriptionView.swift # Main subscription interface
+│   │       ├── PaywallView.swift # Premium paywall
+│   │       ├── UpgradePromptView.swift # Upgrade prompts
+│   │       ├── ScanLimitIndicator.swift # Scan limit display
+│   │       ├── PremiumBadge.swift # Premium badge component
+│   │       └── CustomerCenterExtension.swift # Customer center integration
+│   │
+│   ├── Tracking/                   # Health & medication tracking
+│   │   ├── Models/                 # Tracking data models
+│   │   │   ├── HealthEvent.swift  # Health event model
+│   │   │   └── MedicationReminder.swift # Medication reminder model
+│   │   ├── Services/               # Tracking business logic
+│   │   │   ├── HealthEventService.swift # Health event management
+│   │   │   └── MedicationReminderService.swift # Medication scheduling
+│   │   └── Views/                  # Tracking UI
+│   │       ├── TrackersView.swift # Main tracking hub
+│   │       ├── HealthEventListView.swift # Health events list
+│   │       ├── HealthEventDetailView.swift # Health event details
+│   │       ├── AddHealthEventView.swift # Add health event
+│   │       └── DocumentPickerView.swift # Document attachment
 │   │
 │   ├── Onboarding/                 # First-time user experience
+│   │   ├── LaunchScreenView.swift  # Launch screen
 │   │   └── Views/
 │   │       └── OnboardingView.swift # User onboarding flow
 │   │
@@ -323,24 +366,25 @@ Cross-feature components and utilities:
 
 ## File Organization Summary
 
-**Total: 107 Swift files**
+**Total: 130+ Swift files**
 
 ### Feature Breakdown:
-- **Authentication**: 9 files (2 models, 4 services, 3 views)
-- **Pets**: 8 files (1 model, 2 services, 5 views)
-- **Scanning**: 17 files (2 models, 6 services, 9 views)
-- **Nutrition**: 21 files (1 model, 11 services, 1 view model, 8 views)
-- **Notifications**: 7 files (4 services, 3 views)
-- **Profile**: 4 files (1 service, 3 views)
+- **Authentication**: 7 files (1 model, 5 services, 2 views)
+- **Pets**: 9 files (1 model, 3 services, 5 views)
+- **Scanning**: 20 files (2 models, 6 services, 1 utility, 11 views)
+- **Nutrition**: 24 files (3 models, 10 services, 1 view model, 10 views)
+- **Notifications**: 8 files (5 services, 3 views)
+- **Profile**: 5 files (2 services, 3 views)
+- **Subscription**: 11 files (2 models, 2 services, 1 view model, 6 views)
+- **Tracking**: 7 files (2 models, 2 services, 5 views)
 - **History**: 1 file (1 view)
 - **Help**: 1 file (1 view)
-- **Subscription**: 1 file (1 view)
-- **Onboarding**: 1 file (1 view)
+- **Onboarding**: 2 files (1 launch screen, 1 view)
 - **Settings**: 1 file (1 service)
 - **Core**: 8 files (3 security, 2 configuration, 1 analytics, 2 performance)
-- **Shared**: 22 files (4 models, 8 services, 8 utilities, 6 views)
+- **Shared**: 22+ files (4+ models, 8+ services, 8+ utilities, 6+ views)
 - **App**: 2 files (main app, content view)
-- **Tests**: 6 files (unit tests)
+- **Tests**: 6+ files (unit tests)
 
 ## Benefits of This Structure
 
@@ -396,17 +440,21 @@ Cross-feature components and utilities:
 
 ## Documentation Status
 
-**Last Verified**: October 10, 2025  
+**Last Verified**: November 2025  
 **Architecture**: Feature-based MVVM with SOLID principles  
 **Status**: ✅ Production-ready - Verified against codebase  
-**Total Files**: 107 Swift files across all features
+**Total Files**: 130+ Swift files across all features
 
-### Recent Updates (October 10, 2025)
-- ✅ Updated Scanning feature with 6 services and 9 views
-- ✅ Updated Nutrition feature with 11 services and 8 views
-- ✅ Added Settings feature with Services directory
-- ✅ Added missing files to Shared (BundleExtension, LegalViews, NutritionComponents)
-- ✅ Added GraphicsOptimizer to Core/Performance
-- ✅ Updated file count summary to 107 files
+### Recent Updates (November 2025)
+- ✅ Added Tracking feature with Health Events and Medication Reminders
+- ✅ Enhanced Subscription feature with RevenueCat integration
+- ✅ Updated Nutrition feature with additional models and cached services
+- ✅ Enhanced Scanning feature with nutritional label scanning and product views
+- ✅ Updated Authentication with session recovery and lifecycle management
+- ✅ Added Profile caching service
+- ✅ Enhanced Notifications with meal reminder service
+- ✅ Updated Pets feature with data aggregation and PDF export
+- ✅ Added OCR spell checker utility
+- ✅ Updated file count summary to 130+ files
 - ✅ All directory structures verified against actual codebase
 

@@ -38,6 +38,10 @@ open http://localhost:8000/redoc         # ReDoc (local)
 - ✅ Push notifications for iOS devices
 - ✅ Image optimization and storage
 - ✅ GDPR compliance (data export/deletion)
+- ✅ Subscription management (App Store & RevenueCat)
+- ✅ Waitlist signup functionality
+- ✅ Health event tracking
+- ✅ Medication reminder scheduling
 
 ### Nutrition & Analytics
 - ✅ Advanced nutritional analysis with species-specific standards
@@ -46,6 +50,9 @@ open http://localhost:8000/redoc         # ReDoc (local)
 - ✅ Weight tracking with trend analysis
 - ✅ Nutritional trend monitoring
 - ✅ Ingredient allergen detection
+- ✅ Data quality assessment for food items
+- ✅ Comprehensive feeding logs
+- ✅ Multi-pet nutrition insights
 
 ### Security & Compliance
 - ✅ Rate limiting and security middleware
@@ -162,7 +169,12 @@ server/
 │   │   ├── notifications.py       # Push notifications
 │   │   ├── gdpr.py                # GDPR compliance
 │   │   ├── images.py              # Image upload/processing
-│   │   └── monitoring.py          # Health checks & metrics
+│   │   ├── monitoring.py          # Health checks & metrics
+│   │   ├── subscriptions.py      # Subscription management
+│   │   ├── health_events.py       # Health event tracking
+│   │   ├── medication_reminders.py # Medication scheduling
+│   │   ├── waitlist.py            # Waitlist signup
+│   │   └── data_quality.py       # Data quality assessment
 │   ├── services/                  # Business logic layer
 │   │   ├── analytics/             # Analytics services
 │   │   ├── advanced_analytics_service.py
@@ -175,7 +187,12 @@ server/
 │   │   ├── mfa_service.py
 │   │   ├── push_notification_service.py
 │   │   ├── storage_service.py
-│   │   └── monitoring.py
+│   │   ├── monitoring.py
+│   │   ├── subscription_service.py # App Store subscription verification
+│   │   ├── revenuecat_service.py   # RevenueCat integration
+│   │   ├── health_event_service.py # Health event management
+│   │   ├── medication_reminder_service.py # Medication scheduling
+│   │   └── data_quality_service.py # Data quality assessment
 │   ├── shared/                    # Shared utilities
 │   │   ├── repositories/          # Data access layer
 │   │   └── services/              # Shared services
@@ -240,6 +257,10 @@ Required variables (see `env.example` for complete list):
 ### CORS & Hosts
 - `ALLOWED_ORIGINS_STR` - Comma-separated allowed origins
 - `ALLOWED_HOSTS_STR` - Comma-separated trusted hosts
+
+### RevenueCat (Subscription Management)
+- `REVENUECAT_API_KEY` - RevenueCat API key for subscription management
+- `REVENUECAT_WEBHOOK_SECRET` - Secret for webhook signature verification
 
 ### Rate Limiting
 - `RATE_LIMIT_PER_MINUTE` - General rate limit (default: 60)
@@ -339,32 +360,62 @@ python scripts/railway_start.py
 - `POST /api/v1/scans` - Create new ingredient scan
 - `GET /api/v1/scans` - List user's scans
 - `GET /api/v1/scans/{scan_id}` - Get scan details
-- `POST /api/v1/scans/{scan_id}/analyze` - Analyze scanned ingredients
-- `GET /api/v1/ingredients/search` - Search ingredient database
+- `PUT /api/v1/scans/{scan_id}` - Update scan
+- `DELETE /api/v1/scans/{scan_id}` - Delete scan
+- `POST /api/v1/scans/analyze` - Analyze ingredients
+- `GET /api/v1/ingredients` - Search ingredients
+- `GET /api/v1/ingredients/common-allergens` - Get common allergens
+- `GET /api/v1/ingredients/safe-alternatives` - Get safe alternatives
 
 ### Nutritional Analysis
-- `POST /api/v1/nutrition/analyze` - Analyze ingredient nutrition
-- `GET /api/v1/nutrition/recommendations` - Get pet-specific recommendations
-- `GET /api/v1/nutrition/standards/{species}` - Get nutritional standards
-- `POST /api/v1/nutrition/compare` - Compare multiple products
+- `POST /api/v1/nutrition/analysis/analyze` - Analyze food nutrition
+- `GET /api/v1/nutrition/analysis/analyses/{pet_id}` - Get food analyses
+- `POST /api/v1/nutrition/analysis/compatibility` - Check nutrition compatibility
+- `GET /api/v1/nutrition/requirements/{pet_id}` - Get nutritional requirements
+- `POST /api/v1/nutrition/requirements` - Create nutritional requirements
+- `POST /api/v1/nutrition/feeding` - Log feeding record
+- `GET /api/v1/nutrition/feeding/{pet_id}` - Get feeding history
+- `GET /api/v1/nutrition/feeding/daily-summary/{pet_id}` - Get daily nutrition summary
+- `POST /api/v1/nutrition/goals/calorie-goals` - Create calorie goal
+- `GET /api/v1/nutrition/goals/calorie-goals` - Get calorie goals
+- `GET /api/v1/nutrition/goals/calorie-goals/{pet_id}` - Get pet's active calorie goal
+- `GET /api/v1/nutrition/summaries/insights/multi-pet` - Multi-pet nutrition insights
+- `GET /api/v1/nutrition/advanced/analytics/overview` - Advanced nutrition analytics
+- `GET /api/v1/nutrition/advanced/insights/{pet_id}` - Nutrition insights
+- `GET /api/v1/nutrition/advanced/patterns/{pet_id}` - Nutrition patterns
+- `GET /api/v1/nutrition/advanced/trends/{pet_id}` - Nutrition trends
+- `GET /api/v1/nutrition/advanced/recommendations/{pet_id}` - Nutrition recommendations
 
 ### Advanced Nutrition & Analytics
-- `GET /api/v1/advanced-nutrition/trends` - Get nutritional trends
-- `GET /api/v1/advanced-nutrition/insights` - Get nutritional insights
-- `POST /api/v1/advanced-nutrition/analysis` - Advanced nutritional analysis
-- `POST /api/v1/food-comparison` - Compare food products
-- `GET /api/v1/weight-tracking` - Get weight history
-- `POST /api/v1/weight-tracking` - Log weight entry
-- `GET /api/v1/weight-tracking/trends` - Get weight trends
+- `POST /api/v1/advanced-nutrition/weight/record` - Record pet weight
+- `GET /api/v1/advanced-nutrition/weight/history/{pet_id}` - Get weight history
+- `POST /api/v1/advanced-nutrition/weight/goals` - Create weight goal
+- `PUT /api/v1/advanced-nutrition/weight/goals` - Update weight goal
+- `GET /api/v1/advanced-nutrition/weight/goals/{pet_id}/active` - Get active weight goal
+- `GET /api/v1/advanced-nutrition/weight/trend/{pet_id}` - Get weight trend analysis
+- `GET /api/v1/advanced-nutrition/weight/dashboard/{pet_id}` - Weight management dashboard
+- `GET /api/v1/advanced-nutrition/trends/{pet_id}` - Get nutritional trends
+- `GET /api/v1/advanced-nutrition/trends/dashboard/{pet_id}` - Nutritional trends dashboard
+- `POST /api/v1/advanced-nutrition/comparisons` - Create food comparison
+- `GET /api/v1/advanced-nutrition/comparisons/{comparison_id}` - Get food comparison
+- `GET /api/v1/advanced-nutrition/comparisons` - List food comparisons
+- `GET /api/v1/advanced-nutrition/comparisons/dashboard/{comparison_id}` - Comparison dashboard
+- `DELETE /api/v1/advanced-nutrition/comparisons/{comparison_id}` - Delete food comparison
+- `POST /api/v1/advanced-nutrition/analytics/generate` - Generate nutritional analytics
+- `GET /api/v1/advanced-nutrition/analytics/health-insights/{pet_id}` - Get health insights
+- `GET /api/v1/advanced-nutrition/analytics/patterns/{pet_id}` - Get nutritional patterns
+- `GET /api/v1/advanced-nutrition/analytics/dashboard/{pet_id}` - Advanced nutrition dashboard
 
-### Food & Calorie Management
-- `POST /api/v1/food-items` - Log food item
-- `GET /api/v1/food-items` - List logged food items
-- `PUT /api/v1/food-items/{item_id}` - Update food item
-- `DELETE /api/v1/food-items/{item_id}` - Delete food item
-- `GET /api/v1/calorie-goals` - Get calorie tracking goals
-- `POST /api/v1/calorie-goals` - Set calorie goals
-- `GET /api/v1/calorie-goals/progress` - Get daily progress
+### Food Management
+- `GET /api/v1/food-management/search` - Search foods
+- `GET /api/v1/food-management/barcode/{barcode}` - Get food by barcode
+- `GET /api/v1/food-management/recent` - Get recent foods
+- `GET /api/v1/food-management/{food_id}` - Get food item
+- `POST /api/v1/food-management` - Create food item
+- `PUT /api/v1/food-management/{food_id}` - Update food item
+- `DELETE /api/v1/food-management/{food_id}` - Delete food item
+- `GET /api/v1/food-management/categories` - Get food categories
+- `GET /api/v1/food-management/brands` - Get food brands
 
 ### Push Notifications
 - `POST /api/v1/notifications/register` - Register device for push notifications
@@ -377,6 +428,39 @@ python scripts/railway_start.py
 - `GET /api/v1/images/{image_id}` - Get image
 - `DELETE /api/v1/images/{image_id}` - Delete image
 
+### Subscriptions
+- `POST /api/v1/subscriptions/verify` - Verify App Store receipt
+- `GET /api/v1/subscriptions/status` - Get subscription status
+- `POST /api/v1/subscriptions/restore` - Restore purchases
+- `POST /api/v1/subscriptions/webhook` - App Store webhook (internal)
+- `POST /api/v1/subscriptions/revenuecat/webhook` - RevenueCat webhook
+- `GET /api/v1/subscriptions/revenuecat/subscription-info/{user_id}` - Get RevenueCat subscription info
+
+### Health Events & Medication
+- `POST /api/v1/health-events` - Create health event
+- `GET /api/v1/health-events` - List health events
+- `GET /api/v1/health-events/{event_id}` - Get health event
+- `PUT /api/v1/health-events/{event_id}` - Update health event
+- `DELETE /api/v1/health-events/{event_id}` - Delete health event
+- `POST /api/v1/medication-reminders` - Create medication reminder
+- `GET /api/v1/medication-reminders/pet/{pet_id}` - Get reminders by pet
+- `GET /api/v1/medication-reminders/{reminder_id}` - Get reminder
+- `PUT /api/v1/medication-reminders/{reminder_id}` - Update reminder
+- `DELETE /api/v1/medication-reminders/{reminder_id}` - Delete reminder
+- `POST /api/v1/medication-reminders/{reminder_id}/activate` - Activate reminder
+- `POST /api/v1/medication-reminders/{reminder_id}/deactivate` - Deactivate reminder
+- `GET /api/v1/medication-reminders/frequencies/list` - Get available frequencies
+
+### Waitlist
+- `POST /api/v1/waitlist` - Sign up to waitlist
+
+### Data Quality
+- `GET /api/v1/data-quality/assess/{food_item_id}` - Assess food item quality
+- `POST /api/v1/data-quality/assess/batch` - Batch quality assessment
+- `GET /api/v1/data-quality/stats/overview` - Get quality statistics
+- `GET /api/v1/data-quality/recommendations/{food_item_id}` - Get quality recommendations
+- `GET /api/v1/data-quality/low-quality` - Get low quality items
+
 ### GDPR & Privacy
 - `GET /api/v1/gdpr/export` - Export all user data (JSON)
 - `DELETE /api/v1/gdpr/delete-account` - Permanently delete account
@@ -384,8 +468,8 @@ python scripts/railway_start.py
 
 ### Monitoring & Health
 - `GET /health` - Basic health check
+- `GET /api/v1/monitoring/health` - Detailed health check
 - `GET /api/v1/monitoring/metrics` - System metrics
-- `GET /api/v1/monitoring/status` - Detailed status check
 
 ## 🔍 Monitoring
 
@@ -541,5 +625,8 @@ The API provides comprehensive analytics for pet nutrition:
 Proprietary - All rights reserved
 
 ---
+
+*Last updated: November 2025*
+*API Version: 1.0.0*
 
 Built with ❤️ for pet owners everywhere 🐶🐱

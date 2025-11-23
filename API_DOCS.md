@@ -22,6 +22,7 @@ Complete API reference for the SniffTest backend service.
 - [Push Notifications](#push-notifications)
 - [Subscriptions](#subscriptions)
 - [Waitlist](#waitlist)
+- [Data Quality](#data-quality)
 - [GDPR Compliance](#gdpr-compliance)
 - [Monitoring & Health](#monitoring--health)
 - [Data Models](#data-models)
@@ -54,10 +55,11 @@ The API is organized into the following main domains:
 - **Medication Reminders** (`/api/v1/medication-reminders`) - Medication tracking and scheduling
 - **MFA** (`/api/v1/mfa`) - Multi-factor authentication
 - **Notifications** (`/api/v1/notifications`) - Push notification management
-- **Subscriptions** (`/api/v1/subscriptions`) - Premium subscription management with App Store integration
+- **Subscriptions** (`/api/v1/subscriptions`) - Premium subscription management with App Store & RevenueCat integration
 - **Waitlist** (`/api/v1/waitlist`) - Email waitlist signup
 - **GDPR** (`/api/v1/gdpr`) - Data export and deletion
 - **Monitoring** (`/api/v1/monitoring`) - Health checks and metrics
+- **Data Quality** (`/api/v1/data-quality`) - Food item data quality assessment and analysis
 
 ## Interactive API Documentation
 
@@ -1622,14 +1624,51 @@ This endpoint receives notifications from Apple for subscription events like ren
 
 ### RevenueCat Webhook
 
-Handle RevenueCat webhook events.
+Handle RevenueCat webhook events for subscription management.
 
 ```http
 POST /api/v1/subscriptions/revenuecat/webhook
 Content-Type: application/json
+X-RevenueCat-Signature: <signature>
+Authorization: <webhook_secret>
 ```
 
-This endpoint processes subscription events from RevenueCat integration.
+This endpoint processes subscription events from RevenueCat integration including:
+- Initial purchases
+- Subscription renewals
+- Cancellations and uncancellations
+- Billing issues
+- Expirations
+- Non-renewing purchases
+- Subscription pauses
+- Transfers
+
+**Note**: This endpoint requires webhook signature verification for security.
+
+### Get RevenueCat Subscription Info
+
+Get user's subscription information directly from RevenueCat API.
+
+```http
+GET /api/v1/subscriptions/revenuecat/subscription-info/{user_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "subscription": {
+    "has_subscription": true,
+    "entitlements": {
+      "premium": {
+        "is_active": true,
+        "expires_date": "2025-12-13T10:30:00Z"
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -1696,6 +1735,137 @@ Permanently delete all user data.
 ```http
 DELETE /api/v1/gdpr/delete
 Authorization: Bearer <jwt_token>
+```
+
+---
+
+## Data Quality
+
+### Assess Food Item Quality
+
+Assess data quality for a specific food item.
+
+```http
+GET /api/v1/data-quality/assess/{food_item_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "food_item_id": "uuid-here",
+  "quality_level": "good",
+  "overall_score": 0.85,
+  "ingredients_score": 0.9,
+  "nutritional_score": 0.8,
+  "completeness_score": 0.85,
+  "recommendations": [
+    "Add missing nutritional information",
+    "Verify ingredient list completeness"
+  ]
+}
+```
+
+### Assess Multiple Food Items
+
+Assess data quality for multiple food items in batch.
+
+```http
+POST /api/v1/data-quality/assess/batch
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "food_item_ids": ["uuid1", "uuid2", "uuid3"]
+}
+```
+
+**Response:**
+```json
+[
+  {
+    "food_item_id": "uuid1",
+    "food_name": "Chicken & Rice Dog Food",
+    "brand": "Premium Pet Foods",
+    "quality_level": "excellent",
+    "overall_score": 0.95
+  }
+]
+```
+
+**Note**: Maximum 50 items allowed per batch request.
+
+### Get Quality Statistics Overview
+
+Get overall data quality statistics across the food database.
+
+```http
+GET /api/v1/data-quality/stats/overview?limit=1000
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "total_items": 1000,
+  "quality_distribution": {
+    "excellent": 450,
+    "good": 350,
+    "fair": 150,
+    "poor": 50
+  },
+  "average_score": 0.82,
+  "ingredients_coverage": 0.95,
+  "nutritional_coverage": 0.88,
+  "sample_size": 1000
+}
+```
+
+### Get Quality Recommendations
+
+Get quality improvement recommendations for a food item.
+
+```http
+GET /api/v1/data-quality/recommendations/{food_item_id}
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "food_item_id": "uuid-here",
+  "current_quality_level": "fair",
+  "current_score": 0.65,
+  "priority": "medium",
+  "recommendations": [
+    "Add missing protein content",
+    "Include fiber information",
+    "Verify ingredient list accuracy"
+  ]
+}
+```
+
+### Get Low Quality Items
+
+Get food items with quality scores below a specified threshold.
+
+```http
+GET /api/v1/data-quality/low-quality?threshold=0.5&limit=50
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+[
+  {
+    "food_item_id": "uuid-here",
+    "food_name": "Generic Dog Food",
+    "brand": "Unknown",
+    "quality_level": "poor",
+    "overall_score": 0.35,
+    "recommendations": ["Improve data completeness"]
+  }
+]
 ```
 
 ---
@@ -1893,12 +2063,14 @@ class PetAllergyScannerAPI:
 - Advanced nutrition (weight tracking, trends, comparisons)
 - Calorie goals and feeding logs
 - Health insights and analytics
-- **NEW**: Medication reminders and scheduling
-- **NEW**: Subscription management (App Store & RevenueCat integration)
-- **NEW**: Waitlist signup functionality
-- **FIXED**: Robust JWT validation with multi-strategy support
-- **FIXED**: Row Level Security (RLS) policy violations
-- **FIXED**: Trailing slash routing issues across all endpoints
+- Medication reminders and scheduling
+- Subscription management (App Store & RevenueCat integration)
+- Waitlist signup functionality
+- **NEW**: Data quality assessment and analysis endpoints
+- **NEW**: RevenueCat webhook integration for subscription management
+- **IMPROVED**: Robust JWT validation with multi-strategy support
+- **IMPROVED**: Row Level Security (RLS) policy enforcement
+- **IMPROVED**: Trailing slash routing support across all endpoints
 - **IMPROVED**: Error handling and debugging capabilities
 - **IMPROVED**: Service role integration for system operations
 - Push notifications (APNs)
