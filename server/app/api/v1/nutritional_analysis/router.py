@@ -5,6 +5,8 @@ Provides nutritional analysis and recommendations for pet food
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
+from datetime import datetime
+import uuid
 from app.database import get_supabase_client
 from app.models.nutritional_standards import (
     NutritionalStandardResponse,
@@ -142,7 +144,32 @@ async def get_nutritional_standards(
         # Convert to response models
         standards = []
         for standard in response.data:
+            # Parse datetime strings if they exist
+            created_at = datetime.now()
+            updated_at = datetime.now()
+            
+            if "created_at" in standard and standard["created_at"]:
+                try:
+                    if isinstance(standard["created_at"], str):
+                        # Try ISO format first
+                        created_at = datetime.fromisoformat(standard["created_at"].replace('Z', '+00:00'))
+                    else:
+                        created_at = standard["created_at"]
+                except (ValueError, AttributeError):
+                    created_at = datetime.now()
+            
+            if "updated_at" in standard and standard["updated_at"]:
+                try:
+                    if isinstance(standard["updated_at"], str):
+                        # Try ISO format first
+                        updated_at = datetime.fromisoformat(standard["updated_at"].replace('Z', '+00:00'))
+                    else:
+                        updated_at = standard["updated_at"]
+                except (ValueError, AttributeError):
+                    updated_at = datetime.now()
+            
             standards.append(NutritionalStandardResponse(
+                id=standard.get("id", str(uuid.uuid4())),
                 species=standard["species"],
                 life_stage=standard["life_stage"],
                 weight_range_min=standard["weight_range_min"],
@@ -155,7 +182,9 @@ async def get_nutritional_standards(
                 moisture_max_percent=standard["moisture_max_percent"],
                 ash_max_percent=standard["ash_max_percent"],
                 calcium_min_percent=standard.get("calcium_min_percent"),
-                phosphorus_min_percent=standard.get("phosphorus_min_percent")
+                phosphorus_min_percent=standard.get("phosphorus_min_percent"),
+                created_at=created_at,
+                updated_at=updated_at
             ))
         
         return standards
