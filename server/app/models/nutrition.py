@@ -36,6 +36,8 @@ class NutritionalRequirementsResponse(NutritionalRequirementsBase):
     id: str
     created_at: datetime
     updated_at: datetime
+    # Override daily_calories to allow 0 for default/empty responses
+    daily_calories: float = Field(..., ge=0)  # Allow 0 for "no data" responses
     
     class Config:
         from_attributes = True
