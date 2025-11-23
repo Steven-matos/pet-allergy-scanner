@@ -188,8 +188,11 @@ async def get_active_weight_goal(
         Active weight goal or None
     """
     try:
-        return await get_weight_service().get_active_weight_goal(pet_id, current_user.id)
+        goal = await get_weight_service().get_active_weight_goal(pet_id, current_user.id)
+        # Return None if no goal exists (200 status with null/empty data)
+        return goal
     except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
@@ -272,9 +275,18 @@ async def get_nutritional_trends(
         List of nutritional trend records
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id)
+        
+        # Get trends - service will return empty list if no data exists
         trends = await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
         # Return empty list if no trends (200 status with empty data)
         return trends if trends else []
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -303,9 +315,18 @@ async def get_trends_dashboard(
         Trends dashboard data
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id)
+        
+        # Get dashboard - service already handles empty data gracefully
         dashboard = await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)
         # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)
         return dashboard
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
