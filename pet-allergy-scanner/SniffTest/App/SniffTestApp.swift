@@ -16,12 +16,23 @@ struct SniffTestApp: App {
     private let authService = AuthService.shared
     private let petService = CachedPetService.shared
     private let notificationManager = NotificationManager.shared
+    private let cacheManager = EnhancedCacheManager.shared
+    
+    init() {
+        // Initialize cache manager on app launch
+        // This sets up URLSession caching and lifecycle observers
+        _ = cacheManager
+    }
     
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(authService)
                 .environmentObject(notificationManager)
+                .task {
+                    // Warm cache on app launch
+                    await cacheManager.warmCache()
+                }
         }
     }
 }
@@ -43,8 +54,17 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Configure PostHog analytics using Info.plist values
         PostHogConfigurator.configure()
+        
+        // Clear badge on app launch
+        PushNotificationService.shared.clearBadge()
 
         return true
+    }
+    
+    /// Handle app becoming active (foreground)
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        // Clear badge when app becomes active
+        PushNotificationService.shared.clearBadge()
     }
     
     /// Handle successful device token registration

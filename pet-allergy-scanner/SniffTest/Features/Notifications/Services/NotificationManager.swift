@@ -46,6 +46,9 @@ class NotificationManager: ObservableObject {
     
     /// Handle app becoming active (foreground)
     func handleAppBecameActive() {
+        // Clear badge when app becomes active
+        PushNotificationService.shared.clearBadge()
+        
         Task {
             await notificationSettingsManager.checkAuthorizationStatus()
             checkForBirthdayCelebrations()

@@ -58,26 +58,31 @@ struct NotificationTestView: View {
                     Button("🔔 Test Local Notification (Banner)") {
                         testImmediateNotification()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized)
                     
                     Button("🎉 Test Birthday Notification") {
                         scheduleTestBirthdayNotification()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized)
                     
                     Button("🔍 Test Engagement Notification") {
                         scheduleTestEngagementNotification()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized)
                     
                     Button("🍽️ Test Meal Reminder") {
                         testMealReminder()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized || petService.pets.isEmpty)
                     
                     Button("💊 Test Medication Reminder") {
                         testMedicationReminder()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized || petService.pets.isEmpty)
                 }
                 
@@ -100,6 +105,7 @@ struct NotificationTestView: View {
                             await testPushNotification()
                         }
                     }
+                    .buttonStyle(.plain)
                     .disabled(!PushNotificationService.shared.isAuthorized || PushNotificationService.shared.deviceToken == nil)
                 }
                 
@@ -107,17 +113,20 @@ struct NotificationTestView: View {
                     Button("Test Birthday Celebration") {
                         testBirthdayCelebration()
                     }
+                    .buttonStyle(.plain)
                     .disabled(petService.pets.isEmpty)
                     
                     Button("Test Engagement Reminder") {
                         testEngagementReminder()
                     }
+                    .buttonStyle(.plain)
                     
                     Button("Check Meal Reminders Now") {
                         Task {
                             await testMealReminderCheck()
                         }
                     }
+                    .buttonStyle(.plain)
                 }
                 
                 Section("Pet Data") {
@@ -159,15 +168,18 @@ struct NotificationTestView: View {
                             await notificationSettingsManager.requestPermission()
                         }
                     }
+                    .buttonStyle(.plain)
                     
                     Button("Schedule All Notifications") {
                         notificationSettingsManager.scheduleAllNotifications()
                     }
+                    .buttonStyle(.plain)
                     .disabled(!notificationSettingsManager.isAuthorized)
                     
                     Button("Cancel All Notifications") {
                         notificationSettingsManager.cancelAllNotifications()
                     }
+                    .buttonStyle(.plain)
                 }
             }
             .navigationTitle("Notification Test")

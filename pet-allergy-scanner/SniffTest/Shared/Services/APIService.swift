@@ -12,6 +12,7 @@ import Security
 struct EmptyResponse: Codable {}
 
 /// Main API service for communicating with the backend using Swift Concurrency
+/// Enhanced with URLSession-level caching for optimal performance
 @MainActor
 class APIService: ObservableObject, @unchecked Sendable {
     static let shared = APIService()
@@ -26,6 +27,11 @@ class APIService: ObservableObject, @unchecked Sendable {
     private let authTokenQueue = DispatchQueue(label: "authToken", qos: .userInitiated)
     private var isRefreshing = false
     private var refreshTask: Task<Void, Error>?
+    
+    /// Use cached URLSession from EnhancedCacheManager for HTTP-level caching
+    private var urlSession: URLSession {
+        return EnhancedCacheManager.shared.cachedURLSession
+    }
     
     /// Get authentication token asynchronously
     private var authToken: String? {
@@ -247,7 +253,7 @@ class APIService: ObservableObject, @unchecked Sendable {
             let refreshData = ["refresh_token": refreshToken]
             request.httpBody = try JSONSerialization.data(withJSONObject: refreshData)
             
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 self.isRefreshing = false
@@ -376,7 +382,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         let request = await createRequest(url: url, method: "POST", body: requestData)
         
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -405,7 +411,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.httpBody = requestData
         
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -456,7 +462,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: requestPayload)
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -506,7 +512,7 @@ class APIService: ObservableObject, @unchecked Sendable {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -677,7 +683,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await urlSession.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -796,9 +802,11 @@ class APIService: ObservableObject, @unchecked Sendable {
     }
     
     /// Perform network request with error handling using async/await
+    /// Uses cached URLSession for HTTP-level caching
     private func performRequest<T: Decodable>(_ request: URLRequest, responseType: T.Type) async throws -> T {
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            // Use cached URLSession which has URLCache configured
+            let (data, response) = try await urlSession.data(for: request)
             
             // Check for HTTP errors
             if let httpResponse = response as? HTTPURLResponse {
@@ -815,7 +823,7 @@ class APIService: ObservableObject, @unchecked Sendable {
                             if let newToken = await authToken {
                                 retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
                             }
-                            let (retryData, retryResponse) = try await URLSession.shared.data(for: retryRequest)
+                            let (retryData, retryResponse) = try await urlSession.data(for: retryRequest)
                             if let retryHttpResponse = retryResponse as? HTTPURLResponse,
                                (200...299).contains(retryHttpResponse.statusCode) {
                                 // Success after refresh, decode and return
@@ -850,7 +858,7 @@ class APIService: ObservableObject, @unchecked Sendable {
                             if let newToken = await authToken {
                                 retryRequest.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
                             }
-                            let (retryData, retryResponse) = try await URLSession.shared.data(for: retryRequest)
+                            let (retryData, retryResponse) = try await urlSession.data(for: retryRequest)
                             if let retryHttpResponse = retryResponse as? HTTPURLResponse,
                                (200...299).contains(retryHttpResponse.statusCode) {
                                 // Success after refresh, decode and return
@@ -1097,7 +1105,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await urlSession.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -1223,7 +1231,7 @@ extension APIService {
         let request = await createRequest(url: url, method: "DELETE")
         
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await urlSession.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 switch httpResponse.statusCode {
@@ -1308,7 +1316,7 @@ extension APIService {
         }
         
         let request = await createRequest(url: url)
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await urlSession.data(for: request)
         return data
     }
     
@@ -1515,7 +1523,7 @@ extension APIService {
         }
         
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse

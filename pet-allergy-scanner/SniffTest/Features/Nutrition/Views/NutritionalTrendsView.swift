@@ -28,11 +28,13 @@ struct NutritionalTrendsView: View {
     @State private var petService = CachedPetService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @StateObject private var calorieGoalsService = CalorieGoalsService.shared
     @Binding var selectedPeriod: TrendPeriod
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingPeriodSelector = false
     @State private var showingFeedingLog = false
+    @State private var showingCalorieGoalSheet: Pet?
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -60,8 +62,18 @@ struct NutritionalTrendsView: View {
                     loadTrendsData()
                 }
         }
+        .sheet(item: $showingCalorieGoalSheet) { pet in
+            CalorieGoalEntrySheet(pet: pet) {
+                showingCalorieGoalSheet = nil
+                // Reload goals after setting
+                Task {
+                    try? await calorieGoalsService.loadGoals()
+                }
+            }
+        }
         .onAppear {
             loadTrendsDataIfNeeded()
+            loadCalorieGoalsIfNeeded()
         }
     }
     
@@ -159,45 +171,56 @@ struct NutritionalTrendsView: View {
     
     @ViewBuilder
     private func summaryCardsSection(for pet: Pet) -> some View {
-        LazyVGrid(columns: [
-            GridItem(.flexible()),
-            GridItem(.flexible())
-        ], spacing: ModernDesignSystem.Spacing.md) {
-            // Average Daily Calories
-            SummaryCard(
-                title: "Avg Daily Calories",
-                value: "\(Int(trendsService.averageDailyCalories(for: pet.id)))",
-                unit: "kcal",
-                trend: trendsService.calorieTrend(for: pet.id),
-                color: ModernDesignSystem.Colors.goldenYellow
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
+            // Calorie Goal Card (Full Width)
+            CalorieGoalCard(
+                pet: pet,
+                onTap: {
+                    showingCalorieGoalSheet = pet
+                }
             )
             
-            // Feeding Frequency
-            SummaryCard(
-                title: "Feeding Frequency",
-                value: "\(String(format: "%.1f", trendsService.averageFeedingFrequency(for: pet.id)))",
-                unit: "times/day",
-                trend: trendsService.feedingTrend(for: pet.id),
-                color: ModernDesignSystem.Colors.primary
-            )
-            
-            // Nutritional Balance
-            SummaryCard(
-                title: "Nutritional Balance",
-                value: "\(Int(trendsService.nutritionalBalanceScore(for: pet.id)))",
-                unit: "%",
-                trend: trendsService.balanceTrend(for: pet.id),
-                color: ModernDesignSystem.Colors.primary
-            )
-            
-            // Weight Change
-            SummaryCard(
-                title: "Weight Change",
-                value: "\(String(format: "%.1f", trendsService.totalWeightChange(for: pet.id)))",
-                unit: unitService.getUnitSymbol(),
-                trend: trendsService.weightChangeTrend(for: pet.id),
-                color: ModernDesignSystem.Colors.warmCoral
-            )
+            // Other Summary Cards (2 Column Grid)
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: ModernDesignSystem.Spacing.md) {
+                // Average Daily Calories
+                SummaryCard(
+                    title: "Avg Daily Calories",
+                    value: "\(Int(trendsService.averageDailyCalories(for: pet.id)))",
+                    unit: "kcal",
+                    trend: trendsService.calorieTrend(for: pet.id),
+                    color: ModernDesignSystem.Colors.goldenYellow
+                )
+                
+                // Feeding Frequency
+                SummaryCard(
+                    title: "Feeding Frequency",
+                    value: "\(String(format: "%.1f", trendsService.averageFeedingFrequency(for: pet.id)))",
+                    unit: "times/day",
+                    trend: trendsService.feedingTrend(for: pet.id),
+                    color: ModernDesignSystem.Colors.primary
+                )
+                
+                // Nutritional Balance
+                SummaryCard(
+                    title: "Nutritional Balance",
+                    value: "\(Int(trendsService.nutritionalBalanceScore(for: pet.id)))",
+                    unit: "%",
+                    trend: trendsService.balanceTrend(for: pet.id),
+                    color: ModernDesignSystem.Colors.primary
+                )
+                
+                // Weight Change
+                SummaryCard(
+                    title: "Weight Change",
+                    value: "\(String(format: "%.1f", trendsService.totalWeightChange(for: pet.id)))",
+                    unit: unitService.getUnitSymbol(),
+                    trend: trendsService.weightChangeTrend(for: pet.id),
+                    color: ModernDesignSystem.Colors.warmCoral
+                )
+            }
         }
     }
     
@@ -272,6 +295,23 @@ struct NutritionalTrendsView: View {
     // MARK: - Helper Methods
     
     /**
+     * Load calorie goals for the selected pet
+     * This ensures the calorie goal card displays the latest data
+     */
+    private func loadCalorieGoalsIfNeeded() {
+        guard selectedPet != nil else { return }
+        
+        Task {
+            do {
+                try await calorieGoalsService.loadGoals()
+            } catch {
+                // Silently fail - goals may not be set yet
+                print("Failed to load calorie goals: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    /**
      * Load trends data only if not already cached
      * This prevents unnecessary server calls when data is already available
      */
@@ -328,6 +368,79 @@ struct NutritionalTrendsView: View {
 }
 
 // MARK: - Supporting Views
+
+struct CalorieGoalCard: View {
+    let pet: Pet
+    let onTap: () -> Void
+    @StateObject private var calorieGoalsService = CalorieGoalsService.shared
+    
+    private var hasGoal: Bool {
+        calorieGoalsService.getGoal(for: pet.id) != nil
+    }
+    
+    var body: some View {
+        Button(action: {
+            onTap()
+        }) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                HStack {
+                    Text("Daily Calorie Goal")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Spacer()
+                    
+                    // Show tap indicator
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Text(hasGoal ? "Tap to edit" : "Tap to set")
+                            .font(ModernDesignSystem.Typography.caption2)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        Image(systemName: "chevron.right")
+                            .font(ModernDesignSystem.Typography.caption2)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                }
+                
+                HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
+                    if let goal = calorieGoalsService.getGoal(for: pet.id) {
+                        Text("\(Int(goal))")
+                            .font(ModernDesignSystem.Typography.title2)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text("kcal")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    } else {
+                        Text("Not Set")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "target")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .shadow(
+                color: ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
 
 struct NutritionalTrendsPetSelectionCard: View {
     let pet: Pet
@@ -802,6 +915,344 @@ struct PeriodSelectionView: View {
                     Button("Done") {
                         dismiss()
                     }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Calorie Goal Entry Sheet
+
+/**
+ * Calorie Goal Entry Sheet
+ * 
+ * Simple sheet interface for setting or updating a pet's daily calorie goal.
+ * Pre-populates with existing goal or calculated default based on pet characteristics.
+ * Follows Trust & Nature Design System with clean, intuitive UI.
+ */
+struct CalorieGoalEntrySheet: View {
+    let pet: Pet
+    let onDismiss: () -> Void
+    
+    @StateObject private var calorieGoalsService = CalorieGoalsService.shared
+    @State private var calorieGoalText: String = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var defaultGoal: Int = 0
+    @State private var isLoadingDefault = true
+    @Environment(\.dismiss) private var dismiss
+    
+    private var existingGoal: Double? {
+        calorieGoalsService.getGoal(for: pet.id)
+    }
+    
+    private var isUpdating: Bool {
+        existingGoal != nil
+    }
+    
+    private var canSave: Bool {
+        guard let goal = Double(calorieGoalText),
+              goal > 0 else {
+            return false
+        }
+        return true
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // Pet Info Card
+                    petInfoCard
+                    
+                    // Goal Input Card
+                    goalInputCard
+                    
+                    // Default Goal Card (only show when no existing goal and default is loaded)
+                    if !isUpdating && !isLoadingDefault {
+                        suggestedGoalCard
+                    }
+                    
+                    // Error Message
+                    if let errorMessage = errorMessage {
+                        errorCard(message: errorMessage)
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+            }
+            .background(ModernDesignSystem.Colors.background)
+            .navigationTitle(isUpdating ? "Update Calorie Goal" : "Set Calorie Goal")
+            .navigationBarTitleDisplayMode(.inline)
+            .task {
+                // Load default goal from database
+                isLoadingDefault = true
+                let calculatedDefault = await calorieGoalsService.calculateSuggestedGoal(for: pet)
+                defaultGoal = Int(calculatedDefault)
+                isLoadingDefault = false
+                
+                // Pre-populate with existing goal or default
+                if let existing = existingGoal {
+                    calorieGoalText = "\(Int(existing))"
+                } else {
+                    calorieGoalText = "\(defaultGoal)"
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                        onDismiss()
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveGoal()
+                    }
+                    .disabled(!canSave || isLoading)
+                    .foregroundColor(canSave && !isLoading ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Pet Info Card
+    
+    private var petInfoCard: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Image(systemName: "pawprint.circle.fill")
+                    .font(.title)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            .frame(width: 60, height: 60)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 2)
+            )
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(pet.name)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(pet.species.rawValue.capitalized)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            Spacer()
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Goal Input Card
+    
+    private var goalInputCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Text("Daily Calorie Goal")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                // Show indicator if using standard vs saved goal
+                if !isUpdating {
+                    Text("Using Standard")
+                        .font(ModernDesignSystem.Typography.caption2)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                        .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                } else {
+                    Text("Saved Goal")
+                        .font(ModernDesignSystem.Typography.caption2)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                        .background(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
+                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+            }
+            
+            HStack(spacing: ModernDesignSystem.Spacing.md) {
+                TextField("Enter calories", text: $calorieGoalText)
+                    .keyboardType(.numberPad)
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(Color.white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                            .stroke(
+                                canSave ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.borderPrimary,
+                                lineWidth: canSave ? 2 : 1
+                            )
+                    )
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                
+                Text("kcal/day")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            Text("💡 Tip: Consult with your veterinarian to determine the appropriate daily calorie intake for your pet")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Suggested Goal Card
+    
+    /**
+     * Default Goal Card
+     * Shows the standard calorie goal from nutritional_standards table
+     * Only displayed when no saved goal exists (user is setting goal for first time)
+     */
+    private var suggestedGoalCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(.title3)
+                
+                Text("Standard Goal")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+            }
+            
+            Text("Based on nutritional standards for \(pet.species.rawValue.capitalized), \(pet.lifeStage.rawValue.capitalized) life stage, and activity level. You can customize this value and save it for your pet.")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            Button(action: {
+                calorieGoalText = "\(defaultGoal)"
+            }) {
+                HStack {
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Use Standard")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        Text("\(defaultGoal) kcal/day")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+                .padding(ModernDesignSystem.Spacing.md)
+                .background(ModernDesignSystem.Colors.softCream)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                )
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Error Card
+    
+    @ViewBuilder
+    private func errorCard(message: String) -> some View {
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(ModernDesignSystem.Colors.error)
+            
+            Text(message)
+                .font(ModernDesignSystem.Typography.subheadline)
+                .foregroundColor(ModernDesignSystem.Colors.error)
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.error, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Helper Methods
+    
+    /**
+     * Save the calorie goal
+     * Creates a new goal in calorie_goals table if none exists
+     * Updates existing goal if one already exists
+     */
+    private func saveGoal() {
+        guard let goal = Double(calorieGoalText),
+              goal > 0 else {
+            errorMessage = "Please enter a valid calorie goal"
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                // setGoal will create or update the goal in calorie_goals table
+                // If no goal exists, it creates one
+                // If goal exists, it updates it
+                try await calorieGoalsService.setGoal(for: pet.id, calories: goal)
+                
+                await MainActor.run {
+                    isLoading = false
+                    dismiss()
+                    onDismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = "Failed to save goal: \(error.localizedDescription)"
                 }
             }
         }

@@ -4,7 +4,7 @@
 -- This is the single source of truth for the complete database schema
 -- Run this ONCE in Supabase SQL Editor for fresh installations
 -- Created: 2025-01-15
--- Updated: 2025-01-15
+-- Updated: 2025-01-23
 -- 
 -- PERFORMANCE OPTIMIZATIONS INCLUDED:
 -- ✅ Auth RLS patterns optimized with (select auth.uid()) for better performance
@@ -232,6 +232,17 @@ CREATE TABLE IF NOT EXISTS public.nutrition_goals (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Calorie goals table
+CREATE TABLE IF NOT EXISTS public.calorie_goals (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    pet_id UUID REFERENCES public.pets(id) ON DELETE CASCADE NOT NULL,
+    daily_calories DECIMAL(10,2) NOT NULL CHECK (daily_calories > 0),
+    notes TEXT CHECK (LENGTH(notes) <= 500),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(pet_id)
+);
+
 -- =============================================================================
 -- ADVANCED NUTRITION TABLES
 -- =============================================================================
@@ -358,6 +369,7 @@ CREATE INDEX IF NOT EXISTS idx_nutrition_recommendations_pet_id ON public.nutrit
 CREATE INDEX IF NOT EXISTS idx_nutrition_recommendations_priority ON public.nutrition_recommendations(priority);
 CREATE INDEX IF NOT EXISTS idx_nutrition_goals_pet_id ON public.nutrition_goals(pet_id);
 CREATE INDEX IF NOT EXISTS idx_nutrition_goals_goal_type ON public.nutrition_goals(goal_type);
+CREATE INDEX IF NOT EXISTS idx_calorie_goals_pet_id ON public.calorie_goals(pet_id);
 
 -- Advanced nutrition indexes
 CREATE INDEX IF NOT EXISTS idx_pet_weight_records_pet_id ON public.pet_weight_records(pet_id);
@@ -415,6 +427,10 @@ CREATE TRIGGER update_nutrition_goals_updated_at
     BEFORE UPDATE ON public.nutrition_goals
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_calorie_goals_updated_at
+    BEFORE UPDATE ON public.calorie_goals
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_pet_weight_records_updated_at
     BEFORE UPDATE ON public.pet_weight_records
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -463,6 +479,7 @@ CREATE TABLE IF NOT EXISTS public.health_events (
     notes TEXT CHECK (LENGTH(notes) <= 1000),
     severity_level INTEGER NOT NULL CHECK (severity_level >= 1 AND severity_level <= 5),
     event_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    documents TEXT[] DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -494,6 +511,10 @@ CREATE INDEX IF NOT EXISTS idx_health_events_event_type ON public.health_events(
 CREATE INDEX IF NOT EXISTS idx_health_events_event_category ON public.health_events(event_category);
 CREATE INDEX IF NOT EXISTS idx_health_events_event_date ON public.health_events(event_date);
 CREATE INDEX IF NOT EXISTS idx_health_events_created_at ON public.health_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_health_events_documents ON public.health_events USING GIN(documents);
+
+-- Health events comments
+COMMENT ON COLUMN public.health_events.documents IS 'Array of document URLs for vet paperwork and medical records';
 
 -- Medication reminders indexes
 CREATE INDEX IF NOT EXISTS idx_medication_reminders_health_event_id ON public.medication_reminders(health_event_id);
@@ -520,6 +541,7 @@ ALTER TABLE public.feeding_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_nutrition_summaries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutrition_recommendations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutrition_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.calorie_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pet_weight_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pet_weight_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutritional_trends ENABLE ROW LEVEL SECURITY;
@@ -658,6 +680,19 @@ CREATE POLICY "Users can update nutrition goals for their pets" ON public.nutrit
     FOR UPDATE USING (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
 
 CREATE POLICY "Users can delete nutrition goals for their pets" ON public.nutrition_goals
+    FOR DELETE USING (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
+
+-- Calorie goals policies (matching pattern used by other nutrition tables)
+CREATE POLICY "Users can view calorie goals for their pets" ON public.calorie_goals
+    FOR SELECT USING (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
+
+CREATE POLICY "Users can create calorie goals for their pets" ON public.calorie_goals
+    FOR INSERT WITH CHECK (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
+
+CREATE POLICY "Users can update calorie goals for their pets" ON public.calorie_goals
+    FOR UPDATE USING (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
+
+CREATE POLICY "Users can delete calorie goals for their pets" ON public.calorie_goals
     FOR DELETE USING (pet_id IN (SELECT id FROM public.pets WHERE user_id = (select auth.uid())));
 
 -- Pet weight records policies

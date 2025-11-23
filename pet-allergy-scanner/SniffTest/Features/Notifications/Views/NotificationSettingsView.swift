@@ -209,35 +209,28 @@ struct NotificationSettingsView: View {
             Button("🔔 Test Local Notification (2s delay)") {
                 testImmediateNotification()
             }
+            .buttonStyle(.plain)
             .disabled(!notificationSettingsManager.isAuthorized)
             
             Button("🎉 Test Birthday Notification") {
                 testBirthdayNotification()
             }
+            .buttonStyle(.plain)
             .disabled(!notificationSettingsManager.isAuthorized)
             
             Button("🔍 Test Engagement Notification") {
                 testEngagementNotification()
             }
+            .buttonStyle(.plain)
             .disabled(!notificationSettingsManager.isAuthorized)
-            
-            Button("🍽️ Test Meal Reminder") {
-                testMealReminder()
-            }
-            .disabled(!notificationSettingsManager.isAuthorized || petService.pets.isEmpty)
-            
-            Button("💊 Test Medication Reminder") {
-                testMedicationReminder()
-            }
-            .disabled(!notificationSettingsManager.isAuthorized || petService.pets.isEmpty)
         } header: {
-            Text("Test Notifications (2 seconds)")
+            Text("Quick Test")
         } footer: {
             if !testMessage.isEmpty {
                 Text(testMessage)
                     .foregroundColor(testMessage.hasPrefix("✅") ? .green : testMessage.hasPrefix("❌") ? .red : .blue)
             } else {
-                Text("Test how notifications will appear on your device. Make sure notifications are enabled for this app in Settings.")
+                Text("Quick test notifications. For comprehensive testing, use Advanced Notification Testing below.")
             }
         }
     }
@@ -253,26 +246,10 @@ struct NotificationSettingsView: View {
                     Text("Advanced Notification Testing")
                 }
             }
-            
-            Button("Check Meal Reminders Now") {
-                Task {
-                    await checkMealRemindersNow()
-                }
-            }
-            .disabled(petService.pets.isEmpty)
-            
-            if pushNotificationService.deviceToken != nil {
-                Button("📱 Test Push Notification") {
-                    Task {
-                        await testPushNotification()
-                    }
-                }
-                .disabled(!pushNotificationService.isAuthorized)
-            }
         } header: {
             Text("Advanced Testing")
         } footer: {
-            Text("Use these tools to test meal and medication reminder functionality.")
+            Text("Access comprehensive notification testing including meal reminders, medication reminders, and push notifications.")
         }
     }
     
@@ -303,14 +280,19 @@ struct NotificationSettingsView: View {
         
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
         let request = UNNotificationRequest(
-            identifier: "test_birthday",
+            identifier: "test_birthday_\(Date().timeIntervalSince1970)",
             content: content,
             trigger: trigger
         )
         
         UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("❌ Failed to schedule test notification: \(error)")
+            Task { @MainActor in
+                if let error = error {
+                    print("❌ Failed to schedule test notification: \(error)")
+                    testMessage = "❌ Error: \(error.localizedDescription)"
+                } else {
+                    testMessage = "✅ Birthday notification scheduled! Check notification bar in 2 seconds."
+                }
             }
         }
     }
@@ -367,110 +349,7 @@ struct NotificationSettingsView: View {
         }
     }
     
-    private func testMealReminder() {
-        guard let pet = petService.pets.first else { return }
-        
-        let content = UNMutableNotificationContent()
-        content.title = "🍽️ Don't Forget to Log \(pet.name)'s Meal!"
-        content.body = "You haven't logged any meals for \(pet.name) today. Tap to log their meal now."
-        content.sound = .default
-        content.badge = 1
-        content.userInfo = [
-            "type": "meal_reminder",
-            "pet_id": pet.id,
-            "pet_name": pet.name,
-            "action": "log_meal"
-        ]
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "test_meal_reminder_\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            Task { @MainActor in
-                if let error = error {
-                    testMessage = "❌ Error: \(error.localizedDescription)"
-                } else {
-                    testMessage = "✅ Meal reminder scheduled for \(pet.name)! Check notification bar in 2 seconds."
-                }
-            }
-        }
-    }
     
-    private func testMedicationReminder() {
-        guard let pet = petService.pets.first else { return }
-        
-        let content = UNMutableNotificationContent()
-        content.title = "💊 Medication Reminder"
-        content.body = "Time to give Heartworm Prevention (1 tablet) to \(pet.name)"
-        content.sound = .default
-        content.badge = 1
-        content.userInfo = [
-            "type": "medication_reminder",
-            "medication_id": "test_med_id",
-            "pet_id": pet.id,
-            "medication_name": "Heartworm Prevention",
-            "dosage": "1 tablet",
-            "action": "view_medication"
-        ]
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "test_medication_reminder_\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            Task { @MainActor in
-                if let error = error {
-                    testMessage = "❌ Error: \(error.localizedDescription)"
-                } else {
-                    testMessage = "✅ Medication reminder scheduled! Check notification bar in 2 seconds."
-                }
-            }
-        }
-    }
-    
-    private func checkMealRemindersNow() async {
-        testMessage = "🔄 Checking meal logs..."
-        await mealReminderService.checkAndSendMealReminders()
-        testMessage = "✅ Meal reminder check completed! Notifications sent if needed."
-    }
-    
-    private func testPushNotification() async {
-        guard pushNotificationService.isAuthorized,
-              let deviceToken = pushNotificationService.deviceToken else {
-            testMessage = "❌ Push notifications not authorized or no device token"
-            return
-        }
-        
-        testMessage = "📱 Sending push notification..."
-        
-        let payload: [String: Any] = [
-            "aps": [
-                "alert": [
-                    "title": "📱 Test Push Notification",
-                    "body": "This is a test push notification sent via APNs! If you see this, push notifications are working!"
-                ],
-                "sound": "default",
-                "badge": 1,
-                "category": "test"
-            ],
-            "type": "test_notification",
-            "action": "test"
-        ]
-        
-        do {
-            try await pushNotificationService.sendPushNotification(payload: payload, deviceToken: deviceToken)
-            testMessage = "✅ Push notification sent! Check your phone in a few seconds."
-        } catch {
-            testMessage = "❌ Failed to send push notification: \(error.localizedDescription)"
-        }
-    }
 }
 
 // MARK: - Preview

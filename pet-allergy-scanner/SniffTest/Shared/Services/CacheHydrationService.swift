@@ -256,24 +256,11 @@ final class CacheHydrationService {
     /**
      * Load static reference data (allergens, safe alternatives)
      * These are reference data that don't change often and should be cached
+     * Uses EnhancedCacheManager for optimal caching (7 day cache)
      */
     private func loadStaticReferenceData() async {
-        do {
-            // Load common allergens
-            let allergens = try await apiService.getCommonAllergens()
-            let allergensKey = CacheKey.commonAllergens.rawValue
-            cacheService.store(allergens, forKey: allergensKey)
-            
-            // Load safe alternatives
-            let safeAlternatives = try await apiService.getSafeAlternatives()
-            let safeKey = CacheKey.safeAlternatives.rawValue
-            cacheService.store(safeAlternatives, forKey: safeKey)
-            
-            print("✅ Loaded \(allergens.count) allergens and \(safeAlternatives.count) safe alternatives")
-        } catch {
-            // Don't fail hydration if reference data fails to load
-            print("⚠️ Failed to load reference data: \(error.localizedDescription)")
-        }
+        // Use EnhancedCacheManager which handles caching with proper TTL
+        await EnhancedCacheManager.shared.refreshStaticData()
     }
     
     /**

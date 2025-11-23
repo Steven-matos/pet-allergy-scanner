@@ -7,7 +7,6 @@
 
 import Foundation
 import UserNotifications
-import UIKit
 
 /// Notification service for managing local and push notifications
 /// Handles birthday reminders, engagement notifications, and user preferences
@@ -311,6 +310,9 @@ extension NotificationService: @MainActor UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
         
+        // Clear badge when notification is tapped
+        clearBadge()
+        
         // Handle birthday notification
         if response.notification.request.identifier.hasPrefix(NotificationIdentifiers.birthdayPrefix) {
             if let petId = userInfo["pet_id"] as? String {
@@ -332,6 +334,23 @@ extension NotificationService: @MainActor UNUserNotificationCenterDelegate {
         }
         
         completionHandler()
+    }
+    
+    // MARK: - Badge Management
+    
+    /**
+     * Clear the app badge number
+     * Call this when app becomes active or when notifications are read
+     * Uses iOS 16+ API (setBadgeCount) for iOS 17.2+ compatibility
+     */
+    func clearBadge() {
+        UNUserNotificationCenter.current().setBadgeCount(0) { error in
+            if let error = error {
+                print("⚠️ Failed to clear badge: \(error)")
+            } else {
+                print("✅ Badge cleared")
+            }
+        }
     }
     
     @MainActor

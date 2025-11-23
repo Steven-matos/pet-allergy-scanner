@@ -52,7 +52,7 @@ class CalorieGoalsService: ObservableObject {
         do {
             let goalRequest = CalorieGoalRequest(petId: petId, dailyCalories: calories)
             let response = try await apiService.post(
-                endpoint: "/nutrition/calorie-goals",
+                endpoint: "/nutrition/goals/calorie-goals",
                 body: goalRequest,
                 responseType: CalorieGoalResponse.self
             )
@@ -87,7 +87,7 @@ class CalorieGoalsService: ObservableObject {
         
         do {
             let response = try await apiService.get(
-                endpoint: "/nutrition/calorie-goals",
+                endpoint: "/nutrition/goals/calorie-goals",
                 responseType: [CalorieGoalResponse].self
             )
             
@@ -112,7 +112,7 @@ class CalorieGoalsService: ObservableObject {
         error = nil
         
         do {
-            try await apiService.delete(endpoint: "/nutrition/calorie-goals/\(petId)")
+            try await apiService.delete(endpoint: "/nutrition/goals/calorie-goals/\(petId)")
             
             // Remove from local cache
             petGoals.removeValue(forKey: petId)
@@ -201,6 +201,48 @@ class CalorieGoalsService: ObservableObject {
 }
 
 // MARK: - Data Models
+
+/**
+ * Nutritional Standard Response
+ * Response model for nutritional standards from database
+ */
+struct NutritionalStandardResponse: Codable {
+    let id: String
+    let species: String  // "dog" or "cat"
+    let lifeStage: String  // "puppy", "adult", "senior", etc.
+    let weightRangeMin: Double
+    let weightRangeMax: Double
+    let activityLevel: String  // "low", "moderate", "high"
+    let caloriesPerKg: Double
+    let proteinMinPercent: Double
+    let fatMinPercent: Double
+    let fiberMaxPercent: Double
+    let moistureMaxPercent: Double
+    let ashMaxPercent: Double
+    let calciumMinPercent: Double?
+    let phosphorusMinPercent: Double?
+    let createdAt: Date
+    let updatedAt: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case id
+        case species
+        case lifeStage = "life_stage"
+        case weightRangeMin = "weight_range_min"
+        case weightRangeMax = "weight_range_max"
+        case activityLevel = "activity_level"
+        case caloriesPerKg = "calories_per_kg"
+        case proteinMinPercent = "protein_min_percent"
+        case fatMinPercent = "fat_min_percent"
+        case fiberMaxPercent = "fiber_max_percent"
+        case moistureMaxPercent = "moisture_max_percent"
+        case ashMaxPercent = "ash_max_percent"
+        case calciumMinPercent = "calcium_min_percent"
+        case phosphorusMinPercent = "phosphorus_min_percent"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
 
 /**
  * Calorie Goal Request
@@ -302,21 +344,109 @@ extension CalorieGoalsService {
     
     /**
      * Calculate suggested goal based on pet characteristics
+     * Fetches default from nutritional standards database
      * - Parameter pet: The pet to calculate for
      * - Returns: Suggested daily calorie goal
      */
-    func calculateSuggestedGoal(for pet: Pet) -> Double {
+    func calculateSuggestedGoal(for pet: Pet) async -> Double {
+        // Try to fetch from database first
+        if let defaultFromDB = await fetchDefaultCalorieGoalFromDatabase(for: pet) {
+            return defaultFromDB
+        }
+        
+        // Fallback to local calculation if database fetch fails
         guard let weight = pet.weightKg else {
-            // Default based on species and life stage
             return getDefaultGoal(for: pet)
         }
         
-        // Basic calculation based on weight and activity level
         let baseCalories = weight * 30 // Base calories per kg
         let activityMultiplier = getActivityMultiplier(for: pet.effectiveActivityLevel)
         let lifeStageMultiplier = getLifeStageMultiplier(for: pet.lifeStage)
         
         return baseCalories * activityMultiplier * lifeStageMultiplier
+    }
+    
+    /**
+     * Fetch default calorie goal from nutritional standards database
+     * - Parameter pet: The pet to get default for
+     * - Returns: Default daily calorie goal from database, or nil if not found
+     */
+    private func fetchDefaultCalorieGoalFromDatabase(for pet: Pet) async -> Double? {
+        do {
+            // Build query parameters - use Configuration for base URL
+            let baseURL = Configuration.apiBaseURL
+            var components = URLComponents(string: "\(baseURL)/nutritional-analysis/standards")
+            components?.queryItems = [
+                URLQueryItem(name: "species", value: pet.species.rawValue),
+                URLQueryItem(name: "life_stage", value: pet.lifeStage.rawValue)
+            ]
+            
+            guard let url = components?.url else {
+                return nil
+            }
+            
+            // Create request manually to include query parameters
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            
+            if let token = await apiService.getAuthToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            
+            // Perform request
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return nil
+            }
+            
+            // Decode response
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let standards = try decoder.decode([NutritionalStandardResponse].self, from: data)
+            
+            // Find matching standard based on weight and activity level
+            guard let weight = pet.weightKg else {
+                // If no weight, use first matching standard with default weight
+                if let standard = standards.first(where: { standard in
+                    standard.species == pet.species.rawValue &&
+                    standard.lifeStage == pet.lifeStage.rawValue &&
+                    standard.activityLevel == pet.effectiveActivityLevel.rawValue
+                }) {
+                    // Use average weight for the range
+                    let avgWeight = (standard.weightRangeMin + standard.weightRangeMax) / 2.0
+                    return avgWeight * standard.caloriesPerKg
+                }
+                return nil
+            }
+            
+            // Find standard that matches weight range and activity level
+            if let matchingStandard = standards.first(where: { standard in
+                weight >= standard.weightRangeMin &&
+                weight <= standard.weightRangeMax &&
+                standard.species == pet.species.rawValue &&
+                standard.lifeStage == pet.lifeStage.rawValue &&
+                standard.activityLevel == pet.effectiveActivityLevel.rawValue
+            }) {
+                return weight * matchingStandard.caloriesPerKg
+            }
+            
+            // If no exact match, find closest by species and life stage
+            if let closestStandard = standards.first(where: { standard in
+                standard.species == pet.species.rawValue &&
+                standard.lifeStage == pet.lifeStage.rawValue
+            }) {
+                return weight * closestStandard.caloriesPerKg
+            }
+            
+            return nil
+        } catch {
+            // Silently fail and use fallback calculation
+            print("Failed to fetch nutritional standards: \(error.localizedDescription)")
+            return nil
+        }
     }
     
     /**

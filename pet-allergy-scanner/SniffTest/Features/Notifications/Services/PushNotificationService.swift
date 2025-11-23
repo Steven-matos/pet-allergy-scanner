@@ -383,6 +383,9 @@ extension PushNotificationService: @MainActor UNUserNotificationCenterDelegate {
     ) {
         let userInfo = response.notification.request.content.userInfo
         
+        // Clear badge when notification is tapped
+        clearBadge()
+        
         // Handle engagement notifications
         if let action = userInfo["action"] as? String {
             switch action {
@@ -402,6 +405,23 @@ extension PushNotificationService: @MainActor UNUserNotificationCenterDelegate {
         }
         
         completionHandler()
+    }
+    
+    // MARK: - Badge Management
+    
+    /**
+     * Clear the app badge number
+     * Call this when app becomes active or when notifications are read
+     * Uses iOS 16+ API (setBadgeCount) for iOS 17.2+ compatibility
+     */
+    func clearBadge() {
+        UNUserNotificationCenter.current().setBadgeCount(0) { error in
+            if let error = error {
+                print("⚠️ Failed to clear badge: \(error)")
+            } else {
+                print("✅ Badge cleared")
+            }
+        }
     }
 }
 

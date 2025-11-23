@@ -106,24 +106,34 @@ class CacheService: ObservableObject {
     private var memoryCache: [String: Any] = [:]
     
     /// Cache policies for different data types
+    /// Updated with 2025 best practices: longer cache for static data, shorter for dynamic
     private let cachePolicies: [String: CachePolicy] = [
-        CacheKey.currentUser.rawValue: .timeBased(3600), // 1 hour
+        // User data - 30 minutes (refreshed on sign-in)
+        CacheKey.currentUser.rawValue: .timeBased(1800), // 30 minutes
         CacheKey.userProfile.rawValue: .timeBased(1800), // 30 minutes
+        
+        // Pet data - 30 minutes (refreshed on app launch)
         CacheKey.pets.rawValue: .timeBased(1800), // 30 minutes
-        CacheKey.petDetails.rawValue: .timeBased(3600), // 1 hour
+        CacheKey.petDetails.rawValue: .timeBased(1800), // 30 minutes
+        
+        // Dynamic data - 15 minutes (scans, feeding logs)
         CacheKey.scans.rawValue: .timeBased(900), // 15 minutes
-        CacheKey.scanHistory.rawValue: .timeBased(1800), // 30 minutes
-        CacheKey.commonAllergens.rawValue: .timeBased(86400), // 24 hours
-        CacheKey.safeAlternatives.rawValue: .timeBased(86400), // 24 hours
+        CacheKey.scanHistory.rawValue: .timeBased(900), // 15 minutes
+        CacheKey.feedingRecords.rawValue: .timeBased(900), // 15 minutes
+        CacheKey.dailySummaries.rawValue: .timeBased(900), // 15 minutes
+        
+        // Static reference data - 7 days (rarely changes)
+        CacheKey.commonAllergens.rawValue: .timeBased(604800), // 7 days
+        CacheKey.safeAlternatives.rawValue: .timeBased(604800), // 7 days
+        CacheKey.foodDatabase.rawValue: .timeBased(604800), // 7 days
+        
+        // System data - short cache
         CacheKey.healthStatus.rawValue: .timeBased(300), // 5 minutes
         CacheKey.systemMetrics.rawValue: .timeBased(600), // 10 minutes
         
         // Nutrition data policies
         CacheKey.nutritionRequirements.rawValue: .timeBased(3600), // 1 hour
-        CacheKey.foodDatabase.rawValue: .timeBased(86400), // 24 hours
         CacheKey.recentFoods.rawValue: .timeBased(1800), // 30 minutes
-        CacheKey.feedingRecords.rawValue: .timeBased(900), // 15 minutes
-        CacheKey.dailySummaries.rawValue: .timeBased(1800), // 30 minutes
         CacheKey.weightRecords.rawValue: .timeBased(3600), // 1 hour
         CacheKey.weightGoals.rawValue: .timeBased(7200), // 2 hours
         CacheKey.nutritionalTrends.rawValue: .timeBased(7200) // 2 hours

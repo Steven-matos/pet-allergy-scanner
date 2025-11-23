@@ -68,9 +68,6 @@ struct ProfileSettingsView: View {
                         // Privacy & Data
                         privacyDataCard
                         
-                        // App Settings
-                        appSettingsCard
-                        
                         // Support & About
                         supportAboutCard
                         
@@ -302,6 +299,21 @@ struct ProfileSettingsView: View {
             }
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Pet Count
+                HStack {
+                    Text("Total Pets")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Text("\(petService.pets.count)")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
                 // Default Pet Selection
                 if !petService.pets.isEmpty {
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
@@ -339,15 +351,22 @@ struct ProfileSettingsView: View {
                         .background(ModernDesignSystem.Colors.borderPrimary)
                 }
                 
-                // Pet Count
-                HStack {
-                    Text("Total Pets")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text("\(petService.pets.count)")
-                        .font(ModernDesignSystem.Typography.body)
+                // Weight Unit Preference
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Weight Unit")
+                        .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Picker("Weight Unit", selection: $weightUnitService.selectedUnit) {
+                        ForEach(WeightUnit.allCases, id: \.self) { unit in
+                            Text(unit.displayName).tag(unit)
+                        }
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .accentColor(ModernDesignSystem.Colors.primary)
+                    .onChange(of: weightUnitService.selectedUnit) { _, newUnit in
+                        weightUnitService.setUnit(newUnit)
+                    }
                 }
                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 
@@ -361,24 +380,6 @@ struct ProfileSettingsView: View {
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
                     VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                        // Camera Quality
-                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                            Text("Image Quality")
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                            
-                            Picker("Image Quality", selection: $settingsManager.cameraResolution) {
-                                Text("Low (Faster)").tag("low")
-                                Text("Medium (Balanced)").tag("medium")
-                                Text("High (Best)").tag("high")
-                            }
-                            .pickerStyle(MenuPickerStyle())
-                            .accentColor(ModernDesignSystem.Colors.primary)
-                        }
-                        
-                        Divider()
-                            .background(ModernDesignSystem.Colors.borderPrimary)
-                        
                         // Auto-save Scans
                         HStack {
                             Text("Auto-save Scans")
@@ -440,12 +441,46 @@ struct ProfileSettingsView: View {
             }
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // Notification Settings Link
-                NavigationLink(destination: NotificationSettingsView()) {
+                // Notification Permission Status
+                HStack {
+                    Image(systemName: notificationSettingsManager.isAuthorized ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(notificationSettingsManager.isAuthorized ? ModernDesignSystem.Colors.success : ModernDesignSystem.Colors.warning)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(notificationSettingsManager.isAuthorized ? "Notifications Enabled" : "Notifications Required")
+                            .font(ModernDesignSystem.Typography.body)
+                            .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text(notificationSettingsManager.isAuthorized ? 
+                             "You'll receive reminders and updates" :
+                             "Enable notifications to receive important reminders")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    Spacer()
+                    
+                    if !notificationSettingsManager.isAuthorized {
+                        NavigationLink(destination: NotificationPermissionsView()) {
+                            Text("Setup")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(ModernDesignSystem.Colors.primary)
+                        }
+                    }
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Notification Permissions Link (similar to Camera Permissions)
+                NavigationLink(destination: NotificationPermissionsView()) {
                     HStack {
-                        Image(systemName: "bell.badge")
+                        Image(systemName: "bell.badge.fill")
                             .foregroundColor(ModernDesignSystem.Colors.primary)
-                        Text("Notification Settings")
+                        Text("Notification Permissions")
                             .font(ModernDesignSystem.Typography.body)
                             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                         Spacer()
@@ -461,24 +496,38 @@ struct ProfileSettingsView: View {
                 
                 // Master Notification Toggle
                 HStack {
-                    Text("Push Notifications")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Enable Notifications")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        if !notificationSettingsManager.isAuthorized {
+                            Text("Requires iPhone notification permission")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.warning)
+                        }
+                    }
+                    
                     Spacer()
                     Toggle("", isOn: $notificationSettingsManager.enableNotifications)
                         .tint(ModernDesignSystem.Colors.primary)
+                        .disabled(!notificationSettingsManager.isAuthorized)
                         .onChange(of: notificationSettingsManager.enableNotifications) { _, newValue in
-                            if newValue {
-                                Task {
-                                    await notificationSettingsManager.requestPermission()
+                            if newValue && !notificationSettingsManager.isAuthorized {
+                                Task { @MainActor in
+                                    let granted = await notificationSettingsManager.requestPermission()
+                                    if !granted {
+                                        // If permission denied, reset toggle
+                                        notificationSettingsManager.enableNotifications = false
+                                    }
                                 }
                             }
                         }
                 }
                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 
-                // Engagement Notifications - only show when notifications are enabled
-                if notificationSettingsManager.enableNotifications {
+                // Engagement Notifications - only show when notifications are enabled and authorized
+                if notificationSettingsManager.enableNotifications && notificationSettingsManager.isAuthorized {
                     Divider()
                         .background(ModernDesignSystem.Colors.borderPrimary)
                     
@@ -492,6 +541,20 @@ struct ProfileSettingsView: View {
                     }
                     .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
+                
+                Divider()
+                    .background(ModernDesignSystem.Colors.borderPrimary)
+                
+                // Haptic Feedback
+                HStack {
+                    Text("Haptic Feedback")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    Spacer()
+                    Toggle("", isOn: $settingsManager.enableHapticFeedback)
+                        .tint(ModernDesignSystem.Colors.primary)
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.sm)
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -507,6 +570,11 @@ struct ProfileSettingsView: View {
             x: ModernDesignSystem.Shadows.small.x,
             y: ModernDesignSystem.Shadows.small.y
         )
+        .onAppear {
+            Task {
+                await notificationSettingsManager.checkAuthorizationStatus()
+            }
+        }
     }
     
     // MARK: - Privacy & Data Card
@@ -648,72 +716,6 @@ struct ProfileSettingsView: View {
         )
     }
     
-    // MARK: - App Settings Card
-    private var appSettingsCard: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            // Card Header
-            HStack {
-                Image(systemName: "gearshape.fill")
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .font(ModernDesignSystem.Typography.title3)
-                
-                Text("App Settings")
-                    .font(ModernDesignSystem.Typography.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                
-                Spacer()
-            }
-            
-            VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // Weight Unit Preference
-                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                    Text("Weight Unit")
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    
-                    Picker("Weight Unit", selection: $weightUnitService.selectedUnit) {
-                        ForEach(WeightUnit.allCases, id: \.self) { unit in
-                            Text(unit.displayName).tag(unit)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .accentColor(ModernDesignSystem.Colors.primary)
-                    .onChange(of: weightUnitService.selectedUnit) { _, newUnit in
-                        weightUnitService.setUnit(newUnit)
-                    }
-                }
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Haptic Feedback
-                HStack {
-                    Text("Haptic Feedback")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Toggle("", isOn: $settingsManager.enableHapticFeedback)
-                        .tint(ModernDesignSystem.Colors.primary)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-            }
-        }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
-        )
-    }
-    
     // MARK: - Support & About Card
     private var supportAboutCard: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -808,18 +810,7 @@ struct ProfileSettingsView: View {
                         
                         Divider()
                             .background(ModernDesignSystem.Colors.borderPrimary)
-                        
-                        // Build Number
-                        HStack {
-                            Text("Build")
-                                .font(ModernDesignSystem.Typography.body)
-                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                            Spacer()
-                            Text(Bundle.main.buildNumber)
-                                .font(ModernDesignSystem.Typography.body)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        }
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    
                     }
                 }
             }
@@ -1015,6 +1006,167 @@ struct CameraPermissionsView: View {
         .padding(ModernDesignSystem.Spacing.lg)
         .navigationTitle("Camera Permissions")
         .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// View for notification permissions management
+/// Similar to CameraPermissionsView, guides users to enable notifications
+struct NotificationPermissionsView: View {
+    @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
+    @State private var showingPermissionAlert = false
+    @State private var permissionAlertMessage = ""
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 60))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Notification Permissions")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .fontWeight(.semibold)
+                
+                VStack(spacing: ModernDesignSystem.Spacing.md) {
+                    Text("Notifications are required for the app to send you important reminders about your pet's health and safety.")
+                        .font(ModernDesignSystem.Typography.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    // Permission Status
+                    HStack {
+                        Image(systemName: notificationSettingsManager.isAuthorized ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                            .foregroundColor(notificationSettingsManager.isAuthorized ? ModernDesignSystem.Colors.success : ModernDesignSystem.Colors.warning)
+                            .font(.title2)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(notificationSettingsManager.isAuthorized ? "Notifications Enabled" : "Notifications Disabled")
+                                .font(ModernDesignSystem.Typography.bodyEmphasized)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text(notificationSettingsManager.isAuthorized ?
+                                 "You'll receive birthday reminders, engagement notifications, and meal reminders." :
+                                 "Enable notifications in Settings to receive important updates about your pet.")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(ModernDesignSystem.Colors.softCream)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    
+                    // Instructions
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        Text("How to Enable Notifications:")
+                            .font(ModernDesignSystem.Typography.title3)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            InstructionStep(number: "1", text: "Tap 'Request Permission' below")
+                            InstructionStep(number: "2", text: "Allow notifications when prompted")
+                            InstructionStep(number: "3", text: "If permission was denied, go to Settings > Notifications > Pet Allergy Scanner")
+                        }
+                    }
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(ModernDesignSystem.Colors.softCream)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    
+                    // Action Buttons
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        if !notificationSettingsManager.isAuthorized {
+                            Button(action: {
+                                Task {
+                                    await requestNotificationPermission()
+                                }
+                            }) {
+                                HStack {
+                                    Image(systemName: "bell.badge")
+                                    Text("Request Permission")
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .modernButton(style: .primary)
+                        }
+                        
+                        Button(action: openAppSettings) {
+                            HStack {
+                                Image(systemName: "gearshape.fill")
+                                Text("Open iPhone Settings")
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .modernButton(style: .secondary)
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+                
+                Spacer()
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+        }
+        .navigationTitle("Notification Permissions")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("Notification Permission Required", isPresented: $showingPermissionAlert) {
+            Button("Settings") {
+                openAppSettings()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text(permissionAlertMessage)
+        }
+        .onAppear {
+            Task {
+                await notificationSettingsManager.checkAuthorizationStatus()
+            }
+        }
+    }
+    
+    /**
+     * Request notification permission from the user
+     */
+    private func requestNotificationPermission() async {
+        let granted = await notificationSettingsManager.requestPermission()
+        
+        if !granted {
+            await MainActor.run {
+                permissionAlertMessage = "To receive notifications, please enable them in Settings > Notifications > Pet Allergy Scanner."
+                showingPermissionAlert = true
+            }
+        }
+    }
+    
+    /**
+     * Open app settings for notification permission
+     */
+    private func openAppSettings() {
+        if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsUrl)
+        }
+    }
+}
+
+/// Instruction step component for notification permissions view
+struct InstructionStep: View {
+    let number: String
+    let text: String
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+            Text(number)
+                .font(ModernDesignSystem.Typography.bodyEmphasized)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+                .frame(width: 24, height: 24)
+                .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+                .clipShape(Circle())
+            
+            Text(text)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            Spacer()
+        }
     }
 }
 
