@@ -53,11 +53,10 @@ async def create_calorie_goal(
         await verify_pet_ownership(goal.pet_id, current_user.id, supabase)
         
         # Create calorie goal
-        goal_data = goal.dict()
-        goal_data['user_id'] = current_user.id
+        goal_data = goal.model_dump()
         goal_data['id'] = str(uuid.uuid4())
         
-        # Insert into database
+        # Insert into database (user_id not needed - RLS handles authorization via pet_id)
         response = supabase.table("calorie_goals").insert(goal_data).execute()
         
         if not response.data:
@@ -96,8 +95,8 @@ async def get_calorie_goals(
     """
     try:
         
-        # Get calorie goals
-        response = supabase.table("calorie_goals").select("*").eq("user_id", current_user.id).execute()
+        # Get calorie goals (RLS automatically filters by pet ownership)
+        response = supabase.table("calorie_goals").select("*").execute()
         
         if not response.data:
             return []
@@ -138,8 +137,8 @@ async def get_pet_calorie_goal(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
-        # Get calorie goal
-        response = supabase.table("calorie_goals").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()
+        # Get calorie goal (RLS automatically ensures user owns the pet)
+        response = supabase.table("calorie_goals").select("*").eq("pet_id", pet_id).limit(1).execute()
         
         if response.data:
             return CalorieGoalResponse(**response.data[0])
@@ -181,8 +180,8 @@ async def delete_calorie_goal(
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
-        # Check if calorie goal exists
-        check_response = supabase.table("calorie_goals").select("id").eq("pet_id", pet_id).eq("user_id", current_user.id).limit(1).execute()
+        # Check if calorie goal exists (RLS automatically ensures user owns the pet)
+        check_response = supabase.table("calorie_goals").select("id").eq("pet_id", pet_id).limit(1).execute()
         
         if not check_response.data:
             raise HTTPException(
@@ -190,8 +189,8 @@ async def delete_calorie_goal(
                 detail="Calorie goal not found"
             )
         
-        # Delete calorie goal
-        supabase.table("calorie_goals").delete().eq("pet_id", pet_id).eq("user_id", current_user.id).execute()
+        # Delete calorie goal (RLS automatically ensures user owns the pet)
+        supabase.table("calorie_goals").delete().eq("pet_id", pet_id).execute()
         
         return {"message": "Calorie goal deleted successfully"}
         
