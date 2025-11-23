@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     session_timeout_minutes: int = Field(default=480, ge=30, le=1440, description="Session timeout in minutes")
     
     # Logging Configuration
-    log_level: str = Field(default="INFO", description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL", description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
     verbose_logging: bool = Field(default=False, description="Enable verbose logging for debugging")
     
     # GDPR Compliance

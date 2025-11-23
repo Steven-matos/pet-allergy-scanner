@@ -48,15 +48,21 @@ class CleanFormatter(logging.Formatter):
 def setup_logging(log_level: Optional[str] = None) -> None:
     """
     Set up centralized logging configuration with clean console output
-    Production: Only log ERROR and CRITICAL to reduce Railway rate limits
+    Uses LOG_LEVEL environment variable if set, otherwise falls back to environment-based defaults
     
     Args:
         log_level: Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+                   If None, uses settings.log_level from LOG_LEVEL env var
     """
-    # Determine log level - Use settings or parameter
+    # Determine log level - Priority: parameter > settings.log_level > environment-based defaults
     if log_level:
+        # Explicit parameter override (highest priority)
         level = getattr(logging, log_level.upper(), logging.ERROR)
+    elif settings.log_level:
+        # Use LOG_LEVEL environment variable (second priority)
+        level = getattr(logging, settings.log_level.upper(), logging.ERROR)
     else:
+        # Fallback to environment-based defaults (lowest priority)
         # Production and Railway deployment: ERROR only to avoid Railway rate limits
         # Development: INFO for debugging, but reduce verbosity
         if settings.environment == "production":

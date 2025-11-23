@@ -22,8 +22,12 @@ sys.path.insert(0, str(server_dir))
 
 # Configure basic logging first - write to stdout instead of stderr
 # so Railway doesn't interpret INFO logs as errors
+# Respect LOG_LEVEL environment variable if set
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+log_level = getattr(logging, log_level_str, logging.INFO)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     stream=sys.stdout  # Railway interprets stderr as error-level, so use stdout
 )
@@ -183,17 +187,22 @@ def main():
         # Determine if we should enable verbose logging
         is_production = environment == "production"
         
+        # Get log level from environment variable, with fallback based on environment
+        uvicorn_log_level = os.getenv("LOG_LEVEL", "error" if is_production else "info").lower()
+        
         # Production: Minimal logging to avoid Railway 500 logs/sec limit
         # Development: Full logging for debugging
         if is_production:
             logger.info("⚠️  Production mode: Access logs DISABLED to avoid Railway rate limits")
             logger.info("   Only errors will be logged. Use external monitoring for metrics.")
         
+        logger.info(f"📊 Log level: {uvicorn_log_level.upper()} (from LOG_LEVEL env var)")
+        
         uvicorn.run(
             "main:app",
             host="0.0.0.0",
             port=port,
-            log_level="error" if is_production else "info",
+            log_level=uvicorn_log_level,
             access_log=not is_production,  # Disable access logs in production
             reload=False,
             # Configure uvicorn to use proper logging
@@ -215,15 +224,15 @@ def main():
                 "loggers": {
                     "uvicorn": {
                         "handlers": ["default"], 
-                        "level": "ERROR" if is_production else "INFO"
+                        "level": uvicorn_log_level.upper()
                     },
                     "uvicorn.error": {
                         "handlers": ["default"], 
-                        "level": "ERROR" if is_production else "INFO"
+                        "level": uvicorn_log_level.upper()
                     },
                     "uvicorn.access": {
                         "handlers": ["default"], 
-                        "level": "CRITICAL" if is_production else "INFO"  # Completely disable in prod
+                        "level": "CRITICAL" if is_production else uvicorn_log_level.upper()  # Completely disable in prod
                     },
                 },
             }
