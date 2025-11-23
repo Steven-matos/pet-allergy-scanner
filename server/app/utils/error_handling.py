@@ -112,6 +112,16 @@ def log_error(error: Exception, request: Request, user_id: Optional[str] = None)
         logger.error(f"Database error: {error_context}")
     elif isinstance(error, APIError):
         logger.error(f"API error: {error_context}")
+    elif isinstance(error, (HTTPException, StarletteHTTPException)):
+        # HTTP exceptions are expected client/server errors
+        # Log 4xx as warnings (client errors), 5xx as errors (server errors)
+        status_code = getattr(error, 'status_code', 500)
+        if 400 <= status_code < 500:
+            # Client errors (4xx) - log as warning, not error
+            logger.warning(f"Client error ({status_code}): {error_context}")
+        else:
+            # Server errors (5xx) - log as error
+            logger.error(f"Server error ({status_code}): {error_context}")
     else:
         logger.error(f"Unexpected error: {error_context}")
 

@@ -104,13 +104,31 @@ async def get_weight_history(
     try:
         # Create authenticated Supabase client
         from app.core.config import settings
+        from app.utils.logging_config import get_logger
         from supabase import create_client
+        
+        logger = get_logger(__name__)
+        logger.info(f"[WEIGHT_HISTORY] Creating authenticated client for pet_id={pet_id}, user_id={current_user.id}")
         
         supabase = create_client(
             settings.supabase_url,
             settings.supabase_key
         )
+        
+        # Set session with access token
+        logger.info(f"[WEIGHT_HISTORY] Setting session with token (length={len(credentials.credentials) if credentials.credentials else 0})")
         supabase.auth.set_session(credentials.credentials, "")
+        
+        # Verify session was set
+        try:
+            session = supabase.auth.get_session()
+            if session:
+                session_user_id = session.user.id if hasattr(session, 'user') and session.user else None
+                logger.info(f"[WEIGHT_HISTORY] Session verified. auth.uid()={session_user_id}, expected={current_user.id}")
+            else:
+                logger.warning(f"[WEIGHT_HISTORY] Session set but get_session() returned None!")
+        except Exception as session_check_error:
+            logger.warning(f"[WEIGHT_HISTORY] Could not verify session after setting: {session_check_error}")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
