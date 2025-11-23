@@ -81,6 +81,18 @@ final class SessionLifecycleManager: ObservableObject {
         
         let forceRefresh = detectAppUpdate()
         await authService.resumeSessionIfNeeded(forceRefresh: forceRefresh)
+        
+        // Rehydrate caches with fresh data from server if user is authenticated
+        // This ensures data is up-to-date when app launches after being closed/quit
+        if authService.currentUser != nil {
+            let hydrationService = CacheHydrationService.shared
+            // Only rehydrate if we have cached data (app was previously used)
+            if hydrationService.areCachesHydrated() {
+                Task {
+                    await hydrationService.rehydrateCaches()
+                }
+            }
+        }
     }
     
     private func detectAppUpdate() -> Bool {

@@ -18,7 +18,8 @@ from app.models.advanced_nutrition import (
     NutritionalTrendsDashboard, FoodComparisonDashboard
 )
 from app.models.user import User
-from app.core.security.jwt_handler import get_current_user
+from app.core.security.jwt_handler import get_current_user, security
+from fastapi.security import HTTPAuthorizationCredentials
 from app.services.weight_tracking_service import WeightTrackingService
 from app.services.nutritional_trends_service import NutritionalTrendsService
 from app.services.food_comparison_service import FoodComparisonService
@@ -294,7 +295,8 @@ async def get_weight_management_dashboard(
 async def get_nutritional_trends(
     pet_id: str,
     days_back: int = Query(30, ge=1, le=365),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get nutritional trends for a pet
@@ -305,13 +307,24 @@ async def get_nutritional_trends(
         current_user: Authenticated user
         
     Returns:
-        List of nutritional trend records
+        List of nutritional trend records (empty list if no trends exist)
     """
     try:
-        # Verify pet ownership first using centralized service (handles RLS properly)
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
-        await verify_pet_ownership(pet_id, current_user.id)
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        
+        # Set session with access token
+        supabase.auth.set_session(credentials.credentials, "")
+        
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get trends - service will return empty list if no data exists
         trends = await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
@@ -334,7 +347,8 @@ async def get_nutritional_trends(
 async def get_trends_dashboard(
     pet_id: str,
     period: str = Query("30_days", regex="^(7_days|30_days|90_days)$"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
     Get comprehensive trends dashboard data
@@ -345,13 +359,24 @@ async def get_trends_dashboard(
         current_user: Authenticated user
         
     Returns:
-        Trends dashboard data
+        Trends dashboard data (with default/empty values if no trends exist)
     """
     try:
-        # Verify pet ownership first using centralized service (handles RLS properly)
+        # Create authenticated Supabase client
+        from app.core.config import settings
+        from supabase import create_client
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
-        await verify_pet_ownership(pet_id, current_user.id)
+        
+        supabase = create_client(
+            settings.supabase_url,
+            settings.supabase_key
+        )
+        
+        # Set session with access token
+        supabase.auth.set_session(credentials.credentials, "")
+        
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get dashboard - service already handles empty data gracefully
         dashboard = await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)

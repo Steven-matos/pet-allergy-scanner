@@ -103,6 +103,39 @@ final class CacheHydrationService {
     }
     
     /**
+     * Rehydrate caches with fresh data from server
+     * Loads from cache first for immediate UI, then refreshes from server in background
+     * Called when app launches after being closed/quit to ensure data is up-to-date
+     * 
+     * This method:
+     * 1. Loads cached data immediately (fast UI)
+     * 2. Fetches fresh data from server in background
+     * 3. Updates cache with fresh data
+     * 4. Does NOT show progress overlay (silent background refresh)
+     */
+    func rehydrateCaches() async {
+        // Only rehydrate if user is authenticated
+        guard AuthService.shared.currentUser != nil else {
+            return
+        }
+        
+        // Don't rehydrate if already hydrating (initial hydration)
+        guard !isHydrating else {
+            return
+        }
+        
+        print("🔄 Starting cache rehydration (background refresh)...")
+        
+        // Step 1: Load from cache first (immediate UI)
+        await loadFromCache()
+        
+        // Step 2: Refresh from server in background (silent, no progress overlay)
+        await refreshFromServer()
+        
+        print("✅ Cache rehydration completed successfully")
+    }
+    
+    /**
      * Clear all caches
      * Called on logout
      */
@@ -153,28 +186,52 @@ final class CacheHydrationService {
         // Step 4: Load weight data for all pets
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading weight data...")
         for pet in petService.pets {
-            try await weightService.loadWeightData(for: pet.id)
+            do {
+                try await weightService.loadWeightData(for: pet.id)
+            } catch {
+                // Log but don't fail - individual pet data load failures are non-critical
+                // New pets may not have data yet, which is expected
+                print("⚠️ Failed to load weight data for pet \(pet.id): \(error.localizedDescription)")
+            }
         }
         currentStep += 1.0
         
         // Step 5: Load nutrition data for all pets
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading nutrition data...")
         for pet in petService.pets {
-            try await nutritionService.loadFeedingRecords(for: pet.id)
+            do {
+                try await nutritionService.loadFeedingRecords(for: pet.id)
+            } catch {
+                // Log but don't fail - individual pet data load failures are non-critical
+                // New pets may not have data yet, which is expected
+                print("⚠️ Failed to load nutrition data for pet \(pet.id): \(error.localizedDescription)")
+            }
         }
         currentStep += 1.0
         
         // Step 6: Load trends data for all pets (most recent period)
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading trends data...")
         for pet in petService.pets {
-            try await trendsService.loadTrendsData(for: pet.id, period: .thirtyDays)
+            do {
+                try await trendsService.loadTrendsData(for: pet.id, period: .thirtyDays)
+            } catch {
+                // Log but don't fail - individual pet data load failures are non-critical
+                // New pets may not have data yet, which is expected
+                print("⚠️ Failed to load trends data for pet \(pet.id): \(error.localizedDescription)")
+            }
         }
         currentStep += 1.0
         
         // Step 7: Load feeding logs for all pets
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading feeding logs...")
         for pet in petService.pets {
-            _ = try await feedingLogService.getFeedingRecords(for: pet.id)
+            do {
+                _ = try await feedingLogService.getFeedingRecords(for: pet.id)
+            } catch {
+                // Log but don't fail - individual pet data load failures are non-critical
+                // New pets may not have data yet, which is expected
+                print("⚠️ Failed to load feeding logs for pet \(pet.id): \(error.localizedDescription)")
+            }
         }
         currentStep += 1.0
         
@@ -254,6 +311,101 @@ final class CacheHydrationService {
                 elapsed += pollInterval
             }
         }
+    }
+    
+    /**
+     * Load data from cache (immediate UI)
+     * This loads cached data into memory for instant access
+     */
+    private func loadFromCache() async {
+        // Load pets from cache (triggers cache load if available)
+        petService.loadPets(forceRefresh: false)
+        
+        // Load other cached data if pets exist
+        guard !petService.pets.isEmpty else {
+            return
+        }
+        
+        // Load cached data for each pet in parallel (non-blocking)
+        await withTaskGroup(of: Void.self) { group in
+            for pet in petService.pets {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    
+                    // Load cached data - must call on MainActor since services are @MainActor
+                    await MainActor.run {
+                        // Load cached weight data
+                        _ = self.weightService.hasCachedWeightData(for: pet.id)
+                        
+                        // Load cached trends data
+                        _ = self.trendsService.hasCachedTrendsData(for: pet.id)
+                        
+                        // Load cached nutrition data
+                        _ = self.nutritionService.hasCachedNutritionData(for: pet.id)
+                    }
+                }
+            }
+        }
+        
+        print("✅ Loaded data from cache")
+    }
+    
+    /**
+     * Refresh data from server (background, silent)
+     * Fetches fresh data and updates cache without showing progress
+     */
+    private func refreshFromServer() async {
+        // Refresh pets first (foundation for other data)
+        petService.loadPets(forceRefresh: true)
+        
+        // Wait for pets to load before refreshing pet-specific data
+        var waitCount = 0
+        while petService.isLoading && waitCount < 50 { // Max 5 seconds
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            waitCount += 1
+        }
+        
+        // Refresh pet-specific data in parallel
+        await withTaskGroup(of: Void.self) { group in
+            for pet in petService.pets {
+                group.addTask { [weak self] in
+                    guard let self = self else { return }
+                    
+                    do {
+                        // Refresh weight data
+                        try await self.weightService.loadWeightData(for: pet.id)
+                        
+                        // Refresh nutrition data
+                        try await self.nutritionService.loadFeedingRecords(for: pet.id)
+                        
+                        // Refresh trends data
+                        try await self.trendsService.loadTrendsData(for: pet.id, period: .thirtyDays)
+                        
+                        // Refresh feeding logs
+                        _ = try await self.feedingLogService.getFeedingRecords(for: pet.id)
+                    } catch {
+                        // Log but don't fail - individual pet data refresh failures are non-critical
+                        print("⚠️ Failed to refresh data for pet \(pet.id): \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        
+        // Refresh user profile data
+        do {
+            _ = try await profileService.getCurrentUser()
+            _ = try await profileService.getUserProfile()
+        } catch {
+            print("⚠️ Failed to refresh user profile: \(error.localizedDescription)")
+        }
+        
+        // Refresh static reference data
+        await loadStaticReferenceData()
+        
+        // Refresh comparison history
+        _ = await comparisonService.getComparisonHistory()
+        
+        print("✅ Refreshed data from server")
     }
     
     /**
