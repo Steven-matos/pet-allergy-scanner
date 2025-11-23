@@ -168,8 +168,8 @@ async def register_device_token_anonymous(
 @router.post("/send")
 async def send_push_notification(
     request: SendNotificationRequest,
-    current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = Depends()
+    background_tasks: BackgroundTasks,
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Send push notification to device
@@ -272,8 +272,8 @@ async def cancel_all_notifications(
 
 @router.post("/schedule-engagement")
 async def schedule_engagement_notifications(
-    current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = Depends()
+    background_tasks: BackgroundTasks,
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Schedule engagement reminder notifications
@@ -343,8 +343,8 @@ async def schedule_engagement_notifications(
 async def send_birthday_notification(
     pet_name: str,
     pet_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    background_tasks: BackgroundTasks = Depends()
+    background_tasks: BackgroundTasks,
+    current_user: UserResponse = Depends(get_current_user)
 ):
     """
     Send birthday celebration notification
