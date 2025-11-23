@@ -37,21 +37,20 @@ class NutritionalTrendsService:
         """
         Get nutritional trends for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             days_back: Number of days to look back
             
         Returns:
-            List of nutritional trend records
+            List of nutritional trend records (empty list if no trends exist)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get trend data
+        # Note: Pet ownership is verified by the router before calling this method
         start_date = datetime.utcnow() - timedelta(days=days_back)
         
         response = self.supabase.table("nutritional_trends")\
@@ -61,6 +60,7 @@ class NutritionalTrendsService:
             .order("trend_date", desc=True)\
             .execute()
         
+        # Return empty list if no trends exist (200 status with empty data)
         return [NutritionalTrendResponse(**trend) for trend in response.data]
     
     async def generate_weekly_summary(
@@ -72,21 +72,20 @@ class NutritionalTrendsService:
         """
         Generate weekly nutrition summary
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             week_start: Start date of the week
             
         Returns:
-            Weekly nutrition summary
+            Weekly nutrition summary (with default values if no data exists)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         week_end = week_start + timedelta(days=6)
+        # Note: Pet ownership is verified by the router before calling this method
         
         # Get trends for the week
         trends = await self.get_nutritional_trends(pet_id, user_id, 7)
@@ -174,21 +173,20 @@ class NutritionalTrendsService:
         """
         Generate monthly trend analysis
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             month: Month in YYYY-MM format
             
         Returns:
-            Monthly trend analysis
+            Monthly trend analysis (with default values if no data exists)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Parse month
+        # Note: Pet ownership is verified by the router before calling this method
         year, month_num = month.split('-')
         month_start = date(int(year), int(month_num), 1)
         
@@ -246,21 +244,20 @@ class NutritionalTrendsService:
         """
         Get comprehensive trends dashboard data
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             period: Analysis period (7_days, 30_days, 90_days)
             
         Returns:
-            Trends dashboard data
+            Trends dashboard data (with empty/default values if no trends exist)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get trends based on period
+        # Note: Pet ownership is verified by the router before calling this method
         days_map = {"7_days": 7, "30_days": 30, "90_days": 90}
         days_back = days_map.get(period, 30)
         

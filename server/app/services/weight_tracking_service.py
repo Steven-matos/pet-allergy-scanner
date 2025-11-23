@@ -39,23 +39,22 @@ class WeightTrackingService:
         """
         Record a new weight measurement for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             weight_record: Weight record data
-            user_id: ID of the user recording the weight
+            user_id: ID of the user recording the weight (used for logging/audit)
             
         Returns:
             Created weight record
             
         Raises:
-            ValueError: If pet not found or invalid data
+            ValueError: If weight recording fails
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", weight_record.pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Insert weight record
+        # Note: Pet ownership is verified by the router before calling this method
         weight_data = {
             "pet_id": weight_record.pet_id,
             "weight_kg": float(weight_record.weight_kg),
@@ -83,21 +82,20 @@ class WeightTrackingService:
         """
         Get weight history for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             days_back: Number of days to look back
             
         Returns:
-            List of weight records
+            List of weight records (empty list if no records exist)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get weight records
+        # Note: Pet ownership is verified by the router before calling this method
         start_date = datetime.utcnow() - timedelta(days=days_back)
         
         response = self.supabase.table("pet_weight_records")\
@@ -107,6 +105,7 @@ class WeightTrackingService:
             .order("recorded_at", desc=True)\
             .execute()
         
+        # Return empty list if no records exist (200 status with empty data)
         return [PetWeightRecordResponse(**record) for record in response.data]
     
     async def upsert_weight_goal(
@@ -117,20 +116,19 @@ class WeightTrackingService:
         """
         Create or update a weight goal for a pet (one goal per pet)
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             goal: Weight goal data
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             
         Returns:
             Created or updated weight goal
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", goal.pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Check if pet already has a weight goal
+        # Note: Pet ownership is verified by the router before calling this method
         existing_goal_response = self.supabase.table("pet_weight_goals")\
             .select("*")\
             .eq("pet_id", goal.pet_id)\
@@ -193,20 +191,19 @@ class WeightTrackingService:
         """
         Get active weight goal for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             
         Returns:
-            Active weight goal or None
+            Active weight goal or None (returns None if no goal exists)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get active goal
+        # Note: Pet ownership is verified by the router before calling this method
         response = self.supabase.table("pet_weight_goals")\
             .select("*")\
             .eq("pet_id", pet_id)\

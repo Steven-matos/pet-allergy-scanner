@@ -310,7 +310,7 @@ async def analyze_weight_trend(
         
         # Analyze weight trend
         service = get_weight_service()
-        analysis = await service.analyze_weight_trend(pet_id, days)
+        analysis = await service.analyze_weight_trend(pet_id, current_user.id, days)
         
         return analysis
         
@@ -359,7 +359,7 @@ async def get_weight_management_dashboard(
         
         # Get weight management dashboard
         service = get_weight_service()
-        dashboard = await service.get_weight_management_dashboard(pet_id, days)
+        dashboard = await service.get_weight_management_dashboard(pet_id, current_user.id)
         
         return dashboard
         

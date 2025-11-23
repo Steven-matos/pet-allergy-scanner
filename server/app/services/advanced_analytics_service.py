@@ -39,9 +39,13 @@ class AdvancedAnalyticsService:
         """
         Generate advanced analytics for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             analysis_type: Type of analysis to perform
             force_refresh: Force regeneration even if cache exists
             date_range: Optional date range for analysis
@@ -49,13 +53,8 @@ class AdvancedAnalyticsService:
         Returns:
             Analytics cache response
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Check for existing cache
+        # Note: Pet ownership is verified by the router before calling this method
         if not force_refresh:
             cached = await self._get_cached_analytics(pet_id, analysis_type)
             if cached and cached.expires_at > datetime.utcnow():
@@ -77,20 +76,19 @@ class AdvancedAnalyticsService:
         """
         Get comprehensive health insights for a pet
         
+        Note: Pet ownership should be verified by the calling router/endpoint
+        before calling this method. This method assumes the pet exists and
+        the user has access.
+        
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             
         Returns:
-            Health insights data
+            Health insights data (with default values if no data exists)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get recent trends (last 30 days)
+        # Note: Pet ownership is verified by the router before calling this method
         trends_response = self.supabase.table("nutritional_trends")\
             .select("*")\
             .eq("pet_id", pet_id)\
@@ -161,19 +159,14 @@ class AdvancedAnalyticsService:
         
         Args:
             pet_id: Pet ID
-            user_id: User ID for authorization
+            user_id: User ID for authorization (used for logging/audit)
             analysis_period: Period for analysis (7_days, 30_days, 90_days)
             
         Returns:
-            Nutritional patterns analysis
+            Nutritional patterns analysis (with default values if no data exists)
         """
-        # Verify pet ownership
-        pet_response = self.supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", user_id).execute()
-        
-        if not pet_response.data:
-            raise ValueError("Pet not found or access denied")
-        
         # Get trends based on period
+        # Note: Pet ownership is verified by the router before calling this method
         days_map = {"7_days": 7, "30_days": 30, "90_days": 90}
         days_back = days_map.get(analysis_period, 30)
         

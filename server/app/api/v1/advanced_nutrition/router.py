@@ -79,7 +79,16 @@ async def record_weight(
         Created weight record
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(weight_record.pet_id, current_user.id, supabase)
+        
+        # Record weight - service assumes ownership is already verified
         return await get_weight_service().record_weight(weight_record, current_user.id)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -136,6 +145,12 @@ async def create_weight_goal(
         Created or updated weight goal
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(goal.pet_id, current_user.id, supabase)
+        
+        # Upsert weight goal - service assumes ownership is already verified
         return await get_weight_service().upsert_weight_goal(goal, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -219,7 +234,16 @@ async def analyze_weight_trend(
         Weight trend analysis
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        # Analyze weight trend - service assumes ownership is already verified
         return await get_weight_service().analyze_weight_trend(pet_id, current_user.id, days_back)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -245,7 +269,16 @@ async def get_weight_management_dashboard(
         Weight management dashboard data
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        # Get weight management dashboard - service assumes ownership is already verified
         return await get_weight_service().get_weight_management_dashboard(pet_id, current_user.id)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -491,9 +524,18 @@ async def generate_analytics(
         Analytics cache response
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        # Generate analytics - service assumes ownership is already verified
         return await get_analytics_service().generate_analytics(
             pet_id, current_user.id, analysis_type, force_refresh
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -519,7 +561,16 @@ async def get_health_insights(
         Health insights data
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        # Get health insights - service assumes ownership is already verified
         return await get_analytics_service().get_health_insights(pet_id, current_user.id)
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -547,6 +598,12 @@ async def analyze_nutritional_patterns(
         Nutritional patterns analysis
     """
     try:
+        # Verify pet ownership first using centralized service (handles RLS properly)
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        supabase = get_supabase_client()
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        # Analyze nutritional patterns - service assumes ownership is already verified
         return await get_analytics_service().analyze_nutritional_patterns(
             pet_id, current_user.id, analysis_period
         )
