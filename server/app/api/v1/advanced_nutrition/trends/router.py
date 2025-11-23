@@ -76,6 +76,9 @@ async def get_nutritional_trends(
         # Return empty list if no trends (200 status with empty data)
         return trends if trends else []
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
@@ -137,6 +140,9 @@ async def get_trends_dashboard(
         # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)
         return dashboard
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
+        raise
     except ValueError as e:
         # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
