@@ -107,8 +107,11 @@ async def get_weight_history(
         List of weight records
     """
     try:
-        return await get_weight_service().get_weight_history(pet_id, current_user.id, days_back)
+        history = await get_weight_service().get_weight_history(pet_id, current_user.id, days_back)
+        # Return empty list if no history (200 status with empty data)
+        return history if history else []
     except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
@@ -269,8 +272,11 @@ async def get_nutritional_trends(
         List of nutritional trend records
     """
     try:
-        return await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
+        trends = await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
+        # Return empty list if no trends (200 status with empty data)
+        return trends if trends else []
     except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
@@ -297,8 +303,11 @@ async def get_trends_dashboard(
         Trends dashboard data
     """
     try:
-        return await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)
+        dashboard = await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)
+        # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)
+        return dashboard
     except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(

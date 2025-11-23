@@ -136,9 +136,10 @@ async def get_weight_history(
         
         # Get weight history
         service = get_weight_service()
-        history = await service.get_weight_history(pet_id, days)
+        history = await service.get_weight_history(pet_id, current_user.id, days)
         
-        return history
+        # Return empty list if no history (200 status with empty data)
+        return history if history else []
         
     except Exception as e:
         raise HTTPException(
@@ -259,8 +260,9 @@ async def get_active_weight_goal(
         
         # Get active weight goal
         service = get_weight_service()
-        goal = await service.get_active_weight_goal(pet_id)
+        goal = await service.get_active_weight_goal(pet_id, current_user.id)
         
+        # Return None if no goal exists (200 status with null/empty data)
         return goal
         
     except Exception as e:

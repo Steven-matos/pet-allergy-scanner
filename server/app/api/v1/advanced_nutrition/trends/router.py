@@ -71,10 +71,14 @@ async def get_nutritional_trends(
         
         # Get nutritional trends
         service = get_trends_service()
-        trends = await service.get_nutritional_trends(pet_id, days, trend_type)
+        trends = await service.get_nutritional_trends(pet_id, current_user.id, days)
         
-        return trends
+        # Return empty list if no trends (200 status with empty data)
+        return trends if trends else []
         
+    except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -119,11 +123,23 @@ async def get_trends_dashboard(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get trends dashboard
-        service = get_trends_service()
-        dashboard = await service.get_trends_dashboard(pet_id, days)
+        # Convert days to period format (7_days, 30_days, 90_days)
+        if days <= 7:
+            period = "7_days"
+        elif days <= 30:
+            period = "30_days"
+        else:
+            period = "90_days"
         
+        service = get_trends_service()
+        dashboard = await service.get_trends_dashboard(pet_id, current_user.id, period)
+        
+        # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)
         return dashboard
         
+    except ValueError as e:
+        # ValueError from service means pet not found or access denied - this should be 404
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
