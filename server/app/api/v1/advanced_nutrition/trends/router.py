@@ -16,7 +16,9 @@ from app.models.advanced_nutrition import (
 )
 from app.models.user import User
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.services.nutritional_trends_service import NutritionalTrendsService
+from supabase import Client
 
 router = APIRouter(prefix="/trends", tags=["advanced-nutrition-trends"])
 
@@ -37,7 +39,7 @@ async def get_nutritional_trends(
     days: int = Query(30, description="Number of days to analyze"),
     trend_type: str = Query("all", description="Type of trends to analyze"),
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get nutritional trends for a pet
@@ -55,15 +57,6 @@ async def get_nutritional_trends(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client for RLS policies
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership with authenticated client
         from app.shared.services.pet_authorization import verify_pet_ownership
@@ -94,7 +87,7 @@ async def get_trends_dashboard(
     pet_id: str,
     days: int = Query(30, description="Number of days for dashboard"),
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get nutritional trends dashboard for a pet
@@ -111,15 +104,6 @@ async def get_trends_dashboard(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client for RLS policies
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership with authenticated client
         from app.shared.services.pet_authorization import verify_pet_ownership

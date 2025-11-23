@@ -18,7 +18,9 @@ from app.models.advanced_nutrition import (
 )
 from app.models.user import User
 from app.core.security.jwt_handler import get_current_user, security
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.services.weight_tracking_service import WeightTrackingService
+from supabase import Client
 
 router = APIRouter(prefix="/weight", tags=["advanced-nutrition-weight"])
 
@@ -37,7 +39,7 @@ def get_weight_service():
 async def record_weight(
     weight_record: PetWeightRecordCreate,
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Record a new weight measurement for a pet
@@ -53,15 +55,6 @@ async def record_weight(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
@@ -85,7 +78,7 @@ async def get_weight_history(
     pet_id: str,
     days: int = Query(30, description="Number of days to retrieve"),
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get weight history for a pet
@@ -102,33 +95,6 @@ async def get_weight_history(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client
-        from app.core.config import settings
-        from app.utils.logging_config import get_logger
-        from supabase import create_client
-        
-        logger = get_logger(__name__)
-        logger.info(f"[WEIGHT_HISTORY] Creating authenticated client for pet_id={pet_id}, user_id={current_user.id}")
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        
-        # Set session with access token
-        logger.info(f"[WEIGHT_HISTORY] Setting session with token (length={len(credentials.credentials) if credentials.credentials else 0})")
-        supabase.auth.set_session(credentials.credentials, "")
-        
-        # Verify session was set
-        try:
-            session = supabase.auth.get_session()
-            if session:
-                session_user_id = session.user.id if hasattr(session, 'user') and session.user else None
-                logger.info(f"[WEIGHT_HISTORY] Session verified. auth.uid()={session_user_id}, expected={current_user.id}")
-            else:
-                logger.warning(f"[WEIGHT_HISTORY] Session set but get_session() returned None!")
-        except Exception as session_check_error:
-            logger.warning(f"[WEIGHT_HISTORY] Could not verify session after setting: {session_check_error}")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
@@ -152,7 +118,7 @@ async def get_weight_history(
 async def create_weight_goal(
     weight_goal: PetWeightGoalCreate,
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a weight goal for a pet
@@ -170,7 +136,6 @@ async def create_weight_goal(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Create weight goal
@@ -190,7 +155,7 @@ async def create_weight_goal(
 async def upsert_weight_goal(
     weight_goal: PetWeightGoalCreate,
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create or update a weight goal for a pet
@@ -208,7 +173,6 @@ async def upsert_weight_goal(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Upsert weight goal
@@ -228,7 +192,7 @@ async def upsert_weight_goal(
 async def get_active_weight_goal(
     pet_id: str,
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get active weight goal for a pet
@@ -244,15 +208,6 @@ async def get_active_weight_goal(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
@@ -277,7 +232,7 @@ async def analyze_weight_trend(
     pet_id: str,
     days: int = Query(30, description="Number of days to analyze"),
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze weight trend for a pet
@@ -294,15 +249,6 @@ async def analyze_weight_trend(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
@@ -326,7 +272,7 @@ async def get_weight_management_dashboard(
     pet_id: str,
     days: int = Query(30, description="Number of days for dashboard"),
     current_user: User = Depends(get_current_user),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get weight management dashboard for a pet
@@ -343,15 +289,6 @@ async def get_weight_management_dashboard(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        # Create authenticated Supabase client
-        from app.core.config import settings
-        from supabase import create_client
-        
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_key
-        )
-        supabase.auth.set_session(credentials.credentials, "")
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
