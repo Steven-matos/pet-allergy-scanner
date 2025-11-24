@@ -7,6 +7,7 @@
 
 import Foundation
 import RevenueCat
+import AdSupport
 import os.log
 
 /// Coordinates RevenueCat SDK configuration using app configuration values.
@@ -23,12 +24,12 @@ enum RevenueCatConfigurator {
         RevenueCatSubscriptionProvider.shared.configure(with: providerConfiguration)
         
         // Enable device identifier collection for better analytics
+        // AdSupport framework is required for attribution data
         Purchases.shared.attribution.collectDeviceIdentifiers()
         
         if apiKey.isEmpty {
             logger.error("RevenueCat API key is empty. Update Info.plist with REVENUECAT_PUBLIC_SDK_KEY before shipping.")
         } else {
-            logger.info("RevenueCat configured with entitlement: \(entitlementID)")
         }
     }
     
@@ -47,7 +48,6 @@ enum RevenueCatConfigurator {
         
         do {
             let (customerInfo, _) = try await Purchases.shared.logIn(userId)
-            logger.info("RevenueCat user identified: \(userId)")
             
             // Refresh customer info to update subscription provider state
             // This ensures the provider is aware of any purchases transferred from anonymous account
@@ -58,7 +58,6 @@ enum RevenueCatConfigurator {
             let hasActiveEntitlement = customerInfo.entitlements[entitlementID]?.isActive == true
             
             if hasActiveEntitlement {
-                logger.info("User has active subscription entitlement: \(entitlementID). Syncing with backend...")
                 
                 // Sync subscription status with backend to ensure database is updated
                 // This is especially important when anonymous purchases were transferred to the account
@@ -88,7 +87,6 @@ enum RevenueCatConfigurator {
             )
             
             if response.hasSubscription {
-                logger.info("Subscription status synced with backend for user \(userId)")
             } else {
                 logger.debug("No active subscription found in backend for user \(userId)")
             }
@@ -115,7 +113,6 @@ enum RevenueCatConfigurator {
     static func logoutUser() async {
         do {
             _ = try await Purchases.shared.logOut()
-            logger.info("RevenueCat user logged out")
         } catch {
             logger.error("Failed to log out RevenueCat user: \(error.localizedDescription)")
         }

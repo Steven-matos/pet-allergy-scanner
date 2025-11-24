@@ -167,14 +167,10 @@ class ScanService: ObservableObject, @unchecked Sendable {
         isAnalyzing = true
         errorMessage = nil
         
-        print("🔍 [SCAN_SERVICE] Starting analysis with request: \(analysisRequest)")
-        
         // Use Task to handle async API call
         currentAnalysisTask = Task { @MainActor in
             do {
-                print("🔍 [SCAN_SERVICE] Calling apiService.analyzeScan...")
                 let analyzedScan = try await apiService.analyzeScan(analysisRequest)
-                print("🔍 [SCAN_SERVICE] ✅ API call successful, received scan: \(analyzedScan.id)")
                 
                 // Update the scan in our list
                 if let index = recentScans.firstIndex(where: { $0.id == analyzedScan.id }) {
@@ -188,12 +184,8 @@ class ScanService: ObservableObject, @unchecked Sendable {
                 // Notify notification manager of scan completion
                 NotificationManager.shared.handleScanCompleted()
                 
-                print("🔍 [SCAN_SERVICE] Calling completion handler...")
                 completion(analyzedScan)
-                print("🔍 [SCAN_SERVICE] ✅ Completion handler called successfully")
                } catch {
-                   print("🔍 [SCAN_SERVICE] ❌ Error during analysis: \(error.localizedDescription)")
-                   print("🔍 [SCAN_SERVICE] ❌ Error type: \(type(of: error))")
                    isAnalyzing = false
                    errorMessage = error.localizedDescription
                    
@@ -203,13 +195,7 @@ class ScanService: ObservableObject, @unchecked Sendable {
                    
                    if error.localizedDescription.contains("500") || error.localizedDescription.contains("Server error") {
                        // Perform client-side fallback analysis
-                       print("🔍 [SCAN_SERVICE] 🔄 Server error detected, performing client-side fallback analysis...")
                        let fallbackAnalysis = performClientSideAnalysis(analysisRequest.extractedText)
-                       print("🔍 [SCAN_SERVICE] ✅ Fallback analysis complete:")
-                       print("🔍 [SCAN_SERVICE] - Overall Safety: \(fallbackAnalysis.overallSafety)")
-                       print("🔍 [SCAN_SERVICE] - Safe Ingredients: \(fallbackAnalysis.safeIngredients)")
-                       print("🔍 [SCAN_SERVICE] - Unsafe Ingredients: \(fallbackAnalysis.unsafeIngredients)")
-                       print("🔍 [SCAN_SERVICE] - Caution Ingredients: \(fallbackAnalysis.cautionIngredients)")
                        
                        errorDetails = [
                            "error": "Server temporarily unavailable",

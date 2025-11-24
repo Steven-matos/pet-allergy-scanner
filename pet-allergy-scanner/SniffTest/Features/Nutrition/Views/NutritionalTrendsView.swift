@@ -29,12 +29,14 @@ struct NutritionalTrendsView: View {
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var calorieGoalsService = CalorieGoalsService.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
     @Binding var selectedPeriod: TrendPeriod
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingPeriodSelector = false
     @State private var showingFeedingLog = false
     @State private var showingCalorieGoalSheet: Pet?
+    @State private var showingPaywall = false
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -42,13 +44,21 @@ struct NutritionalTrendsView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            if isLoading {
-                ModernLoadingView(message: "Loading trends...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let pet = selectedPet {
-                trendsContent(for: pet)
+            if gatekeeper.canAccessTrends() {
+                if isLoading {
+                    ModernLoadingView(message: "Loading trends...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let pet = selectedPet {
+                    trendsContent(for: pet)
+                } else {
+                    petSelectionView
+                }
             } else {
-                petSelectionView
+                SubscriptionBlockerView(
+                    featureName: "Nutritional Trends",
+                    featureDescription: "Track your pet's nutrition over time with detailed analytics, calorie trends, and feeding pattern insights.",
+                    icon: "chart.line.uptrend.xyaxis"
+                )
             }
         }
         .background(ModernDesignSystem.Colors.background)
@@ -70,6 +80,15 @@ struct NutritionalTrendsView: View {
                     try? await calorieGoalsService.loadGoals()
                 }
             }
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: $gatekeeper.showingUpgradePrompt) {
+            UpgradePromptView(
+                title: gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage
+            )
         }
         .onAppear {
             loadTrendsDataIfNeeded()

@@ -208,12 +208,30 @@ struct HelpSupportView: View {
                         }
                         
                 FAQCategoryCard(
-                            icon: "lock.fill",
-                            title: "Privacy & Security",
+                    icon: "heart.fill",
+                    title: "Health Tracker",
+                    questionCount: 10,
+                    iconColor: ModernDesignSystem.Colors.warmCoral
+                ) {
+                    selectedCategory = .healthTracker
+                }
+                
+                FAQCategoryCard(
+                    icon: "chart.bar.fill",
+                    title: "Nutrition & Tracking",
+                    questionCount: 12,
+                    iconColor: ModernDesignSystem.Colors.primary
+                ) {
+                    selectedCategory = .nutrition
+                }
+                
+                FAQCategoryCard(
+                    icon: "lock.fill",
+                    title: "Privacy & Security",
                     questionCount: 9,
                     iconColor: ModernDesignSystem.Colors.textSecondary
-                        ) {
-                            selectedCategory = .privacy
+                ) {
+                    selectedCategory = .privacy
                 }
             }
         }
@@ -264,6 +282,8 @@ enum SupportCategory: Identifiable {
     case petManagement
     case allergies
     case subscription
+    case healthTracker
+    case nutrition
     case privacy
     
     var id: String {
@@ -272,6 +292,8 @@ enum SupportCategory: Identifiable {
         case .petManagement: return "petManagement"
         case .allergies: return "allergies"
         case .subscription: return "subscription"
+        case .healthTracker: return "healthTracker"
+        case .nutrition: return "nutrition"
         case .privacy: return "privacy"
         }
     }
@@ -282,6 +304,8 @@ enum SupportCategory: Identifiable {
         case .petManagement: return "Pet Management"
         case .allergies: return "Allergies & Safety"
         case .subscription: return "Subscription & Billing"
+        case .healthTracker: return "Health Tracker"
+        case .nutrition: return "Nutrition & Tracking"
         case .privacy: return "Privacy & Security"
         }
     }
@@ -571,6 +595,8 @@ struct FAQDetailView: View {
         case .petManagement: return "pawprint.fill"
         case .allergies: return "exclamationmark.triangle.fill"
         case .subscription: return "creditcard.fill"
+        case .healthTracker: return "heart.fill"
+        case .nutrition: return "chart.bar.fill"
         case .privacy: return "lock.fill"
         }
     }
@@ -585,6 +611,10 @@ struct FAQDetailView: View {
             return allergiesFAQs
         case .subscription:
             return subscriptionFAQs
+        case .healthTracker:
+            return healthTrackerFAQs
+        case .nutrition:
+            return nutritionFAQs
         case .privacy:
             return privacyFAQs
         }
@@ -859,6 +889,122 @@ private let subscriptionFAQs: [FAQArticle] = [
     FAQArticle(
         question: "Do you offer family plans?",
         answer: "Currently, we offer individual subscriptions. Each family member needs their own account and subscription to use the app.",
+        isImportant: false
+    )
+]
+
+private let healthTrackerFAQs: [FAQArticle] = [
+    FAQArticle(
+        question: "How do I log a health event for my pet?",
+        answer: "Go to the Trackers tab and tap 'Add Health Event'. Select your pet, choose the event type (vomiting, diarrhea, vet visit, medication, etc.), add a title and notes, set the date and time, and tap 'Save'. The event will be saved to your pet's health history.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "What types of health events can I track?",
+        answer: "You can track: vomiting, diarrhea, vet visits, medication administration, behavioral changes, skin issues, eye/ear problems, and other custom events. Each event type helps you monitor patterns in your pet's health over time.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I add a medication reminder?",
+        answer: "When logging a medication health event, enable 'Create Reminder' and fill in the medication name, dosage, frequency (daily, twice daily, weekly, etc.), and reminder times. The app will send you notifications at the scheduled times to give your pet their medication.",
+        isImportant: true
+    ),
+    FAQArticle(
+        question: "Can I attach documents to vet visits?",
+        answer: "Yes! When logging a vet visit, you can attach documents like lab results, vaccination records, or vet notes by tapping 'Add Document'. This helps you keep all your pet's medical records in one place.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I view my pet's health event history?",
+        answer: "Go to the Trackers tab and tap on your pet's card, or tap 'View Events' on any pet card. You'll see a chronological list of all health events with dates, types, and notes. Tap any event to see full details.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "Can I edit or delete a health event?",
+        answer: "Yes, you can edit or delete health events. Open the event from your pet's health event list, tap 'Edit' to modify details, or 'Delete' to remove it. This helps you keep accurate health records.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I set up medication reminders?",
+        answer: "When creating a medication health event, toggle 'Create Reminder' on. Enter the medication name, dosage, frequency (daily, twice daily, weekly, etc.), and set specific reminder times. You can set multiple reminder times per day for medications that need to be given multiple times.",
+        isImportant: true
+    ),
+    FAQArticle(
+        question: "Can I track health events for multiple pets?",
+        answer: "Yes! Each pet has their own health event history. When adding an event, select which pet it's for. Premium users can track unlimited pets, while free users can track one pet.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "What should I include in health event notes?",
+        answer: "Include details like: symptoms observed, duration, severity, any triggers you noticed, what you did (if anything), and any follow-up actions needed. Detailed notes help you and your veterinarian identify patterns and make informed decisions about your pet's health.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How can health event tracking help my veterinarian?",
+        answer: "Regular health event tracking creates a detailed history that can help your veterinarian identify patterns, make diagnoses, and recommend treatments. You can share this information with your vet during visits to provide a complete picture of your pet's health over time.",
+        isImportant: true
+    )
+]
+
+private let nutritionFAQs: [FAQArticle] = [
+    FAQArticle(
+        question: "How do I log a feeding for my pet?",
+        answer: "Go to the Nutrition tab and tap 'Log Feeding' or 'Add Feeding'. Select your pet, choose the food item (search or scan a barcode), enter the amount in grams or cups, select the date and time, add optional notes, and tap 'Save'. The feeding will be recorded in your pet's nutrition history.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I track my pet's weight?",
+        answer: "Go to the Nutrition tab and select 'Weight Management'. Tap 'Record Weight' to add a new weight entry. Enter the weight, date, and optional notes. The app will track weight trends over time and show you a chart of weight changes.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I set a calorie goal for my pet?",
+        answer: "In the Nutrition tab, go to 'Calorie Goals' and tap 'Set Goal'. Enter your pet's target daily calories, select the goal type (maintenance, weight loss, weight gain), set start and end dates, and save. The app will track your pet's progress toward this goal.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "What is a daily nutrition summary?",
+        answer: "The daily nutrition summary shows you a complete breakdown of what your pet ate in a day, including total calories, protein, fat, carbohydrates, and fiber. It compares this to your pet's nutritional requirements and shows how much is remaining to meet daily goals.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I view my pet's feeding history?",
+        answer: "Go to the Nutrition tab and tap 'Feeding Log' or 'Feeding History'. You'll see a chronological list of all feedings with dates, times, food items, amounts, and notes. You can filter by date range or search for specific foods.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "Can I compare different foods?",
+        answer: "Yes! In the Nutrition tab, go to 'Food Comparison' and select multiple food items to compare. The app will show you side-by-side nutritional information, helping you choose the best food for your pet's needs.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I set a weight goal for my pet?",
+        answer: "In Weight Management, tap 'Set Weight Goal'. Enter your target weight, select the goal type (weight loss or weight gain), set start and target dates, and add notes. The app will track progress and show you how close your pet is to reaching the goal.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "What are nutritional trends?",
+        answer: "Nutritional trends show you patterns in your pet's nutrition over time. You can see trends for calories, protein, fat, and other nutrients across different time periods (weekly, monthly, etc.). This helps identify if your pet is getting consistent nutrition.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I search for foods in the database?",
+        answer: "When logging a feeding, tap 'Select Food' and use the search bar to find foods by name or brand. You can also scan a barcode to quickly find a product. The database includes thousands of pet food products with complete nutritional information.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "What are nutritional requirements?",
+        answer: "Nutritional requirements are the daily amounts of calories, protein, fat, carbohydrates, and fiber your pet needs based on their species, age, weight, and activity level. The app calculates these automatically and compares them to what your pet actually eats.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "Can I track nutrition for multiple pets?",
+        answer: "Yes! Premium users can track nutrition for unlimited pets. Each pet has their own feeding logs, weight records, and nutrition goals. Free users can track one pet. Switch between pets using the pet selector in the Nutrition tab.",
+        isImportant: false
+    ),
+    FAQArticle(
+        question: "How do I view advanced nutrition analytics?",
+        answer: "In the Nutrition tab, tap 'Advanced Nutrition' to see detailed analytics including health insights, nutritional patterns, trends over time, and personalized recommendations. These insights help you make informed decisions about your pet's diet.",
         isImportant: false
     )
 ]

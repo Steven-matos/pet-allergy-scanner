@@ -29,9 +29,6 @@ class AnalyticsManager: ObservableObject {
     func trackEvent(_ event: String, parameters: [String: Any] = [:]) {
         guard isEnabled else { return }
         
-        // Log event for debugging
-        logger.info("Event: \(event), Parameters: \(parameters)")
-        
         // In production, send to analytics service
         // Example: Firebase Analytics, Mixpanel, etc.
         sendToAnalyticsService(event: event, parameters: parameters)

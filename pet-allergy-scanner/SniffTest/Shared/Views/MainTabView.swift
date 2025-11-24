@@ -11,16 +11,9 @@ struct MainTabView: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var notificationManager: NotificationManager
     @State private var petService = CachedPetService.shared
-    @State private var selectedTab = 2 {
-        didSet {
-            print("🔍 MainTabView: selectedTab changed from \(oldValue) to \(selectedTab)")
-            // Add stack trace to see what's causing the change
-            print("🔍 MainTabView: Stack trace: \(Thread.callStackSymbols.prefix(5))")
-        }
-    }
+    @State private var selectedTab = 2
     
     var body: some View {
-        let _ = print("🔍 MainTabView: body called with selectedTab = \(selectedTab)")
         TabView(selection: $selectedTab) {
             // Pets Tab
             PetsView()
@@ -71,9 +64,7 @@ struct MainTabView: View {
             petService.loadPets()
         }
         .onChange(of: notificationManager.navigateToScan) { oldValue, newValue in
-            print("🔍 MainTabView: navigateToScan changed from \(oldValue) to \(newValue)")
             if newValue && !oldValue {
-                print("🔍 MainTabView: Navigating to scan tab (selectedTab = 2)")
                 selectedTab = 2 // Navigate to scan tab (now in middle position)
             }
         }
@@ -82,7 +73,3 @@ struct MainTabView: View {
     }
 }
 
-#Preview {
-    MainTabView()
-        .environmentObject(AuthService.shared)
-}

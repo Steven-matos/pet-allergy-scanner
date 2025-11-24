@@ -175,14 +175,12 @@ enum PostHogAnalytics {
         }
         
         PostHogSDK.shared.identify(user.id, userProperties: properties)
-        logger.info("PostHog user identified: \(user.id)")
     }
     
     /// Reset user identification
     /// Call this when user logs out
     static func resetUser() {
         PostHogSDK.shared.reset()
-        logger.info("PostHog user reset")
     }
     
     /// Update user properties

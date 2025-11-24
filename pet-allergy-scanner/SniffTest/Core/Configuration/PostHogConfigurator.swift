@@ -53,14 +53,14 @@ enum PostHogConfigurator {
         
         // Enable session replay for user session recording
         // Note: Session replay may have URL construction issues in some SDK versions
-        // If you see "bad URL" errors with /s/? endpoint, try disabling session replay
-        // by setting config.sessionReplay = false
-        config.sessionReplay = true
-        config.sessionReplayConfig.screenshotMode = true // Required for SwiftUI compatibility
+        // Disabled due to "bad URL" errors with PostHog assets endpoint
+        // Re-enable once PostHog SDK fixes the URL construction issue
+        config.sessionReplay = false
+        // config.sessionReplayConfig.screenshotMode = true // Required for SwiftUI compatibility
         
         // Limit session replay to reduce data usage and potential errors
-        config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input
-        config.sessionReplayConfig.maskAllImages = false // Allow images for better debugging
+        // config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input
+        // config.sessionReplayConfig.maskAllImages = false // Allow images for better debugging
         
         // Enable additional tracking for better analytics
         config.captureApplicationLifecycleEvents = true // Track app open/close events
@@ -70,7 +70,6 @@ enum PostHogConfigurator {
         // Configure PostHog SDK
         // Note: PostHog SDK setup doesn't throw, so errors are handled internally
         PostHogSDK.shared.setup(config)
-        logger.info("PostHog configured successfully with host: \(host), session replay enabled")
     }
     
     // Note: Additional PostHog methods (identify, track, reset) can be called directly

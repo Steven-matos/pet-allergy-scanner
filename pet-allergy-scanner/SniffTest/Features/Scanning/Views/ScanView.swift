@@ -15,31 +15,18 @@ struct ScanView: View {
     private let scanService = ScanService.shared
     private let cameraPermissionService = CameraPermissionService.shared
     private let settingsManager = SettingsManager.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    @StateObject private var dailyScanCounter = DailyScanCounter.shared
     @State private var showingPetSelection = false
     @State private var selectedPet: Pet?
     @State private var showingResults = false
-    @State private var scanResult: Scan? {
-        didSet {
-            if let newValue = scanResult {
-                print("🔍 [SCAN_RESULT_SET] scanResult set to: \(newValue.id)")
-            } else {
-                print("🔍 [SCAN_RESULT_SET] ⚠️ scanResult cleared to nil")
-            }
-        }
-    }
+    @State private var scanResult: Scan?
     @State private var isPreparingScanResult = false
+    @State private var showingPaywall = false
     
     // Force UI refresh when scan data is ready
     @State private var scanDataReady = false
-    @State private var pendingScanResult: Scan? {
-        didSet {
-            if let newValue = pendingScanResult {
-                print("🔍 [PENDING_SCAN_RESULT_SET] pendingScanResult set to: \(newValue.id)")
-            } else {
-                print("🔍 [PENDING_SCAN_RESULT_SET] ⚠️ pendingScanResult cleared to nil")
-            }
-        }
-    }
+    @State private var pendingScanResult: Scan?
     @State private var sheetScanData: Scan?
     @State private var showingPermissionAlert = false
     @State private var cameraError: String?
@@ -653,6 +640,18 @@ struct ScanView: View {
         .onChange(of: hybridScanService.isScanning) { _, _ in
             // Handle scanning state updates
         }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: Binding(
+            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+            set: { gatekeeper.showingUpgradePrompt = $0 }
+        )) {
+            UpgradePromptView(
+                title: gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage
+            )
+        }
         .onAppear {
             PostHogAnalytics.trackScanViewOpened()
             checkCameraPermission()
@@ -745,6 +744,15 @@ struct ScanView: View {
     // MARK: - Image Processing
     
     private func processCapturedImage(_ image: UIImage) {
+        // Check subscription limit before processing scan
+        guard dailyScanCounter.canPerformScan() else {
+            gatekeeper.showScanLimitPrompt()
+            return
+        }
+        
+        // Increment scan count
+        dailyScanCounter.incrementScanCount()
+        
         Task {
             let result = await hybridScanService.performHybridScan(from: image)
             await MainActor.run {
@@ -1066,26 +1074,13 @@ struct ScanView: View {
      * Process nutritional label image captured manually
      */
     private func processNutritionalLabelImage(_ image: UIImage) {
-        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Starting image processing")
-        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
-        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Image size: \(image.size)")
-        print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current UI state - showingNutritionalLabelScan: \(showingNutritionalLabelScan), showingOCRResults: \(showingOCRResults)")
-        
         Task {
-            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Starting OCR-only scan")
             // Use OCR-only scan for nutritional label
             let result = await hybridScanService.performOCROnlyScan(from: image)
-            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR scan completed")
-            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR result - scanMethod: \(result.scanMethod), confidence: \(result.confidence)")
-            print("🔍 [NUTRITIONAL_LABEL_PROCESSING] OCR text length: \(result.ocrText.count) characters")
             
             await MainActor.run {
                 // Preserve the detected barcode from the original scan
-                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Processing result on main thread")
-                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Current detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
-                
                 if let originalBarcode = detectedBarcode {
-                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ✅ Preserving barcode: \(originalBarcode.value)")
                     // Create a new result with the preserved barcode
                     let updatedResult = HybridScanResult(
                         barcode: originalBarcode,
@@ -1099,16 +1094,12 @@ struct ScanView: View {
                         lastCapturedImage: result.lastCapturedImage
                     )
                     hybridScanResult = updatedResult
-                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ✅ Updated result created with barcode: \(updatedResult.barcode?.value ?? "NIL")")
                 } else {
-                    print("🔍 [NUTRITIONAL_LABEL_PROCESSING] ❌ No detectedBarcode to preserve, using OCR-only result")
                     hybridScanResult = result
                 }
                 
                 // Show the OCR results sheet
-                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Setting showingOCRResults to true")
                 showingOCRResults = true
-                print("🔍 [NUTRITIONAL_LABEL_PROCESSING] Final UI state - showingOCRResults: \(showingOCRResults), hybridScanResult: \(hybridScanResult != nil ? "SET" : "NIL")")
             }
         }
     }
@@ -1136,23 +1127,6 @@ struct ScanView: View {
                     ingredients: ingredients,
                     nutrition: nutrition
                 )
-                
-                // Log the created product for debugging
-                print("📦 Created FoodProduct (Database Schema Compliant):")
-                print("   Name: \(foodProduct.name)")
-                print("   Brand: \(foodProduct.brand ?? "Unknown")")
-                print("   Barcode: \(foodProduct.barcode ?? "None")")
-                print("   Data Quality Score: \(foodProduct.nutritionalInfo?.dataQualityScore ?? 0.0)")
-                print("   Calories per 100g: \(foodProduct.nutritionalInfo?.caloriesPer100g ?? 0)")
-                if let meValue = foodProduct.nutritionalInfo?.nutrientLevels["metabolizable_energy_kcal_per_kg"] {
-                    print("   ME (kcal/kg): \(meValue)")
-                }
-                if let treatValue = foodProduct.nutritionalInfo?.nutrientLevels["calories_per_treat"] {
-                    print("   Calories per treat: \(treatValue)")
-                }
-                print("   Ingredients: \(foodProduct.nutritionalInfo?.ingredients.count ?? 0) items")
-                print("   Source: \(foodProduct.nutritionalInfo?.source ?? "Unknown")")
-                print("   External ID: \(foodProduct.nutritionalInfo?.externalId ?? "None")")
                 
                 // Convert FoodProduct to API format
                 let nutritionalInfoDict = convertNutritionalInfoToDict(foodProduct.nutritionalInfo)
@@ -1209,8 +1183,6 @@ struct ScanView: View {
                     }
                 } else {
                     await MainActor.run {
-                        print("❌ Failed to upload food product to database")
-                        
                         // Show error toast
                         errorMessage = "Failed to upload food item. Please try again."
                         showingErrorToast = true
@@ -1227,8 +1199,6 @@ struct ScanView: View {
                 
             } catch {
                 await MainActor.run {
-                    print("❌ Error uploading food product: \(error.localizedDescription)")
-                    
                     // Show error toast
                     errorMessage = "Upload failed: \(error.localizedDescription)"
                     showingErrorToast = true

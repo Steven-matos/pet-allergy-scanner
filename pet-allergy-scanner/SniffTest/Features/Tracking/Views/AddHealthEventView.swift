@@ -20,6 +20,7 @@ struct AddHealthEventView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var healthEventService = HealthEventService.shared
     @State private var petService = CachedPetService.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
     
     @State private var selectedPet: Pet?
     @State private var selectedEventType: HealthEventType = .vomiting
@@ -32,6 +33,7 @@ struct AddHealthEventView: View {
     @State private var showingError = false
     @State private var errorMessage = ""
     @State private var hasAutoSelectedPet = false
+    @State private var showingPaywall = false
     
     // Medication-specific fields
     @State private var medicationName = ""
@@ -109,11 +111,31 @@ struct AddHealthEventView: View {
                 selectedPet = petService.pets.first
                 hasAutoSelectedPet = true
             }
+            // Reset reminder toggle for free users
+            if gatekeeper.currentTier == .free && createReminder {
+                createReminder = false
+            }
+            // Clear documents for free users
+            if gatekeeper.currentTier == .free && !vetDocuments.isEmpty {
+                vetDocuments = []
+            }
         }
         .alert("Error", isPresented: $showingError) {
             Button("OK") { }
         } message: {
             Text(errorMessage)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: Binding(
+            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+            set: { gatekeeper.showingUpgradePrompt = $0 }
+        )) {
+            UpgradePromptView(
+                title: gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage
+            )
         }
     }
     
@@ -545,11 +567,35 @@ struct AddHealthEventView: View {
                 
                 Spacer()
                 
-                Toggle("Create Reminders", isOn: $createReminder)
-                    .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
+                if gatekeeper.currentTier == .premium {
+                    Toggle("Create Reminders", isOn: $createReminder)
+                        .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
+                } else {
+                    HStack {
+                        Text("Create Reminders")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        Image(systemName: "crown.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                            .font(.caption)
+                        
+                        Button("Upgrade") {
+                            gatekeeper.showHealthTrackingPrompt()
+                        }
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                        .background(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                        )
+                    }
+                }
             }
             
-            if createReminder {
+            if createReminder && gatekeeper.currentTier == .premium {
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
                     // Reminder Times
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
@@ -678,12 +724,79 @@ struct AddHealthEventView: View {
     // MARK: - Vet Document Section
     
     private var vetDocumentSection: some View {
-        DocumentPickerView(
-            selectedDocuments: $vetDocuments,
-            userId: AuthService.shared.currentUser?.id ?? "",
-            petId: selectedPet?.id ?? petService.pets.first?.id ?? "",
-            healthEventId: temporaryEventId // Temporary ID for folder structure
-        )
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            if gatekeeper.currentTier == .premium {
+                DocumentPickerView(
+                    selectedDocuments: $vetDocuments,
+                    userId: AuthService.shared.currentUser?.id ?? "",
+                    petId: selectedPet?.id ?? petService.pets.first?.id ?? "",
+                    healthEventId: temporaryEventId // Temporary ID for folder structure
+                )
+            } else {
+                VStack(spacing: ModernDesignSystem.Spacing.md) {
+                    HStack {
+                        Image(systemName: "doc.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .font(.title2)
+                        
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("Document Upload")
+                                .font(ModernDesignSystem.Typography.title3)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("Upload vet documents, test results, and medical records")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "crown.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                            .font(.title3)
+                    }
+                    
+                    Button(action: {
+                        gatekeeper.showHealthTrackingPrompt()
+                    }) {
+                        HStack {
+                            Image(systemName: "crown.fill")
+                            Text("Upgrade to Upload Documents")
+                                .fontWeight(.semibold)
+                        }
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(ModernDesignSystem.Spacing.md)
+                        .background(
+                            LinearGradient(
+                                colors: [
+                                    ModernDesignSystem.Colors.primary,
+                                    ModernDesignSystem.Colors.primary.opacity(0.8)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                        .shadow(
+                            color: ModernDesignSystem.Colors.primary.opacity(0.3),
+                            radius: 8,
+                            x: 0,
+                            y: 4
+                        )
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+                .background(ModernDesignSystem.Colors.softCream)
+                .overlay(
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                )
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -772,9 +885,21 @@ struct AddHealthEventView: View {
                 let finalTitle = selectedEventType == .other ? customEventName : title
                 
                 // Extract document URLs from uploaded documents (already uploaded when selected)
-                let documentUrls: [String] = selectedEventType == .vetVisit 
-                    ? vetDocuments.map { $0.url }
-                    : []
+                // Only allow document uploads for premium users
+                var documentUrls: [String] = []
+                if selectedEventType == .vetVisit {
+                    if gatekeeper.currentTier == .premium {
+                        documentUrls = vetDocuments.map { $0.url }
+                    } else if !vetDocuments.isEmpty {
+                        // User tried to upload documents but doesn't have premium
+                        await MainActor.run {
+                            errorMessage = "Document uploads require a premium subscription. Please upgrade to use this feature."
+                            showingError = true
+                            isSubmitting = false
+                        }
+                        return
+                    }
+                }
                 
                 let healthEvent = try await healthEventService.createHealthEvent(
                     for: pet.id,
@@ -787,7 +912,17 @@ struct AddHealthEventView: View {
                 )
                 
                 // Create medication reminder if medication event and reminder is enabled
+                // Only allow if user has premium subscription
                 if selectedEventType == .medication && createReminder && !medicationName.isEmpty && !dosage.isEmpty {
+                    guard gatekeeper.currentTier == .premium else {
+                        await MainActor.run {
+                            errorMessage = "Medication reminders require a premium subscription. Please upgrade to use this feature."
+                            showingError = true
+                            isSubmitting = false
+                        }
+                        return
+                    }
+                    
                     let reminderService = MedicationReminderService.shared
                     _ = try await reminderService.createMedicationReminder(
                         healthEventId: healthEvent.id,

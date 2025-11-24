@@ -738,51 +738,6 @@ struct SensitivityErrorView: View {
     }
 }
 
-#Preview {
-    let sampleResult = ScanResult(
-        productName: "Sample Pet Food",
-        brand: "Sample Brand",
-        ingredientsFound: ["chicken", "rice", "corn"],
-        unsafeIngredients: ["corn"],
-        safeIngredients: ["chicken", "rice"],
-        overallSafety: "caution",
-        confidenceScore: 0.85,
-        analysisDetails: [
-            "total_ingredients": "3",
-            "unsafe_count": "1",
-            "safe_count": "2"
-        ]
-    )
-    
-    let sampleNutritionalAnalysis = NutritionalAnalysis(
-        servingSizeG: 100.0,
-        caloriesPerServing: 350.0,
-        caloriesPer100G: 350.0,
-        proteinPercent: 25.0,
-        fatPercent: 12.0,
-        fiberPercent: 3.0,
-        moisturePercent: 10.0,
-        ashPercent: 6.0,
-        calciumPercent: 1.2,
-        phosphorusPercent: 0.8
-    )
-    
-    let sampleScan = Scan(
-        id: "1",
-        userId: "user1",
-        petId: "pet1",
-        imageUrl: nil,
-        rawText: "chicken, rice, corn",
-        status: .completed,
-        result: sampleResult,
-        nutritionalAnalysis: sampleNutritionalAnalysis,
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-    
-    ScanResultView(scan: sampleScan)
-}
-
 /**
  * Veterinary disclaimer card reminding users to consult their vet
  * 

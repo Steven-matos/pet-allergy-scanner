@@ -42,6 +42,8 @@ struct AddPetView: View {
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    @State private var showingPaywall = false
     
     var body: some View {
         NavigationStack {
@@ -97,6 +99,18 @@ struct AddPetView: View {
                 if errorMessage != nil {
                     showingAlert = true
                 }
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+            }
+            .sheet(isPresented: Binding(
+                get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+                set: { gatekeeper.showingUpgradePrompt = $0 }
+            )) {
+                UpgradePromptView(
+                    title: gatekeeper.upgradePromptTitle,
+                    message: gatekeeper.upgradePromptMessage
+                )
             }
         }
     }
@@ -609,6 +623,13 @@ struct AddPetView: View {
                     vetName: vetName.isEmpty ? nil : vetName,
                     vetPhone: vetPhone.isEmpty ? nil : vetPhone
                 )
+                
+                // Check subscription limit before creating pet
+                let currentPetCount = CachedPetService.shared.pets.count
+                if !gatekeeper.canAddPet(currentPetCount: currentPetCount) {
+                    gatekeeper.showPetLimitPrompt()
+                    return
+                }
                 
                 CachedPetService.shared.createPet(petCreate)
                 

@@ -81,7 +81,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         Purchases.configure(withAPIKey: configuration.apiKey)
         Purchases.shared.delegate = self
         hasConfiguredSDK = true
-        logger.info("RevenueCat configured successfully.")
 
         Task {
             await refreshOfferings()
@@ -108,10 +107,17 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             products = mappedProducts.sorted { lhs, rhs in
                 lhs.package.storeProduct.price < rhs.package.storeProduct.price
             }
-            logger.info("Loaded \(self.products.count) RevenueCat packages.")
         } catch {
-            logger.error("Failed to load RevenueCat offerings: \(error.localizedDescription)")
-            errorMessage = "Unable to load subscription options. Please try again."
+            // Handle empty offerings gracefully - this is expected if offerings aren't configured in RevenueCat dashboard
+            let errorDescription = error.localizedDescription
+            if errorDescription.contains("no products registered") || errorDescription.contains("offerings empty") {
+                logger.warning("RevenueCat offerings not configured yet. This is expected if offerings haven't been set up in the RevenueCat dashboard.")
+                // Don't set errorMessage for empty offerings - it's not a user-facing error
+                products = []
+            } else {
+                logger.error("Failed to load RevenueCat offerings: \(errorDescription)")
+                errorMessage = "Unable to load subscription options. Please try again."
+            }
         }
 
         isLoading = false
@@ -121,6 +127,15 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         try await withCheckedThrowingContinuation { continuation in
             Purchases.shared.getOfferings { offerings, error in
                 if let error {
+                    // Check if this is an empty offerings error (expected if not configured in dashboard)
+                    let errorDescription = error.localizedDescription
+                    if errorDescription.contains("no products registered") || 
+                       errorDescription.contains("offerings empty") ||
+                       errorDescription.contains("offerings not configured") {
+                        // Return nil for empty offerings instead of throwing - this is expected
+                        continuation.resume(returning: nil)
+                        return
+                    }
                     continuation.resume(throwing: error)
                     return
                 }
@@ -174,7 +189,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             // Subscription just became active (could be new purchase or restore)
             // Note: Specific purchase tracking happens in purchase() method
             PostHogAnalytics.updateUserRole("premium")
-            logger.info("Subscription became active. Syncing with backend...")
             
             // Sync subscription status with backend when subscription becomes active
             Task {
@@ -204,7 +218,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
                 endpoint: "/subscriptions/status",
                 responseType: SubscriptionStatusResponse.self
             )
-            logger.info("Successfully synced subscription status with backend")
         } catch {
             logger.error("Failed to sync subscription with backend: \(error.localizedDescription)")
             // Don't throw - this is a background sync, not critical to user flow
@@ -229,7 +242,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             let result = try await performPurchase(for: product.package)
 
             if result.userCancelled {
-                logger.info("User cancelled RevenueCat purchase for package \(product.id, privacy: .public).")
                 return .userCancelled
             }
 
@@ -247,7 +259,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
                 PostHogAnalytics.trackPremiumUpgrade(tier: tier, productId: product.id)
             }
             
-            logger.info("RevenueCat purchase successful for package \(product.id, privacy: .public).")
             return .success
         } catch {
             logger.error("RevenueCat purchase failed: \(error.localizedDescription, privacy: .public)")
@@ -283,7 +294,6 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         do {
             let info = try await performRestore()
             applyCustomerInfo(info)
-            logger.info("RevenueCat restore succeeded. Active entitlements: \(self.activeEntitlementIDs, privacy: .public)")
         } catch {
             logger.error("RevenueCat restore failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = "Unable to restore purchases. Please try again."

@@ -88,7 +88,6 @@ class MemoryMonitor: ObservableObject {
      * Force memory cleanup when under pressure
      */
     func performMemoryCleanup() {
-        logger.info("Performing memory cleanup")
         
         // Clear image cache
         MemoryEfficientImageCache.shared.clearCache()
@@ -104,7 +103,6 @@ class MemoryMonitor: ObservableObject {
         // Update memory stats
         updateMemoryStats()
         
-        logger.info("Memory cleanup completed")
     }
     
     /**

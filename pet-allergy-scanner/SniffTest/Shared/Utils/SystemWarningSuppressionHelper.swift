@@ -56,10 +56,6 @@ final class SystemWarningSuppressionHelper {
         // Suppress "NSBundle initialization" warnings
         // These occur when iOS tries to load optional system bundles
         
-        #if DEBUG
-        // In debug mode, log suppressed warnings at lower priority
-        logger.debug("System warning suppression configured")
-        #endif
     }
     
     /// Configures logging filters to reduce console noise
@@ -67,13 +63,6 @@ final class SystemWarningSuppressionHelper {
         // Configure os_log to filter out known benign system warnings
         // This doesn't prevent the warnings, but reduces their visibility in console
         
-        #if DEBUG
-        // Keep all warnings visible in debug builds for development
-        logger.info("Logging filters configured for debug mode")
-        #else
-        // In release builds, suppress verbose system logging
-        logger.info("Logging filters configured for release mode")
-        #endif
     }
     
     /// Logs a suppressed warning if needed for debugging
@@ -81,9 +70,7 @@ final class SystemWarningSuppressionHelper {
     ///   - message: Warning message
     ///   - context: Additional context
     func logSuppressedWarning(_ message: String, context: String = "") {
-        #if DEBUG
-        logger.debug("Suppressed warning: \(message) - Context: \(context)")
-        #endif
+        // Suppressed warnings are not logged to reduce memory usage
     }
 }
 

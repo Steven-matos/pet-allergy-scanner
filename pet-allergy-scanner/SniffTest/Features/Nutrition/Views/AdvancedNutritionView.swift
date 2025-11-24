@@ -27,6 +27,7 @@ struct AdvancedNutritionView: View {
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var cachedNutritionService = CachedNutritionService.shared
     @StateObject private var cachedWeightService = CachedWeightTrackingService.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
     @State private var selectedTab = 0
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -34,6 +35,7 @@ struct AdvancedNutritionView: View {
     @State private var showingGoalSetting = false
     @State private var showingPeriodSelector = false
     @State private var selectedPeriod: TrendPeriod = .thirtyDays
+    @State private var showingPaywall = false
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -42,13 +44,21 @@ struct AdvancedNutritionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if isLoading {
-                    ProgressView("Loading nutrition data...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let pet = selectedPet {
-                    phase3Content(for: pet)
+                if gatekeeper.canAccessAnalytics() {
+                    if isLoading {
+                        ProgressView("Loading nutrition data...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if let pet = selectedPet {
+                        phase3Content(for: pet)
+                    } else {
+                        petSelectionView
+                    }
                 } else {
-                    petSelectionView
+                    SubscriptionBlockerView(
+                        featureName: "Advanced Nutrition Analytics",
+                        featureDescription: "Get detailed nutrition analytics, weight tracking, and personalized insights for your pet's health.",
+                        icon: "chart.bar.fill"
+                    )
                 }
             }
             .navigationTitle(selectedPet != nil ? "\(selectedPet!.name) - Advanced" : "Advanced Nutrition")
@@ -177,6 +187,18 @@ struct AdvancedNutritionView: View {
         }
         .sheet(isPresented: $showingPeriodSelector) {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: Binding(
+            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+            set: { gatekeeper.showingUpgradePrompt = $0 }
+        )) {
+            UpgradePromptView(
+                title: gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage
+            )
         }
         .onAppear {
             loadNutritionDataIfNeeded()

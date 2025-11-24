@@ -77,7 +77,6 @@ final class SubscriptionViewModel: ObservableObject {
             return
         }
         
-        logger.info("Starting purchase for product: \(selectedProductID)")
         
         let result = await subscriptionProvider.purchase(product)
         
@@ -91,7 +90,8 @@ final class SubscriptionViewModel: ObservableObject {
             await syncSubscriptionWithBackend()
             
         case .userCancelled:
-            logger.info("User cancelled purchase")
+            // User cancelled purchase - no action needed
+            break
             
         case .pending:
             showError("Your purchase is pending. Please check back later.")
@@ -103,7 +103,6 @@ final class SubscriptionViewModel: ObservableObject {
     
     /// Restore previous purchases
     func restorePurchases() async {
-        logger.info("Restoring purchases")
         
         await subscriptionProvider.restorePurchases()
         
@@ -136,10 +135,8 @@ final class SubscriptionViewModel: ObservableObject {
     /// Sync subscription status with backend
     /// The backend will be updated via RevenueCat webhooks, but this provides a secondary check
     private func syncSubscriptionWithBackend() async {
-        logger.info("Syncing subscription status with backend")
         
         guard subscriptionProvider.hasActiveSubscription else {
-            logger.info("No active subscription to sync")
             return
         }
         
@@ -152,7 +149,6 @@ final class SubscriptionViewModel: ObservableObject {
                 responseType: SubscriptionStatusResponse.self
             )
             
-            logger.info("Subscription status synced: \(response.hasSubscription ? "active" : "inactive")")
             
             // Refresh user profile to get updated role from backend
             if response.hasSubscription {

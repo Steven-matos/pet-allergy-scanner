@@ -290,7 +290,7 @@ struct PetHealthEventCard: View {
             do {
                 _ = try await healthEventService.getHealthEvents(for: pet.id)
             } catch {
-                print("Error loading health events for \(pet.name): \(error)")
+                // Silently handle error - health events may not be available yet
             }
         }
     }

@@ -24,6 +24,7 @@ struct HistoryView: View {
     @StateObject private var scanService = ScanService.shared
     @State private var petService = CachedPetService.shared
     @StateObject private var settingsManager = SettingsManager.shared
+    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
     @EnvironmentObject var notificationManager: NotificationManager
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
@@ -32,6 +33,7 @@ struct HistoryView: View {
     @State private var selectedScan: Scan?
     @State private var showingScanDetail = false
     @State private var showingClearHistoryAlert = false
+    @State private var showingPaywall = false
     
     enum ScanFilter: String, CaseIterable {
         case all = "All"
@@ -50,7 +52,12 @@ struct HistoryView: View {
     }
     
     var filteredScans: [Scan] {
-        let scans = scanService.recentScans
+        var scans = scanService.recentScans
+        
+        // Apply subscription limit to scan history
+        if let limit = gatekeeper.getScanHistoryLimit() {
+            scans = Array(scans.prefix(limit))
+        }
         
         // Filter by search text
         let searchFiltered = searchText.isEmpty ? scans : scans.filter { scan in
@@ -151,6 +158,18 @@ struct HistoryView: View {
             }
         } message: {
             Text("This will permanently delete all your scan history from the server. This action cannot be undone.")
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: Binding(
+            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+            set: { gatekeeper.showingUpgradePrompt = $0 }
+        )) {
+            UpgradePromptView(
+                title: gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage
+            )
         }
     }
     

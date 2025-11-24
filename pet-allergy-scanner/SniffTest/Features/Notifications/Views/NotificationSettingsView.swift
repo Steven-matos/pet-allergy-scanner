@@ -15,9 +15,7 @@ struct NotificationSettingsView: View {
     @State private var pushNotificationService = PushNotificationService.shared
     @State private var petService = CachedPetService.shared
     @State private var showingPermissionAlert = false
-    @State private var showingTestView = false
     @State private var permissionAlertMessage = ""
-    @State private var testMessage = ""
     
     var body: some View {
         List {
@@ -29,12 +27,6 @@ struct NotificationSettingsView: View {
             
             // Engagement Settings Section
             engagementSettingsSection
-            
-            // Test Notifications Section
-            testNotificationsSection
-            
-            // Advanced Testing Section
-            advancedTestingSection
         }
         .navigationTitle("Notification Settings")
         .navigationBarTitleDisplayMode(.large)
@@ -202,57 +194,6 @@ struct NotificationSettingsView: View {
         }
     }
     
-    // MARK: - Test Notifications Section
-    
-    private var testNotificationsSection: some View {
-        Section {
-            Button("🔔 Test Local Notification (2s delay)") {
-                testImmediateNotification()
-            }
-            .buttonStyle(.plain)
-            .disabled(!notificationSettingsManager.isAuthorized)
-            
-            Button("🎉 Test Birthday Notification") {
-                testBirthdayNotification()
-            }
-            .buttonStyle(.plain)
-            .disabled(!notificationSettingsManager.isAuthorized)
-            
-            Button("🔍 Test Engagement Notification") {
-                testEngagementNotification()
-            }
-            .buttonStyle(.plain)
-            .disabled(!notificationSettingsManager.isAuthorized)
-        } header: {
-            Text("Quick Test")
-        } footer: {
-            if !testMessage.isEmpty {
-                Text(testMessage)
-                    .foregroundColor(testMessage.hasPrefix("✅") ? .green : testMessage.hasPrefix("❌") ? .red : .blue)
-            } else {
-                Text("Quick test notifications. For comprehensive testing, use Advanced Notification Testing below.")
-            }
-        }
-    }
-    
-    // MARK: - Advanced Testing Section
-    
-    private var advancedTestingSection: some View {
-        Section {
-            NavigationLink(destination: NotificationTestView()) {
-                HStack {
-                    Image(systemName: "testtube.2")
-                        .foregroundColor(.blue)
-                    Text("Advanced Notification Testing")
-                }
-            }
-        } header: {
-            Text("Advanced Testing")
-        } footer: {
-            Text("Access comprehensive notification testing including meal reminders, medication reminders, and push notifications.")
-        }
-    }
-    
     // MARK: - Private Methods
     
     private func requestNotificationPermission() {
@@ -271,91 +212,5 @@ struct NotificationSettingsView: View {
         }
     }
     
-    private func testBirthdayNotification() {
-        // Create a test notification
-        let content = UNMutableNotificationContent()
-        content.title = "🎉 Test Birthday Notification"
-        content.body = "This is how birthday notifications will appear!"
-        content.sound = .default
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "test_birthday_\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            Task { @MainActor in
-                if let error = error {
-                    print("❌ Failed to schedule test notification: \(error)")
-                    testMessage = "❌ Error: \(error.localizedDescription)"
-                } else {
-                    testMessage = "✅ Birthday notification scheduled! Check notification bar in 2 seconds."
-                }
-            }
-        }
-    }
-    
-    private func testEngagementNotification() {
-        // Create a test notification
-        let content = UNMutableNotificationContent()
-        content.title = "🔍 Test Engagement Notification"
-        content.body = "This is how engagement reminders will appear!"
-        content.sound = .default
-        content.badge = 1
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "test_engagement",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            Task { @MainActor in
-                if let error = error {
-                    print("❌ Failed to schedule test notification: \(error)")
-                    testMessage = "❌ Error: \(error.localizedDescription)"
-                } else {
-                    testMessage = "✅ Notification scheduled! Check notification bar in 2 seconds."
-                }
-            }
-        }
-    }
-    
-    private func testImmediateNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = "🔔 Test Notification"
-        content.body = "This should appear in your notification bar! Look at the top of your screen."
-        content.sound = .default
-        content.badge = 1
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 2, repeats: false)
-        let request = UNNotificationRequest(
-            identifier: "test_immediate_\(Date().timeIntervalSince1970)",
-            content: content,
-            trigger: trigger
-        )
-        
-        UNUserNotificationCenter.current().add(request) { error in
-            Task { @MainActor in
-                if let error = error {
-                    testMessage = "❌ Error: \(error.localizedDescription)"
-                } else {
-                    testMessage = "✅ Notification scheduled! Check notification bar in 2 seconds."
-                }
-            }
-        }
-    }
-    
-    
 }
 
-// MARK: - Preview
-
-struct NotificationSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        NotificationSettingsView()
-    }
-}
