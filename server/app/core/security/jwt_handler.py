@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Don't auto-raise on missing header
 
 # Debug: Log HTTPBearer configuration
-logger.info(f"🔍 DEBUG: HTTPBearer configured with auto_error=False")
 
 
 def get_current_user(
@@ -154,7 +153,6 @@ def get_current_user(
                 create_response = supabase.table("users").insert(create_data).execute()
                 
                 if create_response.data:
-                    logger.info("Successfully created user from JWT")
                     user_data = create_response.data[0]
                     return User(**user_data)
                 else:

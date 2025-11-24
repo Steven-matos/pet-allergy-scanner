@@ -41,7 +41,6 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
             onboarded_status = user_data_response.data[0].get("onboarded", False)
             image_url = user_data_response.data[0].get("image_url")
         else:
-            logger.info(f"User {user_id} not found in public.users, creating record")
             # If user doesn't exist in public.users, create them
             try:
                 create_response = service_supabase.table("users").insert({
@@ -51,7 +50,6 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
                 }).execute()
                 
                 if create_response.data:
-                    logger.info(f"Successfully created user {user_id} in public.users")
                 else:
                     logger.warning(f"Failed to create user {user_id} in public.users")
             except Exception as create_error:
@@ -409,9 +407,7 @@ async def update_user_profile(
                 db_update["image_url"] = update_data["image_url"]
             
             if db_update:
-                logger.info(f"Updating user {user_id} with data: {db_update}")
                 response = supabase.table("users").update(db_update).eq("id", user_id).execute()
-                logger.info(f"Update response: {response}")
                 
                 if not response.data:
                     logger.error(f"Failed to update user {user_id}: {response}")
@@ -431,7 +427,6 @@ async def update_user_profile(
             )
         
         updated_user_data = updated_response.data[0]
-        logger.info(f"Successfully updated user: {updated_user_data.get('email', 'unknown')}")
         
         # Return the updated user data
         return UserResponse(**updated_user_data)

@@ -76,7 +76,6 @@ async def revenuecat_webhook(
         event_data = payload.get("event", {})
         event_type = payload.get("type") or event_data.get("type")
         
-        logger.info(f"Received RevenueCat webhook: {event_type}")
         
         # Initialize RevenueCat service
         revenuecat_service = RevenueCatService(supabase)
@@ -113,7 +112,7 @@ async def revenuecat_webhook(
             await revenuecat_service.handle_transfer(event_data)
             
         else:
-            logger.info(f"Unhandled RevenueCat event type: {event_type}")
+            logger.warning(f"Unhandled RevenueCat event type: {event_type}")
         
         return {"status": "success"}
         

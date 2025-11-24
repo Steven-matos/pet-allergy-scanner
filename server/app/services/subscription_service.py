@@ -84,7 +84,6 @@ class SubscriptionService:
                 # Handle sandbox/production environment switching
                 if result.get("status") == 21007 and not is_sandbox:
                     # Receipt is from sandbox, retry with sandbox URL
-                    logger.info("Receipt from sandbox, retrying with sandbox URL")
                     return await self.verify_receipt(receipt_data, user_id, is_sandbox=True)
                 
                 # Check verification status
@@ -267,7 +266,6 @@ class SubscriptionService:
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", user_id).execute()
             
-            logger.info(f"Updated user {user_id} role to {new_role}")
         except Exception as e:
             logger.error(f"Failed to update user role: {str(e)}")
     
@@ -312,7 +310,6 @@ class SubscriptionService:
                 "original_transaction_id", original_transaction_id
             ).execute()
             
-            logger.info(f"Cancelled subscription for user {user_id}")
             return True
         except Exception as e:
             logger.error(f"Error cancelling subscription: {str(e)}")

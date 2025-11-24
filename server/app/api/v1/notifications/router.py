@@ -141,12 +141,10 @@ async def register_device_token_anonymous(
                 "user_id": None  # Will be linked after authentication
             }).execute()
             
-            logger.info(f"Anonymous device token registered and stored: {device_token[:20]}...")
         except Exception as table_error:
             # Table might not exist - log and continue
             # Token will be registered again after authentication
             logger.warning(f"Could not store anonymous device token in table: {table_error}")
-            logger.info(f"Anonymous device token registration (not stored): {device_token[:20]}...")
         
         return {
             "message": "Device token registered successfully. Please complete authentication to enable notifications.",
@@ -176,7 +174,6 @@ async def send_push_notification(
     """
     try:
         # Log request details for debugging
-        logger.info(f"Received push notification request - device_token: {request.device_token[:20] if request.device_token else 'None'}..., payload keys: {list(request.payload.keys()) if request.payload else 'None'}")
         # Validate request fields
         if not request.device_token:
             raise HTTPException(status_code=400, detail="device_token is required")
@@ -190,8 +187,6 @@ async def send_push_notification(
         device_token = request.device_token
         payload = request.payload
         
-        logger.info(f"Sending push notification to device {device_token[:20]}...")
-        logger.debug(f"Payload: {json.dumps(payload, default=str)}")
         
         # Extract delay if specified in payload - convert to int
         delay = 0
@@ -215,13 +210,11 @@ async def send_push_notification(
                 payload,
                 delay
             )
-            logger.info(f"Notification scheduled for {delay} seconds")
             return {"message": "Notification scheduled successfully"}
         else:
             # Send immediately
             success = await push_service.send_notification(device_token, payload)
             if success:
-                logger.info(f"Notification sent successfully to {device_token[:20]}...")
                 return {"message": "Notification sent successfully"}
             else:
                 logger.error(f"Failed to send notification to {device_token[:20]}...")
@@ -399,6 +392,5 @@ async def send_delayed_notification(device_token: str, payload: Dict[str, Any], 
             return
         
         await push_service.send_notification(device_token, payload_without_delay)
-        logger.info(f"Delayed notification sent successfully to {device_token[:20]}...")
     except Exception as e:
         logger.error(f"Failed to send delayed notification to {device_token[:20]}...: {e}")

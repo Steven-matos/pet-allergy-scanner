@@ -28,7 +28,6 @@ async def init_db():
     global supabase, supabase_service_role
     
     try:
-        logger.info("Initializing database clients...")
         
         # Initialize Supabase clients immediately (no blocking operations)
         supabase = create_client(
@@ -41,7 +40,6 @@ async def init_db():
             settings.supabase_service_role_key
         )
         
-        logger.info("✅ Database clients created")
         
         # Test connection in background (non-blocking)
         asyncio.create_task(_test_database_connection())
@@ -65,7 +63,6 @@ async def _test_database_connection():
         
         for attempt in range(max_retries):
             try:
-                logger.info(f"Testing database connection (attempt {attempt + 1}/{max_retries})...")
                 
                 # Use asyncio.to_thread to make sync call non-blocking
                 await asyncio.wait_for(
@@ -75,7 +72,6 @@ async def _test_database_connection():
                     timeout=5.0  # 5 second timeout per attempt
                 )
                 
-                logger.info("✅ Database connection verified successfully")
                 
                 # Start monitoring in non-production only
                 if settings.environment != "production":
@@ -201,7 +197,6 @@ async def close_db():
         if connection_pool:
             connection_pool = None
         
-        logger.info("Database connections closed successfully")
         
     except Exception as e:
         logger.error(f"Error closing database connections: {e}")

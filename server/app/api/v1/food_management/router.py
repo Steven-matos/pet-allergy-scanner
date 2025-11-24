@@ -186,11 +186,9 @@ async def get_food_by_barcode(
         response = supabase.table("food_items").select("*").eq("barcode", barcode).limit(1).execute()
         
         if not response.data or len(response.data) == 0:
-            logger.info(f"No product found for barcode: {barcode}")
             return None
         
         food_item = response.data[0]
-        logger.info(f"Found product for barcode {barcode}: {food_item.get('name', 'Unknown')}")
         
         # Parse nutritional_info JSONB field
         nutritional_info = None
@@ -246,7 +244,6 @@ async def create_food_item_with_slash(
     Returns:
         Created food item
     """
-    logger.info(f"✅ create_food_item called successfully for user: {current_user.email if current_user else 'Unknown'}")
     try:
         # Check if food item with same name and brand already exists
         existing_response = supabase.table("food_items").select("id").eq("name", food_item.name).eq("brand", food_item.brand).limit(1).execute()

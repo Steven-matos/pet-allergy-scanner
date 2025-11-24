@@ -85,7 +85,6 @@ class MonitoringService:
                 self.metrics[metric_name] = self.metrics[metric_name][-1000:]
             
             # Log to file
-            logger.info(f"Performance metric: {json.dumps(metric_data)}")
             
         except Exception as e:
             logger.error(f"Failed to log performance metric: {e}")
@@ -110,7 +109,6 @@ class MonitoringService:
             }
             
             # Log to file
-            logger.info(f"User activity: {json.dumps(activity_data)}")
             
             # Store in database if enabled
             if settings.enable_audit_logging:
@@ -320,7 +318,6 @@ class MonitoringService:
                 if datetime.fromisoformat(alert["timestamp"]) > cutoff_time
             ]
             
-            logger.info(f"Cleaned up monitoring data older than {days} days")
             
         except Exception as e:
             logger.error(f"Failed to cleanup old data: {e}")

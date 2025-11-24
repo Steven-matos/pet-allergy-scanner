@@ -39,7 +39,7 @@ class RevenueCatService:
             supabase: Supabase client instance
         """
         self.supabase = supabase
-        self.api_key = getattr(settings, 'REVENUECAT_API_KEY', None)
+        self.api_key = settings.revenuecat_api_key
     
     async def handle_initial_purchase(self, event_data: Dict[str, Any]) -> None:
         """
@@ -436,7 +436,6 @@ class RevenueCatService:
                 on_conflict="user_id"
             ).execute()
             
-            logger.debug(f"Updated subscription for user {user_id}: {status}")
         
         except Exception as e:
             logger.error(f"Error updating subscription in database: {str(e)}")
@@ -456,7 +455,6 @@ class RevenueCatService:
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", user_id).execute()
             
-            logger.debug(f"Updated role for user {user_id}: {role.value}")
         
         except Exception as e:
             logger.error(f"Error updating user role: {str(e)}")

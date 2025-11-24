@@ -61,7 +61,6 @@ class PushNotificationService:
                     ssl=self._create_ssl_context()
                 ) as response:
                     if response.status == 200:
-                        logger.info(f"Push notification sent successfully to {device_token[:20]}...")
                         return True
                     else:
                         # APNs returns detailed error information in JSON format
@@ -156,7 +155,6 @@ class PushNotificationService:
         try:
             # In a real implementation, you would maintain a queue of scheduled notifications
             # and cancel them based on user_id. For now, we'll just log the action.
-            logger.info(f"Cancelled all notifications for user {user_id}")
             return True
         except Exception as e:
             logger.error(f"Error cancelling notifications for user {user_id}: {e}")
@@ -216,7 +214,7 @@ class PushNotificationService:
         except Exception as e:
             logger.error(f"Error generating JWT token: {e}")
             import traceback
-            logger.debug(traceback.format_exc())
+            logger.error(f"Error generating notification payload: {e}")
             return ""
     
     def _create_ssl_context(self) -> ssl.SSLContext:

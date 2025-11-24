@@ -54,22 +54,16 @@ async def verify_pet_ownership(
     if db is not None:
         # Authenticated client - rely on RLS to filter by auth.uid()
         # RLS policy: (select auth.uid()) = user_id
-        logger.info(f"[PET_AUTH] Verifying pet ownership with authenticated client: pet_id={pet_id}, user_id={user_id}")
-        
         # Check if client is actually authenticated
         try:
-            # Try to get the current session to verify authentication
             session = supabase.auth.get_session()
             if session:
                 auth_user_id = session.user.id if hasattr(session, 'user') and session.user else None
-                logger.info(f"[PET_AUTH] Authenticated client session found. auth.uid()={auth_user_id}, expected user_id={user_id}")
                 if auth_user_id and auth_user_id != user_id:
                     logger.warning(
                         f"[PET_AUTH] Session user_id mismatch! Session auth.uid()={auth_user_id}, "
                         f"but expected user_id={user_id}. This may cause RLS to block access."
                     )
-            else:
-                logger.warning(f"[PET_AUTH] Authenticated client provided but no active session found!")
         except Exception as session_error:
             logger.warning(f"[PET_AUTH] Could not verify session: {session_error}")
         
@@ -79,27 +73,20 @@ async def verify_pet_ownership(
                 .eq("id", pet_id)\
                 .execute()
             
-            logger.info(f"[PET_AUTH] RLS query returned {len(response.data) if response.data else 0} results")
-            
             if response.data:
                 found_pet = response.data[0]
                 found_user_id = found_pet.get("user_id")
-                logger.info(f"[PET_AUTH] Pet found via RLS. Pet user_id={found_user_id}, Expected user_id={user_id}")
                 
                 # Verify the pet belongs to the expected user (double-check)
                 if found_user_id != user_id:
                     logger.error(
                         f"[PET_AUTH] Pet {pet_id} found via RLS but belongs to different user. "
-                        f"Expected: {user_id}, Found: {found_user_id}. "
-                        f"This suggests RLS auth.uid() != expected user_id. "
-                        f"Pet data: {found_pet}"
+                        f"Expected: {user_id}, Found: {found_user_id}."
                     )
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Pet not found or access denied"
                     )
-                else:
-                    logger.info(f"[PET_AUTH] Pet ownership verified successfully via RLS")
             else:
                 logger.warning(f"[PET_AUTH] RLS query returned no results for pet_id={pet_id}")
         except HTTPException:
@@ -107,26 +94,22 @@ async def verify_pet_ownership(
         except Exception as e:
             logger.error(f"[PET_AUTH] Error querying pet with authenticated client: {type(e).__name__}: {e}", exc_info=True)
             # Fall back to explicit user_id filter
-            logger.info("[PET_AUTH] Falling back to explicit user_id filter")
             try:
                 response = supabase.table("pets")\
                     .select("*")\
                     .eq("id", pet_id)\
                     .eq("user_id", user_id)\
                     .execute()
-                logger.info(f"[PET_AUTH] Fallback query returned {len(response.data) if response.data else 0} results")
             except Exception as fallback_error:
                 logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
                 raise
     else:
         # Unauthenticated client - must filter explicitly
-        logger.info(f"[PET_AUTH] Verifying pet ownership with unauthenticated client: pet_id={pet_id}, user_id={user_id}")
         response = supabase.table("pets")\
             .select("*")\
             .eq("id", pet_id)\
             .eq("user_id", user_id)\
             .execute()
-        logger.info(f"[PET_AUTH] Unauthenticated query returned {len(response.data) if response.data else 0} results")
     
     if not response.data:
         # Log for debugging - check if pet exists at all

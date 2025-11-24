@@ -109,6 +109,11 @@ class Settings(BaseSettings):
     enable_data_deletion: bool = Field(default=True, description="Enable data deletion for GDPR")
     
     # RevenueCat Integration
+    revenuecat_api_key: Optional[str] = Field(
+        default=None,
+        alias="REVENUECAT_API_KEY",
+        description="RevenueCat secret API key for backend API calls"
+    )
     revenuecat_webhook_secret: Optional[str] = Field(
         default=None,
         alias="REVENUECAT_WEBHOOK_SECRET",

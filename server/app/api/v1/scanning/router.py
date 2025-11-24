@@ -354,18 +354,6 @@ async def analyze_scan(
             updated_at=updated_scan["updated_at"]
         )
         
-        # Debug logging
-        logger.info(f"🔍 [SCAN_ANALYSIS] Returning scan response:")
-        logger.info(f"  - ID: {response.id}")
-        logger.info(f"  - Status: {response.status}")
-        logger.info(f"  - Has result: {response.result is not None}")
-        if response.result:
-            logger.info(f"  - Result safety: {response.result.overall_safety}")
-            logger.info(f"  - Ingredients found: {len(response.result.ingredients_found)}")
-            logger.info(f"  - Unsafe ingredients: {len(response.result.unsafe_ingredients)}")
-            logger.info(f"  - Safe ingredients: {len(response.result.safe_ingredients)}")
-            logger.info(f"  - Confidence score: {response.result.confidence_score}")
-        
         return response
         
     except HTTPException:

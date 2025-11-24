@@ -85,7 +85,6 @@ class StorageService:
                         target_size=2_097_152  # 2MB target
                     )
                     upload_data = optimized_data
-                    logger.info(f"Scan image optimized: {metadata['size_reduction_percent']}% reduction")
                 except Exception as e:
                     logger.warning(f"Image optimization failed, uploading original: {e}")
                     upload_data = image_data
@@ -115,7 +114,6 @@ class StorageService:
             # Get public URL
             public_url = supabase.storage.from_(bucket_config["name"]).get_public_url(file_path)
             
-            logger.info(f"Scan image uploaded successfully: {file_path}")
             return public_url
             
         except HTTPException:
@@ -188,7 +186,6 @@ class StorageService:
                 )
             
             public_url = supabase.storage.from_(bucket_config["name"]).get_public_url(file_path)
-            logger.info(f"User image uploaded successfully: {file_path}")
             return public_url
             
         except HTTPException:
@@ -263,7 +260,6 @@ class StorageService:
                 )
             
             public_url = supabase.storage.from_(bucket_config["name"]).get_public_url(file_path)
-            logger.info(f"Pet image uploaded successfully: {file_path}")
             return public_url
             
         except HTTPException:
@@ -301,7 +297,6 @@ class StorageService:
             supabase = get_supabase_client()
             response = supabase.storage.from_("scan-images").remove([file_path])
             
-            logger.info(f"Scan image deleted: {file_path}")
             return True
             
         except Exception as e:

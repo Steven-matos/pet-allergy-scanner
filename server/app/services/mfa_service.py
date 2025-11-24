@@ -42,7 +42,6 @@ class MFAService:
                 }
             })
             
-            logger.info(f"MFA secret generated for user: {user_id}")
             return secret
             
         except Exception as e:
@@ -91,7 +90,6 @@ class MFAService:
             
             qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
             
-            logger.info(f"QR code generated for user: {user_id}")
             return qr_code_base64
             
         except Exception as e:
@@ -136,7 +134,6 @@ class MFAService:
             is_valid = totp.verify(token, valid_window=1)  # Allow 1 time step tolerance
             
             if is_valid:
-                logger.info(f"MFA token verified for user: {user_id}")
                 return True
             else:
                 logger.warning(f"Invalid MFA token for user: {user_id}")
@@ -180,7 +177,6 @@ class MFAService:
                 }
             })
             
-            logger.info(f"MFA enabled for user: {user_id}")
             return True
             
         except Exception as e:
@@ -217,7 +213,6 @@ class MFAService:
                 }
             })
             
-            logger.info(f"MFA disabled for user: {user_id}")
             return True
             
         except Exception as e:
@@ -281,7 +276,6 @@ class MFAService:
                 }
             })
             
-            logger.info(f"Backup codes generated for user: {user_id}")
             return backup_codes
             
         except Exception as e:
@@ -335,7 +329,6 @@ class MFAService:
                     }
                 }).eq("id", user_id).execute()
                 
-                logger.info(f"Backup code verified for user: {user_id}")
                 return True
             else:
                 logger.warning(f"Invalid backup code for user: {user_id}")

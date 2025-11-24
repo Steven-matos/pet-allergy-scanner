@@ -55,7 +55,6 @@ async def verify_subscription(
             is_sandbox=False  # Start with production, will fallback to sandbox if needed
         )
         
-        logger.info(f"Subscription verified for user {current_user.id}")
         return result
         
     except HTTPException:
@@ -154,7 +153,6 @@ async def get_subscription_status(
                     # Refresh subscription from database
                     subscription = await subscription_service.get_user_subscription(current_user.id)
                     
-                    logger.info(f"Proactively synced subscription for user {current_user.id} from RevenueCat")
                     
                     if subscription:
                         return {
@@ -166,10 +164,10 @@ async def get_subscription_status(
         except HTTPException:
             # If RevenueCat API fails, don't fail the whole request
             # Just return no subscription - webhook will eventually sync
-            logger.debug(f"Could not verify subscription with RevenueCat for user {current_user.id}")
+            pass  # RevenueCat API failed, webhook will sync eventually
         except Exception as e:
-            # Log but don't fail - webhooks will eventually sync
-            logger.debug(f"Error verifying with RevenueCat (will retry via webhook): {str(e)}")
+            # Log only errors, not debug info
+            logger.error(f"Error verifying subscription with RevenueCat: {str(e)}")
         
         # No active subscription found
         return {
@@ -218,7 +216,6 @@ async def restore_purchases(
             is_sandbox=False
         )
         
-        logger.info(f"Purchases restored for user {current_user.id}")
         return {
             "success": True,
             "message": "Purchases restored successfully",
@@ -272,7 +269,6 @@ async def app_store_webhook(
         notification_type = body.get("notificationType")
         subtype = body.get("subtype")
         
-        logger.info(f"Received App Store notification: {notification_type} - {subtype}")
         
         # Extract transaction data
         signed_transaction_info = body.get("data", {}).get("signedTransactionInfo")
@@ -286,19 +282,14 @@ async def app_store_webhook(
         
         # Handle different notification types
         if notification_type == "DID_RENEW":
-            logger.info("Subscription renewed")
             # Update subscription with new expiration date
         elif notification_type == "DID_CHANGE_RENEWAL_STATUS":
-            logger.info("Renewal status changed")
             # Update auto-renew status
         elif notification_type == "EXPIRED":
-            logger.info("Subscription expired")
             # Mark subscription as expired, downgrade user
         elif notification_type == "GRACE_PERIOD_EXPIRED":
-            logger.info("Grace period expired")
             # Downgrade user after grace period
         elif notification_type == "REFUND":
-            logger.info("Subscription refunded")
             # Revoke subscription immediately
         
         return {"status": "ok"}

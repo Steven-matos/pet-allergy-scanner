@@ -80,7 +80,6 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         
         if existing.data:
             # Email already exists, return existing entry with duplicate flag
-            logger.info(f"Waitlist signup: Email {normalized_email} already exists")
             return _build_waitlist_response(existing.data[0], is_duplicate=True)
         
         # Email doesn't exist, insert new entry
@@ -94,7 +93,6 @@ async def signup_waitlist(signup_data: WaitlistSignup):
                 detail="Failed to add email to waitlist"
             )
         
-        logger.info(f"Waitlist signup successful: {normalized_email}")
         entry = insert_response.data[0]
         return _build_waitlist_response(entry, is_duplicate=False)
         
@@ -113,7 +111,6 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         
         # Handle duplicate email constraint violations (PostgreSQL error code 23505)
         if 'duplicate' in error_str.lower() or 'unique' in error_str.lower() or '23505' in error_str:
-            logger.info(f"Duplicate email attempt (caught by constraint): {normalized_email}")
             # Fetch existing entry
             try:
                 existing = supabase.table("waitlist").select(

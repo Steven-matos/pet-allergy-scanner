@@ -91,7 +91,6 @@ class GDPRService:
                 zip_file.writestr("manifest.json", json.dumps(manifest, indent=2))
             
             zip_buffer.seek(0)
-            logger.info(f"User data exported for user: {user_id}")
             return zip_buffer.getvalue()
             
         except Exception as e:
@@ -147,7 +146,6 @@ class GDPRService:
             # 8. Delete user and pet images from storage
             self._delete_user_images_from_storage(user_data.data, pets_data.data)
             
-            logger.info(f"User data deleted for user: {user_id}")
             return True
             
         except Exception as e:
@@ -204,7 +202,6 @@ class GDPRService:
                 "updated_at": datetime.utcnow().isoformat()
             }).eq("user_id", user_id).execute()
             
-            logger.info(f"User data anonymized for user: {user_id}")
             return True
             
         except Exception as e:
@@ -447,7 +444,6 @@ class GDPRService:
                         storage_path = image_url.split("/storage/v1/object/public/user-images/")[-1]
                         try:
                             self.supabase.storage.from_("user-images").remove([storage_path])
-                            logger.info(f"Deleted user image: {storage_path}")
                         except Exception as e:
                             logger.warning(f"Failed to delete user image {storage_path}: {e}")
             
@@ -460,7 +456,6 @@ class GDPRService:
                         storage_path = image_url.split("/storage/v1/object/public/pet-images/")[-1]
                         try:
                             self.supabase.storage.from_("pet-images").remove([storage_path])
-                            logger.info(f"Deleted pet image: {storage_path}")
                         except Exception as e:
                             logger.warning(f"Failed to delete pet image {storage_path}: {e}")
                             
@@ -481,12 +476,10 @@ class GDPRService:
             
             for user in expired_users.data:
                 user_id = user["id"]
-                logger.info(f"Cleaning up expired data for user: {user_id}")
                 
                 # Anonymize instead of delete for research purposes
                 self.anonymize_user_data(user_id)
             
-            logger.info(f"Cleaned up data for {len(expired_users.data)} expired users")
             
         except Exception as e:
             logger.error(f"Failed to cleanup expired data: {e}")

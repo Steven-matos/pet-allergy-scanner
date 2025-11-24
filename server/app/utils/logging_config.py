@@ -70,10 +70,8 @@ def setup_logging(log_level: Optional[str] = None) -> None:
         elif settings.environment in ["staging", "production"] or "railway" in os.environ.get("RAILWAY_PROJECT_ID", ""):
             # Railway deployment - be more aggressive about log reduction
             level = logging.ERROR
-        elif settings.verbose_logging and settings.environment == "development":
-            level = logging.DEBUG
         else:
-            level = logging.WARNING  # Default to WARNING to reduce noise
+            level = logging.WARNING  # Default to WARNING to reduce noise - only errors and warnings
     
     # Create formatters based on environment
     if settings.environment == "production":
