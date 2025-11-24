@@ -186,8 +186,8 @@ struct OnboardingView: View {
                     } else if currentStep == 4 {
                         // Skip paywall button
                         Button("Skip for now") {
-                            // Skip paywall and proceed to create pet
-                            createPet()
+                            // Skip paywall and proceed to create pet, then dismiss onboarding
+                            createPet(shouldDismissOnboarding: true)
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -772,12 +772,12 @@ struct OnboardingView: View {
                 // After purchase attempt (success or failure), create the pet
                 // The pet creation should happen regardless of subscription status
                 await MainActor.run {
-                    createPet()
+                    createPet(shouldDismissOnboarding: false)
                 }
             }
         } else {
             // No subscription selected - just create pet
-            createPet()
+            createPet(shouldDismissOnboarding: false)
         }
     }
     
@@ -801,7 +801,8 @@ struct OnboardingView: View {
     }
     
     /// Create pet and mark onboarding as complete
-    private func createPet() {
+    /// - Parameter shouldDismissOnboarding: If true, calls onSkip() after successful pet creation to dismiss onboarding
+    private func createPet(shouldDismissOnboarding: Bool = false) {
         isCreatingPet = true
         
         // Convert weight to kg for storage (backend expects kg)
@@ -854,6 +855,11 @@ struct OnboardingView: View {
                 if petService.errorMessage == nil {
                     // Pet created successfully - mark onboarding as complete
                     petService.completeOnboarding()
+                    
+                    // If user skipped paywall, dismiss onboarding view immediately
+                    if shouldDismissOnboarding {
+                        onSkip()
+                    }
                     
                     // Even if onboarding completion fails, the pet was created successfully
                     // The user can proceed to the main app
