@@ -5,7 +5,7 @@
  */
 
 interface StructuredDataProps {
-  type: 'homepage' | 'privacy' | 'terms'
+  type: 'homepage' | 'privacy' | 'terms' | 'support'
 }
 
 /**
@@ -154,6 +154,51 @@ function getTermsStructuredData() {
 }
 
 /**
+ * Generates structured data for support/help page
+ * Includes FAQPage schema for better SEO
+ */
+function getSupportStructuredData() {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://snifftest.app'
+  
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    name: 'Help & Support - SniffTest',
+    description: 'Get help with SniffTest. Find answers to frequently asked questions about scanning pet food labels, managing pets, allergies, subscriptions, health tracking, and more.',
+    url: `${baseUrl}/support`,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: [
+        {
+          '@type': 'Question',
+          name: 'How do I scan a pet food label?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Open the app and tap the camera icon on the main screen. Point your camera at the ingredient list on the pet food label. Make sure the text is clearly visible and well-lit. The app will automatically extract the text and analyze it for your pet\'s safety.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'How do I add a new pet to my profile?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Go to the Pets tab and tap the \'+\' button. Fill in your pet\'s name, species (dog or cat), breed, birthday, weight, and any known sensitivities. You can also add a photo and vet information.',
+          },
+        },
+        {
+          '@type': 'Question',
+          name: 'What ingredients are most dangerous for dogs?',
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: 'Common ingredients that may be problematic for dogs include: chocolate, grapes, raisins, onions, garlic, xylitol, macadamia nuts, and certain artificial sweeteners. This information is for educational purposes only. Always consult your veterinarian about your specific pet\'s dietary needs and health concerns.',
+          },
+        },
+      ],
+    },
+  }
+}
+
+/**
  * Structured Data component that injects JSON-LD into the page head
  * Improves SEO by helping search engines understand the content
  */
@@ -169,6 +214,9 @@ export default function StructuredData({ type }: StructuredDataProps) {
       break
     case 'terms':
       structuredData = getTermsStructuredData()
+      break
+    case 'support':
+      structuredData = getSupportStructuredData()
       break
     default:
       structuredData = []

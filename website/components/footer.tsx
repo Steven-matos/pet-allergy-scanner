@@ -39,6 +39,7 @@ export default function Footer() {
     product: [
       { name: 'Features', href: getNavLink('#features') },
       { name: 'Waitlist', href: isHomePage ? '#waitlist' : '/#waitlist' },
+      { name: 'Support', href: '/support' },
     ],
     legal: [
       { name: 'Privacy', href: '/privacy' },
