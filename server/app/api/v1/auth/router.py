@@ -50,6 +50,8 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
                 }).execute()
                 
                 if create_response.data:
+                    # User created successfully with default values
+                    pass
                 else:
                     logger.warning(f"Failed to create user {user_id} in public.users")
             except Exception as create_error:

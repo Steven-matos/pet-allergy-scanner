@@ -45,13 +45,13 @@ struct NutritionalTrendsView: View {
     var body: some View {
         VStack(spacing: 0) {
             if gatekeeper.canAccessTrends() {
-                if isLoading {
-                    ModernLoadingView(message: "Loading trends...")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let pet = selectedPet {
-                    trendsContent(for: pet)
-                } else {
-                    petSelectionView
+            if isLoading {
+                ModernLoadingView(message: "Loading trends...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let pet = selectedPet {
+                trendsContent(for: pet)
+            } else {
+                petSelectionView
                 }
             } else {
                 SubscriptionBlockerView(
