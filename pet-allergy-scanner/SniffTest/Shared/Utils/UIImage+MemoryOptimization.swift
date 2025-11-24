@@ -145,7 +145,8 @@ class MemoryEfficientImageCache {
     
     // MARK: - Initialization
     
-    private init(maxCacheSize: Int = 50, maxMemoryUsage: Int = 50_000_000) { // 50MB
+    // MEMORY OPTIMIZATION: Reduced cache limits to prevent memory pressure
+    private init(maxCacheSize: Int = 30, maxMemoryUsage: Int = 30_000_000) { // 30MB (reduced from 50MB)
         self.maxCacheSize = maxCacheSize
         self.maxMemoryUsage = maxMemoryUsage
         setupMemoryWarningObserver()
@@ -257,8 +258,9 @@ class MemoryEfficientImageCache {
     }
     
     nonisolated private func handleMemoryWarning() {
-        // Clear half the cache on memory warning
-        let targetCount = cache.count / 2
+        // MEMORY OPTIMIZATION: Aggressively clear cache on memory warning
+        // Clear 75% of cache to free up more memory
+        let targetCount = max(1, cache.count / 4) // Keep only 25%
         while cache.count > targetCount {
             evictLeastRecentlyUsed()
         }

@@ -21,16 +21,19 @@ struct SubscriptionBlockerView: View {
     let featureDescription: String
     let icon: String
     @State private var showingPaywall = false
-    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    // MEMORY OPTIMIZATION: Use @ObservedObject for observable shared singleton
+    @ObservedObject private var gatekeeper = SubscriptionGatekeeper.shared
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.xl) {
             Spacer()
             
-            // Icon
-            Image(systemName: icon)
-                .font(.system(size: 80))
-                .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+            // Premium Feature Illustration
+            Image("Illustrations/premium-feature")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: 300, maxHeight: 300)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
             // Title
             Text("Premium Feature")
@@ -109,7 +112,8 @@ struct SubscriptionGate: ViewModifier {
     let featureName: String
     let featureDescription: String
     let icon: String
-    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    // MEMORY OPTIMIZATION: Use @ObservedObject for observable shared singleton
+    @ObservedObject private var gatekeeper = SubscriptionGatekeeper.shared
     
     func body(content: Content) -> some View {
         Group {

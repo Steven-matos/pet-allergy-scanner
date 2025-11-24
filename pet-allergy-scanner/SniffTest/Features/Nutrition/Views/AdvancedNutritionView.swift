@@ -22,12 +22,14 @@ import SwiftUI
  */
 struct AdvancedNutritionView: View {
     @EnvironmentObject var authService: AuthService
-    @State private var petService = CachedPetService.shared
-    @StateObject private var petSelectionService = NutritionPetSelectionService.shared
-    @StateObject private var unitService = WeightUnitPreferenceService.shared
-    @StateObject private var cachedNutritionService = CachedNutritionService.shared
-    @StateObject private var cachedWeightService = CachedWeightTrackingService.shared
-    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    // MEMORY OPTIMIZATION: Use direct access for non-observable services, @ObservedObject for observable ones
+    // @ObservedObject is better than @StateObject for shared singletons as it doesn't create new instances
+    private let petService = CachedPetService.shared
+    @ObservedObject private var petSelectionService = NutritionPetSelectionService.shared
+    @ObservedObject private var unitService = WeightUnitPreferenceService.shared
+    private let cachedNutritionService = CachedNutritionService.shared
+    private let cachedWeightService = CachedWeightTrackingService.shared
+    @ObservedObject private var gatekeeper = SubscriptionGatekeeper.shared
     @State private var selectedTab = 0
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -66,23 +68,98 @@ struct AdvancedNutritionView: View {
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if selectedTab == 0 && selectedPet != nil {
-                        // Weight tab - Add Weight button
-                        Button(action: {
-                            showingWeightEntry = true
-                        }) {
-                            HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(ModernDesignSystem.Typography.caption)
-                                Text("Add Weight")
-                                    .font(ModernDesignSystem.Typography.subheadline)
-                                    .fontWeight(.medium)
+                // Only show toolbar items if user has premium access
+                if gatekeeper.canAccessAnalytics() {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        if selectedTab == 0 && selectedPet != nil {
+                            // Weight tab - Add Weight button
+                            Button(action: {
+                                showingWeightEntry = true
+                            }) {
+                                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                    Text("Add Weight")
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                                .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                                .background(ModernDesignSystem.Colors.buttonPrimary)
+                                .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                                .shadow(
+                                    color: ModernDesignSystem.Shadows.small.color,
+                                    radius: ModernDesignSystem.Shadows.small.radius,
+                                    x: ModernDesignSystem.Shadows.small.x,
+                                    y: ModernDesignSystem.Shadows.small.y
+                                )
                             }
-                            .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                        } else if selectedTab == 1 && selectedPet != nil {
+                            // Trends tab - Period selector
+                            Button(action: {
+                                showingPeriodSelector = true
+                            }) {
+                                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                    Image(systemName: "calendar")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                    
+                                    Text(selectedPeriod.displayName)
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    
+                                    Image(systemName: "chevron.down")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
+                                .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                                .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                                .background(ModernDesignSystem.Colors.softCream)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                                )
+                                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                                .shadow(
+                                    color: ModernDesignSystem.Shadows.small.color,
+                                    radius: ModernDesignSystem.Shadows.small.radius,
+                                    x: ModernDesignSystem.Shadows.small.x,
+                                    y: ModernDesignSystem.Shadows.small.y
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Menu {
+                            Button("Refresh Data") {
+                                loadNutritionData()
+                            }
+                            .disabled(selectedPet == nil || isLoading)
+                            
+                            if selectedPet != nil {
+                                Button("Change Pet") {
+                                    petSelectionService.clearSelection()
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 2) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    Circle()
+                                        .fill(ModernDesignSystem.Colors.textPrimary)
+                                        .frame(width: 4, height: 4)
+                                }
+                            }
                             .padding(.horizontal, ModernDesignSystem.Spacing.md)
                             .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                            .background(ModernDesignSystem.Colors.buttonPrimary)
+                            .background(ModernDesignSystem.Colors.softCream)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                            )
                             .cornerRadius(ModernDesignSystem.CornerRadius.small)
                             .shadow(
                                 color: ModernDesignSystem.Shadows.small.color,
@@ -91,78 +168,6 @@ struct AdvancedNutritionView: View {
                                 y: ModernDesignSystem.Shadows.small.y
                             )
                         }
-                    } else if selectedTab == 1 && selectedPet != nil {
-                        // Trends tab - Period selector
-                        Button(action: {
-                            showingPeriodSelector = true
-                        }) {
-                            HStack(spacing: ModernDesignSystem.Spacing.sm) {
-                                Image(systemName: "calendar")
-                                    .font(ModernDesignSystem.Typography.caption)
-                                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                                
-                                Text(selectedPeriod.displayName)
-                                    .font(ModernDesignSystem.Typography.subheadline)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                                
-                                Image(systemName: "chevron.down")
-                                    .font(ModernDesignSystem.Typography.caption)
-                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                            }
-                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                            .background(ModernDesignSystem.Colors.softCream)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                            )
-                            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-                            .shadow(
-                                color: ModernDesignSystem.Shadows.small.color,
-                                radius: ModernDesignSystem.Shadows.small.radius,
-                                x: ModernDesignSystem.Shadows.small.x,
-                                y: ModernDesignSystem.Shadows.small.y
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button("Refresh Data") {
-                            loadNutritionData()
-                        }
-                        .disabled(selectedPet == nil || isLoading)
-                        
-                        if selectedPet != nil {
-                            Button("Change Pet") {
-                                petSelectionService.clearSelection()
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 2) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                Circle()
-                                    .fill(ModernDesignSystem.Colors.textPrimary)
-                                    .frame(width: 4, height: 4)
-                            }
-                        }
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(ModernDesignSystem.Colors.softCream)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                        )
-                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
-                        .shadow(
-                            color: ModernDesignSystem.Shadows.small.color,
-                            radius: ModernDesignSystem.Shadows.small.radius,
-                            x: ModernDesignSystem.Shadows.small.x,
-                            y: ModernDesignSystem.Shadows.small.y
-                        )
                     }
                 }
             }
@@ -202,6 +207,17 @@ struct AdvancedNutritionView: View {
         }
         .onAppear {
             loadNutritionDataIfNeeded()
+        }
+        .onDisappear {
+            // MEMORY OPTIMIZATION: Clear cached data when view disappears to free memory
+            // This helps prevent memory buildup when navigating between tabs
+            Task {
+                // Clear image cache if memory pressure is high
+                let stats = MemoryEfficientImageCache.shared.getCacheStats()
+                if stats.memoryUsage > 20_000_000 { // If over 20MB
+                    MemoryEfficientImageCache.shared.clearCache()
+                }
+            }
         }
     }
     
@@ -285,15 +301,12 @@ struct AdvancedNutritionView: View {
     
     private func petHeaderSection(_ pet: Pet) -> some View {
         HStack {
-            AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Image(systemName: "pawprint.circle.fill")
-                    .font(.title)
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-            }
+            // MEMORY OPTIMIZATION: Use RemoteImageView for memory-efficient image loading
+            RemoteImageView(
+                petImageUrl: pet.imageUrl,
+                species: pet.species,
+                contentMode: .fill
+            )
             .frame(width: 50, height: 50)
             .clipShape(Circle())
             .overlay(
@@ -514,20 +527,18 @@ struct AdvancedNutritionView: View {
 struct AdvancedNutritionPetSelectionCard: View {
     let pet: Pet
     let onTap: () -> Void
-    @StateObject private var unitService = WeightUnitPreferenceService.shared
+    // MEMORY OPTIMIZATION: Use @ObservedObject for observable shared singleton
+    @ObservedObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
         Button(action: onTap) {
             HStack {
-                AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "pawprint.circle.fill")
-                        .font(.title)
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                }
+                // MEMORY OPTIMIZATION: Use RemoteImageView for memory-efficient image loading
+                RemoteImageView(
+                    petImageUrl: pet.imageUrl,
+                    species: pet.species,
+                    contentMode: .fill
+                )
                 .frame(width: 50, height: 50)
                 .clipShape(Circle())
                 .overlay(
@@ -579,10 +590,11 @@ struct AdvancedNutritionPetSelectionCard: View {
 
 struct AdvancedAnalyticsView: View {
     @EnvironmentObject var authService: AuthService
-    @StateObject private var analyticsService = AdvancedAnalyticsService.shared
-    @StateObject private var cachedNutritionService = CachedNutritionService.shared
-    @StateObject private var cachedWeightService = CachedWeightTrackingService.shared
-    @StateObject private var petSelectionService = NutritionPetSelectionService.shared
+    // MEMORY OPTIMIZATION: Use direct access for non-observable services, @ObservedObject for observable ones
+    private let analyticsService = AdvancedAnalyticsService.shared
+    private let cachedNutritionService = CachedNutritionService.shared
+    private let cachedWeightService = CachedWeightTrackingService.shared
+    @ObservedObject private var petSelectionService = NutritionPetSelectionService.shared
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var healthInsights: HealthInsights?

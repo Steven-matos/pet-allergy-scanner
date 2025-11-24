@@ -34,6 +34,7 @@ struct AddHealthEventView: View {
     @State private var errorMessage = ""
     @State private var hasAutoSelectedPet = false
     @State private var showingPaywall = false
+    @State private var showingUpgradePrompt = false
     
     // Medication-specific fields
     @State private var medicationName = ""
@@ -128,14 +129,16 @@ struct AddHealthEventView: View {
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
         }
-        .sheet(isPresented: Binding(
-            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
-            set: { gatekeeper.showingUpgradePrompt = $0 }
-        )) {
+        .sheet(isPresented: $showingUpgradePrompt) {
             UpgradePromptView(
-                title: gatekeeper.upgradePromptTitle,
-                message: gatekeeper.upgradePromptMessage
+                title: gatekeeper.upgradePromptTitle.isEmpty ? "Premium Feature" : gatekeeper.upgradePromptTitle,
+                message: gatekeeper.upgradePromptMessage.isEmpty ? "This feature is available with SniffTest Premium." : gatekeeper.upgradePromptMessage
             )
+            .onDisappear {
+                // Reset both states when sheet dismisses
+                showingUpgradePrompt = false
+                gatekeeper.showingUpgradePrompt = false
+            }
         }
     }
     
@@ -581,7 +584,11 @@ struct AddHealthEventView: View {
                             .font(.caption)
                         
                         Button("Upgrade") {
-                            gatekeeper.showHealthTrackingPrompt()
+                            // Set the upgrade prompt message directly without triggering gatekeeper state
+                            gatekeeper.upgradePromptTitle = "Premium Feature"
+                            gatekeeper.upgradePromptMessage = "Medication reminders are available with SniffTest Premium. 💊\n\nSet up automatic reminders to never miss a dose!"
+                            // Show the sheet using local state
+                            showingUpgradePrompt = true
                         }
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.primary)
@@ -758,7 +765,11 @@ struct AddHealthEventView: View {
                     }
                     
                     Button(action: {
-                        gatekeeper.showHealthTrackingPrompt()
+                        // Set the upgrade prompt message directly without triggering gatekeeper state
+                        gatekeeper.upgradePromptTitle = "Premium Feature"
+                        gatekeeper.upgradePromptMessage = "Document uploads are available with SniffTest Premium. 📄\n\nUpload vet documents, test results, and medical records to keep all your pet's health information in one place!"
+                        // Show the sheet using local state
+                        showingUpgradePrompt = true
                     }) {
                         HStack {
                             Image(systemName: "crown.fill")

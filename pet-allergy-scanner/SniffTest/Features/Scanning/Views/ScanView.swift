@@ -9,14 +9,15 @@ import SwiftUI
 import AVFoundation
 
 struct ScanView: View {
-    @State private var petService = CachedPetService.shared
-    // MEMORY OPTIMIZATION: Use shared service instances instead of @State
+    // MEMORY OPTIMIZATION: Use direct access for non-observable services, @ObservedObject for observable ones
+    // @ObservedObject is better than @StateObject for shared singletons as it doesn't create new instances
+    private let petService = CachedPetService.shared
     private let hybridScanService = HybridScanService.shared
     private let scanService = ScanService.shared
     private let cameraPermissionService = CameraPermissionService.shared
     private let settingsManager = SettingsManager.shared
-    @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
-    @StateObject private var dailyScanCounter = DailyScanCounter.shared
+    @ObservedObject private var gatekeeper = SubscriptionGatekeeper.shared
+    @ObservedObject private var dailyScanCounter = DailyScanCounter.shared
     @State private var showingPetSelection = false
     @State private var selectedPet: Pet?
     @State private var showingResults = false
@@ -53,6 +54,42 @@ struct ScanView: View {
     @State private var cameraController: SimpleCameraViewController?
     @State private var isCameraPaused = false
     
+    // MARK: - Presentation State Management
+    
+    /**
+     * Computed property to check if any sheet is currently being presented
+     * Prevents multiple simultaneous presentations that cause SwiftUI errors
+     */
+    private var isAnySheetPresented: Bool {
+        showingResults ||
+        showingPetSelection ||
+        showingAddPet ||
+        showingHistory ||
+        showingProductFound ||
+        showingProductNotFound ||
+        showingNutritionalLabelScan ||
+        showingOCRResults ||
+        showingPaywall ||
+        gatekeeper.showingUpgradePrompt
+    }
+    
+    /**
+     * Safely sets a sheet presentation state, ensuring no other sheet is already presented
+     * - Parameter binding: The binding to set to true
+     * - Returns: True if the sheet can be presented, false if another sheet is already showing
+     */
+    @MainActor
+    private func safePresentSheet(_ binding: Binding<Bool>) -> Bool {
+        // If any sheet is already presented, don't present a new one
+        guard !isAnySheetPresented else {
+            print("⚠️ [SCAN_VIEW] Cannot present sheet - another sheet is already being presented")
+            return false
+        }
+        
+        binding.wrappedValue = true
+        return true
+    }
+    
     // MARK: - Helper to present scan result sheet with async/await
     private func presentScanResult(_ scan: Scan) async {
         print("🔍 [SCAN_VIEW] presentScanResult called with scan: \(scan.id)")
@@ -61,14 +98,24 @@ struct ScanView: View {
             print("🔍 [SCAN_VIEW] Scan result ingredients: \(result.ingredientsFound.count)")
         }
         
+        // Check if we can present the sheet
+        await MainActor.run {
+            guard !isAnySheetPresented else {
+                print("⚠️ [SCAN_VIEW] Cannot present scan results - another sheet is already being presented")
+                return
+            }
+        }
+        
         // Set loading state immediately
         isPreparingScanResult = true
         scanDataReady = false
         print("🔍 [SCAN_VIEW] Setting isPreparingScanResult to true")
         
         // Present loading sheet first
-        showingResults = true
-        print("🔍 [SCAN_VIEW] Showing loading sheet")
+        await MainActor.run {
+            showingResults = true
+            print("🔍 [SCAN_VIEW] Showing loading sheet")
+        }
         
         do {
             // Wait for scan data to be fully loaded and validated
@@ -197,6 +244,8 @@ struct ScanView: View {
                             
                             Button(action: {
                                 PostHogAnalytics.trackScanHistoryViewed()
+                                // Ensure no other sheet is presented before showing history
+                                guard !isAnySheetPresented else { return }
                                 showingHistory = true
                             }) {
                                 Image(systemName: "clock.arrow.circlepath")
@@ -328,6 +377,18 @@ struct ScanView: View {
             }
         }
         .navigationBarHidden(true)
+        .onDisappear {
+            // MEMORY OPTIMIZATION: Clean up camera resources and clear image cache when view disappears
+            cameraController = nil
+            
+            // Clear image cache if memory pressure is high
+            Task {
+                let stats = MemoryEfficientImageCache.shared.getCacheStats()
+                if stats.memoryUsage > 20_000_000 { // If over 20MB
+                    MemoryEfficientImageCache.shared.clearCache()
+                }
+            }
+        }
         .sheet(isPresented: $showingResults) {
             // Enhanced data validation and loading state management
             Group {
@@ -483,9 +544,18 @@ struct ScanView: View {
                         showingProductNotFound = false
                     }
                     
-                    // Resume camera for nutritional label scanning
-                    resumeCameraForNutritionalLabelScan()
-                    showingNutritionalLabelScan = true
+                    // Small delay to ensure previous sheet is fully dismissed
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        // Ensure no other sheet is presented before showing nutritional label scan
+                        guard !self.isAnySheetPresented else {
+                            print("⚠️ [SCAN_VIEW] Cannot show nutritional label scan - another sheet is already being presented")
+                            return
+                        }
+                        
+                        // Resume camera for nutritional label scanning
+                        self.resumeCameraForNutritionalLabelScan()
+                        self.showingNutritionalLabelScan = true
+                    }
                 },
                 onRetry: {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -592,11 +662,20 @@ struct ScanView: View {
                         }
                         print("🔍 [OCR_RESULTS] showingOCRResults set to false")
                         
-                        // Resume camera for retry
-                        resumeCameraForNutritionalLabelScan()
-                        showingNutritionalLabelScan = true
-                        hybridScanResult = nil
-                        print("🔍 [OCR_RESULTS] Retry setup - showingNutritionalLabelScan: \(showingNutritionalLabelScan), hybridScanResult cleared")
+                        // Small delay to ensure previous sheet is fully dismissed
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            // Ensure no other sheet is presented before showing nutritional label scan
+                            guard !self.isAnySheetPresented else {
+                                print("⚠️ [SCAN_VIEW] Cannot show nutritional label scan on retry - another sheet is already being presented")
+                                return
+                            }
+                            
+                            // Resume camera for retry
+                            self.resumeCameraForNutritionalLabelScan()
+                            self.showingNutritionalLabelScan = true
+                            self.hybridScanResult = nil
+                            print("🔍 [OCR_RESULTS] Retry setup - showingNutritionalLabelScan: \(self.showingNutritionalLabelScan), hybridScanResult cleared")
+                        }
                     }
                 )
                 .onAppear {
@@ -808,6 +887,12 @@ struct ScanView: View {
                 let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
                 
                 await MainActor.run {
+                    // Ensure no other sheet is presented before showing product sheets
+                    guard !isAnySheetPresented else {
+                        print("⚠️ [SCAN_VIEW] Cannot show product sheet - another sheet is already being presented")
+                        return
+                    }
+                    
                     if let product = product {
                         // Product found in database
                         foundProduct = product
@@ -826,6 +911,12 @@ struct ScanView: View {
             } catch {
                 // Error looking up product - treat as not found
                 await MainActor.run {
+                    // Ensure no other sheet is presented before showing product not found
+                    guard !isAnySheetPresented else {
+                        print("⚠️ [SCAN_VIEW] Cannot show product not found sheet - another sheet is already being presented")
+                        return
+                    }
+                    
                     detectedBarcode = barcode // Restore barcode for nutritional label scan
                     showingProductNotFound = true
                 }
@@ -837,6 +928,12 @@ struct ScanView: View {
     
     private func analyzeHybridResult() {
         guard let result = hybridScanResult else { return }
+        
+        // Ensure no other sheet is presented before showing pet selection or add pet
+        guard !isAnySheetPresented else {
+            print("⚠️ [SCAN_VIEW] Cannot show pet selection - another sheet is already being presented")
+            return
+        }
         
         // Don't clear the result immediately - let the analysis complete first
         // The result will be cleared after analysis completes in analyzeIngredientsWithResult
@@ -1079,6 +1176,12 @@ struct ScanView: View {
             let result = await hybridScanService.performOCROnlyScan(from: image)
             
             await MainActor.run {
+                // Ensure no other sheet is presented before showing OCR results
+                guard !isAnySheetPresented else {
+                    print("⚠️ [SCAN_VIEW] Cannot show OCR results - another sheet is already being presented")
+                    return
+                }
+                
                 // Preserve the detected barcode from the original scan
                 if let originalBarcode = detectedBarcode {
                     // Create a new result with the preserved barcode
@@ -1235,6 +1338,12 @@ struct ScanView: View {
             await performAutomaticAnalysis(result: result, foodProduct: foodProduct)
         } else {
             await MainActor.run {
+                // Ensure no other sheet is presented before showing pet selection
+                guard !isAnySheetPresented else {
+                    print("⚠️ [SCAN_VIEW] Cannot show pet selection - another sheet is already being presented")
+                    return
+                }
+                
                 print("ℹ️ Multiple pets found - showing pet selection for analysis")
                 showingPetSelection = true
             }
@@ -1546,6 +1655,12 @@ struct ScanView: View {
     private func analyzeProductForPet(_ product: FoodProduct) {
         print("🔍 [PRODUCT_ANALYSIS] analyzeProductForPet called for product: \(product.name)")
         print("🔍 [PRODUCT_ANALYSIS] Available pets: \(petService.pets.count)")
+        
+        // Ensure no other sheet is presented before showing pet selection or add pet
+        guard !isAnySheetPresented else {
+            print("⚠️ [PRODUCT_ANALYSIS] Cannot show pet selection - another sheet is already being presented")
+            return
+        }
         
         // Select pet first
         if petService.pets.count == 1 {

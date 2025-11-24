@@ -18,10 +18,12 @@ struct UpgradePromptView: View {
             VStack(spacing: ModernDesignSystem.Spacing.xl) {
                 Spacer()
                 
-                // Icon
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                // Premium Feature Illustration
+                Image("Illustrations/premium-feature")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 300, maxHeight: 300)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                     .padding(.top, ModernDesignSystem.Spacing.xxl)
                 
                 // Title
