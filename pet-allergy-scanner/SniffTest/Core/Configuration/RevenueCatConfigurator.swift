@@ -14,22 +14,43 @@ import os.log
 enum RevenueCatConfigurator {
     private static let logger = Logger(subsystem: "com.snifftest.app", category: "RevenueCat")
     
+    /// Check if RevenueCat SDK is configured and ready to use
+    @MainActor
+    private static var isConfigured: Bool {
+        RevenueCatSubscriptionProvider.shared.isConfigured
+    }
+    
     /// Configure the RevenueCat SDK and subscription provider using Info.plist values.
     @MainActor
     static func configure() {
         let apiKey = Configuration.revenueCatAPIKey
         let entitlementID = Configuration.revenueCatEntitlementID
+        
+        logger.info("🔧 Starting RevenueCat configuration...")
+        logger.info("API Key present: \(!apiKey.isEmpty), length: \(apiKey.count)")
+        logger.info("Entitlement ID: \(entitlementID)")
+        logger.info("Build mode: \(Configuration.isDebugMode ? "DEBUG" : "RELEASE")")
+        
         let providerConfiguration = RevenueCatConfiguration(apiKey: apiKey, entitlementID: entitlementID)
         
         RevenueCatSubscriptionProvider.shared.configure(with: providerConfiguration)
         
-        // Enable device identifier collection for better analytics
-        // AdSupport framework is required for attribution data
-        Purchases.shared.attribution.collectDeviceIdentifiers()
+        // Wait a moment for configuration to complete, then check
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            if isConfigured {
+                logger.info("✅ RevenueCat SDK configuration verified")
+                // Enable device identifier collection for better analytics
+                // AdSupport framework is required for attribution data
+                Purchases.shared.attribution.collectDeviceIdentifiers()
+            } else {
+                logger.warning("⚠️ RevenueCat SDK not configured - skipping device identifier collection")
+                logger.warning("Check logs above for configuration failure reason")
+            }
+        }
         
         if apiKey.isEmpty {
             logger.error("RevenueCat API key is empty. Update Info.plist with REVENUECAT_PUBLIC_SDK_KEY before shipping.")
-        } else {
         }
     }
     
@@ -39,6 +60,12 @@ enum RevenueCatConfigurator {
     /// - Parameter userId: The unique user identifier from your backend
     @MainActor
     static func identifyUser(_ userId: String) async {
+        // Guard: Only proceed if RevenueCat SDK is configured
+        guard isConfigured else {
+            logger.debug("RevenueCat SDK not configured - skipping user identification")
+            return
+        }
+        
         // Check if user is already identified to avoid duplicate calls
         let currentAppUserId = Purchases.shared.appUserID
         if currentAppUserId == userId {
@@ -111,6 +138,12 @@ enum RevenueCatConfigurator {
     /// This clears the user association but keeps anonymous purchase history
     @MainActor
     static func logoutUser() async {
+        // Guard: Only proceed if RevenueCat SDK is configured
+        guard isConfigured else {
+            logger.debug("RevenueCat SDK not configured - skipping logout")
+            return
+        }
+        
         do {
             _ = try await Purchases.shared.logOut()
         } catch {

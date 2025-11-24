@@ -337,9 +337,20 @@ struct HealthEventListView: View {
     
     private var emptyStateView: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
-            Image(systemName: "heart.text.square")
-                .font(.system(size: 48))
-                .foregroundColor(ModernDesignSystem.Colors.primary)
+            // Show species-specific tracking image based on pet type
+            Group {
+                if let imageName = getTrackingImageName() {
+                    Image(imageName)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 200, height: 200)
+                } else {
+                    // Fallback to system icon if image not found
+                    Image(systemName: "heart.text.square")
+                        .font(.system(size: 48))
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
             
             Text("No Health Events")
                 .font(ModernDesignSystem.Typography.title2)
@@ -366,6 +377,33 @@ struct HealthEventListView: View {
             )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    /**
+     * Get the appropriate tracking image name based on pet species
+     * 
+     * Returns the tracking image name for dogs (chi-chi) or cats (kenji)
+     * Images are loaded from Assets.xcassets/Illustrations
+     * Uses the same format as other illustration images: "Illustrations/image-name"
+     * - Returns: Image name string if found, nil otherwise
+     */
+    private func getTrackingImageName() -> String? {
+        let imageName: String
+        switch pet.species {
+        case .dog:
+            imageName = "Illustrations/chi-chi-tracking"
+        case .cat:
+            imageName = "Illustrations/cat-tracking"
+        }
+        
+        // Verify image exists in bundle
+        if UIImage(named: imageName) != nil {
+            print("✅ Found tracking image: \(imageName) for species: \(pet.species)")
+            return imageName
+        }
+        
+        print("⚠️ Tracking image not found: \(imageName) for species: \(pet.species)")
+        return nil
     }
     
     // MARK: - Helper Methods

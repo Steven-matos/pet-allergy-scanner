@@ -46,6 +46,11 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
     private let logger = Logger(subsystem: "com.snifftest.app", category: "RevenueCat")
     private var configuration = RevenueCatConfiguration(apiKey: "", entitlementID: "")
     private var hasConfiguredSDK = false
+    
+    /// Check if RevenueCat SDK has been successfully configured
+    var isConfigured: Bool {
+        hasConfiguredSDK
+    }
     private var activeEntitlementIDs: Set<String> = []
     private lazy var dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -59,7 +64,10 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
     /// Configure the RevenueCat SDK and prime initial data loads.
     /// - Parameter configuration: RevenueCat API key and entitlement identifier.
     func configure(with configuration: RevenueCatConfiguration) {
-        guard configuration.apiKey != self.configuration.apiKey || configuration.entitlementID != self.configuration.entitlementID else { return }
+        guard configuration.apiKey != self.configuration.apiKey || configuration.entitlementID != self.configuration.entitlementID else {
+            logger.debug("RevenueCat configuration unchanged - skipping reconfiguration")
+            return
+        }
 
         self.configuration = configuration
 
@@ -70,6 +78,7 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         }
 
         guard !hasConfiguredSDK else {
+            logger.info("RevenueCat SDK already configured - refreshing offerings and customer info")
             Task {
                 await refreshOfferings()
                 await refreshCustomerInfo()
@@ -77,10 +86,30 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             return
         }
 
+        // Check if using Test Store key in Release build - RevenueCat will fatal error
+        let isTestStoreKey = configuration.apiKey.hasPrefix("test_")
+        #if !DEBUG
+        if isTestStoreKey {
+            errorMessage = "Test Store API key cannot be used in Release builds. Please configure a production API key (REVENUECAT_PUBLIC_SDK_KEY) in Info.plist for Release builds."
+            logger.error("RevenueCat configuration failed: Test Store key used in Release build. RevenueCat SDK will fatal error if configured. Skipping configuration.")
+            // Don't configure SDK to prevent fatal error
+            return
+        }
+        #else
+        if isTestStoreKey {
+            logger.info("Using Test Store API key in Debug build - this is allowed for development.")
+        }
+        #endif
+
+        logger.info("Configuring RevenueCat SDK with API key: \(configuration.apiKey.prefix(10))... (length: \(configuration.apiKey.count))")
+        logger.info("Build configuration: DEBUG=\(Configuration.isDebugMode), isTestStoreKey=\(isTestStoreKey)")
+
         Purchases.logLevel = Configuration.isDebugMode ? .info : .warn
         Purchases.configure(withAPIKey: configuration.apiKey)
         Purchases.shared.delegate = self
         hasConfiguredSDK = true
+        
+        logger.info("✅ RevenueCat SDK configured successfully")
 
         Task {
             await refreshOfferings()

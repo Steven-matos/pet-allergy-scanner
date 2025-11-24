@@ -36,8 +36,9 @@ struct OnboardingView: View {
     @FocusState private var isBreedFieldFocused: Bool
     @FocusState private var isWeightFieldFocused: Bool
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
-    private let totalSteps = 4
+    private let totalSteps = 5
     
     var body: some View {
         NavigationStack {
@@ -68,6 +69,10 @@ struct OnboardingView: View {
                             // Step 4: Allergies & Vet Info
                             allergiesAndVetStep
                                 .tag(3)
+                            
+                            // Step 5: Premium Subscription
+                            paywallStep
+                                .tag(4)
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
                         .animation(.easeInOut, value: currentStep)
@@ -163,7 +168,7 @@ struct OnboardingView: View {
                         )
                     }
                     
-                    // Skip button (only show on first step) - 1/3 width
+                    // Skip button (only show on first step or paywall step) - 1/3 width
                     if currentStep == 0 {
                         Button("Skip for now") {
                             // Skip onboarding for this session only
@@ -178,12 +183,28 @@ struct OnboardingView: View {
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
                         )
+                    } else if currentStep == 4 {
+                        // Skip paywall button
+                        Button("Skip for now") {
+                            // Skip paywall and proceed to create pet
+                            createPet()
+                        }
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
+                        )
+                        .disabled(isCreatingPet)
                     }
                     
-                    // Next/Complete button - 2/3 width
+                    // Next/Complete/Subscribe button - 2/3 width
                     Button(action: {
                         if currentStep == totalSteps - 1 {
-                            createPet()
+                            // On paywall step, try to subscribe then create pet
+                            handlePaywallAction()
                         } else {
                             // Validate before moving forward
                             if canProceed {
@@ -208,7 +229,7 @@ struct OnboardingView: View {
                         }
                     }) {
                         ZStack {
-                            Text(currentStep == totalSteps - 1 ? "Complete Setup" : "Next")
+                            Text(buttonText)
                                 .opacity(isCreatingPet ? 0 : 1)
                             
                             if isCreatingPet {
@@ -231,8 +252,8 @@ struct OnboardingView: View {
                         RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                             .fill(ModernDesignSystem.Colors.primary)
                     )
-                    .disabled(!canProceed || isCreatingPet)
-                    .opacity((!canProceed || isCreatingPet) ? 0.5 : 1.0)
+                    .disabled((!canProceed && currentStep != 4) || isCreatingPet)
+                    .opacity(((!canProceed && currentStep != 4) || isCreatingPet) ? 0.5 : 1.0)
                 }
                 .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                 .padding(.vertical, ModernDesignSystem.Spacing.md)
@@ -601,6 +622,82 @@ struct OnboardingView: View {
         }
     }
     
+    /// Paywall step for premium subscription
+    private var paywallStep: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Premium Feature Illustration
+                Image("Illustrations/premium-feature")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 300, height: 300)
+                
+                Text("Unlock Premium Features")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text("Get unlimited scans, advanced analytics, and premium health tracking for your pet.")
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, ModernDesignSystem.Spacing.xxl)
+            
+            // Features List
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                OnboardingPaywallFeatureRow(icon: "camera.fill", title: "Unlimited Scans", subtitle: "Scan as many products as you need")
+                OnboardingPaywallFeatureRow(icon: "checkmark.shield.fill", title: "Advanced Detection", subtitle: "Get detailed sensitivity analysis")
+                OnboardingPaywallFeatureRow(icon: "chart.line.uptrend.xyaxis", title: "Health Analytics", subtitle: "Track your pet's nutrition trends")
+                OnboardingPaywallFeatureRow(icon: "pawprint.fill", title: "Unlimited Pets", subtitle: "Manage unlimited pet profiles")
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            
+            // Pricing Options (if available)
+            if !subscriptionViewModel.products.isEmpty {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("Choose Your Plan")
+                        .font(ModernDesignSystem.Typography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.xs)
+                    
+                    ForEach(Array(subscriptionViewModel.products.enumerated()), id: \.element.id) { index, product in
+                        OnboardingPricingCard(
+                            product: product,
+                            isSelected: subscriptionViewModel.isSelected(product),
+                            savings: subscriptionViewModel.savings(for: product)
+                        ) {
+                            subscriptionViewModel.selectProduct(product)
+                        }
+                    }
+                }
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+            } else if subscriptionViewModel.isLoading {
+                VStack(spacing: ModernDesignSystem.Spacing.md) {
+                    ProgressView()
+                        .tint(ModernDesignSystem.Colors.primary)
+                    Text("Loading subscription options...")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(ModernDesignSystem.Spacing.xl)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+        .task {
+            await subscriptionViewModel.refreshStatus()
+        }
+    }
+    
     // MARK: - Computed Properties
     
     /// Available years for selection (from 1900 to current year)
@@ -628,6 +725,8 @@ struct OnboardingView: View {
             return true // Physical info step (all optional)
         case 3:
             return true // Allergies and vet step (all optional)
+        case 4:
+            return true // Paywall step (always proceed)
         default:
             return false
         }
@@ -646,12 +745,41 @@ struct OnboardingView: View {
             return true // Physical info step (all optional)
         case 3:
             return true // Allergies and vet step (all optional)
+        case 4:
+            return true // Paywall step (always proceed)
         default:
             return false
         }
     }
     
+    /// Button text based on current step
+    private var buttonText: String {
+        if currentStep == totalSteps - 1 {
+            return subscriptionViewModel.selectedProductID != nil ? "Subscribe & Continue" : "Continue"
+        } else {
+            return "Next"
+        }
+    }
+    
     // MARK: - Methods
+    
+    /// Handle paywall action - subscribe if product selected, otherwise just create pet
+    private func handlePaywallAction() {
+        if subscriptionViewModel.selectedProductID != nil {
+            // User selected a subscription plan - try to purchase
+            Task {
+                await subscriptionViewModel.purchaseSubscription()
+                // After purchase attempt (success or failure), create the pet
+                // The pet creation should happen regardless of subscription status
+                await MainActor.run {
+                    createPet()
+                }
+            }
+        } else {
+            // No subscription selected - just create pet
+            createPet()
+        }
+    }
     
     private func validateForm() {
         // Convert weight to kg for validation (backend expects kg)
@@ -815,6 +943,98 @@ struct FeatureRow: View {
             
             Spacer()
         }
+    }
+}
+
+/// Feature row component for onboarding paywall
+struct OnboardingPaywallFeatureRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    
+    var body: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            Image(systemName: icon)
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+                .frame(width: 32, height: 32)
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(title)
+                    .font(ModernDesignSystem.Typography.bodyEmphasized)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(subtitle)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "checkmark.circle.fill")
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+        }
+        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+    }
+}
+
+/// Pricing card component for onboarding paywall
+struct OnboardingPricingCard: View {
+    let product: SubscriptionProduct
+    let isSelected: Bool
+    let savings: String?
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text(product.planLabel)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Text(product.price)
+                            .font(ModernDesignSystem.Typography.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        Text(product.duration)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    }
+                    
+                    if let savings = savings {
+                        Text(savings)
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .fontWeight(.semibold)
+                    }
+                }
+                
+                Spacer()
+                
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
+            }
+            .padding(ModernDesignSystem.Spacing.md)
+        }
+        .background(
+            isSelected ?
+            ModernDesignSystem.Colors.primary.opacity(0.1) :
+            ModernDesignSystem.Colors.softCream
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(
+                    isSelected ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.borderPrimary,
+                    lineWidth: isSelected ? 2 : 1
+                )
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
     }
 }
 
