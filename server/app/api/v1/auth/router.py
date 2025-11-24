@@ -516,13 +516,23 @@ async def refresh_token(
             raise
         except Exception as refresh_error:
             logger.error(f"Token refresh failed: {refresh_error}")
-            # Check if it's a token expiration issue
             error_str = str(refresh_error).lower()
+            
+            # Check if it's a rate limit error from Supabase
+            if "rate limit" in error_str or "rate_limit" in error_str or "429" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Rate limit exceeded. Please try again later.",
+                    headers={"Retry-After": "60"}
+                )
+            
+            # Check if it's a token expiration issue
             if "expired" in error_str or "invalid" in error_str or "401" in error_str:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Refresh token expired or invalid. Please login again."
                 )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error refreshing token"

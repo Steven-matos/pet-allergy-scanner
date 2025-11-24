@@ -92,7 +92,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     def _is_auth_endpoint(self, path: str) -> bool:
         """Check if the endpoint is an authentication endpoint"""
-        auth_paths = ["/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/forgot-password"]
+        auth_paths = [
+            "/api/v1/auth/login", 
+            "/api/v1/auth/register", 
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/refresh"
+        ]
         return any(path.startswith(auth_path) for auth_path in auth_paths)
     
     def _cleanup_old_entries(self):
