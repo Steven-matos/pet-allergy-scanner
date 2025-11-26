@@ -143,15 +143,16 @@ class SubscriptionChecker:
                     # Ensure user role is premium in database
                     current_role = user_data.get("role", "free")
                     
-                if current_role != "premium":
-                    from app.shared.services.user_role_manager import UserRoleManager
-                    role_manager = UserRoleManager(self.supabase)
-                    await role_manager.update_user_role(
-                        user_id, 
-                        UserRole.PREMIUM,
-                        "Admin user (protected email)"
-                    )
+                    if current_role != "premium":
+                        from app.shared.services.user_role_manager import UserRoleManager
+                        role_manager = UserRoleManager(self.supabase)
+                        await role_manager.update_user_role(
+                            user_id, 
+                            UserRole.PREMIUM,
+                            "Admin user (protected email)"
+                        )
                     
+                    # Always return premium access for bypass users
                     return {
                         "has_active_subscription": False,
                         "is_premium": True,
@@ -193,6 +194,24 @@ class SubscriptionChecker:
                 }
             
             # Step 5: No subscription found - user is free
+            # Double-check for bypass users as a safeguard (should have been caught in Step 3)
+            if user_response.data:
+                bypass_subscription = user_response.data[0].get("bypass_subscription", False)
+                if bypass_subscription:
+                    logger.warning(f"🛡️ User {user_id} has bypass_subscription but reached Step 5 - this should not happen")
+                    # Ensure premium role and return premium access
+                    from app.shared.services.user_role_manager import UserRoleManager
+                    role_manager = UserRoleManager(self.supabase)
+                    await role_manager.ensure_premium_for_bypass_user(user_id)
+                    return {
+                        "has_active_subscription": False,
+                        "is_premium": True,
+                        "is_admin": True,
+                        "source": "bypass_subscription",
+                        "subscription": None,
+                        "user_role": "premium"
+                    }
+            
             logger.info(f"❌ User {user_id} has no active subscription")
             return {
                 "has_active_subscription": False,
