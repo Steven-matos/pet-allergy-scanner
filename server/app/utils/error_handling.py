@@ -6,6 +6,7 @@ import logging
 import traceback
 import re
 from datetime import datetime
+from app.shared.services.datetime_service import DateTimeService
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -194,7 +195,7 @@ def create_error_response(
         content={
             "error": message,
             "details": details,
-            "timestamp": str(datetime.utcnow()),
+            "timestamp": DateTimeService.now_iso(),
             "path": request.url.path
         }
     )
@@ -354,5 +355,5 @@ def create_success_response(data: Any, message: str = "Success") -> Dict[str, An
         "success": True,
         "message": message,
         "data": data,
-        "timestamp": str(datetime.utcnow())
+        "timestamp": DateTimeService.now_iso()
     }

@@ -7,6 +7,8 @@ import time
 import json
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
+from app.shared.services.database_operation_service import DatabaseOperationService
 from app.core.config import settings
 from app.database import get_supabase_client
 
@@ -33,7 +35,7 @@ class MonitoringService:
         """
         try:
             event_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": DateTimeService.now_iso(),
                 "event_type": event_type,
                 "user_id": user_id,
                 "severity": severity,
@@ -44,9 +46,10 @@ class MonitoringService:
             # Log to file
             logger.critical(f"Security event: {json.dumps(event_data)}")
             
-            # Store in database if enabled
+            # Store in database if enabled using centralized service
             if settings.enable_audit_logging:
-                self.supabase.table("security_events").insert(event_data).execute()
+                db_service = DatabaseOperationService(self.supabase)
+                db_service.insert_with_timestamps("security_events", event_data, include_created_at=False)
             
             # Check if alert is needed
             if severity in ["high", "critical"]:
@@ -67,7 +70,7 @@ class MonitoringService:
         """
         try:
             metric_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": DateTimeService.now_iso(),
                 "metric_name": metric_name,
                 "value": value,
                 "tags": tags or {},
@@ -101,7 +104,7 @@ class MonitoringService:
         """
         try:
             activity_data = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": DateTimeService.now_iso(),
                 "user_id": user_id,
                 "activity_type": activity_type,
                 "details": details,
@@ -110,9 +113,10 @@ class MonitoringService:
             
             # Log to file
             
-            # Store in database if enabled
+            # Store in database if enabled using centralized service
             if settings.enable_audit_logging:
-                self.supabase.table("user_activities").insert(activity_data).execute()
+                db_service = DatabaseOperationService(self.supabase)
+                db_service.insert_with_timestamps("user_activities", activity_data, include_created_at=False)
                 
         except Exception as e:
             logger.error(f"Failed to log user activity: {e}")
@@ -128,13 +132,13 @@ class MonitoringService:
             Metrics summary
         """
         try:
-            cutoff_time = datetime.utcnow() - timedelta(hours=hours)
+            cutoff_time = DateTimeService.now() - timedelta(hours=hours)
             
             summary = {
                 "period_hours": hours,
                 "metrics": {},
                 "alerts": [],
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": DateTimeService.now_iso()
             }
             
             # Calculate metrics
@@ -221,7 +225,7 @@ class MonitoringService:
                 "status": db_status,
                 "connection_count": connection_count,
                 "response_time": round(db_response_time, 3),
-                "last_check": datetime.utcnow().isoformat() + "Z"
+                "last_check": DateTimeService.now_iso() + "Z"
             }
             
             # Check memory usage (optional, won't fail if psutil not available)
@@ -260,7 +264,7 @@ class MonitoringService:
                     "status": "unhealthy",
                     "connection_count": 0,
                     "response_time": 0.0,
-                    "last_check": datetime.utcnow().isoformat() + "Z"
+                    "last_check": DateTimeService.now_iso() + "Z"
                 },
                 "timestamp": time.time()
             }
@@ -274,7 +278,7 @@ class MonitoringService:
         """
         try:
             alert = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": DateTimeService.now_iso(),
                 "event": event_data,
                 "sent": False
             }
@@ -303,7 +307,7 @@ class MonitoringService:
             days: Number of days to keep
         """
         try:
-            cutoff_time = datetime.utcnow() - timedelta(days=days)
+            cutoff_time = DateTimeService.now() - timedelta(days=days)
             
             # Clean up metrics
             for metric_name in self.metrics:

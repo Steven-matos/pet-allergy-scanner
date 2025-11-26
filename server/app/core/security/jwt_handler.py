@@ -123,54 +123,28 @@ def get_current_user(
             logger.error(f"All JWT validation attempts failed: {type(e).__name__}, {type(e2).__name__}")
             raise credentials_exception
     
-    # Get user from database
+    # Get user from database using centralized service
     try:
-        # Use service role client to bypass RLS policies
-        from supabase import create_client
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_service_role_key
-        )
+        from app.shared.services.user_data_service import UserDataService
         
-        response = supabase.table("users").select("*").eq("id", user_id).execute()
+        user_service = UserDataService()
+        # Use sync method since get_current_user is not async
+        user_data = user_service.get_user_by_id_sync(user_id)
         
-        if not response.data:
-            logger.warning(f"User not found in database, attempting to create")
-            # Try to create the user in the database using JWT payload data
+        if not user_data:
+            # User not found - create using async method in sync context
+            import asyncio
             try:
-                # Extract user data from the JWT payload we already decoded
-                user_metadata = payload.get("user_metadata", {})
-                create_data = {
-                    "id": user_id,
-                    "email": payload.get("email"),
-                    "username": user_metadata.get("username"),
-                    "first_name": user_metadata.get("first_name"),
-                    "last_name": user_metadata.get("last_name"),
-                    "role": user_metadata.get("role", "free"),
-                    "onboarded": False
-                }
-                
-                create_response = supabase.table("users").insert(create_data).execute()
-                
-                if create_response.data:
-                    user_data = create_response.data[0]
-                    return User(**user_data)
-                else:
-                    logger.error("User creation failed: No data returned")
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="User creation failed",
-                        headers={"WWW-Authenticate": "Bearer"},
-                    )
-            except Exception as create_error:
-                logger.error(f"User creation error: {type(create_error).__name__}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User creation failed",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            user = loop.run_until_complete(
+                user_service.create_user(user_id, auth_metadata=payload)
+            )
+            return user
         
-        user_data = response.data[0]
         return User(**user_data)
         
     except Exception as e:

@@ -5,6 +5,8 @@ Handles complex nutritional analytics, pattern recognition, and predictive insig
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
+from app.shared.services.database_operation_service import DatabaseOperationService
 from decimal import Decimal
 import statistics
 import json
@@ -57,7 +59,7 @@ class AdvancedAnalyticsService:
         # Note: Pet ownership is verified by the router before calling this method
         if not force_refresh:
             cached = await self._get_cached_analytics(pet_id, analysis_type)
-            if cached and cached.expires_at > datetime.utcnow():
+            if cached and cached.expires_at > DateTimeService.now():
                 return cached
         
         # Generate new analytics
@@ -92,7 +94,7 @@ class AdvancedAnalyticsService:
         trends_response = self.supabase.table("nutritional_trends")\
             .select("*")\
             .eq("pet_id", pet_id)\
-            .gte("trend_date", (datetime.utcnow() - timedelta(days=30)).date().isoformat())\
+            .gte("trend_date", (DateTimeService.now() - timedelta(days=30)).date().isoformat())\
             .order("trend_date", desc=True)\
             .execute()
         
@@ -173,7 +175,7 @@ class AdvancedAnalyticsService:
         trends_response = self.supabase.table("nutritional_trends")\
             .select("*")\
             .eq("pet_id", pet_id)\
-            .gte("trend_date", (datetime.utcnow() - timedelta(days=days_back)).date().isoformat())\
+            .gte("trend_date", (DateTimeService.now() - timedelta(days=days_back)).date().isoformat())\
             .order("trend_date", desc=True)\
             .execute()
         
@@ -232,7 +234,7 @@ class AdvancedAnalyticsService:
             .select("*")\
             .eq("pet_id", pet_id)\
             .eq("analysis_type", analysis_type.value)\
-            .gt("expires_at", datetime.utcnow().isoformat())\
+            .gt("expires_at", DateTimeService.now_iso())\
             .order("generated_at", desc=True)\
             .limit(1)\
             .execute()
@@ -278,7 +280,7 @@ class AdvancedAnalyticsService:
             AnalyticsType.NUTRITIONAL_PATTERNS: 72
         }
         
-        expires_at = datetime.utcnow() + timedelta(hours=expiration_hours.get(analysis_type, 24))
+        expires_at = DateTimeService.now() + timedelta(hours=expiration_hours.get(analysis_type, 24))
         
         cache_data = {
             "pet_id": pet_id,
@@ -287,12 +289,10 @@ class AdvancedAnalyticsService:
             "expires_at": expires_at.isoformat()
         }
         
-        response = self.supabase.table("nutritional_analytics_cache").insert(cache_data).execute()
+        db_service = DatabaseOperationService(self.supabase)
+        result = db_service.insert_with_timestamps("nutritional_analytics_cache", cache_data)
         
-        if not response.data:
-            raise ValueError("Failed to cache analytics")
-        
-        return NutritionalAnalyticsCacheResponse(**response.data[0])
+        return NutritionalAnalyticsCacheResponse(**result)
     
     async def _analyze_weight_management(self, trends: List[Dict[str, Any]]) -> str:
         """Analyze weight management status"""
@@ -434,10 +434,10 @@ class AdvancedAnalyticsService:
                 priority="high",
                 category="weight",
                 is_active=True,
-                generated_at=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(days=30),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                generated_at=DateTimeService.now(),
+                expires_at=DateTimeService.now() + timedelta(days=30),
+                created_at=DateTimeService.now(),
+                updated_at=DateTimeService.now()
             ))
         elif weight_status == "weight_loss":
             recommendations.append(NutritionalRecommendationResponse(
@@ -449,10 +449,10 @@ class AdvancedAnalyticsService:
                 priority="critical",
                 category="diet",
                 is_active=True,
-                generated_at=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(days=14),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                generated_at=DateTimeService.now(),
+                expires_at=DateTimeService.now() + timedelta(days=14),
+                created_at=DateTimeService.now(),
+                updated_at=DateTimeService.now()
             ))
         
         # Nutritional adequacy recommendations
@@ -466,10 +466,10 @@ class AdvancedAnalyticsService:
                 priority="medium",
                 category="diet",
                 is_active=True,
-                generated_at=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(days=60),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                generated_at=DateTimeService.now(),
+                expires_at=DateTimeService.now() + timedelta(days=60),
+                created_at=DateTimeService.now(),
+                updated_at=DateTimeService.now()
             ))
         
         # Feeding consistency recommendations
@@ -483,10 +483,10 @@ class AdvancedAnalyticsService:
                 priority="low",
                 category="feeding",
                 is_active=True,
-                generated_at=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(days=30),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
+                generated_at=DateTimeService.now(),
+                expires_at=DateTimeService.now() + timedelta(days=30),
+                created_at=DateTimeService.now(),
+                updated_at=DateTimeService.now()
             ))
         
         return recommendations

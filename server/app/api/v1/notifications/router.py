@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 import json
 import asyncio
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -87,21 +88,15 @@ async def register_device_token(
         # Extract device token from request
         device_token = request.device_token
         
-        # Update user's device token
-        # Note: Supabase UPDATE may return empty data array even on success
-        # We'll verify success by checking if the update didn't raise an error
-        response = supabase.table("users").update({
-            "device_token": device_token,
-            "updated_at": datetime.utcnow().isoformat()
-        }).eq("id", current_user.id).execute()
+        # Update user's device token using centralized service
+        from app.shared.services.database_operation_service import DatabaseOperationService
         
-        # Verify update succeeded by checking for errors
-        if hasattr(response, 'error') and response.error:
-            logger.error(f"Supabase error updating device token: {response.error}")
-            raise HTTPException(status_code=500, detail="Failed to update device token")
-        
-        # If response.data is empty, it might still be successful (Supabase quirk)
-        # But if we got here without an error, assume success
+        db_service = DatabaseOperationService(supabase)
+        db_service.update_with_timestamp(
+            "users",
+            current_user.id,
+            {"device_token": device_token}
+        )
         return {"message": "Device token registered successfully"}
     except HTTPException:
         raise
@@ -133,17 +128,18 @@ async def register_device_token_anonymous(
         
         # Store device token in a temporary table with expiration
         # Token will be linked to user after authentication
-        expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        expires_at = (DateTimeService.now() + timedelta(days=30)).isoformat()
         
         try:
             # Try to insert into device_tokens_temp table
             # If table doesn't exist, we'll store in a simpler way
-            response = supabase.table("device_tokens_temp").insert({
+            from app.shared.services.database_operation_service import DatabaseOperationService
+            db_service = DatabaseOperationService(supabase)
+            db_service.insert_with_timestamps("device_tokens_temp", {
                 "device_token": device_token,
-                "created_at": datetime.utcnow().isoformat(),
                 "expires_at": expires_at,
                 "user_id": None  # Will be linked after authentication
-            }).execute()
+            })
             
         except Exception as table_error:
             # Table might not exist - log and continue

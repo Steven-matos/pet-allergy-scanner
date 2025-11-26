@@ -84,9 +84,13 @@ class SubscriptionChecker:
                             expires_at=expires_date
                         )
                         
-                        # Ensure user role is premium
-                        await self.revenuecat_service._update_user_role(
-                            user_id, UserRole.PREMIUM
+                        # Ensure user role is premium using centralized manager
+                        from app.shared.services.user_role_manager import UserRoleManager
+                        role_manager = UserRoleManager(self.supabase)
+                        await role_manager.update_user_role(
+                            user_id, 
+                            UserRole.PREMIUM,
+                            "RevenueCat subscription active"
                         )
                         
                         return {
@@ -139,10 +143,14 @@ class SubscriptionChecker:
                     # Ensure user role is premium in database
                     current_role = user_data.get("role", "free")
                     
-                    if current_role != "premium":
-                        await self.revenuecat_service._update_user_role(
-                            user_id, UserRole.PREMIUM
-                        )
+                if current_role != "premium":
+                    from app.shared.services.user_role_manager import UserRoleManager
+                    role_manager = UserRoleManager(self.supabase)
+                    await role_manager.update_user_role(
+                        user_id, 
+                        UserRole.PREMIUM,
+                        "Admin user (protected email)"
+                    )
                     
                     return {
                         "has_active_subscription": False,
@@ -167,8 +175,12 @@ class SubscriptionChecker:
                     current_role = user_response.data[0].get("role", "free") if user_response.data else "free"
                 
                 if current_role != "premium":
-                    await self.revenuecat_service._update_user_role(
-                        user_id, UserRole.PREMIUM
+                    from app.shared.services.user_role_manager import UserRoleManager
+                    role_manager = UserRoleManager(self.supabase)
+                    await role_manager.update_user_role(
+                        user_id, 
+                        UserRole.PREMIUM,
+                        "Bypass subscription user"
                     )
                 
                 return {

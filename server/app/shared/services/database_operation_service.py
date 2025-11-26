@@ -1,0 +1,256 @@
+"""
+Centralized database operation service
+
+This is the SINGLE SOURCE OF TRUTH for:
+1. Common database operations (insert, update, delete with timestamps)
+2. Consistent error handling for database operations
+3. Automatic updated_at timestamp management
+4. Standardized response handling
+
+All database operations should use this service for consistency.
+"""
+
+import logging
+from typing import Optional, Dict, Any, List
+from supabase import Client
+
+from app.shared.services.datetime_service import DateTimeService
+
+logger = logging.getLogger(__name__)
+
+
+class DatabaseOperationService:
+    """
+    Centralized service for common database operations
+    
+    This ensures:
+    - Consistent timestamp handling (created_at, updated_at)
+    - Standardized error handling
+    - Automatic field management
+    - Consistent response format
+    """
+    
+    def __init__(self, supabase: Client):
+        """
+        Initialize database operation service
+        
+        Args:
+            supabase: Supabase client instance
+        """
+        self.supabase = supabase
+    
+    def insert_with_timestamps(
+        self,
+        table_name: str,
+        data: Dict[str, Any],
+        include_created_at: bool = True,
+        include_updated_at: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Insert record with automatic timestamp management
+        
+        Args:
+            table_name: Table name
+            data: Data to insert
+            include_created_at: Whether to add created_at timestamp
+            include_updated_at: Whether to add updated_at timestamp
+            
+        Returns:
+            Inserted record data
+            
+        Raises:
+            Exception: If insert fails
+        """
+        try:
+            # Add timestamps if not already present
+            if include_created_at and "created_at" not in data:
+                data["created_at"] = DateTimeService.now_iso()
+            if include_updated_at and "updated_at" not in data:
+                data["updated_at"] = DateTimeService.now_iso()
+            
+            response = self.supabase.table(table_name).insert(data).execute()
+            
+            if not response.data:
+                raise Exception(f"Insert failed: No data returned for {table_name}")
+            
+            logger.debug(f"✅ Inserted record into {table_name}")
+            return response.data[0]
+        
+        except Exception as e:
+            logger.error(f"❌ Error inserting into {table_name}: {str(e)}", exc_info=True)
+            raise
+    
+    def update_with_timestamp(
+        self,
+        table_name: str,
+        record_id: str,
+        data: Dict[str, Any],
+        id_column: str = "id",
+        include_updated_at: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Update record with automatic updated_at timestamp
+        
+        Args:
+            table_name: Table name
+            record_id: Record ID to update
+            data: Data to update
+            id_column: Column name for ID (default: "id")
+            include_updated_at: Whether to add updated_at timestamp
+            
+        Returns:
+            Updated record data
+            
+        Raises:
+            Exception: If update fails
+        """
+        try:
+            # Add updated_at if not already present
+            if include_updated_at and "updated_at" not in data:
+                data["updated_at"] = DateTimeService.now_iso()
+            
+            response = self.supabase.table(table_name).update(data).eq(
+                id_column, record_id
+            ).execute()
+            
+            if not response.data:
+                raise Exception(
+                    f"Update failed: No data returned for {table_name} "
+                    f"record {record_id}"
+                )
+            
+            logger.debug(f"✅ Updated {table_name} record {record_id}")
+            return response.data[0]
+        
+        except Exception as e:
+            logger.error(
+                f"❌ Error updating {table_name} record {record_id}: {str(e)}",
+                exc_info=True
+            )
+            raise
+    
+    def upsert_with_timestamps(
+        self,
+        table_name: str,
+        data: Dict[str, Any],
+        conflict_column: str,
+        include_created_at: bool = True,
+        include_updated_at: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Upsert (insert or update) record with automatic timestamp management
+        
+        Args:
+            table_name: Table name
+            data: Data to upsert
+            conflict_column: Column to check for conflicts
+            include_created_at: Whether to add created_at on insert
+            include_updated_at: Whether to add updated_at
+            
+        Returns:
+            Upserted record data
+            
+        Raises:
+            Exception: If upsert fails
+        """
+        try:
+            # Check if record exists
+            existing = self.supabase.table(table_name).select("*").eq(
+                conflict_column, data.get(conflict_column)
+            ).execute()
+            
+            if existing.data:
+                # Update existing record
+                record_id = existing.data[0].get("id")
+                return self.update_with_timestamp(
+                    table_name, record_id, data, include_updated_at=include_updated_at
+                )
+            else:
+                # Insert new record
+                return self.insert_with_timestamps(
+                    table_name, data,
+                    include_created_at=include_created_at,
+                    include_updated_at=include_updated_at
+                )
+        
+        except Exception as e:
+            logger.error(f"❌ Error upserting into {table_name}: {str(e)}", exc_info=True)
+            raise
+    
+    def delete_record(
+        self,
+        table_name: str,
+        record_id: str,
+        id_column: str = "id"
+    ) -> bool:
+        """
+        Delete record by ID
+        
+        Args:
+            table_name: Table name
+            record_id: Record ID to delete
+            id_column: Column name for ID (default: "id")
+            
+        Returns:
+            True if deleted, False if not found
+            
+        Raises:
+            Exception: If delete fails
+        """
+        try:
+            response = self.supabase.table(table_name).delete().eq(
+                id_column, record_id
+            ).execute()
+            
+            deleted = bool(response.data)
+            if deleted:
+                logger.debug(f"✅ Deleted {table_name} record {record_id}")
+            else:
+                logger.warning(f"⚠️ No record found to delete: {table_name} {record_id}")
+            
+            return deleted
+        
+        except Exception as e:
+            logger.error(
+                f"❌ Error deleting {table_name} record {record_id}: {str(e)}",
+                exc_info=True
+            )
+            raise
+    
+    def get_by_id(
+        self,
+        table_name: str,
+        record_id: str,
+        id_column: str = "id",
+        columns: Optional[List[str]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get record by ID
+        
+        Args:
+            table_name: Table name
+            record_id: Record ID
+            id_column: Column name for ID (default: "id")
+            columns: Optional list of columns to select (default: all)
+            
+        Returns:
+            Record data or None if not found
+            
+        Raises:
+            Exception: If query fails
+        """
+        try:
+            query = self.supabase.table(table_name).select(
+                ",".join(columns) if columns else "*"
+            ).eq(id_column, record_id)
+            
+            response = query.execute()
+            return response.data[0] if response.data else None
+        
+        except Exception as e:
+            logger.error(
+                f"❌ Error fetching {table_name} record {record_id}: {str(e)}",
+                exc_info=True
+            )
+            raise
+

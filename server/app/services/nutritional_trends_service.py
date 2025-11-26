@@ -5,6 +5,7 @@ Handles nutritional trend analysis, pattern recognition, and insights generation
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
 import json
@@ -51,7 +52,7 @@ class NutritionalTrendsService:
         """
         # Get trend data
         # Note: Pet ownership is verified by the router before calling this method
-        start_date = datetime.utcnow() - timedelta(days=days_back)
+        start_date = DateTimeService.now() - timedelta(days=days_back)
         
         response = self.supabase.table("nutritional_trends")\
             .select("*")\

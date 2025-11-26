@@ -8,7 +8,9 @@ Future-ready module for sophisticated nutrition analysis.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
+from app.shared.services.datetime_service import DateTimeService
+from datetime import timedelta
 
 from app.database import get_db
 from app.models.user import UserResponse
@@ -242,7 +244,7 @@ async def get_advanced_recommendations(
         # Generate comprehensive recommendations
         recommendations = {
             "pet_id": pet_id,
-            "generated_at": datetime.utcnow(),
+            "generated_at": DateTimeService.now(),
             "insights": insights,
             "patterns": patterns,
             "trends": trends,

@@ -8,6 +8,9 @@ Implements DRY: Common database operations in one place
 from typing import Generic, TypeVar, Type, Optional, List, Any, Dict
 from abc import ABC, abstractmethod
 
+from app.shared.services.query_builder_service import QueryBuilderService
+from app.shared.services.pagination_service import PaginationService, PaginationResponse
+
 
 T = TypeVar('T')
 
@@ -171,3 +174,123 @@ class BaseRepository(ABC, Generic[T]):
         """
         entity = await self.get_by_id(id)
         return entity is not None
+    
+    def build_query(self) -> QueryBuilderService:
+        """
+        Create a query builder for this repository's table
+        
+        Returns:
+            QueryBuilderService instance configured for this table
+        """
+        return QueryBuilderService(self.supabase, self.table_name)
+    
+    async def search(
+        self,
+        search_fields: List[str],
+        search_term: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: Optional[str] = None,
+        desc: bool = True,
+        include_count: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Search entities with filters, pagination, and ordering
+        
+        Args:
+            search_fields: List of field names to search in
+            search_term: Search term to look for
+            filters: Optional dictionary of field:value filters
+            limit: Maximum number of results
+            offset: Number of results to skip
+            order_by: Field name to order by
+            desc: Whether to order descending
+            include_count: Whether to include total count
+            
+        Returns:
+            Dictionary with 'data' and 'count' keys
+        """
+        query_builder = self.build_query()
+        
+        if filters:
+            query_builder.with_filters(filters)
+        
+        if search_term and search_fields:
+            query_builder.with_search(search_fields, search_term)
+        
+        if order_by:
+            query_builder.with_ordering(order_by, desc)
+        
+        query_builder.with_pagination(limit, offset, include_count)
+        
+        return query_builder.execute()
+    
+    async def get_paginated(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: Optional[str] = None,
+        desc: bool = True
+    ) -> PaginationResponse[Dict[str, Any]]:
+        """
+        Get paginated results with has_more calculation
+        
+        Args:
+            filters: Optional dictionary of field:value filters
+            limit: Maximum number of results
+            offset: Number of results to skip
+            order_by: Field name to order by
+            desc: Whether to order descending
+            
+        Returns:
+            PaginationResponse with items, total_count, has_more, offset, and limit
+        """
+        query_builder = self.build_query()
+        
+        if filters:
+            query_builder.with_filters(filters)
+        
+        if order_by:
+            query_builder.with_ordering(order_by, desc)
+        
+        result = query_builder.with_pagination(limit, offset, include_count=True).execute()
+        
+        return PaginationService.build_pagination_response(
+            items=result["data"],
+            total_count=result["count"],
+            offset=offset,
+            limit=limit
+        )
+    
+    async def get_all_with_ordering(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "created_at",
+        desc: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all entities with optional filtering and ordering
+        
+        Args:
+            filters: Optional dictionary of field:value filters
+            limit: Maximum number of results to return
+            offset: Number of results to skip
+            order_by: Field name to order by
+            desc: Whether to order descending
+            
+        Returns:
+            List of entity data dictionaries
+        """
+        query_builder = self.build_query()
+        
+        if filters:
+            query_builder.with_filters(filters)
+        
+        query_builder.with_ordering(order_by, desc)
+        
+        result = query_builder.with_pagination(limit, offset).execute()
+        return result["data"]

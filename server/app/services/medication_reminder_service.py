@@ -13,6 +13,7 @@ from app.models.medication_reminder import (
     MedicationReminderUpdate,
     MedicationReminderResponse
 )
+from app.shared.services.database_operation_service import DatabaseOperationService
 
 
 class MedicationReminderService:
@@ -41,13 +42,9 @@ class MedicationReminderService:
             "is_active": reminder_data.is_active
         }
         
-        # Insert into database
-        response = supabase.table("medication_reminders").insert(db_reminder).execute()
-        
-        if not response.data:
-            raise Exception("Failed to create medication reminder")
-        
-        return response.data[0]
+        # Insert into database using centralized service
+        db_service = DatabaseOperationService(supabase)
+        return db_service.insert_with_timestamps("medication_reminders", db_reminder)
     
     @staticmethod
     async def get_medication_reminders_for_pet(
@@ -175,13 +172,12 @@ class MedicationReminderService:
             # No updates to make
             return await MedicationReminderService.get_medication_reminder_by_id(reminder_id, user_id, supabase)
         
-        # Update in database
-        response = supabase.table("medication_reminders").update(update_data).eq("id", reminder_id).eq("user_id", user_id).execute()
-        
-        if not response.data:
+        # Update in database using centralized service
+        db_service = DatabaseOperationService(supabase)
+        try:
+            reminder = db_service.update_with_timestamp("medication_reminders", reminder_id, update_data)
+        except Exception:
             return None
-        
-        reminder = response.data[0]
         
         # Parse reminder times from JSON
         if reminder.get("reminder_times"):
@@ -214,9 +210,9 @@ class MedicationReminderService:
         """
         Activate a medication reminder
         """
-        response = supabase.table("medication_reminders").update({"is_active": True}).eq("id", reminder_id).eq("user_id", user_id).execute()
-        
-        return len(response.data) > 0
+        db_service = DatabaseOperationService(supabase)
+        db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": True})
+        return True
     
     @staticmethod
     async def deactivate_medication_reminder(
@@ -227,9 +223,9 @@ class MedicationReminderService:
         """
         Deactivate a medication reminder
         """
-        response = supabase.table("medication_reminders").update({"is_active": False}).eq("id", reminder_id).eq("user_id", user_id).execute()
-        
-        return len(response.data) > 0
+        db_service = DatabaseOperationService(supabase)
+        db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": False})
+        return True
     
     @staticmethod
     async def get_medication_reminders_count_for_pet(

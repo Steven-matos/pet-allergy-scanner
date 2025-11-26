@@ -7,6 +7,7 @@ Extracted from advanced_analytics_service.py for better single responsibility.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
 
@@ -67,7 +68,7 @@ class HealthAnalyticsService:
                 trends=health_trends,
                 risks=health_risks,
                 recommendations=recommendations,
-                generated_at=datetime.utcnow()
+                generated_at=DateTimeService.now()
             )
             
         except Exception as e:
@@ -102,7 +103,7 @@ class HealthAnalyticsService:
                 "weight_trend": weight_trend,
                 "management_score": management_score,
                 "recommendations": recommendations,
-                "analysis_date": datetime.utcnow().isoformat()
+                "analysis_date": DateTimeService.now_iso()
             }
             
         except Exception as e:
@@ -123,7 +124,7 @@ class HealthAnalyticsService:
         # For now, return placeholder data
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "weight": 25.5,
                 "energy_level": "high",
                 "coat_condition": "excellent",
@@ -265,7 +266,7 @@ class HealthAnalyticsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "weight": 25.5,
                 "weight_change": 0.2
             }

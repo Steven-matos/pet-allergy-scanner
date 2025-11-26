@@ -82,18 +82,13 @@ async def signup_waitlist(signup_data: WaitlistSignup):
             # Email already exists, return existing entry with duplicate flag
             return _build_waitlist_response(existing.data[0], is_duplicate=True)
         
-        # Email doesn't exist, insert new entry
-        insert_response = supabase.table("waitlist").insert({
+        # Email doesn't exist, insert new entry using centralized service
+        from app.shared.services.database_operation_service import DatabaseOperationService
+        
+        db_service = DatabaseOperationService(supabase)
+        entry = db_service.insert_with_timestamps("waitlist", {
             "email": normalized_email
-        }).execute()
-        
-        if not insert_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to add email to waitlist"
-            )
-        
-        entry = insert_response.data[0]
+        })
         return _build_waitlist_response(entry, is_duplicate=False)
         
     except HTTPException:

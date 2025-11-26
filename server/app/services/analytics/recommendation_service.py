@@ -7,6 +7,7 @@ Extracted from advanced_analytics_service.py for better single responsibility.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
 
 from app.database import get_supabase_client
 from app.models.advanced_nutrition import (
@@ -266,7 +267,8 @@ class RecommendationService:
                 })
             
             # Seasonal recommendations
-            current_month = datetime.utcnow().month
+            from app.shared.services.datetime_service import DateTimeService
+            current_month = DateTimeService.now().month
             if current_month in [6, 7, 8]:  # Summer months
                 recommendations.append({
                     "type": "seasonal_care",
@@ -315,7 +317,7 @@ class RecommendationService:
                     "title": rec.get("title", ""),
                     "description": rec.get("description", ""),
                     "action_items": rec.get("action_items", []),
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": DateTimeService.now_iso()
                 }
                 
                 # Save to database

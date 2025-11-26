@@ -275,23 +275,24 @@ async def set_bypass_subscription(
                 detail="Only admin users can set bypass subscription flags"
             )
         
-        # Update user's bypass_subscription flag
-        update_response = supabase.table("users").update({
-            "bypass_subscription": request.bypass,
-            "role": "premium" if request.bypass else "free"
-        }).eq("id", request.user_id).execute()
+        # Update user's bypass_subscription flag using centralized services
+        from app.shared.services.database_operation_service import DatabaseOperationService
+        from app.shared.services.user_role_manager import UserRoleManager
         
-        if not update_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User {request.user_id} not found"
-            )
+        # Update bypass_subscription flag using DatabaseOperationService
+        db_service = DatabaseOperationService(supabase)
+        db_service.update_with_timestamp(
+            "users",
+            request.user_id,
+            {"bypass_subscription": request.bypass}
+        )
         
-        # If setting bypass, ensure user role is premium
-        if request.bypass:
-            await revenuecat_service._update_user_role(
+        # Update role using centralized UserRoleManager
+        role_manager = UserRoleManager(supabase)
+        await role_manager.update_user_role(
                 request.user_id, 
-                UserRole.PREMIUM
+                UserRole.PREMIUM,
+                "Bypass subscription enabled"
             )
         
         logger.info(f"Admin {current_user.id} set bypass_subscription={request.bypass} for user {request.user_id}")

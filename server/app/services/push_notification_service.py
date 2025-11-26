@@ -8,6 +8,7 @@ import json
 import ssl
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import aiohttp
 import logging
 import jwt
@@ -171,7 +172,7 @@ class PushNotificationService:
                 "apns-topic": self.apns_bundle_id,
                 "apns-push-type": "alert",
                 "apns-priority": "10",
-                "apns-expiration": str(int(datetime.utcnow().timestamp()) + 3600),  # 1 hour
+                "apns-expiration": str(int(DateTimeService.now().timestamp()) + 3600),  # 1 hour
                 "content-type": "application/json"
             }
         except Exception as e:
@@ -196,10 +197,11 @@ class PushNotificationService:
                 return ""
             
             # JWT payload with issuer, issued at, and expiration
+            now = DateTimeService.now()
             jwt_payload = {
                 "iss": self.apns_team_id,
-                "iat": int(datetime.utcnow().timestamp()),
-                "exp": int((datetime.utcnow() + timedelta(hours=1)).timestamp())
+                "iat": int(now.timestamp()),
+                "exp": int((now + timedelta(hours=1)).timestamp())
             }
             
             # Generate JWT token with ES256 algorithm

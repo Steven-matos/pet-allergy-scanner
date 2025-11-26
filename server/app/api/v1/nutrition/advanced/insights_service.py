@@ -7,6 +7,7 @@ Future-ready service for AI-powered nutrition analysis.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ class NutritionInsightsService:
             
             insights = {
                 "pet_id": pet_id,
-                "generated_at": datetime.utcnow().isoformat(),
+                "generated_at": DateTimeService.now_iso(),
                 "insight_type": insight_type
             }
             
@@ -109,7 +110,7 @@ class NutritionInsightsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "calories": 300,
                 "protein": 25,
                 "carbs": 15,

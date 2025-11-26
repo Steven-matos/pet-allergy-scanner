@@ -11,6 +11,8 @@ Documentation:
 
 import httpx
 from datetime import datetime, timezone
+from app.shared.services.datetime_service import DateTimeService
+from app.shared.services.database_operation_service import DatabaseOperationService
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from supabase import Client
@@ -443,7 +445,7 @@ class RevenueCatService:
                 "status": status,
                 "product_id": product_id,
                 "tier": tier,
-                "updated_at": datetime.now(timezone.utc).isoformat()
+                "updated_at": DateTimeService.now_iso()
             }
             
             # Map expires_at to expiration_date (correct column name)
@@ -451,29 +453,43 @@ class RevenueCatService:
                 subscription_data["expiration_date"] = expires_at
             
             # If subscription exists, update it; otherwise create new
+            db_service = DatabaseOperationService(self.supabase)
+            
             if existing_response.data and len(existing_response.data) > 0:
-                # Update existing subscription
-                # Use original_transaction_id as the key if available
+                # Update existing subscription using centralized service
                 existing_sub = existing_response.data[0]
-                original_transaction_id = existing_sub.get("original_transaction_id")
+                subscription_id = existing_sub.get("id")
                 
-                if original_transaction_id:
-                    response = self.supabase.table("subscriptions").update(subscription_data).eq(
-                        "original_transaction_id", original_transaction_id
-                    ).execute()
+                if subscription_id:
+                    # Use DatabaseOperationService for update
+                    db_service.update_with_timestamp(
+                        "subscriptions",
+                        subscription_id,
+                        subscription_data
+                    )
                 else:
-                    # Fallback to user_id if no transaction ID
-                    response = self.supabase.table("subscriptions").update(subscription_data).eq(
-                        "user_id", user_id
-                    ).execute()
+                    # Fallback: update by original_transaction_id (less ideal but handles edge cases)
+                    original_transaction_id = existing_sub.get("original_transaction_id")
+                    if original_transaction_id:
+                        # Direct update for this edge case - add updated_at manually
+                        subscription_data["updated_at"] = DateTimeService.now_iso()
+                        response = self.supabase.table("subscriptions").update(subscription_data).eq(
+                            "original_transaction_id", original_transaction_id
+                        ).execute()
+                    else:
+                        # Fallback to user_id
+                        subscription_data["updated_at"] = DateTimeService.now_iso()
+                        response = self.supabase.table("subscriptions").update(subscription_data).eq(
+                            "user_id", user_id
+                        ).execute()
             else:
-                # Create new subscription - need required fields
-                subscription_data["purchase_date"] = datetime.now(timezone.utc).isoformat()
-                subscription_data["original_transaction_id"] = f"rc_{user_id}_{int(datetime.now(timezone.utc).timestamp())}"
+                # Create new subscription using centralized service - need required fields
+                subscription_data["purchase_date"] = DateTimeService.now_iso()
+                subscription_data["original_transaction_id"] = f"rc_{user_id}_{int(DateTimeService.now().timestamp())}"
                 subscription_data["latest_transaction_id"] = subscription_data["original_transaction_id"]
                 subscription_data["auto_renew"] = True
                 
-                response = self.supabase.table("subscriptions").insert(subscription_data).execute()
+                db_service.insert_with_timestamps("subscriptions", subscription_data)
             
             # Verify the update succeeded
             verify_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
@@ -632,42 +648,17 @@ class RevenueCatService:
         """
         Update user's role in database
         
+        DEPRECATED: Use UserRoleManager.update_user_role() instead.
+        This method is kept for backward compatibility but now delegates to UserRoleManager.
+        
         Args:
             user_id: User ID
             role: New user role
-            allow_downgrade: If False, prevents downgrading from premium to free
+            allow_downgrade: If False, prevents downgrading from premium to free (ignored, always checked)
         """
-        try:
-            # ALWAYS check protection when trying to downgrade to free
-            # This prevents RevenueCat from downgrading manually set premium accounts
-            if role == UserRole.FREE:
-                if self._should_protect_from_downgrade(user_id):
-                    logger.warning(f"🛡️ BLOCKED downgrade attempt for protected user {user_id} - keeping premium status")
-                    # Don't update the role - keep it as premium
-                    return
-            
-            response = self.supabase.table("users").update({
-                "role": role.value,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", user_id).execute()
-            
-            # Verify the update succeeded
-            if hasattr(response, 'data') and response.data:
-                updated_user = response.data[0] if isinstance(response.data, list) and len(response.data) > 0 else None
-                if updated_user and updated_user.get("role") == role.value:
-                    logger.info(f"✅ Successfully updated user {user_id} role to {role.value}")
-                else:
-                    logger.warning(f"⚠️ User role update may have failed for user {user_id}. Expected {role.value}")
-            else:
-                # Check if user exists and verify update
-                verify_response = self.supabase.table("users").select("role").eq("id", user_id).execute()
-                if verify_response.data and verify_response.data[0].get("role") == role.value:
-                    logger.info(f"✅ Verified user {user_id} role updated to {role.value}")
-                else:
-                    logger.error(f"❌ Failed to update user {user_id} role to {role.value}")
-                    raise Exception(f"User role update verification failed for user {user_id}")
+        from app.shared.services.user_role_manager import UserRoleManager
         
-        except Exception as e:
-            logger.error(f"Error updating user role for user {user_id}: {str(e)}", exc_info=True)
-            raise
+        role_manager = UserRoleManager(self.supabase)
+        reason = f"RevenueCat service update (allow_downgrade={allow_downgrade})"
+        await role_manager.update_user_role(user_id, role, reason)
 

@@ -10,6 +10,7 @@ from app.services.image_optimizer import ImageOptimizerService
 from app.utils.logging_config import get_logger
 import uuid
 from datetime import datetime
+from app.shared.services.datetime_service import DateTimeService
 
 logger = get_logger(__name__)
 
@@ -90,7 +91,7 @@ class StorageService:
                     upload_data = image_data
             
             # Generate unique file path
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = DateTimeService.now().strftime("%Y%m%d_%H%M%S")
             file_path = f"{user_id}/scans/{scan_id}_{timestamp}.jpg"
             
             # Upload to Supabase Storage

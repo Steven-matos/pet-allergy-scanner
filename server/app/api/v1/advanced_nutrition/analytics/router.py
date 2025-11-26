@@ -8,6 +8,7 @@ Extracted from advanced_nutrition.py for better organization.
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
 from datetime import datetime
+from app.shared.services.datetime_service import DateTimeService
 
 from app.database import get_supabase_client
 from app.models.advanced_nutrition import (
@@ -108,7 +109,7 @@ async def generate_analytics(
             pet_id=pet_id,
             analysis_type=analysis_type,
             result=result,
-            generated_at=datetime.utcnow(),
+            generated_at=DateTimeService.now(),
             cached=True
         )
         
@@ -225,9 +226,10 @@ async def get_advanced_nutrition_dashboard(
         patterns = await pattern_service.analyze_nutritional_patterns(pet_id, current_user.id)
         trends = await trend_service.analyze_nutritional_trends(pet_id, current_user.id)
         
-        # Generate recommendations
+        # Generate recommendations using data transformation service
+        from app.shared.services.data_transformation_service import DataTransformationService
         health_recommendations = await recommendation_service.generate_health_recommendations(
-            pet_id, current_user.id, health_insights.dict()
+            pet_id, current_user.id, DataTransformationService.model_to_dict(health_insights)
         )
         
         return AdvancedNutritionResponse(
@@ -236,7 +238,7 @@ async def get_advanced_nutrition_dashboard(
             patterns=patterns,
             trends=trends,
             recommendations=health_recommendations,
-            generated_at=datetime.utcnow()
+            generated_at=DateTimeService.now()
         )
         
     except Exception as e:

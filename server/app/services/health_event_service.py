@@ -13,6 +13,7 @@ from app.models.health_event import (
     HealthEventResponse,
     HealthEventCategory
 )
+from app.shared.services.database_operation_service import DatabaseOperationService
 
 
 class HealthEventService:
@@ -60,13 +61,9 @@ class HealthEventService:
         else:
             db_event["documents"] = []
         
-        # Insert into database
-        response = supabase.table("health_events").insert(db_event).execute()
-        
-        if not response.data:
-            raise Exception("Failed to create health event")
-        
-        return response.data[0]
+        # Insert into database using centralized service
+        db_service = DatabaseOperationService(supabase)
+        return db_service.insert_with_timestamps("health_events", db_event)
     
     @staticmethod
     async def get_health_events_for_pet(
@@ -150,13 +147,12 @@ class HealthEventService:
             # No updates to make
             return await HealthEventService.get_health_event_by_id(event_id, user_id, supabase)
         
-        # Update in database
-        response = supabase.table("health_events").update(update_data).eq("id", event_id).eq("user_id", user_id).execute()
-        
-        if not response.data:
+        # Update in database using centralized service
+        db_service = DatabaseOperationService(supabase)
+        try:
+            return db_service.update_with_timestamp("health_events", event_id, update_data)
+        except Exception:
             return None
-        
-        return response.data[0]
     
     @staticmethod
     async def delete_health_event(

@@ -7,6 +7,7 @@ Future-ready service for sophisticated nutrition analysis.
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class AdvancedAnalyticsService:
         """
         try:
             # Calculate date range
-            end_date = datetime.utcnow()
+            end_date = DateTimeService.now()
             start_date = end_date - timedelta(days=days)
             
             # Get nutrition data for the period

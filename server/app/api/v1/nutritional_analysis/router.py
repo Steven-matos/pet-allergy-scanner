@@ -6,7 +6,6 @@ Provides nutritional analysis and recommendations for pet food
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 from datetime import datetime
-import uuid
 from app.database import get_supabase_client
 from app.models.nutritional_standards import (
     NutritionalStandardResponse,
@@ -23,6 +22,11 @@ from app.models.user import User
 from app.core.security.jwt_handler import get_current_user
 from app.shared.services.pet_authorization import verify_pet_ownership
 
+# Import centralized services
+from app.shared.services.data_transformation_service import DataTransformationService
+from app.shared.services.id_generation_service import IDGenerationService
+from app.shared.decorators.error_handler import handle_errors
+
 router = APIRouter(prefix="/nutritional-analysis", tags=["nutritional-analysis"])
 
 # Initialize nutritional calculator
@@ -30,6 +34,7 @@ nutritional_calculator = NutritionalCalculator()
 
 
 @router.post("/analyze", response_model=dict)
+@handle_errors("analyze_nutritional_content")
 async def analyze_nutritional_content(
     analysis_request: NutritionalAnalysisRequest,
     current_user: User = Depends(get_current_user)
@@ -102,8 +107,8 @@ async def analyze_nutritional_content(
             activity_level=activity_level_enum
         )
         
-        # Add nutritional analysis to the result
-        analysis_result["nutritional_analysis"] = nutritional_analysis.dict()
+        # Add nutritional analysis to the result using data transformation service
+        analysis_result["nutritional_analysis"] = DataTransformationService.model_to_dict(nutritional_analysis)
         
         return analysis_result
         
@@ -169,7 +174,7 @@ async def get_nutritional_standards(
                     updated_at = datetime.now()
             
             standards.append(NutritionalStandardResponse(
-                id=standard.get("id", str(uuid.uuid4())),
+                id=standard.get("id", IDGenerationService.generate_uuid()),
                 species=standard["species"],
                 life_stage=standard["life_stage"],
                 weight_range_min=standard["weight_range_min"],

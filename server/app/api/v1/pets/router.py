@@ -14,6 +14,14 @@ from app.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
 
+# Import centralized services
+from app.shared.services.database_operation_service import DatabaseOperationService
+from app.shared.services.response_model_service import ResponseModelService
+from app.shared.services.response_utils import handle_empty_response
+from app.shared.services.validation_service import ValidationService
+from app.shared.services.data_transformation_service import DataTransformationService
+from app.shared.decorators.error_handler import handle_errors
+
 router = APIRouter()
 logger = get_logger(__name__)
 
@@ -27,6 +35,7 @@ async def create_pet_no_slash(
     return await create_pet_with_slash(pet_data, current_user, supabase)
 
 @router.post("/", response_model=PetResponse)
+@handle_errors("create_pet")
 async def create_pet_with_slash(
     pet_data: PetCreate,
     current_user: UserResponse = Depends(get_current_user),
@@ -37,84 +46,31 @@ async def create_pet_with_slash(
     
     Creates a new pet profile for the authenticated user with species-specific validation
     """
-    try:
-        
-        # Validate species-specific requirements
-        if pet_data.species == "cat" and pet_data.weight_kg and pet_data.weight_kg > 15:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cat weight seems unusually high. Please verify the weight."
-            )
-        
-        if pet_data.species == "dog" and pet_data.weight_kg and pet_data.weight_kg > 100:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Dog weight seems unusually high. Please verify the weight."
-            )
-        
-        # Create pet record, only including non-None values
-        pet_record = {
-            "name": pet_data.name,
-            "species": pet_data.species,
-            "user_id": current_user.id
-        }
-        
-        # Add optional fields only if they have values
-        if pet_data.breed is not None:
-            pet_record["breed"] = pet_data.breed
-        if pet_data.birthday is not None:
-            pet_record["birthday"] = pet_data.birthday.isoformat()
-        if pet_data.weight_kg is not None:
-            pet_record["weight_kg"] = pet_data.weight_kg
-        if pet_data.activity_level is not None:
-            pet_record["activity_level"] = pet_data.activity_level.value
-        if pet_data.image_url is not None:
-            pet_record["image_url"] = pet_data.image_url
-        if pet_data.known_sensitivities:
-            pet_record["known_sensitivities"] = pet_data.known_sensitivities
-        if pet_data.vet_name is not None:
-            pet_record["vet_name"] = pet_data.vet_name
-        if pet_data.vet_phone is not None:
-            pet_record["vet_phone"] = pet_data.vet_phone
-        
-        # Insert pet into database
-        response = supabase.table("pets").insert(pet_record).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create pet profile"
-            )
-        
-        created_pet = response.data[0]
-        
-        return PetResponse(
-            id=created_pet["id"],
-            name=created_pet["name"],
-            species=created_pet["species"],
-            breed=created_pet.get("breed"),
-            birthday=created_pet.get("birthday"),
-            weight_kg=created_pet.get("weight_kg"),
-            activity_level=created_pet.get("activity_level"),
-            image_url=created_pet.get("image_url"),
-            known_sensitivities=created_pet.get("known_sensitivities", []),
-            vet_name=created_pet.get("vet_name"),
-            vet_phone=created_pet.get("vet_phone"),
-            user_id=created_pet["user_id"],
-            created_at=created_pet["created_at"],
-            updated_at=created_pet["updated_at"]
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error creating pet: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error creating pet profile"
-        )
+    # Validate species-specific requirements using centralized validation service
+    ValidationService.validate_pet_weight(pet_data.species, pet_data.weight_kg)
+    
+    # Prepare pet record using data transformation service
+    pet_record = DataTransformationService.model_to_dict(pet_data, exclude_none=True)
+    pet_record["user_id"] = current_user.id
+    
+    # Handle date serialization
+    if "birthday" in pet_record and pet_record["birthday"] is not None:
+        if hasattr(pet_record["birthday"], "isoformat"):
+            pet_record["birthday"] = pet_record["birthday"].isoformat()
+    
+    # Handle enum serialization
+    if "activity_level" in pet_record and hasattr(pet_record["activity_level"], "value"):
+        pet_record["activity_level"] = pet_record["activity_level"].value
+    
+    # Insert pet into database using centralized service
+    db_service = DatabaseOperationService(supabase)
+    created_pet = db_service.insert_with_timestamps("pets", pet_record)
+    
+    # Convert to response model using centralized service
+    return ResponseModelService.convert_to_model(created_pet, PetResponse)
 
 @router.get("/", response_model=List[PetResponse])
+@handle_errors("get_user_pets")
 async def get_user_pets(
     current_user: UserResponse = Depends(get_current_user),
     supabase: Client = Depends(get_authenticated_supabase_client)
@@ -124,43 +80,20 @@ async def get_user_pets(
     
     Returns a list of all pet profiles belonging to the authenticated user
     """
-    try:
-        
-        # Get pets for the current user
-        response = supabase.table("pets").select("*").eq("user_id", current_user.id).execute()
-        
-        if not response.data:
-            return []
-        
-        pets = []
-        for pet in response.data:
-            pets.append(PetResponse(
-                id=pet["id"],
-                name=pet["name"],
-                species=pet["species"],
-                breed=pet.get("breed"),
-                birthday=pet.get("birthday"),
-                weight_kg=pet.get("weight_kg"),
-                activity_level=pet.get("activity_level"),
-                image_url=pet.get("image_url"),
-                known_sensitivities=pet.get("known_sensitivities", []),
-                vet_name=pet.get("vet_name"),
-                vet_phone=pet.get("vet_phone"),
-                user_id=pet["user_id"],
-                created_at=pet["created_at"],
-                updated_at=pet["updated_at"]
-            ))
-        
-        return pets
-        
-    except Exception as e:
-        logger.error(f"Error fetching pets: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error fetching pets"
-        )
+    # Get pets for the current user using query builder
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    query_builder = QueryBuilderService(supabase, "pets")
+    result = query_builder.with_filters({"user_id": current_user.id}).execute()
+    
+    # Handle empty response using centralized utility
+    pets_data = handle_empty_response(result["data"])
+    
+    # Convert to response models using centralized service
+    return ResponseModelService.convert_list_to_models(pets_data, PetResponse)
 
 @router.get("/{pet_id}", response_model=PetResponse)
+@handle_errors("get_pet")
 async def get_pet(
     pet_id: str,
     current_user: UserResponse = Depends(get_current_user),
@@ -171,46 +104,26 @@ async def get_pet(
     
     Returns the pet profile if it belongs to the authenticated user
     """
-    try:
-        
-        # Get pet by ID and verify ownership
-        response = supabase.table("pets").select("*").eq("id", pet_id).eq("user_id", current_user.id).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
-        
-        pet = response.data[0]
-        
-        return PetResponse(
-            id=pet["id"],
-            name=pet["name"],
-            species=pet["species"],
-            breed=pet.get("breed"),
-            birthday=pet.get("birthday"),
-            weight_kg=pet.get("weight_kg"),
-            activity_level=pet.get("activity_level"),
-            image_url=pet.get("image_url"),
-            known_sensitivities=pet.get("known_sensitivities", []),
-            vet_name=pet.get("vet_name"),
-            vet_phone=pet.get("vet_phone"),
-            user_id=pet["user_id"],
-            created_at=pet["created_at"],
-            updated_at=pet["updated_at"]
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching pet: {e}")
+    # Get pet by ID and verify ownership using query builder
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    query_builder = QueryBuilderService(supabase, "pets")
+    result = query_builder.with_filters({
+        "id": pet_id,
+        "user_id": current_user.id
+    }).execute()
+    
+    if not result["data"]:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error fetching pet"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet not found"
         )
+    
+    # Convert to response model using centralized service
+    return ResponseModelService.convert_to_model(result["data"][0], PetResponse)
 
 @router.put("/{pet_id}", response_model=PetResponse)
+@handle_errors("update_pet")
 async def update_pet(
     pet_id: str,
     pet_update: PetUpdate,
@@ -222,81 +135,56 @@ async def update_pet(
     
     Updates the pet profile if it belongs to the authenticated user
     """
-    try:
+    # Verify pet exists and belongs to user
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    query_builder = QueryBuilderService(supabase, "pets")
+    existing_result = query_builder.with_filters({
+        "id": pet_id,
+        "user_id": current_user.id
+    }).select(["id"]).execute()
+    
+    if not existing_result["data"]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet not found"
+        )
         
-        # Verify pet exists and belongs to user
-        existing_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
+        # Get existing pet to validate species-specific requirements
+        from app.shared.services.query_builder_service import QueryBuilderService
         
-        if not existing_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
+        query_builder = QueryBuilderService(supabase, "pets")
+        existing_result = query_builder.select(["species"]).with_filters({
+            "id": pet_id,
+            "user_id": current_user.id
+        }).execute()
         
-        # Get existing pet to validate species-specific requirements (fixed species validation)
-        existing_pet_response = supabase.table("pets").select("species").eq("id", pet_id).eq("user_id", current_user.id).execute()
+        if existing_result["data"]:
+            existing_species = existing_result["data"][0]["species"]
+            # Validate species-specific requirements for updates using centralized validation
+            ValidationService.validate_pet_weight(existing_species, pet_update.weight_kg)
         
-        if existing_pet_response.data:
-            existing_species = existing_pet_response.data[0]["species"]
-            
-            # Validate species-specific requirements for updates
-            if existing_species == "cat" and pet_update.weight_kg and pet_update.weight_kg > 15:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Cat weight seems unusually high. Please verify the weight."
-                )
-            
-            if existing_species == "dog" and pet_update.weight_kg and pet_update.weight_kg > 100:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Dog weight seems unusually high. Please verify the weight."
-                )
-        
-        # Prepare update data
-        update_data = pet_update.dict(exclude_unset=True)
+        # Prepare update data using data transformation service
+        update_data = DataTransformationService.model_to_dict(pet_update, exclude_none=True)
         
         # Convert date objects to strings for JSON serialization
         if 'birthday' in update_data and update_data['birthday'] is not None:
-            update_data['birthday'] = update_data['birthday'].isoformat()
+            if hasattr(update_data['birthday'], 'isoformat'):
+                update_data['birthday'] = update_data['birthday'].isoformat()
         
-        # Update pet
-        response = supabase.table("pets").update(update_data).eq("id", pet_id).eq("user_id", current_user.id).execute()
+        # Handle enum serialization
+        if 'activity_level' in update_data and hasattr(update_data['activity_level'], 'value'):
+            update_data['activity_level'] = update_data['activity_level'].value
         
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update pet profile"
-            )
+        # Update pet using centralized service
+        db_service = DatabaseOperationService(supabase)
+        updated_pet = db_service.update_with_timestamp("pets", pet_id, update_data)
         
-        updated_pet = response.data[0]
-        
-        return PetResponse(
-            id=updated_pet["id"],
-            name=updated_pet["name"],
-            species=updated_pet["species"],
-            breed=updated_pet.get("breed"),
-            birthday=updated_pet.get("birthday"),
-            weight_kg=updated_pet.get("weight_kg"),
-            activity_level=updated_pet.get("activity_level"),
-            image_url=updated_pet.get("image_url"),
-            known_sensitivities=updated_pet.get("known_sensitivities", []),
-            vet_name=updated_pet.get("vet_name"),
-            vet_phone=updated_pet.get("vet_phone"),
-            user_id=updated_pet["user_id"],
-            created_at=updated_pet["created_at"],
-            updated_at=updated_pet["updated_at"]
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating pet: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error updating pet profile"
-        )
+        # Convert to response model using centralized service
+        return ResponseModelService.convert_to_model(updated_pet, PetResponse)
 
 @router.delete("/{pet_id}")
+@handle_errors("delete_pet")
 async def delete_pet(
     pet_id: str,
     current_user: UserResponse = Depends(get_current_user),
@@ -307,27 +195,23 @@ async def delete_pet(
     
     Deletes the pet profile if it belongs to the authenticated user
     """
-    try:
-        
-        # Verify pet exists and belongs to user
-        existing_response = supabase.table("pets").select("id").eq("id", pet_id).eq("user_id", current_user.id).execute()
-        
-        if not existing_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pet not found"
-            )
-        
-        # Delete pet
-        response = supabase.table("pets").delete().eq("id", pet_id).eq("user_id", current_user.id).execute()
-        
-        return {"message": "Pet profile deleted successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting pet: {e}")
+    # Verify pet exists and belongs to user
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    query_builder = QueryBuilderService(supabase, "pets")
+    existing_result = query_builder.select(["id"]).with_filters({
+        "id": pet_id,
+        "user_id": current_user.id
+    }).execute()
+    
+    if not existing_result["data"]:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error deleting pet profile"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pet not found"
         )
+    
+    # Delete pet using centralized service
+    db_service = DatabaseOperationService(supabase)
+    db_service.delete_record("pets", pet_id)
+    
+    return {"message": "Pet profile deleted successfully"}

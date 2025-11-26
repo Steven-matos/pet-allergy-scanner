@@ -6,6 +6,8 @@ import httpx
 import json
 import base64
 from datetime import datetime, timezone
+from app.shared.services.datetime_service import DateTimeService
+from app.shared.services.database_operation_service import DatabaseOperationService
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from supabase import Client
@@ -164,7 +166,7 @@ class SubscriptionService:
         tier = self._get_subscription_tier(product_id)
         
         # Determine subscription status
-        current_time = datetime.now(timezone.utc)
+        current_time = DateTimeService.now()
         expiration_date = datetime.fromtimestamp(expires_date_ms / 1000, timezone.utc)
         
         if current_time < expiration_date:
@@ -206,20 +208,26 @@ class SubscriptionService:
             "original_transaction_id", original_transaction_id
         ).execute()
         
+        db_service = DatabaseOperationService(self.supabase)
+        
         if existing.data:
-            # Update existing subscription
-            result = self.supabase.table("subscriptions").update({
+            # Update existing subscription using centralized service
+            existing_sub = existing.data[0]
+            update_data = {
                 "status": subscription_status,
                 "expiration_date": expiration_date.isoformat(),
                 "auto_renew": auto_renew,
-                "latest_transaction_id": transaction_id,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).eq("original_transaction_id", original_transaction_id).execute()
+                "latest_transaction_id": transaction_id
+            }
+            # Use original_transaction_id as the ID column for update
+            result = db_service.update_with_timestamp(
+                "subscriptions",
+                existing_sub.get("id"),
+                update_data
+            )
         else:
-            # Create new subscription
-            subscription_data["created_at"] = datetime.now(timezone.utc).isoformat()
-            subscription_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-            result = self.supabase.table("subscriptions").insert(subscription_data).execute()
+            # Create new subscription using centralized service
+            result = db_service.insert_with_timestamps("subscriptions", subscription_data)
         
         return subscription_data
     
@@ -249,7 +257,7 @@ class SubscriptionService:
             user_id: User ID
             subscription_status: Current subscription status
         """
-        from app.services.revenuecat_service import RevenueCatService
+        from app.shared.services.user_role_manager import UserRoleManager
         
         # Determine role based on subscription status
         if subscription_status in [
@@ -261,22 +269,10 @@ class SubscriptionService:
         else:
             new_role = UserRole.FREE
         
-        # Check protection before downgrading to free
-        if new_role == UserRole.FREE:
-            revenuecat_service = RevenueCatService(self.supabase)
-            if revenuecat_service._should_protect_from_downgrade(user_id):
-                logger.warning(f"🛡️ SubscriptionService: Blocked downgrade attempt for protected user {user_id}")
-                return  # Don't downgrade protected users
-        
-        # Update user role
-        try:
-            self.supabase.table("users").update({
-                "role": new_role,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).eq("id", user_id).execute()
-            
-        except Exception as e:
-            logger.error(f"Failed to update user role: {str(e)}")
+        # Use centralized role manager (ensures bypass flag is checked)
+        role_manager = UserRoleManager(self.supabase)
+        reason = f"Subscription status change: {subscription_status}"
+        await role_manager.update_user_role(user_id, new_role, reason)
     
     async def get_user_subscription(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -312,12 +308,21 @@ class SubscriptionService:
             True if successful
         """
         try:
-            self.supabase.table("subscriptions").update({
-                "auto_renew": False,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).eq("user_id", user_id).eq(
+            # Use DatabaseOperationService for update
+            # First get subscription ID
+            sub_response = self.supabase.table("subscriptions").select("id").eq("user_id", user_id).eq(
                 "original_transaction_id", original_transaction_id
-            ).execute()
+            ).limit(1).execute()
+            
+            if not sub_response.data:
+                return False
+            
+            db_service = DatabaseOperationService(self.supabase)
+            db_service.update_with_timestamp(
+                "subscriptions",
+                sub_response.data[0]["id"],
+                {"auto_renew": False}
+            )
             
             return True
         except Exception as e:

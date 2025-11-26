@@ -5,9 +5,11 @@ Handles side-by-side food comparison, nutritional analysis, and recommendations
 
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
+from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
 from ..database import get_supabase_client
+from app.shared.services.database_operation_service import DatabaseOperationService
 from ..models.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
     FoodComparisonMetrics, FoodComparisonDashboard
@@ -56,12 +58,10 @@ class FoodComparisonService:
             "comparison_data": comparison_data
         }
         
-        response = self.supabase.table("food_comparisons").insert(comparison_record).execute()
+        db_service = DatabaseOperationService(self.supabase)
+        result = db_service.insert_with_timestamps("food_comparisons", comparison_record)
         
-        if not response.data:
-            raise ValueError("Failed to create food comparison")
-        
-        return FoodComparisonResponse(**response.data[0])
+        return FoodComparisonResponse(**result)
     
     async def get_comparison(
         self, 
@@ -228,7 +228,7 @@ class FoodComparisonService:
         return {
             "foods": foods,
             "metrics": metrics.dict(),
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": DateTimeService.now_iso()
         }
     
     async def _generate_detailed_metrics(

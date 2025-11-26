@@ -16,6 +16,8 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
     """
     Merge data from auth.users and public.users tables into a single UserResponse
     
+    Uses centralized UserDataService for consistency.
+    
     Args:
         user_id: The user's ID
         auth_metadata: The user metadata from auth.users table
@@ -23,60 +25,10 @@ async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserRespons
     Returns:
         UserResponse with merged data from both tables
     """
-    from supabase import create_client
+    from app.shared.services.user_data_service import UserDataService
     
-    # Create service role client to fetch data from public.users table
-    service_supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_service_role_key
-    )
-    
-    # Get data from public.users table
-    try:
-        user_data_response = service_supabase.table("users").select("onboarded, image_url").eq("id", user_id).execute()
-        
-        onboarded_status = False
-        image_url = None
-        if user_data_response.data:
-            onboarded_status = user_data_response.data[0].get("onboarded", False)
-            image_url = user_data_response.data[0].get("image_url")
-        else:
-            # If user doesn't exist in public.users, create them
-            try:
-                create_response = service_supabase.table("users").insert({
-                    "id": user_id,
-                    "onboarded": False,
-                    "image_url": None
-                }).execute()
-                
-                if create_response.data:
-                    # User created successfully with default values
-                    pass
-                else:
-                    logger.warning(f"Failed to create user {user_id} in public.users")
-            except Exception as create_error:
-                logger.error(f"Error creating user in public.users: {create_error}")
-    
-    except Exception as e:
-        logger.error(f"Error fetching user data from public.users: {e}")
-        onboarded_status = False
-        image_url = None
-    
-    # Merge the data
-    merged_data = {
-        "id": user_id,
-        "email": auth_metadata.get("email"),
-        "username": auth_metadata.get("user_metadata", {}).get("username"),
-        "first_name": auth_metadata.get("user_metadata", {}).get("first_name"),
-        "last_name": auth_metadata.get("user_metadata", {}).get("last_name"),
-        "role": auth_metadata.get("user_metadata", {}).get("role", "free"),
-        "onboarded": onboarded_status,
-        "image_url": image_url,
-        "created_at": auth_metadata.get("created_at"),
-        "updated_at": auth_metadata.get("updated_at")
-    }
-    
-    return UserResponse(**merged_data)
+    user_service = UserDataService()
+    return await user_service.get_merged_user_data(user_id, auth_metadata)
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -131,23 +83,30 @@ async def register_user(user_data: UserCreate):
         user_id = auth_response.user.id
         user_metadata = auth_response.user.user_metadata or {}
         
-        # Create user record in public.users table using service role to bypass RLS
+        # Create user record in public.users table using centralized service
         try:
-            from app.database import get_supabase_service_role_client
-            service_supabase = get_supabase_service_role_client()
-            user_record_response = service_supabase.table("users").insert({
-                "id": user_id,
-                "email": user_data.email,
-                "username": user_data.username,
-                "first_name": user_data.first_name,
-                "last_name": user_data.last_name,
-                "role": user_data.role,
-                "onboarded": False,
-                "image_url": None
-            }).execute()
+            from app.shared.services.user_data_service import UserDataService
             
-            if not user_record_response.data:
-                logger.warning(f"Failed to create user record for {user_id}")
+            user_service = UserDataService()
+            await user_service.create_user(
+                user_id,
+                auth_metadata={
+                    "email": user_data.email,
+                    "user_metadata": {
+                        "username": user_data.username,
+                        "first_name": user_data.first_name,
+                        "last_name": user_data.last_name,
+                        "role": user_data.role.value if hasattr(user_data.role, 'value') else user_data.role
+                    }
+                },
+                additional_data={
+                    "email": user_data.email,
+                    "username": user_data.username,
+                    "first_name": user_data.first_name,
+                    "last_name": user_data.last_name,
+                    "role": user_data.role.value if hasattr(user_data.role, 'value') else user_data.role
+                }
+            )
         
         except Exception as e:
             logger.error(f"Error creating user record: {e}")
@@ -401,22 +360,29 @@ async def update_user_profile(
                 db_update["last_name"] = update_data["last_name"]
             if "username" in update_data:
                 db_update["username"] = update_data["username"]
+            # Role updates must go through centralized role manager
             if "role" in update_data:
-                db_update["role"] = update_data["role"]
+                from app.shared.services.user_role_manager import UserRoleManager
+                role_manager = UserRoleManager(supabase)
+                new_role = UserRole(update_data["role"]) if isinstance(update_data["role"], str) else update_data["role"]
+                await role_manager.update_user_role(
+                    user_id, 
+                    new_role, 
+                    "User profile update"
+                )
+                # Remove role from db_update since it's handled by role manager
+                update_data.pop("role", None)
             if "onboarded" in update_data:
                 db_update["onboarded"] = update_data["onboarded"]
             if "image_url" in update_data:
                 db_update["image_url"] = update_data["image_url"]
             
             if db_update:
-                response = supabase.table("users").update(db_update).eq("id", user_id).execute()
+                # Use DatabaseOperationService for non-role user updates
+                from app.shared.services.database_operation_service import DatabaseOperationService
                 
-                if not response.data:
-                    logger.error(f"Failed to update user {user_id}: {response}")
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Failed to update user profile"
-                    )
+                db_service = DatabaseOperationService(supabase)
+                db_service.update_with_timestamp("users", user_id, db_update)
         
         # Get updated user data
         updated_response = supabase.table("users").select("*").eq("id", user_id).execute()
@@ -430,8 +396,9 @@ async def update_user_profile(
         
         updated_user_data = updated_response.data[0]
         
-        # Return the updated user data
-        return UserResponse(**updated_user_data)
+        # Return the updated user data using response model service
+        from app.shared.services.response_model_service import ResponseModelService
+        return ResponseModelService.convert_to_model(updated_user_data, UserResponse)
         
     except HTTPException:
         raise

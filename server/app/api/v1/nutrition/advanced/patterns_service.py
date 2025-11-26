@@ -7,6 +7,7 @@ Future-ready service for pattern recognition and analysis.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class NutritionPatternsService:
             
             patterns = {
                 "pet_id": pet_id,
-                "analysis_date": datetime.utcnow().isoformat(),
+                "analysis_date": DateTimeService.now_iso(),
                 "pattern_type": pattern_type
             }
             
@@ -90,7 +91,7 @@ class NutritionPatternsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "time": "08:00",
                 "food_type": "dry_kibble",
                 "amount": 150,
@@ -112,7 +113,7 @@ class NutritionPatternsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "weight": 25.5,
                 "energy_level": "high",
                 "coat_condition": "excellent",

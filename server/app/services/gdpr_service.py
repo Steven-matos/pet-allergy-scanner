@@ -8,10 +8,12 @@ import zipfile
 import io
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 from fastapi import HTTPException, status
 from app.core.config import settings
 from app.database import get_supabase_client
-from supabase import create_client
+from app.database import get_supabase_service_role_client
+from app.shared.services.database_operation_service import DatabaseOperationService
 
 logger = get_logger(__name__)
 
@@ -20,14 +22,11 @@ class GDPRService:
     
     def __init__(self):
         self.supabase = get_supabase_client()
-        # Create service role client for admin operations
+        # Use centralized service role client for admin operations
         try:
-            self.service_supabase = create_client(
-                settings.supabase_url,
-                settings.supabase_service_role_key
-            )
+            self.service_supabase = get_supabase_service_role_client()
         except Exception as e:
-            logger.error(f"Failed to create service role client: {e}")
+            logger.error(f"Failed to get service role client: {e}")
             # Fallback to regular client if service role fails
             self.service_supabase = self.supabase
     
@@ -71,7 +70,7 @@ class GDPRService:
                 
                 # Create manifest
                 manifest = {
-                    "export_date": datetime.utcnow().isoformat(),
+                    "export_date": DateTimeService.now_iso(),
                     "user_id": user_id,
                     "data_retention_days": settings.data_retention_days,
                     "files": [
@@ -170,37 +169,57 @@ class GDPRService:
         """
         try:
             # Generate anonymous ID
-            anonymous_id = f"anon_{user_id[:8]}_{datetime.utcnow().strftime('%Y%m%d')}"
+            anonymous_id = f"anon_{user_id[:8]}_{DateTimeService.now().strftime('%Y%m%d')}"
             
-            # Anonymize user profile
-            self.supabase.table("users").update({
-                "email": f"anonymous_{anonymous_id}@deleted.local",
-                "first_name": "Anonymous",
-                "last_name": "User",
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("id", user_id).execute()
+            # Anonymize user profile using centralized service
+            db_service = DatabaseOperationService(self.supabase)
+            db_service.update_with_timestamp(
+                "users",
+                user_id,
+                {
+                    "email": f"anonymous_{anonymous_id}@deleted.local",
+                    "first_name": "Anonymous",
+                    "last_name": "User"
+                }
+            )
             
-            # Anonymize pets
-            self.supabase.table("pets").update({
-                "name": "Anonymous Pet",
-                "vet_name": None,
-                "vet_phone": None,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("user_id", user_id).execute()
+            # Anonymize pets - need to get pet IDs first
+            pets_response = self.supabase.table("pets").select("id").eq("user_id", user_id).execute()
+            if pets_response.data:
+                for pet in pets_response.data:
+                    db_service.update_with_timestamp(
+                        "pets",
+                        pet["id"],
+                        {
+                            "name": "Anonymous Pet",
+                            "vet_name": None,
+                            "vet_phone": None
+                        }
+                    )
             
-            # Anonymize scans (keep data for research but remove personal info)
-            self.supabase.table("scans").update({
-                "raw_text": "[ANONYMIZED]",
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("user_id", user_id).execute()
+            # Anonymize scans - need to get scan IDs first
+            scans_response = self.supabase.table("scans").select("id").eq("user_id", user_id).execute()
+            if scans_response.data:
+                for scan in scans_response.data:
+                    db_service.update_with_timestamp(
+                        "scans",
+                        scan["id"],
+                        {"raw_text": "[ANONYMIZED]"}
+                    )
             
-            # Anonymize favorites
-            self.supabase.table("favorites").update({
-                "product_name": "[ANONYMIZED]",
-                "brand": "[ANONYMIZED]",
-                "notes": None,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("user_id", user_id).execute()
+            # Anonymize favorites - need to get favorite IDs first
+            favorites_response = self.supabase.table("favorites").select("id").eq("user_id", user_id).execute()
+            if favorites_response.data:
+                for favorite in favorites_response.data:
+                    db_service.update_with_timestamp(
+                        "favorites",
+                        favorite["id"],
+                        {
+                            "product_name": "[ANONYMIZED]",
+                            "brand": "[ANONYMIZED]",
+                            "notes": None
+                        }
+                    )
             
             return True
             
@@ -252,8 +271,8 @@ class GDPRService:
                         # Convert datetime to ISO string for database insertion
                         created_at_str = auth_user.user.created_at.isoformat() if hasattr(auth_user.user.created_at, 'isoformat') else str(auth_user.user.created_at)
                         
-                        # Upsert user record in public.users (insert or update if exists)
-                        self.service_supabase.table("users").upsert({
+                        # Upsert user record in public.users using centralized service
+                        user_data = {
                             "id": user_id,
                             "email": auth_user.user.email,
                             "first_name": auth_user.user.user_metadata.get("first_name"),
@@ -263,7 +282,9 @@ class GDPRService:
                             "created_at": created_at_str,
                             "onboarded": False,
                             "image_url": None
-                        }).execute()
+                        }
+                        db_service = DatabaseOperationService(self.service_supabase)
+                        db_service.upsert_with_timestamps("users", user_data, conflict_column="id", include_created_at=False)
                         created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
                     else:
                         raise HTTPException(
@@ -293,20 +314,20 @@ class GDPRService:
                     elif any(error_type in str(auth_error).lower() for error_type in ["timeout", "handshake", "ssl", "connection"]):
                         logger.warning("Auth service unavailable, creating minimal user record with current timestamp")
                         try:
-                            # Create a minimal user record with current timestamp
-                            current_time = datetime.utcnow().isoformat()
-                            self.service_supabase.table("users").upsert({
+                            # Create a minimal user record with current timestamp using centralized service
+                            user_data = {
                                 "id": user_id,
                                 "email": f"user_{user_id[:8]}@temp.local",
                                 "first_name": "Unknown",
                                 "last_name": "User",
                                 "username": f"user_{user_id[:8]}",
                                 "role": "free",
-                                "created_at": current_time,
                                 "onboarded": False,
                                 "image_url": None
-                            }).execute()
-                            created_at = datetime.utcnow()
+                            }
+                            db_service = DatabaseOperationService(self.service_supabase)
+                            db_service.upsert_with_timestamps("users", user_data, conflict_column="id")
+                            created_at = DateTimeService.now()
                         except Exception as create_error:
                             logger.error(f"Failed to create minimal user record: {create_error}")
                             raise HTTPException(
@@ -324,7 +345,7 @@ class GDPRService:
             retention_date = created_at + timedelta(days=settings.data_retention_days)
             
             # Check if data should be deleted (ensure both datetimes are timezone-aware)
-            current_time = datetime.utcnow().replace(tzinfo=None)  # Make timezone-naive
+            current_time = DateTimeService.now().replace(tzinfo=None)  # Make timezone-naive
             retention_date_naive = retention_date.replace(tzinfo=None) if retention_date.tzinfo else retention_date
             should_delete = current_time > retention_date_naive
             
@@ -414,14 +435,15 @@ class GDPRService:
         """Log data deletion request"""
         try:
             deletion_log = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": DateTimeService.now_iso(),
                 "user_id": user_id,
                 "action": "data_deletion_request",
                 "legal_basis": "GDPR Article 17 - Right to erasure",
                 "status": "initiated"
             }
             
-            self.supabase.table("gdpr_requests").insert(deletion_log).execute()
+            db_service = DatabaseOperationService(self.supabase)
+            db_service.insert_with_timestamps("gdpr_requests", deletion_log)
             
         except Exception as e:
             logger.error(f"Failed to log deletion request for {user_id}: {e}")
@@ -469,7 +491,7 @@ class GDPRService:
         This should be run as a scheduled task
         """
         try:
-            cutoff_date = datetime.utcnow() - timedelta(days=settings.data_retention_days)
+            cutoff_date = DateTimeService.now() - timedelta(days=settings.data_retention_days)
             
             # Find users with expired data
             expired_users = self.supabase.table("users").select("id").lt("created_at", cutoff_date.isoformat()).execute()

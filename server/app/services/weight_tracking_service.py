@@ -53,7 +53,7 @@ class WeightTrackingService:
         Raises:
             ValueError: If weight recording fails
         """
-        # Insert weight record
+        # Insert weight record using centralized service
         # Note: Pet ownership is verified by the router before calling this method
         weight_data = {
             "pet_id": weight_record.pet_id,
@@ -63,15 +63,13 @@ class WeightTrackingService:
             "recorded_by_user_id": user_id
         }
         
-        response = self.supabase.table("pet_weight_records").insert(weight_data).execute()
-        
-        if not response.data:
-            raise ValueError("Failed to record weight")
+        db_service = DatabaseOperationService(self.supabase)
+        result = db_service.insert_with_timestamps("pet_weight_records", weight_data, include_created_at=False)
         
         # Update nutritional trends for this date
         await self._update_nutritional_trends(weight_record.pet_id, weight_record.recorded_at.date())
         
-        return PetWeightRecordResponse(**response.data[0])
+        return PetWeightRecordResponse(**result)
     
     async def get_weight_history(
         self, 
@@ -96,7 +94,7 @@ class WeightTrackingService:
         """
         # Get weight records
         # Note: Pet ownership is verified by the router before calling this method
-        start_date = datetime.utcnow() - timedelta(days=days_back)
+        start_date = DateTimeService.now() - timedelta(days=days_back)
         
         response = self.supabase.table("pet_weight_records")\
             .select("*")\
@@ -158,12 +156,10 @@ class WeightTrackingService:
             return PetWeightGoalResponse(**response.data[0])
         else:
             # Create new goal
-            response = self.supabase.table("pet_weight_goals").insert(goal_data).execute()
+            db_service = DatabaseOperationService(self.supabase)
+            result = db_service.insert_with_timestamps("pet_weight_goals", goal_data)
             
-            if not response.data:
-                raise ValueError("Failed to create weight goal")
-            
-            return PetWeightGoalResponse(**response.data[0])
+            return PetWeightGoalResponse(**result)
     
     async def create_weight_goal(
         self, 
@@ -359,14 +355,15 @@ class WeightTrackingService:
         weekly_data = []
         
         for week_offset in range(weeks):
-            week_start = datetime.utcnow() - timedelta(weeks=week_offset + 1)
+            now = DateTimeService.now()
+            week_start = now - timedelta(weeks=week_offset + 1)
             week_end = week_start + timedelta(days=6)
             
             # Get weight records for this week
             week_records = await self.get_weight_history(
                 pet_id, 
                 user_id, 
-                (week_end - datetime.utcnow()).days + 7
+                (week_end - now).days + 7
             )
             
             # Filter to this week

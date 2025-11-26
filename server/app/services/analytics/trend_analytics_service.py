@@ -7,6 +7,7 @@ Extracted from advanced_analytics_service.py for better single responsibility.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import statistics
 
 from app.database import get_supabase_client
@@ -65,7 +66,7 @@ class TrendAnalyticsService:
                 "macro_trends": macro_trends,
                 "frequency_trends": frequency_trends,
                 "insights": insights,
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": DateTimeService.now_iso()
             }
             
         except Exception as e:
@@ -104,7 +105,7 @@ class TrendAnalyticsService:
                 "weight_trends": weight_trends,
                 "energy_trends": energy_trends,
                 "health_score_trends": health_score_trends,
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": DateTimeService.now_iso()
             }
             
         except Exception as e:
@@ -140,7 +141,7 @@ class TrendAnalyticsService:
                 "analysis_type": "weekly",
                 "patterns": weekly_patterns,
                 "insights": insights,
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": DateTimeService.now_iso()
             }
             
         except Exception as e:
@@ -176,7 +177,7 @@ class TrendAnalyticsService:
                 "analysis_type": "monthly",
                 "patterns": monthly_patterns,
                 "insights": insights,
-                "generated_at": datetime.utcnow().isoformat()
+                "generated_at": DateTimeService.now_iso()
             }
             
         except Exception as e:
@@ -196,7 +197,7 @@ class TrendAnalyticsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "calories": 300,
                 "protein": 25,
                 "carbs": 15,
@@ -347,7 +348,7 @@ class TrendAnalyticsService:
         """Get health data for analysis"""
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "weight": 25.5,
                 "energy_level": "high",
                 "health_score": 88

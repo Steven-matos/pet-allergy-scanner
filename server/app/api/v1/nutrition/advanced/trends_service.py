@@ -7,6 +7,7 @@ Future-ready service for trend analysis and forecasting.
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class NutritionTrendsService:
             
             trends = {
                 "pet_id": pet_id,
-                "analysis_date": datetime.utcnow().isoformat(),
+                "analysis_date": DateTimeService.now_iso(),
                 "trend_period": trend_period,
                 "data_points": len(historical_data)
             }
@@ -83,7 +84,7 @@ class NutritionTrendsService:
             Historical data
         """
         # Calculate date range based on period
-        end_date = datetime.utcnow()
+        end_date = DateTimeService.now()
         if period == "weekly":
             start_date = end_date - timedelta(weeks=1)
         elif period == "monthly":

@@ -7,6 +7,7 @@ Extracted from advanced_analytics_service.py for better single responsibility.
 
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
+from app.shared.services.datetime_service import DateTimeService
 import statistics
 
 from app.database import get_supabase_client
@@ -66,7 +67,7 @@ class PatternAnalyticsService:
                 food_preferences=food_preferences,
                 seasonal_patterns=seasonal_patterns,
                 insights=insights,
-                generated_at=datetime.utcnow()
+                generated_at=DateTimeService.now()
             )
             
         except Exception as e:
@@ -203,7 +204,7 @@ class PatternAnalyticsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "feeding_time": "08:00",
                 "food_type": "dry_kibble",
                 "amount": 150,
@@ -328,7 +329,7 @@ class PatternAnalyticsService:
         # This would contain actual database queries
         return [
             {
-                "date": datetime.utcnow().isoformat(),
+                "date": DateTimeService.now_iso(),
                 "protein": 25,
                 "fiber": 5,
                 "vitamins": {"A": 100, "D": 50}
