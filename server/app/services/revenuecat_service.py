@@ -431,14 +431,25 @@ class RevenueCatService:
                 subscription_data["expires_at"] = expires_at
             
             # Upsert subscription record
-            self.supabase.table("subscriptions").upsert(
+            response = self.supabase.table("subscriptions").upsert(
                 subscription_data,
                 on_conflict="user_id"
             ).execute()
             
+            # Verify the update succeeded
+            verify_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
+            if verify_response.data:
+                verified_sub = verify_response.data[0]
+                if verified_sub.get("status") == status:
+                    logger.info(f"✅ Successfully updated subscription for user {user_id}: status={status}, product={product_id}")
+                else:
+                    logger.warning(f"⚠️ Subscription update verification failed for user {user_id}. Expected status {status}, got {verified_sub.get('status')}")
+            else:
+                logger.error(f"❌ Failed to verify subscription update for user {user_id}")
+                raise Exception(f"Subscription update verification failed for user {user_id}")
         
         except Exception as e:
-            logger.error(f"Error updating subscription in database: {str(e)}")
+            logger.error(f"Error updating subscription in database for user {user_id}: {str(e)}", exc_info=True)
             raise
     
     async def _update_user_role(self, user_id: str, role: UserRole) -> None:
@@ -450,13 +461,28 @@ class RevenueCatService:
             role: New user role
         """
         try:
-            self.supabase.table("users").update({
+            response = self.supabase.table("users").update({
                 "role": role.value,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }).eq("id", user_id).execute()
             
+            # Verify the update succeeded
+            if hasattr(response, 'data') and response.data:
+                updated_user = response.data[0] if isinstance(response.data, list) and len(response.data) > 0 else None
+                if updated_user and updated_user.get("role") == role.value:
+                    logger.info(f"✅ Successfully updated user {user_id} role to {role.value}")
+                else:
+                    logger.warning(f"⚠️ User role update may have failed for user {user_id}. Expected {role.value}")
+            else:
+                # Check if user exists and verify update
+                verify_response = self.supabase.table("users").select("role").eq("id", user_id).execute()
+                if verify_response.data and verify_response.data[0].get("role") == role.value:
+                    logger.info(f"✅ Verified user {user_id} role updated to {role.value}")
+                else:
+                    logger.error(f"❌ Failed to update user {user_id} role to {role.value}")
+                    raise Exception(f"User role update verification failed for user {user_id}")
         
         except Exception as e:
-            logger.error(f"Error updating user role: {str(e)}")
+            logger.error(f"Error updating user role for user {user_id}: {str(e)}", exc_info=True)
             raise
 

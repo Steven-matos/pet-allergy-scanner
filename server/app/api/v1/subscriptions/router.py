@@ -101,12 +101,14 @@ async def get_subscription_status(
         
         # If no subscription in database, verify with RevenueCat API
         # This handles cases where a purchase just happened but webhook hasn't arrived
+        # OR cases where webhook failed but subscription is actually active
         try:
             revenuecat_service = RevenueCatService(supabase)
             rc_info = await revenuecat_service.get_subscriber_info(current_user.id)
             
             if rc_info.get("has_subscription", False):
                 # RevenueCat confirms active subscription - update database
+                logger.info(f"RevenueCat API confirms subscription for user {current_user.id} - updating backend")
                 subscriber = rc_info.get("subscriber", {})
                 entitlements = rc_info.get("entitlements", {})
                 premium_entitlement = entitlements.get(RevenueCatService.PREMIUM_ENTITLEMENT, {})
@@ -138,6 +140,7 @@ async def get_subscription_status(
                         product_id = "unknown"
                         logger.warning(f"Could not extract product_id for user {current_user.id} from RevenueCat API")
                     
+                    # Update subscription record
                     await revenuecat_service._update_subscription(
                         user_id=current_user.id,
                         status="active",
@@ -146,13 +149,14 @@ async def get_subscription_status(
                         expires_at=expires_date
                     )
                     
-                    # Upgrade user role
+                    # Upgrade user role to premium
                     from app.models.user import UserRole
                     await revenuecat_service._update_user_role(current_user.id, UserRole.PREMIUM)
                     
+                    logger.info(f"✅ Backend updated: user {current_user.id} upgraded to premium via RevenueCat API sync")
+                    
                     # Refresh subscription from database
                     subscription = await subscription_service.get_user_subscription(current_user.id)
-                    
                     
                     if subscription:
                         return {

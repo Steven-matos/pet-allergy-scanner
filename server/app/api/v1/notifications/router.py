@@ -24,6 +24,10 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 security = HTTPBearer()
 
+# Maximum delay for notifications to prevent platform time_t overflow
+# Set to 1 year (31536000 seconds) to stay well within platform limits
+MAX_NOTIFICATION_DELAY_SECONDS = 31536000  # 365 * 24 * 60 * 60
+
 # Initialize push notification service
 try:
     push_service = PushNotificationService()
@@ -193,6 +197,13 @@ async def send_push_notification(
         if "delay" in payload:
             try:
                 delay = int(payload.get("delay", 0))
+                # Validate delay is within reasonable bounds
+                if delay < 0:
+                    logger.warning(f"Negative delay value: {delay}, using 0")
+                    delay = 0
+                elif delay > MAX_NOTIFICATION_DELAY_SECONDS:
+                    logger.warning(f"Delay value {delay} exceeds maximum {MAX_NOTIFICATION_DELAY_SECONDS}, capping to maximum")
+                    delay = MAX_NOTIFICATION_DELAY_SECONDS
                 # Remove delay from payload as it's not part of APNs payload
                 payload = {k: v for k, v in payload.items() if k != "delay"}
             except (ValueError, TypeError) as e:
@@ -304,19 +315,32 @@ async def schedule_engagement_notifications(
             "action": "navigate_to_scan"
         }
         
-        # Schedule notifications
+        # Schedule notifications with validated delays
+        # Calculate delays and ensure they're within bounds
+        weekly_delay = 7 * 24 * 60 * 60  # 7 days in seconds (604800)
+        monthly_delay = 30 * 24 * 60 * 60  # 30 days in seconds (2592000)
+        
+        # Validate delays are within bounds (they should be, but check anyway)
+        if weekly_delay > MAX_NOTIFICATION_DELAY_SECONDS or weekly_delay < 0:
+            logger.error(f"Invalid weekly delay: {weekly_delay}")
+            weekly_delay = min(weekly_delay, MAX_NOTIFICATION_DELAY_SECONDS)
+        
+        if monthly_delay > MAX_NOTIFICATION_DELAY_SECONDS or monthly_delay < 0:
+            logger.error(f"Invalid monthly delay: {monthly_delay}")
+            monthly_delay = min(monthly_delay, MAX_NOTIFICATION_DELAY_SECONDS)
+        
         background_tasks.add_task(
             send_delayed_notification,
             current_user.device_token,
             weekly_payload,
-            7 * 24 * 60 * 60  # 7 days in seconds
+            weekly_delay
         )
         
         background_tasks.add_task(
             send_delayed_notification,
             current_user.device_token,
             monthly_payload,
-            30 * 24 * 60 * 60  # 30 days in seconds
+            monthly_delay
         )
         
         return {"message": "Engagement notifications scheduled successfully"}
@@ -382,15 +406,30 @@ async def send_delayed_notification(device_token: str, payload: Dict[str, Any], 
         payload: Notification payload
         delay: Delay in seconds (integer)
     """
+    # Validate and clamp delay to prevent overflow errors
+    # This prevents OverflowError: timestamp out of range for platform time_t
+    MIN_DELAY_SECONDS = 0
+    
+    if delay < MIN_DELAY_SECONDS:
+        logger.warning(f"Invalid delay value {delay} seconds, using 0")
+        delay = MIN_DELAY_SECONDS
+    elif delay > MAX_NOTIFICATION_DELAY_SECONDS:
+        logger.warning(f"Delay value {delay} seconds exceeds maximum {MAX_NOTIFICATION_DELAY_SECONDS}, capping to maximum")
+        delay = MAX_NOTIFICATION_DELAY_SECONDS
+    
     # Remove delay from payload before sending (it's not part of APNs payload)
     payload_without_delay = {k: v for k, v in payload.items() if k != "delay"}
     
-    await asyncio.sleep(delay)
     try:
+        # Use asyncio.sleep with validated delay
+        await asyncio.sleep(delay)
+        
         if push_service is None:
             logger.error("Push notification service is not configured - cannot send delayed notification")
             return
         
         await push_service.send_notification(device_token, payload_without_delay)
+    except OverflowError as e:
+        logger.error(f"Overflow error with delay {delay} seconds: {e}. This should not happen after validation.")
     except Exception as e:
         logger.error(f"Failed to send delayed notification to {device_token[:20]}...: {e}")

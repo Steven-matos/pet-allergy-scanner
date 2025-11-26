@@ -73,48 +73,99 @@ async def revenuecat_webhook(
         # Parse the webhook payload
         payload = await request.json()
         
-        event_data = payload.get("event", {})
+        # RevenueCat webhook structure: payload contains "event" object with event data
+        # The event type can be in payload.type or event.type
+        event_data = payload.get("event", payload)  # Fallback to payload if no event key
         event_type = payload.get("type") or event_data.get("type")
         
+        if not event_type:
+            logger.error("No event type found in webhook payload")
+            logger.debug(f"Webhook payload structure: {payload}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing event type in webhook payload"
+            )
+        
+        user_id = event_data.get("app_user_id") or payload.get("app_user_id")
+        if not user_id:
+            logger.error(f"No app_user_id found in webhook payload for event {event_type}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing app_user_id in webhook payload"
+            )
+        
+        logger.info(f"Processing RevenueCat webhook: event_type={event_type}, user_id={user_id}")
         
         # Initialize RevenueCat service
         revenuecat_service = RevenueCatService(supabase)
         
         # Process the event based on type
-        if event_type == "INITIAL_PURCHASE":
-            await revenuecat_service.handle_initial_purchase(event_data)
+        try:
+            if event_type == "INITIAL_PURCHASE":
+                await revenuecat_service.handle_initial_purchase(event_data)
+                logger.info(f"✅ Successfully processed INITIAL_PURCHASE for user {user_id}")
+                
+            elif event_type == "RENEWAL":
+                await revenuecat_service.handle_renewal(event_data)
+                logger.info(f"✅ Successfully processed RENEWAL for user {user_id}")
+                
+            elif event_type == "CANCELLATION":
+                await revenuecat_service.handle_cancellation(event_data)
+                logger.info(f"✅ Successfully processed CANCELLATION for user {user_id}")
+                
+            elif event_type == "UNCANCELLATION":
+                await revenuecat_service.handle_uncancellation(event_data)
+                logger.info(f"✅ Successfully processed UNCANCELLATION for user {user_id}")
+                
+            elif event_type == "NON_RENEWING_PURCHASE":
+                await revenuecat_service.handle_non_renewing_purchase(event_data)
+                logger.info(f"✅ Successfully processed NON_RENEWING_PURCHASE for user {user_id}")
+                
+            elif event_type == "EXPIRATION":
+                await revenuecat_service.handle_expiration(event_data)
+                logger.info(f"✅ Successfully processed EXPIRATION for user {user_id}")
+                
+            elif event_type == "BILLING_ISSUE":
+                await revenuecat_service.handle_billing_issue(event_data)
+                logger.info(f"✅ Successfully processed BILLING_ISSUE for user {user_id}")
+                
+            elif event_type == "SUBSCRIBER_ALIAS":
+                await revenuecat_service.handle_subscriber_alias(event_data)
+                logger.info(f"✅ Successfully processed SUBSCRIBER_ALIAS for user {user_id}")
+                
+            elif event_type == "SUBSCRIPTION_PAUSED":
+                await revenuecat_service.handle_subscription_paused(event_data)
+                logger.info(f"✅ Successfully processed SUBSCRIPTION_PAUSED for user {user_id}")
+                
+            elif event_type == "TRANSFER":
+                await revenuecat_service.handle_transfer(event_data)
+                logger.info(f"✅ Successfully processed TRANSFER for user {user_id}")
+                
+            else:
+                logger.warning(f"⚠️ Unhandled RevenueCat event type: {event_type} for user {user_id}")
+                # Still return success to prevent RevenueCat from retrying
+                return {"status": "success", "message": f"Unhandled event type: {event_type}"}
             
-        elif event_type == "RENEWAL":
-            await revenuecat_service.handle_renewal(event_data)
+            # Verify the update was successful by checking user role
+            try:
+                user_response = supabase.table("users").select("role").eq("id", user_id).execute()
+                if user_response.data:
+                    updated_role = user_response.data[0].get("role")
+                    logger.info(f"✅ Verified backend update: user {user_id} role is now {updated_role}")
+                else:
+                    logger.warning(f"⚠️ Could not verify user role update for user {user_id}")
+            except Exception as verify_error:
+                logger.warning(f"⚠️ Error verifying backend update: {str(verify_error)}")
             
-        elif event_type == "CANCELLATION":
-            await revenuecat_service.handle_cancellation(event_data)
-            
-        elif event_type == "UNCANCELLATION":
-            await revenuecat_service.handle_uncancellation(event_data)
-            
-        elif event_type == "NON_RENEWING_PURCHASE":
-            await revenuecat_service.handle_non_renewing_purchase(event_data)
-            
-        elif event_type == "EXPIRATION":
-            await revenuecat_service.handle_expiration(event_data)
-            
-        elif event_type == "BILLING_ISSUE":
-            await revenuecat_service.handle_billing_issue(event_data)
-            
-        elif event_type == "SUBSCRIBER_ALIAS":
-            await revenuecat_service.handle_subscriber_alias(event_data)
-            
-        elif event_type == "SUBSCRIPTION_PAUSED":
-            await revenuecat_service.handle_subscription_paused(event_data)
-            
-        elif event_type == "TRANSFER":
-            await revenuecat_service.handle_transfer(event_data)
-            
-        else:
-            logger.warning(f"Unhandled RevenueCat event type: {event_type}")
+        except Exception as handler_error:
+            logger.error(f"❌ Error processing {event_type} for user {user_id}: {str(handler_error)}", exc_info=True)
+            # Re-raise to return error status to RevenueCat (they will retry)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process webhook event: {str(handler_error)}"
+            )
         
-        return {"status": "success"}
+        return {"status": "success", "event_type": event_type, "user_id": user_id}
         
     except HTTPException:
         raise
