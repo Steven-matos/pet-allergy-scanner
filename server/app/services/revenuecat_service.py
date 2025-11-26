@@ -226,10 +226,18 @@ class RevenueCatService:
                         entitlement_id=self.PREMIUM_ENTITLEMENT
                     )
                     
-                    # Downgrade user to free
-                    await self._update_user_role(user_id, UserRole.FREE)
+                    # Downgrade user to free, but check if user should be protected
+                    # Set allow_downgrade=False to check protection before downgrading
+                    await self._update_user_role(user_id, UserRole.FREE, allow_downgrade=False)
                     
-                    logger.info(f"User {user_id} downgraded to free")
+                    # Check if downgrade was actually applied
+                    verify_response = self.supabase.table("users").select("role").eq("id", user_id).execute()
+                    if verify_response.data:
+                        final_role = verify_response.data[0].get("role")
+                        if final_role == "premium":
+                            logger.info(f"🛡️ User {user_id} protected from downgrade - remains premium")
+                        else:
+                            logger.info(f"User {user_id} downgraded to free")
         
         except Exception as e:
             logger.error(f"Error handling expiration: {str(e)}", exc_info=True)
@@ -331,7 +339,8 @@ class RevenueCatService:
             
             # Handle subscription transfer
             if from_user_id:
-                await self._update_user_role(from_user_id, UserRole.FREE)
+                # Only downgrade if user is not protected
+                await self._update_user_role(from_user_id, UserRole.FREE, allow_downgrade=False)
             
             await self._update_user_role(to_user_id, UserRole.PREMIUM)
         
@@ -452,15 +461,96 @@ class RevenueCatService:
             logger.error(f"Error updating subscription in database for user {user_id}: {str(e)}", exc_info=True)
             raise
     
-    async def _update_user_role(self, user_id: str, role: UserRole) -> None:
+    def _should_protect_from_downgrade(self, user_id: str) -> bool:
+        """
+        Check if a user should be protected from automatic downgrades
+        This protects developer/admin accounts from RevenueCat webhook downgrades
+        
+        Args:
+            user_id: User ID to check
+            
+        Returns:
+            True if user should be protected from downgrades
+        """
+        try:
+            # Get user email to check against protected list
+            user_response = self.supabase.table("users").select("email, role").eq("id", user_id).execute()
+            
+            if not user_response.data:
+                return False
+            
+            user_email = user_response.data[0].get("email", "").lower()
+            current_role = user_response.data[0].get("role", "free")
+            
+            # Get protected emails from environment variable
+            protected_emails = []
+            if settings.protected_premium_emails:
+                protected_emails = [email.strip() for email in settings.protected_premium_emails.split(",") if email.strip()]
+            
+            # Also add hardcoded protected emails (for development/testing)
+            # You can add your email here as a fallback
+            hardcoded_protected = [
+                # Add your email addresses here if needed
+                # Example: "developer@yourcompany.com",
+                # Example: "@yourcompany.com",  # Protects entire domain
+            ]
+            protected_emails.extend(hardcoded_protected)
+            
+            # Check if user email matches protected list
+            for protected in protected_emails:
+                if protected.startswith("@"):
+                    # Domain protection
+                    if user_email.endswith(protected.lower()):
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (domain match: {protected})")
+                        return True
+                else:
+                    # Exact email match
+                    if user_email == protected.lower():
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (exact match)")
+                        return True
+            
+            # Also protect users who are already premium and have no active subscription
+            # This prevents accidental downgrades for accounts manually set to premium
+            # This is useful for developer accounts that are manually set to premium
+            if current_role == "premium":
+                # Check if there's an active subscription - if not, it might be manually set
+                subscription_response = self.supabase.table("subscriptions").select("status").eq("user_id", user_id).execute()
+                has_active_subscription = False
+                if subscription_response.data:
+                    for sub in subscription_response.data:
+                        if sub.get("status") in ["active", "grace_period", "billing_retry"]:
+                            has_active_subscription = True
+                            break
+                
+                # If user is premium but has no active subscription, protect from downgrade
+                # This assumes it was manually set (like via the script we created)
+                if not has_active_subscription:
+                    logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (premium without active subscription - likely manually set)")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking downgrade protection for user {user_id}: {str(e)}")
+            # On error, don't protect (fail open)
+            return False
+    
+    async def _update_user_role(self, user_id: str, role: UserRole, allow_downgrade: bool = True) -> None:
         """
         Update user's role in database
         
         Args:
             user_id: User ID
             role: New user role
+            allow_downgrade: If False, prevents downgrading from premium to free
         """
         try:
+            # Check if this is a downgrade attempt and if user should be protected
+            if role == UserRole.FREE and not allow_downgrade:
+                if self._should_protect_from_downgrade(user_id):
+                    logger.warning(f"🛡️ Blocked downgrade attempt for protected user {user_id}")
+                    return
+            
             response = self.supabase.table("users").update({
                 "role": role.value,
                 "updated_at": datetime.now(timezone.utc).isoformat()
