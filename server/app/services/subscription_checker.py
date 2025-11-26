@@ -58,6 +58,41 @@ class SubscriptionChecker:
             }
         """
         try:
+            # STEP 0: Check bypass_subscription flag FIRST (highest priority)
+            # This must be checked before any subscription checks to prevent downgrades
+            user_response = self.supabase.table("users").select("role, bypass_subscription").eq(
+                "id", user_id
+            ).execute()
+            
+            if user_response.data:
+                user_data = user_response.data[0]
+                bypass_subscription = user_data.get("bypass_subscription", False)
+                
+                if bypass_subscription:
+                    logger.info(f"🛡️ User {user_id} has bypass_subscription flag - granting premium access (bypassing all subscription checks)")
+                    
+                    # Ensure user role is premium in database
+                    current_role = user_data.get("role", "free")
+                    
+                    if current_role != "premium":
+                        from app.shared.services.user_role_manager import UserRoleManager
+                        role_manager = UserRoleManager(self.supabase)
+                        await role_manager.update_user_role(
+                            user_id, 
+                            UserRole.PREMIUM,
+                            "Bypass subscription user - ensuring premium role"
+                        )
+                    
+                    # Always return premium access for bypass users - skip all other checks
+                    return {
+                        "has_active_subscription": False,
+                        "is_premium": True,
+                        "is_admin": True,
+                        "source": "bypass_subscription",
+                        "subscription": None,
+                        "user_role": "premium"
+                    }
+            
             # Step 1: Check RevenueCat API (source of truth)
             try:
                 rc_info = await self.revenuecat_service.get_subscriber_info(user_id)
@@ -128,41 +163,7 @@ class SubscriptionChecker:
                             "user_role": "premium"
                         }
             
-            # Step 3: Check if user has bypass_subscription flag set
-            user_response = self.supabase.table("users").select("role, bypass_subscription").eq(
-                "id", user_id
-            ).execute()
-            
-            if user_response.data:
-                user_data = user_response.data[0]
-                bypass_subscription = user_data.get("bypass_subscription", False)
-                
-                if bypass_subscription:
-                    logger.info(f"🛡️ User {user_id} has bypass_subscription flag - granting premium access without subscription")
-                    
-                    # Ensure user role is premium in database
-                    current_role = user_data.get("role", "free")
-                    
-                    if current_role != "premium":
-                        from app.shared.services.user_role_manager import UserRoleManager
-                        role_manager = UserRoleManager(self.supabase)
-                        await role_manager.update_user_role(
-                            user_id, 
-                            UserRole.PREMIUM,
-                            "Admin user (protected email)"
-                        )
-                    
-                    # Always return premium access for bypass users
-                    return {
-                        "has_active_subscription": False,
-                        "is_premium": True,
-                        "is_admin": True,
-                        "source": "bypass_subscription",
-                        "subscription": None,
-                        "user_role": "premium"
-                    }
-            
-            # Step 4: Check if user is admin (bypass subscription requirement via email)
+            # Step 3: Check if user is admin (bypass subscription requirement via email)
             if self.revenuecat_service.is_admin_user(user_id):
                 logger.info(f"🛡️ User {user_id} is admin user - granting premium access without subscription")
                 
@@ -193,8 +194,8 @@ class SubscriptionChecker:
                     "user_role": "premium"
                 }
             
-            # Step 5: No subscription found - user is free
-            # Double-check for bypass users as a safeguard (should have been caught in Step 3)
+            # Step 4: No subscription found - user is free
+            # Final safeguard: double-check for bypass users (should never reach here since checked in Step 0)
             if user_response.data:
                 bypass_subscription = user_response.data[0].get("bypass_subscription", False)
                 if bypass_subscription:
