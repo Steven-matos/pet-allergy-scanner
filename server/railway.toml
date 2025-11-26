@@ -1,8 +1,7 @@
 [build]
 builder = "RAILPACK"
 buildCommand = "pip install -r requirements-lock.txt"
-watchPaths = ["server/**/*.py", "server/**/*.txt"]
-
+watchPaths = ["**/*.py", "**/*.txt"]
 
 [deploy]
 startCommand = "python3 scripts/railway_start.py"
