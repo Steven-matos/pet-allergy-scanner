@@ -471,18 +471,37 @@ async def refresh_token(
             # Refresh the session to get new access and refresh tokens
             response = supabase.auth.refresh_session()
             
-            if not response or not hasattr(response, 'session') or not response.session:
+            # Validate response structure
+            if not response:
+                logger.error("refresh_session() returned None")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Refresh token expired or invalid"
                 )
             
-            session = response
+            # Check if response has session attribute
+            if not hasattr(response, 'session') or not response.session:
+                logger.error(f"Response missing session: {type(response)}, attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token expired or invalid"
+                )
+            
+            # Check if response has user attribute
+            if not hasattr(response, 'user') or not response.user:
+                logger.error(f"Response missing user: {type(response)}, attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Refresh token expired or invalid - user not found"
+                )
+            
+            session = response.session
+            user = response.user
             
         except HTTPException:
             raise
         except Exception as refresh_error:
-            logger.error(f"Token refresh failed: {refresh_error}")
+            logger.error(f"Token refresh failed: {refresh_error}", exc_info=True)
             error_str = str(refresh_error).lower()
             
             # Check if it's a rate limit error from Supabase
@@ -506,7 +525,6 @@ async def refresh_token(
             )
         
         # Get user data
-        user = session.user
         user_metadata = user.user_metadata or {}
         
         # Return merged user data with new session
@@ -518,10 +536,10 @@ async def refresh_token(
         })
         
         return {
-            "access_token": session.session.access_token,
-            "refresh_token": session.session.refresh_token,
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
             "token_type": "Bearer",
-            "expires_in": session.session.expires_in,
+            "expires_in": session.expires_in,
             "user": user_data
         }
         
