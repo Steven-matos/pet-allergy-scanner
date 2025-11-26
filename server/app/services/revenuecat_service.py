@@ -424,26 +424,56 @@ class RevenueCatService:
             user_id: User ID
             status: Subscription status
             product_id: Product identifier
-            entitlement_id: Entitlement identifier
-            expires_at: Expiration datetime (ISO format)
+            entitlement_id: Entitlement identifier (not stored in DB, kept for API compatibility)
+            expires_at: Expiration datetime (ISO format) - stored as expiration_date in DB
         """
         try:
+            # Check if subscription exists for this user
+            existing_response = self.supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
+            
+            # Determine tier from product_id
+            tier = "monthly"  # default
+            if "weekly" in product_id.lower():
+                tier = "weekly"
+            elif "yearly" in product_id.lower() or "annual" in product_id.lower():
+                tier = "yearly"
+            
             subscription_data = {
                 "user_id": user_id,
                 "status": status,
                 "product_id": product_id,
-                "entitlement_id": entitlement_id,
+                "tier": tier,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }
             
+            # Map expires_at to expiration_date (correct column name)
             if expires_at:
-                subscription_data["expires_at"] = expires_at
+                subscription_data["expiration_date"] = expires_at
             
-            # Upsert subscription record
-            response = self.supabase.table("subscriptions").upsert(
-                subscription_data,
-                on_conflict="user_id"
-            ).execute()
+            # If subscription exists, update it; otherwise create new
+            if existing_response.data and len(existing_response.data) > 0:
+                # Update existing subscription
+                # Use original_transaction_id as the key if available
+                existing_sub = existing_response.data[0]
+                original_transaction_id = existing_sub.get("original_transaction_id")
+                
+                if original_transaction_id:
+                    response = self.supabase.table("subscriptions").update(subscription_data).eq(
+                        "original_transaction_id", original_transaction_id
+                    ).execute()
+                else:
+                    # Fallback to user_id if no transaction ID
+                    response = self.supabase.table("subscriptions").update(subscription_data).eq(
+                        "user_id", user_id
+                    ).execute()
+            else:
+                # Create new subscription - need required fields
+                subscription_data["purchase_date"] = datetime.now(timezone.utc).isoformat()
+                subscription_data["original_transaction_id"] = f"rc_{user_id}_{int(datetime.now(timezone.utc).timestamp())}"
+                subscription_data["latest_transaction_id"] = subscription_data["original_transaction_id"]
+                subscription_data["auto_renew"] = True
+                
+                response = self.supabase.table("subscriptions").insert(subscription_data).execute()
             
             # Verify the update succeeded
             verify_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
@@ -473,14 +503,19 @@ class RevenueCatService:
             True if user should be protected from downgrades
         """
         try:
+            logger.info(f"🔍 Checking downgrade protection for user {user_id}")
+            
             # Get user email to check against protected list
             user_response = self.supabase.table("users").select("email, role").eq("id", user_id).execute()
             
             if not user_response.data:
+                logger.warning(f"⚠️ User {user_id} not found in database - cannot protect")
                 return False
             
             user_email = user_response.data[0].get("email", "").lower()
             current_role = user_response.data[0].get("role", "free")
+            
+            logger.info(f"🔍 User {user_id} ({user_email}) current role: {current_role}")
             
             # Get protected emails from environment variable
             protected_emails = []
@@ -496,42 +531,61 @@ class RevenueCatService:
             ]
             protected_emails.extend(hardcoded_protected)
             
+            logger.info(f"🔍 Protected emails list: {protected_emails}")
+            
             # Check if user email matches protected list
             for protected in protected_emails:
                 if protected.startswith("@"):
                     # Domain protection
                     if user_email.endswith(protected.lower()):
-                        logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (domain match: {protected})")
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is PROTECTED from downgrade (domain match: {protected})")
                         return True
                 else:
                     # Exact email match
                     if user_email == protected.lower():
-                        logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (exact match)")
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is PROTECTED from downgrade (exact match: {protected})")
                         return True
             
-            # Also protect users who are already premium and have no active subscription
-            # This prevents accidental downgrades for accounts manually set to premium
-            # This is useful for developer accounts that are manually set to premium
+            # ALWAYS protect users who are already premium and don't have active RevenueCat subscriptions
+            # This prevents RevenueCat from downgrading manually set premium accounts
+            # This is critical for developer/admin accounts
             if current_role == "premium":
-                # Check if there's an active subscription - if not, it might be manually set
-                subscription_response = self.supabase.table("subscriptions").select("status").eq("user_id", user_id).execute()
+                # Check if there's an active subscription from RevenueCat
+                subscription_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
                 has_active_subscription = False
+                has_any_subscription = False
+                
                 if subscription_response.data:
+                    has_any_subscription = True
                     for sub in subscription_response.data:
-                        if sub.get("status") in ["active", "grace_period", "billing_retry"]:
+                        sub_status = sub.get("status", "").lower()
+                        product_id = sub.get("product_id", "")
+                        
+                        # Skip permanent premium markers (created by our script)
+                        if product_id == "permanent_premium":
+                            logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (has permanent_premium marker)")
+                            return True
+                        
+                        # Check for active subscriptions (only RevenueCat-managed subscriptions)
+                        # If status is active/grace_period/billing_retry, user has active RevenueCat subscription
+                        if sub_status in ["active", "grace_period", "billing_retry"]:
                             has_active_subscription = True
                             break
                 
-                # If user is premium but has no active subscription, protect from downgrade
-                # This assumes it was manually set (like via the script we created)
+                # If user is premium but has no active RevenueCat subscription, ALWAYS protect
+                # This means the premium status was manually set and should be preserved
                 if not has_active_subscription:
-                    logger.info(f"🛡️ User {user_id} ({user_email}) is protected from downgrade (premium without active subscription - likely manually set)")
+                    if not has_any_subscription:
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is PROTECTED from downgrade (premium with no subscriptions - manually set)")
+                    else:
+                        logger.info(f"🛡️ User {user_id} ({user_email}) is PROTECTED from downgrade (premium with only expired/cancelled subscriptions - manually set)")
                     return True
             
+            logger.info(f"❌ User {user_id} ({user_email}) is NOT protected from downgrade")
             return False
             
         except Exception as e:
-            logger.warning(f"Error checking downgrade protection for user {user_id}: {str(e)}")
+            logger.error(f"❌ ERROR checking downgrade protection for user {user_id}: {str(e)}", exc_info=True)
             # On error, don't protect (fail open)
             return False
     
@@ -545,10 +599,12 @@ class RevenueCatService:
             allow_downgrade: If False, prevents downgrading from premium to free
         """
         try:
-            # Check if this is a downgrade attempt and if user should be protected
-            if role == UserRole.FREE and not allow_downgrade:
+            # ALWAYS check protection when trying to downgrade to free
+            # This prevents RevenueCat from downgrading manually set premium accounts
+            if role == UserRole.FREE:
                 if self._should_protect_from_downgrade(user_id):
-                    logger.warning(f"🛡️ Blocked downgrade attempt for protected user {user_id}")
+                    logger.warning(f"🛡️ BLOCKED downgrade attempt for protected user {user_id} - keeping premium status")
+                    # Don't update the role - keep it as premium
                     return
             
             response = self.supabase.table("users").update({
