@@ -123,10 +123,6 @@ class Settings(BaseSettings):
         default=None,
         alias="PROTECTED_PREMIUM_EMAILS",
         description="Comma-separated list of email addresses or domains (starting with @) that should never be downgraded from premium"
-    ) Field(
-        default=None,
-        alias="REVENUECAT_WEBHOOK_SECRET",
-        description="RevenueCat webhook shared secret for signature verification"
     )
     
     # Push Notification Configuration (APNs)
