@@ -4,7 +4,7 @@
 -- This is the single source of truth for the complete database schema
 -- Run this ONCE in Supabase SQL Editor for fresh installations
 -- Created: 2025-01-15
--- Updated: 2025-01-23
+-- Updated: 2025-11-26
 -- 
 -- PERFORMANCE OPTIMIZATIONS INCLUDED:
 -- ✅ Auth RLS patterns optimized with (select auth.uid()) for better performance
@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS public.users (
 -- Pets table
 CREATE TABLE IF NOT EXISTS public.pets (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,    name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 100),
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL CHECK (LENGTH(name) > 0 AND LENGTH(name) <= 100),
     species TEXT NOT NULL CHECK (species IN ('dog', 'cat')),
     breed TEXT,
     birthday DATE,
@@ -383,6 +384,15 @@ CREATE INDEX IF NOT EXISTS idx_food_comparisons_user_id ON public.food_compariso
 CREATE INDEX IF NOT EXISTS idx_analytics_cache_pet_type ON public.nutritional_analytics_cache(pet_id, analysis_type);
 CREATE INDEX IF NOT EXISTS idx_analytics_cache_expires ON public.nutritional_analytics_cache(expires_at);
 
+-- Device tokens temp indexes
+CREATE INDEX IF NOT EXISTS idx_device_tokens_temp_device_token 
+    ON public.device_tokens_temp(device_token);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_temp_user_id 
+    ON public.device_tokens_temp(user_id) 
+    WHERE user_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_device_tokens_temp_expires_at 
+    ON public.device_tokens_temp(expires_at);
+
 -- =============================================================================
 -- TRIGGERS AND FUNCTIONS
 -- =============================================================================
@@ -458,6 +468,10 @@ CREATE TRIGGER update_health_events_updated_at
 
 CREATE TRIGGER update_medication_reminders_updated_at
     BEFORE UPDATE ON public.medication_reminders
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_device_tokens_temp_updated_at
+    BEFORE UPDATE ON public.device_tokens_temp
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================================================
@@ -550,6 +564,7 @@ ALTER TABLE public.food_comparisons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nutritional_analytics_cache ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.health_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.medication_reminders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.device_tokens_temp ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
 CREATE POLICY "Users can view own profile" ON public.users
@@ -733,6 +748,29 @@ CREATE POLICY "Users can view their pet analytics" ON public.nutritional_analyti
 
 CREATE POLICY "System can manage analytics cache" ON public.nutritional_analytics_cache
     FOR ALL USING (true);
+
+-- Device tokens temp policies
+DROP POLICY IF EXISTS "Allow anonymous device token registration" ON public.device_tokens_temp;
+DROP POLICY IF EXISTS "Allow users to read their own temp tokens" ON public.device_tokens_temp;
+DROP POLICY IF EXISTS "Allow service role full access" ON public.device_tokens_temp;
+
+CREATE POLICY "Allow anonymous device token registration"
+    ON public.device_tokens_temp
+    FOR INSERT
+    TO anon, authenticated
+    WITH CHECK (true);
+
+CREATE POLICY "Allow users to read their own temp tokens"
+    ON public.device_tokens_temp
+    FOR SELECT
+    TO authenticated
+    USING (user_id = (SELECT auth.uid()) OR user_id IS NULL);
+
+CREATE POLICY "Allow service role full access"
+    ON public.device_tokens_temp
+    FOR ALL
+    TO service_role
+    USING (true);
 
 -- =============================================================================
 -- INITIAL DATA
@@ -1040,6 +1078,34 @@ CREATE TRIGGER update_waitlist_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- =============================================================================
+-- DEVICE TOKENS TEMP TABLE (Anonymous Device Token Registration)
+-- =============================================================================
+
+-- Device tokens temp table for storing temporary device tokens for anonymous users
+CREATE TABLE IF NOT EXISTS public.device_tokens_temp (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    device_token TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create cleanup function to remove expired tokens (optional - can be run as a scheduled job)
+CREATE OR REPLACE FUNCTION cleanup_expired_device_tokens_temp()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM public.device_tokens_temp
+    WHERE expires_at < NOW();
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Insert initial ingredient data
 INSERT INTO public.ingredients (name, aliases, safety_level, species_compatibility, description, common_allergen) VALUES
 ('chicken', ARRAY['chicken meat', 'chicken breast', 'chicken thigh'], 'caution', 'both', 'Common protein source, but frequent allergen', true),
@@ -1070,7 +1136,7 @@ ON CONFLICT (name) DO NOTHING;
 DO $$
 BEGIN
   RAISE NOTICE '✅ Complete database schema created successfully!';
-  RAISE NOTICE '📊 Tables: 19 total (core + food_items + nutrition + advanced + health_events + medication_reminders)';
+  RAISE NOTICE '📊 Tables: 20 total (core + food_items + nutrition + advanced + health_events + medication_reminders + device_tokens_temp)';
   RAISE NOTICE '🔒 RLS: Enabled on all tables with PERFORMANCE-OPTIMIZED policies';
   RAISE NOTICE '⚡ Performance: Auth RLS patterns optimized with (select auth.uid())';
   RAISE NOTICE '📈 Indexes: 35+ performance indexes created (no duplicates)';

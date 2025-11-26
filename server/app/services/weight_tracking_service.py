@@ -9,6 +9,8 @@ from decimal import Decimal
 import statistics
 from ..database import get_supabase_client
 from ..utils.logging_config import get_logger
+from ..shared.services.datetime_service import DateTimeService
+from ..shared.services.database_operation_service import DatabaseOperationService
 from ..models.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
