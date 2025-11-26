@@ -8,7 +8,7 @@ from typing import Optional
 import logging
 
 from app.api.v1.dependencies import get_current_user, get_supabase_client
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.subscription import (
     AppStoreReceiptVerification,
     AppStoreServerNotification,
@@ -17,6 +17,7 @@ from app.models.subscription import (
 from app.services.subscription_service import SubscriptionService
 from app.services.revenuecat_service import RevenueCatService
 from app.services.subscription_checker import SubscriptionChecker
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -98,10 +99,17 @@ async def get_subscription_status(
         checker = SubscriptionChecker(supabase)
         status_result = await checker.check_subscription_status(current_user.id)
         
+        # Get bypass_subscription flag from user record
+        user_response = supabase.table("users").select("bypass_subscription").eq("id", current_user.id).execute()
+        bypass_subscription = False
+        if user_response.data:
+            bypass_subscription = user_response.data[0].get("bypass_subscription", False)
+        
         return {
             "has_subscription": status_result["has_active_subscription"],
             "is_premium": status_result["is_premium"],
             "is_admin": status_result["is_admin"],
+            "bypass_subscription": bypass_subscription,
             "subscription": status_result.get("subscription"),
             "user_role": status_result["user_role"],
             "source": status_result.get("source", "unknown")
@@ -229,4 +237,78 @@ async def app_store_webhook(
         logger.error(f"Error processing App Store webhook: {str(e)}")
         # Return 200 anyway to prevent Apple from retrying
         return {"status": "error", "message": str(e)}
+
+
+# Admin endpoint models
+class BypassSubscriptionRequest(BaseModel):
+    """Request model for setting bypass subscription flag"""
+    user_id: str
+    bypass: bool
+
+
+@router.post("/admin/set-bypass", response_model=dict, status_code=status.HTTP_200_OK)
+async def set_bypass_subscription(
+    request: BypassSubscriptionRequest,
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client)
+):
+    """
+    Admin endpoint to set/unset bypass_subscription flag for a user
+    
+    This allows certain accounts to bypass subscription checks and have full premium access.
+    Only users with bypass_subscription flag or protected emails can use this endpoint.
+    
+    Args:
+        request: Request with user_id and bypass flag
+        current_user: Authenticated user (must be admin)
+        supabase: Supabase client
+        
+    Returns:
+        Success message with updated user info
+    """
+    try:
+        # Check if current user is admin (has bypass or is in protected emails)
+        revenuecat_service = RevenueCatService(supabase)
+        if not revenuecat_service.is_admin_user(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admin users can set bypass subscription flags"
+            )
+        
+        # Update user's bypass_subscription flag
+        update_response = supabase.table("users").update({
+            "bypass_subscription": request.bypass,
+            "role": "premium" if request.bypass else "free"
+        }).eq("id", request.user_id).execute()
+        
+        if not update_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {request.user_id} not found"
+            )
+        
+        # If setting bypass, ensure user role is premium
+        if request.bypass:
+            await revenuecat_service._update_user_role(
+                request.user_id, 
+                UserRole.PREMIUM
+            )
+        
+        logger.info(f"Admin {current_user.id} set bypass_subscription={request.bypass} for user {request.user_id}")
+        
+        return {
+            "success": True,
+            "message": f"Bypass subscription {'enabled' if request.bypass else 'disabled'} for user {request.user_id}",
+            "user_id": request.user_id,
+            "bypass_subscription": request.bypass
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error setting bypass subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to set bypass subscription flag"
+        )
 

@@ -528,8 +528,18 @@ class RevenueCatService:
         try:
             logger.info(f"🔍 Checking downgrade protection for user {user_id}")
             
+            # First check if user has bypass_subscription flag set
+            user_response = self.supabase.table("users").select("email, role, bypass_subscription").eq("id", user_id).execute()
+            
+            if user_response.data:
+                bypass_subscription = user_response.data[0].get("bypass_subscription", False)
+                if bypass_subscription:
+                    logger.info(f"🛡️ User {user_id} is protected from downgrade (bypass_subscription flag is set)")
+                    return True
+            
             # Get user email to check against protected list
-            user_response = self.supabase.table("users").select("email, role").eq("id", user_id).execute()
+            if not user_response.data:
+                user_response = self.supabase.table("users").select("email, role").eq("id", user_id).execute()
             
             if not user_response.data:
                 logger.warning(f"⚠️ User {user_id} not found in database - cannot protect")

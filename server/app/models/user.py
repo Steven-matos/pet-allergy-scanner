@@ -21,6 +21,7 @@ class UserBase(BaseModel):
     image_url: Optional[str] = None
     role: UserRole = UserRole.FREE
     onboarded: bool = False
+    bypass_subscription: bool = False
 
 class UserCreate(UserBase):
     """User creation model"""
@@ -35,6 +36,7 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     onboarded: Optional[bool] = None
     device_token: Optional[str] = None
+    bypass_subscription: Optional[bool] = None
 
 class UserResponse(UserBase):
     """User response model"""

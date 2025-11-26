@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     onboarded BOOLEAN DEFAULT FALSE,
     device_token TEXT,
     image_url TEXT,
+    bypass_subscription BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

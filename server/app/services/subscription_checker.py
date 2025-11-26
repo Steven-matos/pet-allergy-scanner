@@ -124,18 +124,47 @@ class SubscriptionChecker:
                             "user_role": "premium"
                         }
             
-            # Step 3: Check if user is admin (bypass subscription requirement)
+            # Step 3: Check if user has bypass_subscription flag set
+            user_response = self.supabase.table("users").select("role, bypass_subscription").eq(
+                "id", user_id
+            ).execute()
+            
+            if user_response.data:
+                user_data = user_response.data[0]
+                bypass_subscription = user_data.get("bypass_subscription", False)
+                
+                if bypass_subscription:
+                    logger.info(f"🛡️ User {user_id} has bypass_subscription flag - granting premium access without subscription")
+                    
+                    # Ensure user role is premium in database
+                    current_role = user_data.get("role", "free")
+                    
+                    if current_role != "premium":
+                        await self.revenuecat_service._update_user_role(
+                            user_id, UserRole.PREMIUM
+                        )
+                    
+                    return {
+                        "has_active_subscription": False,
+                        "is_premium": True,
+                        "is_admin": True,
+                        "source": "bypass_subscription",
+                        "subscription": None,
+                        "user_role": "premium"
+                    }
+            
+            # Step 4: Check if user is admin (bypass subscription requirement via email)
             if self.revenuecat_service.is_admin_user(user_id):
                 logger.info(f"🛡️ User {user_id} is admin user - granting premium access without subscription")
                 
                 # Ensure user role is premium in database
-                user_response = self.supabase.table("users").select("role").eq(
-                    "id", user_id
-                ).execute()
-                
-                current_role = None
                 if user_response.data:
                     current_role = user_response.data[0].get("role", "free")
+                else:
+                    user_response = self.supabase.table("users").select("role").eq(
+                        "id", user_id
+                    ).execute()
+                    current_role = user_response.data[0].get("role", "free") if user_response.data else "free"
                 
                 if current_role != "premium":
                     await self.revenuecat_service._update_user_role(
@@ -151,7 +180,7 @@ class SubscriptionChecker:
                     "user_role": "premium"
                 }
             
-            # Step 4: No subscription found - user is free
+            # Step 5: No subscription found - user is free
             logger.info(f"❌ User {user_id} has no active subscription")
             return {
                 "has_active_subscription": False,
