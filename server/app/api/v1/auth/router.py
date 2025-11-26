@@ -163,9 +163,26 @@ async def login_user(login_data: UserLogin):
                 "password": login_data.password
             })
         except Exception as auth_error:
-            # Check if this is an email verification error
+            # Log the full error for debugging
             error_str = str(auth_error).lower()
             error_type = type(auth_error).__name__
+            
+            # Try to extract more details from the error
+            error_details = {
+                "error_type": error_type,
+                "error_message": str(auth_error),
+                "error_repr": repr(auth_error)
+            }
+            
+            # Check if error has attributes that might contain more info
+            if hasattr(auth_error, 'message'):
+                error_details["error_message_attr"] = str(auth_error.message)
+            if hasattr(auth_error, 'status_code'):
+                error_details["status_code"] = auth_error.status_code
+            if hasattr(auth_error, 'args') and auth_error.args:
+                error_details["error_args"] = str(auth_error.args)
+            
+            logger.error(f"Supabase auth error details: {error_details}", exc_info=True)
             
             # Check for email not confirmed/verified errors
             if "email" in error_str and ("not confirmed" in error_str or "not verified" in error_str or "confirmation" in error_str):
@@ -175,6 +192,7 @@ async def login_user(login_data: UserLogin):
                 )
             # Check for invalid credentials
             if "invalid" in error_str or "credentials" in error_str or "password" in error_str or "auth" in error_type.lower():
+                logger.warning(f"Invalid credentials for email: {login_data.email_or_username}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
