@@ -194,11 +194,57 @@ async def login_user(login_data: UserLogin):
             if "database error" in error_str or "granting user" in error_str:
                 logger.error(f"Database error during authentication for email: {login_data.email_or_username}")
                 logger.error("This usually means the user exists in auth.users but not in public.users, or there's a constraint violation.")
-                logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Database error during authentication. Please contact support if this persists."
-                )
+                
+                # Try to fix the issue automatically by creating the missing public.users record
+                try:
+                    logger.info("Attempting to auto-fix: Creating missing public.users record...")
+                    from supabase import create_client
+                    from app.core.config import settings
+                    from app.shared.services.user_data_service import UserDataService
+                    
+                    # Use service role to bypass RLS and access auth schema
+                    service_supabase = create_client(
+                        settings.supabase_url,
+                        settings.supabase_service_role_key
+                    )
+                    
+                    # Query auth.users directly using service role (requires direct SQL or admin API)
+                    # Since we can't easily query auth.users from Python, we'll try to create the record
+                    # based on the email, assuming the user exists in auth.users
+                    
+                    # First, check if a user with this email exists in public.users
+                    existing_check = service_supabase.table("users").select("id, email").eq("email", login_data.email_or_username).execute()
+                    
+                    if existing_check.data:
+                        # User exists in public.users - this might be a different issue (constraint violation, etc.)
+                        logger.warning(f"User with email {login_data.email_or_username} already exists in public.users - may be constraint violation")
+                        logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail="Database error during authentication. Please contact support if this persists."
+                        )
+                    
+                    # User doesn't exist in public.users - try to find them in auth.users via SQL
+                    # Note: We can't directly query auth.users from Python easily, so we'll use a workaround
+                    # The best approach is to run the SQL fix script, but we can provide a helpful message
+                    logger.error("Cannot auto-fix: Need to query auth.users which requires SQL access.")
+                    logger.error("Please run the fix_auth_user_grant_error.sql script in Supabase SQL Editor.")
+                    logger.error("The script will create missing public.users records automatically.")
+                    
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Database error during authentication. This usually means your user record is missing. Please contact support or try again in a few moments after the database is fixed."
+                    )
+                        
+                except HTTPException:
+                    raise
+                except Exception as fix_error:
+                    logger.error(f"Auto-fix attempt failed: {fix_error}", exc_info=True)
+                    logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Database error during authentication. Please contact support if this persists."
+                    )
             
             # Check for invalid credentials
             if "invalid" in error_str or "credentials" in error_str or "password" in error_str or "auth" in error_type.lower():
