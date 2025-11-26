@@ -111,11 +111,13 @@ class UserRoleManager:
                     return False
             
             # Step 5: Perform the role update using centralized service
+            # allow_role_update=True because we've already checked bypass flag above
             db_service = DatabaseOperationService(self.supabase)
             result = db_service.update_with_timestamp(
                 "users",
                 user_id,
-                {"role": new_role.value}
+                {"role": new_role.value},
+                allow_role_update=True
             )
             
             # Step 6: Verify the update succeeded

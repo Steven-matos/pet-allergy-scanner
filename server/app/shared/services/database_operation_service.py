@@ -86,7 +86,8 @@ class DatabaseOperationService:
         record_id: str,
         data: Dict[str, Any],
         id_column: str = "id",
-        include_updated_at: bool = True
+        include_updated_at: bool = True,
+        allow_role_update: bool = False
     ) -> Dict[str, Any]:
         """
         Update record with automatic updated_at timestamp
@@ -97,6 +98,7 @@ class DatabaseOperationService:
             data: Data to update
             id_column: Column name for ID (default: "id")
             include_updated_at: Whether to add updated_at timestamp
+            allow_role_update: If True, allows role updates (only for UserRoleManager)
             
         Returns:
             Updated record data
@@ -105,6 +107,19 @@ class DatabaseOperationService:
             Exception: If update fails
         """
         try:
+            # CRITICAL: Prevent direct role updates that bypass UserRoleManager
+            # Role updates MUST go through UserRoleManager.update_user_role()
+            if table_name == "users" and "role" in data and not allow_role_update:
+                logger.error(
+                    f"🚨 SECURITY VIOLATION: Attempted to update role directly via DatabaseOperationService. "
+                    f"Role updates MUST go through UserRoleManager.update_user_role(). "
+                    f"User ID: {record_id}, Attempted role: {data.get('role')}"
+                )
+                raise ValueError(
+                    "Direct role updates are not allowed. Use UserRoleManager.update_user_role() instead. "
+                    "This ensures bypass_subscription flag is always respected."
+                )
+            
             # Add updated_at if not already present
             if include_updated_at and "updated_at" not in data:
                 data["updated_at"] = DateTimeService.now_iso()
