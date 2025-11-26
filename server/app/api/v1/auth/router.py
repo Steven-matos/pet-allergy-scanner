@@ -190,6 +190,16 @@ async def login_user(login_data: UserLogin):
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Please verify your email address before signing in. Check your email for the verification link."
                 )
+            # Check for database errors (common cause of "Database error granting user")
+            if "database error" in error_str or "granting user" in error_str:
+                logger.error(f"Database error during authentication for email: {login_data.email_or_username}")
+                logger.error("This usually means the user exists in auth.users but not in public.users, or there's a constraint violation.")
+                logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Database error during authentication. Please contact support if this persists."
+                )
+            
             # Check for invalid credentials
             if "invalid" in error_str or "credentials" in error_str or "password" in error_str or "auth" in error_type.lower():
                 logger.warning(f"Invalid credentials for email: {login_data.email_or_username}")
