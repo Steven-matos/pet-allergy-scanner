@@ -122,7 +122,7 @@ class Settings(BaseSettings):
     protected_premium_emails: Optional[str] = Field(
         default=None,
         alias="PROTECTED_PREMIUM_EMAILS",
-        description="Comma-separated list of email addresses or domains (starting with @) that should never be downgraded from premium"
+        description="Comma-separated list of admin email addresses or domains (starting with @) that have full premium access without subscription. These users bypass all subscription checks."
     )
     
     # Push Notification Configuration (APNs)

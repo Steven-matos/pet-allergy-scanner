@@ -184,6 +184,7 @@ temp_*.py
 project.pbxproj.backup
 server/database_migrations/*.sql
 server/scripts/*.py
+server/docs/*.md
 
 Info.plist
 PrivacyInfo.xcprivacy

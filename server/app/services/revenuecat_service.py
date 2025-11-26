@@ -491,16 +491,39 @@ class RevenueCatService:
             logger.error(f"Error updating subscription in database for user {user_id}: {str(e)}", exc_info=True)
             raise
     
-    def _should_protect_from_downgrade(self, user_id: str) -> bool:
+    def is_admin_user(self, user_id: str) -> bool:
         """
-        Check if a user should be protected from automatic downgrades
-        This protects developer/admin accounts from RevenueCat webhook downgrades
+        Check if a user is an admin user with full access without subscription
+        
+        Admin users are defined by:
+        1. Email in PROTECTED_PREMIUM_EMAILS environment variable
+        2. Premium role without active RevenueCat subscription (manually set)
         
         Args:
             user_id: User ID to check
             
         Returns:
-            True if user should be protected from downgrades
+            True if user is an admin user
+        """
+        return self._should_protect_from_downgrade(user_id)
+    
+    def _should_protect_from_downgrade(self, user_id: str) -> bool:
+        """
+        Check if a user should be protected from automatic downgrades
+        This protects admin/developer accounts from RevenueCat webhook downgrades
+        
+        Admin users have full premium access without requiring a subscription.
+        This is useful for:
+        - Developer accounts
+        - Internal team members
+        - Beta testers
+        - Support staff
+        
+        Args:
+            user_id: User ID to check
+            
+        Returns:
+            True if user should be protected from downgrades (is an admin user)
         """
         try:
             logger.info(f"🔍 Checking downgrade protection for user {user_id}")
@@ -519,8 +542,12 @@ class RevenueCatService:
             
             # Get protected emails from environment variable
             protected_emails = []
-            if settings.protected_premium_emails:
-                protected_emails = [email.strip() for email in settings.protected_premium_emails.split(",") if email.strip()]
+            if hasattr(settings, 'protected_premium_emails') and settings.protected_premium_emails:
+                # Handle both string and list formats
+                if isinstance(settings.protected_premium_emails, str):
+                    protected_emails = [email.strip() for email in settings.protected_premium_emails.split(",") if email.strip()]
+                elif isinstance(settings.protected_premium_emails, list):
+                    protected_emails = [email.strip() for email in settings.protected_premium_emails if email.strip()]
             
             # Also add hardcoded protected emails (for development/testing)
             # You can add your email here as a fallback
@@ -533,7 +560,8 @@ class RevenueCatService:
             
             logger.info(f"🔍 Protected emails list: {protected_emails}")
             
-            # Check if user email matches protected list
+            # Check if user email matches protected list FIRST
+            # This works even if user was already downgraded to free
             for protected in protected_emails:
                 if protected.startswith("@"):
                     # Domain protection
@@ -549,6 +577,7 @@ class RevenueCatService:
             # ALWAYS protect users who are already premium and don't have active RevenueCat subscriptions
             # This prevents RevenueCat from downgrading manually set premium accounts
             # This is critical for developer/admin accounts
+            # NOTE: This only works if user is STILL premium - if already downgraded, check protected emails above
             if current_role == "premium":
                 # Check if there's an active subscription from RevenueCat
                 subscription_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()

@@ -249,6 +249,8 @@ class SubscriptionService:
             user_id: User ID
             subscription_status: Current subscription status
         """
+        from app.services.revenuecat_service import RevenueCatService
+        
         # Determine role based on subscription status
         if subscription_status in [
             SubscriptionStatus.ACTIVE,
@@ -258,6 +260,13 @@ class SubscriptionService:
             new_role = UserRole.PREMIUM
         else:
             new_role = UserRole.FREE
+        
+        # Check protection before downgrading to free
+        if new_role == UserRole.FREE:
+            revenuecat_service = RevenueCatService(self.supabase)
+            if revenuecat_service._should_protect_from_downgrade(user_id):
+                logger.warning(f"🛡️ SubscriptionService: Blocked downgrade attempt for protected user {user_id}")
+                return  # Don't downgrade protected users
         
         # Update user role
         try:

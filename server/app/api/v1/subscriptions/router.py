@@ -16,6 +16,7 @@ from app.models.subscription import (
 )
 from app.services.subscription_service import SubscriptionService
 from app.services.revenuecat_service import RevenueCatService
+from app.services.subscription_checker import SubscriptionChecker
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -75,109 +76,35 @@ async def get_subscription_status(
     """
     Get current user's subscription status
     
-    Returns the active subscription details for the authenticated user.
-    If no subscription is found in the database, proactively verifies with RevenueCat API
-    to handle cases where webhooks haven't arrived yet.
+    Uses RevenueCat as the source of truth for subscription status.
+    Also checks for admin/protected users who have full access without subscription.
     
     Args:
         current_user: Authenticated user
         supabase: Supabase client
         
     Returns:
-        Subscription status and details
+        Subscription status and details:
+        {
+            "has_subscription": bool,
+            "is_premium": bool,
+            "is_admin": bool,
+            "subscription": Optional[Dict],
+            "user_role": str
+        }
     """
     try:
-        subscription_service = SubscriptionService(supabase=supabase)
+        # Use centralized subscription checker (RevenueCat as source of truth)
+        checker = SubscriptionChecker(supabase)
+        status_result = await checker.check_subscription_status(current_user.id)
         
-        # First, check database for active subscription
-        subscription = await subscription_service.get_user_subscription(current_user.id)
-        
-        if subscription:
-            return {
-                "has_subscription": True,
-                "subscription": subscription,
-                "user_role": current_user.role
-            }
-        
-        # If no subscription in database, verify with RevenueCat API
-        # This handles cases where a purchase just happened but webhook hasn't arrived
-        # OR cases where webhook failed but subscription is actually active
-        try:
-            revenuecat_service = RevenueCatService(supabase)
-            rc_info = await revenuecat_service.get_subscriber_info(current_user.id)
-            
-            if rc_info.get("has_subscription", False):
-                # RevenueCat confirms active subscription - update database
-                logger.info(f"RevenueCat API confirms subscription for user {current_user.id} - updating backend")
-                subscriber = rc_info.get("subscriber", {})
-                entitlements = rc_info.get("entitlements", {})
-                premium_entitlement = entitlements.get(RevenueCatService.PREMIUM_ENTITLEMENT, {})
-                
-                if premium_entitlement.get("is_active") or premium_entitlement.get("expires_date"):
-                    # Extract subscription details from RevenueCat data
-                    expires_date = premium_entitlement.get("expires_date")
-                    
-                    # Try to get product_id from entitlement or subscriber's active subscriptions
-                    product_id = (
-                        premium_entitlement.get("product_identifier") or
-                        premium_entitlement.get("product_id") or
-                        ""
-                    )
-                    
-                    # If no product_id in entitlement, try to get from subscriber's subscriptions
-                    if not product_id:
-                        subscriber_subscriptions = subscriber.get("subscriptions", {})
-                        if subscriber_subscriptions:
-                            # Get the first active subscription's product_id
-                            for sub_key, sub_data in subscriber_subscriptions.items():
-                                if isinstance(sub_data, dict):
-                                    product_id = sub_data.get("product_identifier") or sub_key
-                                    break
-                    
-                    # Update subscription in database using RevenueCat service
-                    # Use a default product_id if we couldn't find one (webhook will update later)
-                    if not product_id:
-                        product_id = "unknown"
-                        logger.warning(f"Could not extract product_id for user {current_user.id} from RevenueCat API")
-                    
-                    # Update subscription record
-                    await revenuecat_service._update_subscription(
-                        user_id=current_user.id,
-                        status="active",
-                        product_id=product_id,
-                        entitlement_id=RevenueCatService.PREMIUM_ENTITLEMENT,
-                        expires_at=expires_date
-                    )
-                    
-                    # Upgrade user role to premium
-                    from app.models.user import UserRole
-                    await revenuecat_service._update_user_role(current_user.id, UserRole.PREMIUM)
-                    
-                    logger.info(f"✅ Backend updated: user {current_user.id} upgraded to premium via RevenueCat API sync")
-                    
-                    # Refresh subscription from database
-                    subscription = await subscription_service.get_user_subscription(current_user.id)
-                    
-                    if subscription:
-                        return {
-                            "has_subscription": True,
-                            "subscription": subscription,
-                            "user_role": UserRole.PREMIUM.value
-                        }
-        
-        except HTTPException:
-            # If RevenueCat API fails, don't fail the whole request
-            # Just return no subscription - webhook will eventually sync
-            pass  # RevenueCat API failed, webhook will sync eventually
-        except Exception as e:
-            # Log only errors, not debug info
-            logger.error(f"Error verifying subscription with RevenueCat: {str(e)}")
-        
-        # No active subscription found
         return {
-            "has_subscription": False,
-            "subscription": None,
-            "user_role": current_user.role
+            "has_subscription": status_result["has_active_subscription"],
+            "is_premium": status_result["is_premium"],
+            "is_admin": status_result["is_admin"],
+            "subscription": status_result.get("subscription"),
+            "user_role": status_result["user_role"],
+            "source": status_result.get("source", "unknown")
         }
             
     except Exception as e:
