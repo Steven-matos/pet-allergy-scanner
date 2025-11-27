@@ -770,7 +770,8 @@ CREATE POLICY "Allow service role full access"
     ON public.device_tokens_temp
     FOR ALL
     TO service_role
-    USING (true);
+    USING (true)
+    WITH CHECK (true);
 
 -- =============================================================================
 -- INITIAL DATA

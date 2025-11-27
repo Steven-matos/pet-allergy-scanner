@@ -320,15 +320,10 @@ async def analyze_ingredients_endpoint(
         )
 
 @router.get("/allergens", response_model=List[str])
-async def get_common_allergens(
-    current_user: UserResponse = Depends(get_current_user)
-):
+async def get_common_allergens():
     """
-    Get list of common allergen ingredients
+    Get list of common allergen ingredients (public endpoint)
     
-    Args:
-        current_user: Current authenticated user
-        
     Returns:
         List of common allergen ingredient names
     """
@@ -349,15 +344,10 @@ async def get_common_allergens(
         )
 
 @router.get("/safe", response_model=List[str])
-async def get_safe_ingredients(
-    current_user: UserResponse = Depends(get_current_user)
-):
+async def get_safe_ingredients():
     """
-    Get list of generally safe ingredients
+    Get list of generally safe ingredients (public endpoint)
     
-    Args:
-        current_user: Current authenticated user
-        
     Returns:
         List of generally safe ingredient names
     """
@@ -378,15 +368,10 @@ async def get_safe_ingredients(
         )
 
 @router.get("/dangerous", response_model=List[str])
-async def get_dangerous_ingredients(
-    current_user: UserResponse = Depends(get_current_user)
-):
+async def get_dangerous_ingredients():
     """
-    Get list of dangerous ingredients
+    Get list of dangerous ingredients (public endpoint)
     
-    Args:
-        current_user: Current authenticated user
-        
     Returns:
         List of dangerous ingredient names
     """

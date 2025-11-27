@@ -107,8 +107,7 @@ async def register_device_token(
 
 @router.post("/register-device-anonymous")
 async def register_device_token_anonymous(
-    request: DeviceTokenRequest,
-    supabase = Depends(get_db)
+    request: DeviceTokenRequest
 ):
     """
     Register device token for push notifications (anonymous)
@@ -117,7 +116,6 @@ async def register_device_token_anonymous(
     
     Args:
         request: DeviceTokenRequest containing device_token
-        supabase: Supabase client
         
     Returns:
         Success message with temporary token
@@ -131,10 +129,13 @@ async def register_device_token_anonymous(
         expires_at = (DateTimeService.now() + timedelta(days=30)).isoformat()
         
         try:
-            # Try to insert into device_tokens_temp table
-            # If table doesn't exist, we'll store in a simpler way
+            # Use service role client for anonymous device token registration
+            # This bypasses RLS policies since this is a backend operation
+            from app.database import get_supabase_service_role_client
             from app.shared.services.database_operation_service import DatabaseOperationService
-            db_service = DatabaseOperationService(supabase)
+            
+            service_supabase = get_supabase_service_role_client()
+            db_service = DatabaseOperationService(service_supabase)
             db_service.insert_with_timestamps("device_tokens_temp", {
                 "device_token": device_token,
                 "expires_at": expires_at,
