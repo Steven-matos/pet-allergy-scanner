@@ -100,6 +100,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ]
         return any(path.startswith(auth_path) for auth_path in auth_paths)
     
+    def _is_logout_endpoint(self, path: str) -> bool:
+        """Check if the endpoint is the logout endpoint"""
+        return path.startswith("/api/v1/auth/logout")
+    
+    def _clear_auth_rate_limit(self, client_ip: str):
+        """Clear auth rate limit entries for a specific IP (used after successful logout)"""
+        if client_ip in self.auth_limits:
+            del self.auth_limits[client_ip]
+    
     def _cleanup_old_entries(self):
         """Clean up old rate limit entries"""
         current_time = time.time()
@@ -128,6 +137,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if current_time - self.last_cleanup > self.cleanup_interval:
             self._cleanup_old_entries()
             self.last_cleanup = current_time
+        
+        # Skip rate limiting for logout endpoint (it's a cleanup operation)
+        if self._is_logout_endpoint(request.url.path):
+            response = await call_next(request)
+            # On successful logout, clear auth rate limit to allow immediate re-login
+            if response.status_code == 200:
+                self._clear_auth_rate_limit(client_ip)
+            return response
         
         # Determine rate limit based on endpoint
         if self._is_auth_endpoint(request.url.path):

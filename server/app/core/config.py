@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60, ge=1, le=1000, description="Rate limit per minute")
-    auth_rate_limit_per_minute: int = Field(default=5, ge=1, le=20, description="Auth rate limit per minute")
+    auth_rate_limit_per_minute: int = Field(default=10, ge=1, le=20, description="Auth rate limit per minute")
     
     # Database Configuration
     database_url: str = Field(..., alias="DATABASE_URL", description="Database connection URL")
