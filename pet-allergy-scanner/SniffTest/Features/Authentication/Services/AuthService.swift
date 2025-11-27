@@ -125,8 +125,15 @@ class AuthService: ObservableObject, @unchecked Sendable {
             // Identify user with RevenueCat to restore subscription state
             await RevenueCatConfigurator.identifyUser(user.id)
             
+            // Check subscription status and refresh user profile if user is bypass/premium
+            // This ensures bypass users get their premium role synced
+            await checkAndRefreshSubscriptionStatus()
+            
+            // Get fresh user data after subscription check (may have updated role)
+            let freshUser = try await CachedProfileService.shared.getCurrentUser(forceRefresh: true)
+            
             // Auto-complete onboarding if user has pets but onboarded is false
-            let finalUser = await checkAndCompleteOnboardingIfNeeded(user: user)
+            let finalUser = await checkAndCompleteOnboardingIfNeeded(user: freshUser)
             
             // Hydrate all caches before transitioning to authenticated state
             // This will use cached data if available, only fetching what's missing
@@ -147,11 +154,49 @@ class AuthService: ObservableObject, @unchecked Sendable {
     func resumeSessionIfNeeded(forceRefresh: Bool = false) async {
         if case .authenticated = authState {
             await refreshSessionIfNeeded(force: forceRefresh)
+            // Also check subscription status and refresh profile if user is bypass/premium
+            await checkAndRefreshSubscriptionStatus()
             return
         }
         
         guard await apiService.hasAuthToken else { return }
         await restoreUserSession()
+        // After restoring session, check subscription status
+        await checkAndRefreshSubscriptionStatus()
+    }
+    
+    /// Check subscription status and refresh user profile if needed (for bypass users)
+    private func checkAndRefreshSubscriptionStatus() async {
+        guard case .authenticated = authState else { return }
+        
+        do {
+            let apiService = APIService.shared
+            let response = try await apiService.get(
+                endpoint: "/subscriptions/status",
+                responseType: SubscriptionStatusResponse.self
+            )
+            
+            // If user is premium (bypass or subscription), refresh profile to get latest role
+            if response.isPremium {
+                await refreshUserProfile(forceRefresh: true)
+            }
+        } catch {
+            // Silent failure - this is a background check
+            print("⚠️ Failed to check subscription status: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Response model for subscription status endpoint
+    private struct SubscriptionStatusResponse: Codable {
+        let hasSubscription: Bool
+        let isPremium: Bool
+        let bypassSubscription: Bool?
+        
+        enum CodingKeys: String, CodingKey {
+            case hasSubscription = "has_subscription"
+            case isPremium = "is_premium"
+            case bypassSubscription = "bypass_subscription"
+        }
     }
     
     /// Refresh the authenticated session if the last validation exceeds Apple's recommended interval.
@@ -293,12 +338,17 @@ class AuthService: ObservableObject, @unchecked Sendable {
     /// Used after subscription changes to update user role
     /// Only fetches from server if cache is stale or missing
     func refreshUserProfile() async {
+        await refreshUserProfile(forceRefresh: false)
+    }
+    
+    /// Refresh user profile from backend
+    /// - Parameter forceRefresh: If true, bypasses cache and fetches from server
+    func refreshUserProfile(forceRefresh: Bool) async {
         guard case .authenticated = authState else { return }
         
         do {
-            // Use cached service which checks cache first before hitting server
-            // This prevents unnecessary server calls when data is already cached
-            let user = try await CachedProfileService.shared.getCurrentUser(forceRefresh: false)
+            // Force refresh when called after subscription sync to ensure we get updated role
+            let user = try await CachedProfileService.shared.getCurrentUser(forceRefresh: forceRefresh)
             cacheAuthenticatedUser(user)
             await MainActor.run {
                 authState = .authenticated(user)

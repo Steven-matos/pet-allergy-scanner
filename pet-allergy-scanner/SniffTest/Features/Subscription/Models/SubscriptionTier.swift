@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 /// Subscription tier limits and features
 enum SubscriptionTier {
@@ -93,12 +94,49 @@ class SubscriptionGatekeeper: ObservableObject {
     @Published var upgradePromptTitle = ""
     
     private let subscriptionProvider = RevenueCatSubscriptionProvider.shared
+    private let authService = AuthService.shared
+    private var cancellables = Set<AnyCancellable>()
     
-    private init() {}
+    private init() {
+        // Observe auth state changes to update tier when user role changes
+        authService.$authState
+            .sink { [weak self] _ in
+                // Trigger objectWillChange to notify observers that currentTier may have changed
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        // Observe subscription provider changes
+        subscriptionProvider.objectWillChange
+            .sink { [weak self] _ in
+                // Trigger objectWillChange to notify observers that currentTier may have changed
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
     
     /// Get the current user's subscription tier
+    /// Checks bypass_subscription flag first, then RevenueCat subscription status, then backend user role
+    /// This ensures users with bypass flag or premium role get access even if RevenueCat isn't synced
     var currentTier: SubscriptionTier {
-        subscriptionProvider.hasActiveSubscription ? .premium : .free
+        // First check if user has bypass_subscription flag (highest priority)
+        // This allows admin accounts to bypass all subscription checks
+        if let user = authService.currentUser, user.bypassSubscription {
+            return .premium
+        }
+        
+        // Second check RevenueCat subscription status (primary source of truth for regular users)
+        if subscriptionProvider.hasActiveSubscription {
+            return .premium
+        }
+        
+        // Fallback: Check backend user role if RevenueCat subscription check fails
+        // This handles cases where user has premium role in backend but RevenueCat sync hasn't completed
+        if let user = authService.currentUser, user.role == .premium {
+            return .premium
+        }
+        
+        return .free
     }
     
     /// Check if user can perform a scan

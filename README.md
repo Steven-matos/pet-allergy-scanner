@@ -35,7 +35,7 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 ## Features
 
 ### Core Functionality
-- 📱 **Native iOS App**: Built with SwiftUI for iOS 17.0+ (v5.1)
+- 📱 **Native iOS App**: Built with SwiftUI for iOS 17.0+ (v1.0.0)
 - 🔍 **Camera Scanning**: Real-time OCR and barcode scanning for pet food labels
 - 🧠 **AI-Powered Analysis**: Intelligent ingredient safety assessment with species-specific logic
 - 🐕 **Pet Profiles**: Complete pet management with birthday tracking and age calculation
@@ -554,12 +554,20 @@ APNS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour_apns_private_key_content_her
 
 2. **Database Schema**:
    ```bash
-   # Copy database_schema.sql content
-   # Paste in Supabase SQL Editor
-   # Execute to create tables and policies
+   # Run the complete schema in Supabase SQL Editor:
+   # server/database_schemas/01_complete_database_schema.sql
    ```
 
-3. **Authentication Setup**:
+3. **Security Fixes** (Recommended):
+   ```bash
+   # Apply security hardening for database functions:
+   # server/scripts/fix_function_search_path_security.sql
+   # 
+   # Fix authentication errors if needed:
+   # server/scripts/fix_auth_user_grant_error.sql
+   ```
+
+4. **Authentication Setup**:
    - Enable email authentication
    - Configure email templates
    - Set up MFA if needed
@@ -617,6 +625,9 @@ The security middleware is applied in the following order (order matters):
 - **Service Role Client**: Used for system operations that bypass RLS
 - **Policy Enforcement**: Users can only access their own data
 - **Automatic User Creation**: Handles missing user records gracefully
+- **Function Search Path Security**: All SECURITY DEFINER functions use explicit search_path to prevent injection attacks
+- **Performance Optimizations**: Auth RLS patterns optimized with `(select auth.uid())` for better performance
+- **Security Linter Compliance**: All Supabase linter warnings addressed (2025-11-26)
 
 ### 6. Logging Configuration
 
@@ -678,7 +689,7 @@ The server automatically adds security headers:
    - Open `Info.plist`
    - Current settings:
      - **Bundle ID**: `com.snifftest.app`
-     - **Version**: `5.1` (Build 6)
+     - **Version**: `1.0.0` (Pre-release)
      - **API_BASE_URL**: `https://snifftest-api-production.up.railway.app/api/v1`
      - **Supabase URL**: `https://oxjywpearruxtnysoyuf.supabase.co`
    - For local development, change `API_BASE_URL` to `http://localhost:8000/api/v1`
@@ -788,8 +799,11 @@ Built on **Supabase (PostgreSQL)** with Row Level Security (RLS) for data protec
 - `add_birthday_column.sql` - Added birthday tracking to pets
 - `add_onboarded_column.sql` - Added onboarding status to users
 - `sync_username_auth.sql` - Synchronized usernames with auth
+- `fix_function_search_path_security.sql` - Security hardening for database functions (2025-11-26)
+- `fix_auth_user_grant_error.sql` - Authentication error fixes and diagnostics
+- `create_device_tokens_temp_table.sql` - Anonymous device token storage
 
-See `database_schemas/database_schema.sql` for complete schema.
+See `database_schemas/01_complete_database_schema.sql` for complete schema.
 
 ## Security Features
 
@@ -813,6 +827,8 @@ See `database_schemas/database_schema.sql` for complete schema.
 - **Secure Storage**: iOS Keychain for sensitive data
 - **Audit Logging**: Comprehensive activity tracking
 - **GDPR Compliance**: Data export, deletion, and portability
+- **Database Function Security**: Explicit search_path for all SECURITY DEFINER functions to prevent search path injection
+- **SQL Injection Protection**: Parameterized queries and explicit schema qualification
 
 ### 📊 Monitoring
 - **Health Checks**: Real-time system monitoring
@@ -853,6 +869,16 @@ SniffTest/
 - **Backend**: `pytest tests/ -v`
 - **iOS**: `Cmd + U` in Xcode
 - **Security**: `python security_audit.py`
+
+### Utility Scripts
+The `server/scripts/` directory contains utility scripts for deployment, maintenance, and database operations:
+
+- **Deployment**: `railway_start.py`, `test_config.py`, `check-deployment-ready.py`
+- **Database**: `analyze_database_tables.py`, `cleanup_database.py`, `setup_test_data.py`
+- **Security**: `fix_function_search_path_security.sql`, `fix_auth_user_grant_error.sql`
+- **Admin**: `set_premium_account.py`, `generate-railway-vars.py`
+
+See `server/scripts/README.md` for detailed usage instructions.
 
 ## Deployment
 
@@ -913,6 +939,11 @@ SniffTest/
 - **IMPROVED**: Trailing slash routing support across all endpoints
 - **IMPROVED**: Error handling and debugging capabilities
 - **IMPROVED**: Service role integration for system operations
+- **NEW**: Database function security hardening (function search path fixes)
+- **NEW**: Security fix scripts for database functions (`fix_function_search_path_security.sql`)
+- **NEW**: Device tokens temp table for anonymous device registration
+- **IMPROVED**: Database performance optimizations with optimized RLS patterns
+- **IMPROVED**: All Supabase linter security warnings resolved
 - Bug fixes and performance improvements
 - Major nutrition feature release
 - Comprehensive food database integration
@@ -924,5 +955,6 @@ SniffTest/
 **Built with ❤️ for pet owners everywhere**
 
 *Last updated: November 2025*
-*iOS App Version: 1.0.0*
+*iOS App Version: 1.0.0 (Pre-release)*
 *API Version: 1.0.0*
+*Database Schema: Updated 2025-11-26 with security hardening*

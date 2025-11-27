@@ -53,6 +53,10 @@ class NotificationManager: ObservableObject {
             await notificationSettingsManager.checkAuthorizationStatus()
             checkForBirthdayCelebrations()
             checkEngagementStatus()
+            
+            // Check and sync subscription status to ensure user role is up-to-date
+            // This handles cases where backend has premium role but app cache is stale
+            await RevenueCatSubscriptionProvider.shared.checkAndSyncSubscriptionStatus()
         }
     }
     
@@ -140,6 +144,9 @@ class NotificationManager: ObservableObject {
     }
     
     private func showEngagementReminder() {
+        // Mark reminder as shown today to prevent multiple popups
+        notificationSettingsManager.markEngagementReminderShown()
+        
         // Create a gentle engagement reminder alert
         let alert = UIAlertController(
             title: "🐾 We Miss You!",

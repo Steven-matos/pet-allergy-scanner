@@ -113,9 +113,10 @@ enum RevenueCatConfigurator {
                 responseType: SubscriptionStatusResponse.self
             )
             
-            if response.hasSubscription {
-            } else {
-                logger.debug("No active subscription found in backend for user \(userId)")
+            // If user is premium (bypass or subscription), refresh profile to get latest role
+            if response.isPremium {
+                let authService = AuthService.shared
+                await authService.refreshUserProfile(forceRefresh: true)
             }
         } catch {
             // Log but don't fail - this is a background sync operation
@@ -127,10 +128,11 @@ enum RevenueCatConfigurator {
     /// We only decode the fields we need - subscription details are optional
     private struct SubscriptionStatusResponse: Codable {
         let hasSubscription: Bool
+        let isPremium: Bool
         
         enum CodingKeys: String, CodingKey {
             case hasSubscription = "has_subscription"
-            // Ignore subscription and user_role fields - we only need has_subscription
+            case isPremium = "is_premium"
         }
     }
     

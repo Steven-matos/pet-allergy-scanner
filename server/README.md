@@ -22,12 +22,13 @@ open http://localhost:8000/redoc         # ReDoc (local)
 
 ## 🏗️ Architecture
 
-- **Framework**: FastAPI (Python 3.11+)
-- **Database**: PostgreSQL via Supabase
-- **Authentication**: Supabase Auth + JWT with MFA
+- **Framework**: FastAPI 0.115.6 (Python 3.11+)
+- **Database**: PostgreSQL via Supabase with async connection pooling
+- **Authentication**: Supabase Auth + JWT with MFA support
 - **Push Notifications**: Apple Push Notification service (APNs)
-- **Storage**: Supabase Storage for images
-- **Deployment**: Railway with automated startup checks
+- **Storage**: Supabase Storage for images and file uploads
+- **Deployment**: Railway with automated startup checks and health monitoring
+- **Security**: Multi-layer middleware with rate limiting, request validation, and audit logging
 
 ## 📋 Features
 
@@ -211,10 +212,18 @@ server/
 ├── logs/                          # Application logs (gitignored)
 │   └── audit.log                 # Security audit log
 ├── scripts/                       # Utility scripts
-│   ├── railway_start.py          # Railway startup
-│   ├── test_config.py            # Config testing
-│   ├── check-deployment-ready.py # Deployment checks
-│   └── generate-railway-vars.py  # Env generator
+│   ├── README.md                  # Scripts documentation
+│   ├── railway_start.py          # Railway startup (production)
+│   ├── test_config.py            # Configuration testing
+│   ├── check-deployment-ready.py # Deployment readiness checks
+│   ├── generate-railway-vars.py  # Railway env var generator
+│   ├── check_centralization.sh   # Code quality checker
+│   ├── set_premium_account.py    # Admin: set premium status
+│   ├── setup_test_data.py        # Test data setup
+│   ├── analyze_database_tables.py # Database analysis
+│   ├── cleanup_database.py       # Database cleanup utility
+│   ├── fix_function_search_path_security.sql # Security fix
+│   └── fix_auth_user_grant_error.sql # Auth error fix
 ├── standardizor/                  # Data standardization
 │   ├── update_nutritional_info.py # Nutrition updates
 │   └── README.md                  # Standardization docs
@@ -311,31 +320,65 @@ python tests/run_tests.py
 
 ## 🛠️ Utility Scripts
 
-The `scripts/` directory contains helpful utilities:
+The `scripts/` directory contains helpful utilities for deployment, development, and maintenance. See [`scripts/README.md`](./scripts/README.md) for detailed documentation.
 
-### Configuration Testing
+### Deployment & Configuration
 ```bash
 # Test environment configuration
 python scripts/test_config.py
 
 # Generate secure secret key
 python scripts/test_config.py --generate-key
-```
 
-### Deployment Preparation
-```bash
 # Check if ready for Railway deployment
 python scripts/check-deployment-ready.py
 
 # Generate Railway environment variable commands
 python scripts/generate-railway-vars.py
-```
 
-### Production Startup
-```bash
-# Railway uses this automatically (via railway.toml)
+# Production startup (Railway uses this automatically via railway.toml)
 python scripts/railway_start.py
 ```
+
+### Development & Maintenance
+```bash
+# Check for centralization violations (code quality)
+./scripts/check_centralization.sh
+
+# Set user to premium status (admin utility)
+python scripts/set_premium_account.py user@example.com
+
+# Setup test data for development/testing
+python scripts/setup_test_data.py
+```
+
+### Database Maintenance
+```bash
+# Analyze database table structure and statistics
+python scripts/analyze_database_tables.py
+
+# Cleanup database (removes food items without ingredients)
+python scripts/cleanup_database.py --dry-run  # Dry run first
+python scripts/cleanup_database.py            # Actual cleanup
+```
+
+### Security & Database Fixes
+
+#### Function Search Path Security Fix
+Fixes security vulnerabilities in SECURITY DEFINER functions by setting explicit search_path to prevent search path injection attacks.
+
+**Usage**: Copy contents of `scripts/fix_function_search_path_security.sql` to Supabase SQL Editor and execute.
+
+**When to run**: After Supabase linter reports security warnings about mutable search_path in functions.
+
+#### Authentication Error Fix
+Diagnoses and fixes common causes of "Database error granting user" authentication errors.
+
+**Usage**: Copy contents of `scripts/fix_auth_user_grant_error.sql` to Supabase SQL Editor, review diagnostics, then execute appropriate fixes.
+
+**When to run**: If users are experiencing login issues or authentication errors.
+
+For detailed instructions on security fixes, see [`scripts/README.md`](./scripts/README.md).
 
 ## 📊 API Endpoints
 
@@ -490,16 +533,39 @@ railway logs
 
 ## 🛡️ Security Features
 
-- ✅ Rate limiting (60 req/min, 5 req/min for auth)
-- ✅ CORS protection
-- ✅ Security headers (CSP, HSTS, etc.)
-- ✅ Request size limits
-- ✅ SQL injection protection (via SQLAlchemy)
-- ✅ XSS protection
-- ✅ Audit logging
-- ✅ MFA support
-- ✅ JWT token validation
-- ✅ Input validation (Pydantic)
+### Request Protection
+- ✅ Rate limiting (60 req/min general, 5 req/min for auth endpoints)
+- ✅ Request size limits (configurable max file/request size)
+- ✅ Range header validation (mitigates CVE-2025-62727 ReDoS vulnerability)
+- ✅ Request timeout protection
+- ✅ API version middleware
+
+### Network Security
+- ✅ CORS protection with configurable allowed origins
+- ✅ Security headers (CSP, HSTS, X-Frame-Options, etc.)
+- ✅ Trusted host middleware
+- ✅ Referrer policy enforcement
+- ✅ Cross-origin resource policy
+
+### Authentication & Authorization
+- ✅ JWT token validation with configurable expiration
+- ✅ Multi-factor authentication (MFA) support
+- ✅ Secure password hashing (bcrypt)
+- ✅ Session timeout management
+- ✅ Token refresh mechanism
+
+### Data Protection
+- ✅ SQL injection protection (via SQLAlchemy parameterized queries)
+- ✅ XSS protection with input sanitization
+- ✅ Input validation (Pydantic models)
+- ✅ File upload validation (type, size, content)
+- ✅ Audit logging for security events
+
+### Database Security
+- ✅ Row Level Security (RLS) policies in Supabase
+- ✅ Function search path security (prevents injection)
+- ✅ Secure connection pooling
+- ✅ Database function security hardening
 
 ## 📥 Data Import
 
@@ -566,8 +632,10 @@ python update_nutritional_info.py
 - Monitor Railway dashboard for CPU/Memory usage
 - Check database query performance in Supabase
 - Review rate limiting settings
-- Consider connection pooling adjustments
+- Consider connection pooling adjustments (default: 10 connections)
 - Enable query logging for slow queries
+- Use `analyze_database_tables.py` to identify unused tables
+- Review connection pool size vs. Supabase limits (max 20 connections)
 
 ### Testing Issues
 - Install test dependencies: `pip install pytest pytest-asyncio`
@@ -605,28 +673,98 @@ The API provides comprehensive analytics for pet nutrition:
 
 ## 📚 Documentation
 
+### Project Documentation
 - [`API_DOCS.md`](../API_DOCS.md) - Comprehensive API reference
+- [`scripts/README.md`](./scripts/README.md) - Utility scripts documentation
 - [`importing/README.md`](./importing/README.md) - Data import guide
 - [`standardizor/README.md`](./standardizor/README.md) - Data standardization guide
+- [`tests/README.md`](./tests/README.md) - Testing documentation
+
+### External Resources
 - [FastAPI Docs](https://fastapi.tiangolo.com/) - Framework documentation
 - [Supabase Docs](https://supabase.com/docs) - Database & Auth
+- [Railway Docs](https://docs.railway.app/) - Deployment platform
+- [Pydantic v2 Docs](https://docs.pydantic.dev/) - Data validation
 
 ## 🤝 Contributing
 
-1. Create feature branch: `git checkout -b feature/your-feature`
-2. Follow SOLID, DRY, and KISS principles
-3. Keep files under 500 lines
-4. Add docstrings to all functions
-5. Run tests: `pytest`
-6. Submit pull request
+### Development Guidelines
+
+1. **Create feature branch**: `git checkout -b feature/your-feature`
+
+2. **Follow coding principles**:
+   - **SOLID** - Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion
+   - **DRY** - Don't Repeat Yourself
+   - **KISS** - Keep It Simple, Stupid
+
+3. **Code organization**:
+   - Keep files under 500 lines (split into modules when needed)
+   - Use functional, declarative programming
+   - Prefer async/await for I/O operations
+   - Use type hints for all function signatures
+
+4. **Documentation**:
+   - Add docstrings to all functions (JSDoc-style comments)
+   - Document complex logic with inline comments
+   - Update README files when adding features
+
+5. **Testing**:
+   - Run tests: `pytest`
+   - Ensure all tests pass before submitting
+   - Add tests for new features
+
+6. **Code quality**:
+   - Run `./scripts/check_centralization.sh` to check for violations
+   - Follow error handling patterns (early returns, guard clauses)
+   - Use Pydantic models for validation
+
+7. **Submit pull request** with clear description of changes
 
 ## 📄 License
 
 Proprietary - All rights reserved
 
+## 📦 Dependencies
+
+### Core Framework
+- **FastAPI 0.115.6** - Web framework (pinned for compatibility)
+- **Uvicorn** - ASGI server with performance improvements
+- **Python 3.11+** - Required Python version
+
+### Database & Supabase
+- **Supabase 2.9.1** - Supabase client (pinned for stability)
+- **SQLAlchemy 2.0+** - ORM with async support
+- **asyncpg** - Async PostgreSQL driver
+- **Alembic** - Database migrations
+
+### Security & Authentication
+- **PyJWT 2.10+** - JWT token handling
+- **passlib[bcrypt]** - Password hashing
+- **cryptography 46.0+** - Cryptographic operations
+- **pyotp** - MFA/TOTP support
+
+### Validation & Data
+- **Pydantic 2.12+** - Data validation and settings
+- **email-validator** - Email validation
+
+### File Processing
+- **Pillow 11.0+** - Image processing
+- **python-multipart** - File upload handling
+- **bleach** - HTML sanitization
+
+### Performance & Monitoring
+- **slowapi** - Rate limiting
+- **psutil** - System monitoring
+
+### Testing
+- **pytest 8.4+** - Testing framework
+- **pytest-asyncio** - Async test support
+
+**Note**: Some dependencies are pinned to specific versions for compatibility. See `requirements.txt` for complete list with version constraints.
+
 ---
 
-*Last updated: November 2025*
+*Last updated: January 2025*
 *API Version: 1.0.0*
 
 Built with ❤️ for pet owners everywhere 🐶🐱

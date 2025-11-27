@@ -84,6 +84,10 @@ struct ProfileSettingsView: View {
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
                 calculateCacheSize()
+                // Refresh user profile when view appears to ensure latest role is displayed
+                Task {
+                    await authService.refreshUserProfile(forceRefresh: true)
+                }
             }
             .sheet(isPresented: $showingGDPRView) {
                 GDPRView()

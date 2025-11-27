@@ -151,8 +151,10 @@ final class SubscriptionViewModel: ObservableObject {
             
             
             // Refresh user profile to get updated role from backend
-            if response.hasSubscription {
-                await authService.refreshUserProfile()
+            // Force refresh to bypass cache and get latest role from server
+            // Refresh for both active subscriptions AND bypass users (is_premium = true)
+            if response.hasSubscription || response.isPremium {
+                await authService.refreshUserProfile(forceRefresh: true)
             }
         } catch {
             logger.error("Failed to sync subscription with backend: \(error.localizedDescription)")
@@ -163,12 +165,16 @@ final class SubscriptionViewModel: ObservableObject {
     /// Response model for subscription status endpoint
     private struct SubscriptionStatusResponse: Codable {
         let hasSubscription: Bool
+        let isPremium: Bool
+        let bypassSubscription: Bool?
         let status: String?
         let expiresAt: Date?
         let productId: String?
         
         enum CodingKeys: String, CodingKey {
             case hasSubscription = "has_subscription"
+            case isPremium = "is_premium"
+            case bypassSubscription = "bypass_subscription"
             case status
             case expiresAt = "expires_at"
             case productId = "product_id"

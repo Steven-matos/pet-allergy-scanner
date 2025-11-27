@@ -17,6 +17,7 @@ struct User: Codable, Identifiable, Equatable {
     let imageUrl: String?
     let role: UserRole
     let onboarded: Bool
+    let bypassSubscription: Bool
     let createdAt: Date
     let updatedAt: Date
     
@@ -29,6 +30,7 @@ struct User: Codable, Identifiable, Equatable {
         case imageUrl = "image_url"
         case role
         case onboarded
+        case bypassSubscription = "bypass_subscription"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -43,6 +45,7 @@ struct User: Codable, Identifiable, Equatable {
     ///   - imageUrl: Optional profile image URL
     ///   - role: User role (free or premium)
     ///   - onboarded: Whether user has completed onboarding
+    ///   - bypassSubscription: Whether user bypasses subscription checks (admin accounts)
     ///   - createdAt: Account creation timestamp
     ///   - updatedAt: Last update timestamp
     init(
@@ -54,6 +57,7 @@ struct User: Codable, Identifiable, Equatable {
         imageUrl: String? = nil,
         role: UserRole,
         onboarded: Bool = false,
+        bypassSubscription: Bool = false,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -65,6 +69,7 @@ struct User: Codable, Identifiable, Equatable {
         self.imageUrl = imageUrl
         self.role = role
         self.onboarded = onboarded
+        self.bypassSubscription = bypassSubscription
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -82,6 +87,7 @@ struct User: Codable, Identifiable, Equatable {
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         role = try container.decode(UserRole.self, forKey: .role)
         onboarded = try container.decodeIfPresent(Bool.self, forKey: .onboarded) ?? false
+        bypassSubscription = try container.decodeIfPresent(Bool.self, forKey: .bypassSubscription) ?? false
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -193,6 +199,7 @@ struct RegistrationResponse: Decodable {
         case imageUrl = "image_url"
         case role
         case onboarded
+        case bypassSubscription = "bypass_subscription"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -221,6 +228,7 @@ struct RegistrationResponse: Decodable {
             let userImageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
             let userRole = try container.decodeIfPresent(UserRole.self, forKey: .role) ?? .free
             let userOnboarded = try container.decodeIfPresent(Bool.self, forKey: .onboarded) ?? false
+            let userBypassSubscription = try container.decodeIfPresent(Bool.self, forKey: .bypassSubscription) ?? false
             let userCreatedAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
             let userUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
             
@@ -233,6 +241,7 @@ struct RegistrationResponse: Decodable {
                 imageUrl: userImageUrl,
                 role: userRole,
                 onboarded: userOnboarded,
+                bypassSubscription: userBypassSubscription,
                 createdAt: userCreatedAt,
                 updatedAt: userUpdatedAt
             )

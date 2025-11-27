@@ -17,6 +17,10 @@ This directory contains utility scripts for the Pet Allergy Scanner backend.
 - **`cleanup_database.py`** - Database cleanup utility (removes food items without ingredients)
 - **`analyze_database_tables.py`** - Analyzes database table structure and statistics
 
+### Security & Database Fixes
+- **`fix_function_search_path_security.sql`** - Security hardening for database functions (fixes search path injection vulnerabilities)
+- **`fix_auth_user_grant_error.sql`** - Diagnoses and fixes authentication errors ("Database error granting user")
+
 ## 🗑️ Removed Scripts (One-Time Migrations - Already Completed)
 
 The following scripts were removed as they were one-time migrations that have already been completed:
@@ -58,4 +62,48 @@ python scripts/cleanup_database.py --dry-run
 # Analyze database tables
 python scripts/analyze_database_tables.py
 ```
+
+### Security & Database Fixes
+
+#### Function Search Path Security Fix
+Fixes security vulnerabilities in SECURITY DEFINER functions by setting explicit search_path. This prevents search path injection attacks.
+
+**When to run**: After Supabase linter reports security warnings about mutable search_path in functions.
+
+**How to run**:
+1. Open Supabase SQL Editor
+2. Copy and paste the contents of `fix_function_search_path_security.sql`
+3. Review the diagnostic queries (Step 1) to see current function definitions
+4. Execute the fix statements
+5. Verify the fixes using the verification queries at the end of the script
+
+**What it fixes**:
+- `cleanup_expired_device_tokens_temp()` function
+- `prevent_bypass_user_downgrade()` function
+- Sets explicit `search_path = public, pg_temp` for security
+
+**Reference**: [Supabase Database Linter - Function Search Path](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
+
+#### Authentication Error Fix
+Diagnoses and fixes common causes of "Database error granting user" authentication errors.
+
+**When to run**: If users are experiencing login issues or authentication errors.
+
+**How to run**:
+1. Open Supabase SQL Editor
+2. Copy and paste the contents of `fix_auth_user_grant_error.sql`
+3. Review the diagnostic queries to identify the specific issue:
+   - Step 1: Check for orphaned or duplicate user records
+   - Step 2: Check for duplicate emails
+   - Step 3: Check for constraint violations
+4. Execute the appropriate fix based on the diagnostics
+5. Verify the fix worked
+
+**What it fixes**:
+- Missing user records in `public.users` (orphaned auth.users)
+- Duplicate email addresses
+- ID or email mismatches between `auth.users` and `public.users`
+- Constraint violations preventing user creation
+
+**Note**: This script includes comprehensive diagnostic queries to help identify the root cause before applying fixes.
 

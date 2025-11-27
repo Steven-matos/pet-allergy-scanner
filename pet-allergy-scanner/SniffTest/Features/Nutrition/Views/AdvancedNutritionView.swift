@@ -65,14 +65,14 @@ struct AdvancedNutritionView: View {
             }
             .navigationTitle(selectedPet != nil ? "\(selectedPet!.name) - Advanced" : "Advanced Nutrition")
             .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .toolbar {
                 // Only show toolbar items if user has premium access
                 if gatekeeper.canAccessAnalytics() {
                     ToolbarItem(placement: .navigationBarLeading) {
                         if selectedTab == 0 && selectedPet != nil {
-                            // Weight tab - Add Weight button
+                            // Weight tab - Add Weight button integrated with liquid glass
                             Button(action: {
                                 showingWeightEntry = true
                             }) {
@@ -83,20 +83,13 @@ struct AdvancedNutritionView: View {
                                         .font(ModernDesignSystem.Typography.subheadline)
                                         .fontWeight(.medium)
                                 }
-                                .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                                .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
                                 .padding(.horizontal, ModernDesignSystem.Spacing.md)
                                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                                .background(ModernDesignSystem.Colors.buttonPrimary)
-                                .cornerRadius(ModernDesignSystem.CornerRadius.small)
-                                .shadow(
-                                    color: ModernDesignSystem.Shadows.small.color,
-                                    radius: ModernDesignSystem.Shadows.small.radius,
-                                    x: ModernDesignSystem.Shadows.small.x,
-                                    y: ModernDesignSystem.Shadows.small.y
-                                )
                             }
+                            .buttonStyle(.plain)
                         } else if selectedTab == 1 && selectedPet != nil {
-                            // Trends tab - Period selector
+                            // Trends tab - Period selector integrated with liquid glass
                             Button(action: {
                                 showingPeriodSelector = true
                             }) {
@@ -116,20 +109,8 @@ struct AdvancedNutritionView: View {
                                 }
                                 .padding(.horizontal, ModernDesignSystem.Spacing.md)
                                 .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                                .background(ModernDesignSystem.Colors.softCream)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                                )
-                                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-                                .shadow(
-                                    color: ModernDesignSystem.Shadows.small.color,
-                                    radius: ModernDesignSystem.Shadows.small.radius,
-                                    x: ModernDesignSystem.Shadows.small.x,
-                                    y: ModernDesignSystem.Shadows.small.y
-                                )
                             }
-                            .buttonStyle(PlainButtonStyle())
+                            .buttonStyle(.plain)
                         }
                     }
                     
@@ -146,28 +127,12 @@ struct AdvancedNutritionView: View {
                                 }
                             }
                         } label: {
-                            HStack(spacing: 2) {
-                                ForEach(0..<3, id: \.self) { _ in
-                                    Circle()
-                                        .fill(ModernDesignSystem.Colors.textPrimary)
-                                        .frame(width: 4, height: 4)
-                                }
-                            }
-                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                            .background(ModernDesignSystem.Colors.softCream)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                            )
-                            .cornerRadius(ModernDesignSystem.CornerRadius.small)
-                            .shadow(
-                                color: ModernDesignSystem.Shadows.small.color,
-                                radius: ModernDesignSystem.Shadows.small.radius,
-                                x: ModernDesignSystem.Shadows.small.x,
-                                y: ModernDesignSystem.Shadows.small.y
-                            )
+                            Image(systemName: "ellipsis")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                .padding(ModernDesignSystem.Spacing.sm)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }

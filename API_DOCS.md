@@ -92,6 +92,12 @@ Authorization: Bearer <jwt_token>
 - **Token Analysis**: Automatic token payload inspection for debugging
 - **Graceful User Creation**: Handles missing user records automatically
 
+### Database Security Features (2025-11-26)
+- **Function Search Path Security**: All SECURITY DEFINER functions use explicit search_path to prevent injection attacks
+- **Performance Optimizations**: Auth RLS patterns optimized with `(select auth.uid())` for better performance
+- **Security Linter Compliance**: All Supabase linter warnings addressed
+- **SQL Injection Protection**: Parameterized queries and explicit schema qualification
+
 ## Error Handling
 
 The API uses standard HTTP status codes and returns structured error responses:
@@ -2068,11 +2074,16 @@ class PetAllergyScannerAPI:
 - Waitlist signup functionality
 - **NEW**: Data quality assessment and analysis endpoints
 - **NEW**: RevenueCat webhook integration for subscription management
+- **NEW**: Database function security hardening (function search path fixes) - 2025-11-26
+- **NEW**: Security fix scripts for database functions
+- **NEW**: Device tokens temp table for anonymous device registration
 - **IMPROVED**: Robust JWT validation with multi-strategy support
 - **IMPROVED**: Row Level Security (RLS) policy enforcement
 - **IMPROVED**: Trailing slash routing support across all endpoints
 - **IMPROVED**: Error handling and debugging capabilities
 - **IMPROVED**: Service role integration for system operations
+- **IMPROVED**: Database performance optimizations with optimized RLS patterns
+- **IMPROVED**: All Supabase linter security warnings resolved (2025-11-26)
 - Push notifications (APNs)
 - GDPR compliance features
 - Health monitoring and metrics
@@ -2099,6 +2110,14 @@ class PetAllergyScannerAPI:
 - **Solution**: Fixed automatically - system uses service role for system operations
 - **Note**: Users should not encounter this error anymore
 
+**Problem**: Supabase linter warnings about function search_path security
+- **Solution**: Run `server/scripts/fix_function_search_path_security.sql` in Supabase SQL Editor
+- **Note**: This fixes security vulnerabilities in SECURITY DEFINER functions (2025-11-26)
+
+**Problem**: Authentication errors ("Database error granting user")
+- **Solution**: Run `server/scripts/fix_auth_user_grant_error.sql` in Supabase SQL Editor
+- **Note**: This script includes diagnostic queries to identify specific issues
+
 #### Routing Issues
 **Problem**: 405 Method Not Allowed error
 - **Solution**: Ensure correct HTTP method and URL format
@@ -2114,4 +2133,5 @@ All endpoints support both trailing slash and non-trailing slash formats:
 
 *Last updated: November 2025*
 *API Version: 1.0.0*
+*Database Schema: Updated 2025-11-26 with security hardening*
 *Production API: https://snifftest-api-production.up.railway.app*

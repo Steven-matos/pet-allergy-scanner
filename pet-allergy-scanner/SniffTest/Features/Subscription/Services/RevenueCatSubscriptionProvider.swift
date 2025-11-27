@@ -230,23 +230,47 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         // Only sync when subscription becomes active to avoid unnecessary API calls
     }
     
+    /// Check subscription status with backend and refresh user profile if needed
+    /// This is called when app becomes active to ensure user role is synced
+    /// Always checks backend even if RevenueCat doesn't show active subscription
+    /// This handles cases where backend has premium role but RevenueCat sync hasn't completed
+    func checkAndSyncSubscriptionStatus() async {
+        guard isConfigured else { return }
+        
+        // Refresh customer info from RevenueCat first
+        await refreshCustomerInfo()
+        
+        // Always sync with backend to check subscription status
+        // This ensures we get updated user role even if RevenueCat doesn't show active subscription
+        await syncSubscriptionWithBackend(forceCheck: true)
+    }
+    
     /// Sync subscription status with backend API
     /// This ensures the backend knows about the subscription state from RevenueCat
-    private func syncSubscriptionWithBackend() async {
-        guard hasActiveSubscription else {
+    /// - Parameter forceCheck: If true, checks backend even if RevenueCat doesn't show active subscription
+    private func syncSubscriptionWithBackend(forceCheck: Bool = false) async {
+        // If not forcing check and no active subscription, skip
+        if !forceCheck && !hasActiveSubscription {
             logger.debug("No active subscription to sync with backend")
             return
         }
         
         do {
             // Call backend subscription status endpoint to verify and sync
-            // The backend will verify the subscription via RevenueCat webhooks
-            // This is a secondary check to ensure consistency
+            // The backend will verify the subscription via RevenueCat API and update user role if needed
             let apiService = APIService.shared
-            let _ = try await apiService.get(
+            let response: SubscriptionStatusResponse = try await apiService.get(
                 endpoint: "/subscriptions/status",
                 responseType: SubscriptionStatusResponse.self
             )
+            
+            // If backend confirms subscription OR user is premium (bypass users), refresh user profile
+            // This ensures bypass users get their premium role synced even without active subscription
+            if response.hasSubscription || response.isPremium {
+                let authService = AuthService.shared
+                // Force refresh to bypass cache and get latest role from server
+                await authService.refreshUserProfile(forceRefresh: true)
+            }
         } catch {
             logger.error("Failed to sync subscription with backend: \(error.localizedDescription)")
             // Don't throw - this is a background sync, not critical to user flow
@@ -422,12 +446,18 @@ extension RevenueCatSubscriptionProvider: PurchasesDelegate {
 /// Response model for backend subscription status endpoint
 struct SubscriptionStatusResponse: Codable {
     let hasSubscription: Bool
+    let isPremium: Bool
+    let bypassSubscription: Bool?
+    let isAdmin: Bool?
     let status: String?
     let expiresAt: Date?
     let productId: String?
     
     enum CodingKeys: String, CodingKey {
         case hasSubscription = "has_subscription"
+        case isPremium = "is_premium"
+        case bypassSubscription = "bypass_subscription"
+        case isAdmin = "is_admin"
         case status
         case expiresAt = "expires_at"
         case productId = "product_id"

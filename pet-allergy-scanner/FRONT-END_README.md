@@ -17,13 +17,18 @@ SniffTest/                           # iOS App Root
 │
 ├── Core/                           # Core Infrastructure (Cross-cutting concerns)
 │   ├── Analytics/                  # Analytics & tracking
-│   │   └── AnalyticsManager.swift  # Centralized analytics service
+│   │   ├── AnalyticsManager.swift  # Centralized analytics service
+│   │   └── PostHogAnalytics.swift  # PostHog analytics integration
 │   ├── Configuration/              # App configuration management
 │   │   ├── Configuration.swift     # App-wide configuration
-│   │   └── CacheConfiguration.swift # Cache settings & policies
+│   │   ├── CacheConfiguration.swift # Cache settings & policies
+│   │   ├── RevenueCatConfigurator.swift # RevenueCat subscription setup
+│   │   └── PostHogConfigurator.swift # PostHog analytics setup
 │   ├── Performance/                # Performance optimization
 │   │   ├── PerformanceOptimizer.swift # Memory & performance utilities
-│   │   └── GraphicsOptimizer.swift # Graphics rendering optimization
+│   │   ├── ModernPerformanceOptimizer.swift # Modern performance optimizations
+│   │   ├── GraphicsOptimizer.swift # Graphics rendering optimization
+│   │   └── MemoryMonitor.swift     # Memory monitoring utilities
 │   └── Security/                   # Security infrastructure
 │       ├── SecurityManager.swift   # Security policy enforcement
 │       ├── SecureDataManager.swift # Secure data storage
@@ -193,13 +198,19 @@ SniffTest/                           # iOS App Root
 │   │   ├── GDPRModels.swift        # GDPR compliance models
 │   │   ├── MonitoringModels.swift  # App monitoring models
 │   │   ├── CacheModels.swift       # Caching data models
+│   │   ├── FoodProduct.swift       # Food product data model
 │   │   └── MockData.swift          # Test & development data
 │   ├── Services/                   # Shared business services
 │   │   ├── APIService.swift        # Core API communication
 │   │   ├── APIError.swift          # API error handling
 │   │   ├── CacheManager.swift      # Centralized caching
+│   │   ├── EnhancedCacheManager.swift # Enhanced multi-layer caching
 │   │   ├── CacheService.swift      # Cache operations
 │   │   ├── CacheAnalyticsService.swift # Cache analytics
+│   │   ├── CacheHydrationService.swift # Cache warming & hydration
+│   │   ├── DataQualityService.swift # Data quality assessment
+│   │   ├── MemoryEfficientImageProcessor.swift # Memory-optimized image processing
+│   │   ├── PetSensitivityService.swift # Pet sensitivity analysis
 │   │   ├── GDPRService.swift       # GDPR compliance
 │   │   ├── MonitoringService.swift # App monitoring
 │   │   └── URLHandler.swift        # Deep linking & URL handling
@@ -210,21 +221,47 @@ SniffTest/                           # iOS App Root
 │   │   ├── HapticFeedback.swift    # Haptic feedback utilities
 │   │   ├── ImageLoader.swift       # Image loading utilities
 │   │   ├── ImageOptimizer.swift    # Image optimization
+│   │   ├── UIImage+MemoryOptimization.swift # UIImage memory extensions
+│   │   ├── KeyboardManager.swift   # Keyboard handling utilities
+│   │   ├── OrientationManager.swift # Device orientation management
+│   │   ├── SystemWarningSuppressionHelper.swift # Console warning suppression
 │   │   ├── SettingsManager.swift   # App settings management
 │   │   └── BundleExtension.swift   # Bundle utility extensions
 │   └── Views/                      # Shared UI components
 │       ├── MainTabView.swift       # Main tab navigation
 │       ├── EmptyPetsView.swift     # Empty state components
 │       ├── GDPRView.swift          # GDPR compliance UI
-│       ├── APNTestView.swift       # Push notification testing
 │       ├── LegalViews.swift        # Legal & terms views
-│       └── NutritionComponents.swift # Reusable nutrition components
+│       ├── NutritionComponents.swift # Reusable nutrition components
+│       ├── CacheHydrationProgressView.swift # Cache warming progress
+│       ├── SafeTextField.swift     # Safe text input component
+│       ├── ModernSwiftUIAnimations.swift # Modern animation utilities
+│       └── ModernSwiftUIConcurrency.swift # Concurrency helpers
 │
 ├── Assets.xcassets/                # App assets & resources
 │   ├── AppIcon.appiconset/         # App icons
 │   ├── AccentColor.colorset/       # Accent color definition
+│   ├── softCream.colorset/         # Soft cream color
+│   ├── Branding/                   # Brand assets
+│   │   ├── app-logo.imageset/      # App logo
+│   │   └── launch-icon.imageset/   # Launch screen icon
+│   ├── Icons/                      # Icon assets
+│   ├── Illustrations/              # Illustration assets
+│   │   ├── cat-scale.imageset/     # Cat scale illustration
+│   │   ├── cat-scanning.imageset/   # Cat scanning illustration
+│   │   ├── cat-tracking.imageset/   # Cat tracking illustration
+│   │   ├── chi-chi-tracking.imageset/ # Dog tracking illustration
+│   │   ├── dog-scale.imageset/     # Dog scale illustration
+│   │   ├── dog-scanning.imageset/   # Dog scanning illustration
+│   │   ├── premium-feature.imageset/ # Premium feature illustration
+│   │   ├── running.imageset/       # Running illustration
+│   │   └── welcome.imageset/       # Welcome illustration
+│   ├── Placeholders/               # Placeholder images
+│   │   ├── cat-placeholder.imageset/ # Cat placeholder
+│   │   └── dog-placeholder.imageset/ # Dog placeholder
 │   └── Contents.json               # Asset catalog configuration
 │
+├── Configuration.storekit          # StoreKit configuration for testing
 ├── SniffTest.entitlements         # App capabilities & permissions
 ├── LaunchScreen.storyboard        # Launch screen interface
 └── Tests/                          # Test Suite
@@ -299,10 +336,10 @@ Contains the application entry point and root configuration:
 
 ### **Core/ Directory**
 Infrastructure components used across all features:
-- **Analytics**: Centralized tracking and metrics
-- **Configuration**: App-wide settings and environment management
-- **Performance**: Memory optimization and performance monitoring
-- **Security**: Authentication, encryption, and security policies
+- **Analytics**: Centralized tracking and metrics (AnalyticsManager, PostHogAnalytics)
+- **Configuration**: App-wide settings and environment management (Configuration, RevenueCatConfigurator, PostHogConfigurator)
+- **Performance**: Memory optimization and performance monitoring (PerformanceOptimizer, ModernPerformanceOptimizer, GraphicsOptimizer, MemoryMonitor)
+- **Security**: Authentication, encryption, and security policies (SecurityManager, SecureDataManager, CertificatePinning)
 
 ### **Features/ Directory**
 Self-contained feature modules following MVVM:
@@ -312,10 +349,10 @@ Self-contained feature modules following MVVM:
 
 ### **Shared/ Directory**
 Cross-feature components and utilities:
-- **Models**: Common data structures used by multiple features
-- **Services**: Reusable business services and API clients
-- **Utils**: Helper functions, validators, and design system
-- **Views**: Reusable UI components and common layouts
+- **Models**: Common data structures used by multiple features (GDPRModels, MonitoringModels, CacheModels, FoodProduct, MockData)
+- **Services**: Reusable business services and API clients (APIService, EnhancedCacheManager, CacheHydrationService, DataQualityService, PetSensitivityService, MemoryEfficientImageProcessor)
+- **Utils**: Helper functions, validators, and design system (ModernDesignSystem, InputValidator, KeyboardManager, OrientationManager, SystemWarningSuppressionHelper, UIImage+MemoryOptimization)
+- **Views**: Reusable UI components and common layouts (MainTabView, CacheHydrationProgressView, SafeTextField, ModernSwiftUIAnimations, ModernSwiftUIConcurrency)
 
 ## Design Patterns Applied
 
@@ -366,23 +403,23 @@ Cross-feature components and utilities:
 
 ## File Organization Summary
 
-**Total: 130+ Swift files**
+**Total: 103+ Swift files**
 
 ### Feature Breakdown:
-- **Authentication**: 7 files (1 model, 5 services, 2 views)
+- **Authentication**: 6 files (1 model, 5 services, 2 views)
 - **Pets**: 9 files (1 model, 3 services, 5 views)
-- **Scanning**: 20 files (2 models, 6 services, 1 utility, 11 views)
-- **Nutrition**: 24 files (3 models, 10 services, 1 view model, 10 views)
-- **Notifications**: 8 files (5 services, 3 views)
+- **Scanning**: 24 files (2 models, 6 services, 1 utility, 15 views)
+- **Nutrition**: 25 files (3 models, 11 services, 1 view model, 10 views)
+- **Notifications**: 6 files (5 services, 1 view)
 - **Profile**: 5 files (2 services, 3 views)
-- **Subscription**: 11 files (2 models, 2 services, 1 view model, 6 views)
-- **Tracking**: 7 files (2 models, 2 services, 5 views)
+- **Subscription**: 12 files (2 models, 2 services, 1 view model, 7 views)
+- **Tracking**: 9 files (2 models, 2 services, 5 views)
 - **History**: 1 file (1 view)
 - **Help**: 1 file (1 view)
 - **Onboarding**: 2 files (1 launch screen, 1 view)
 - **Settings**: 1 file (1 service)
-- **Core**: 8 files (3 security, 2 configuration, 1 analytics, 2 performance)
-- **Shared**: 22+ files (4+ models, 8+ services, 8+ utilities, 6+ views)
+- **Core**: 10 files (3 security, 4 configuration, 2 analytics, 4 performance)
+- **Shared**: 35+ files (5+ models, 13+ services, 12+ utilities, 8+ views)
 - **App**: 2 files (main app, content view)
 - **Tests**: 6+ files (unit tests)
 
@@ -409,9 +446,35 @@ Cross-feature components and utilities:
 - Centralized test utilities and mock data
 
 ### **Performance**
+- Multi-layer caching system (URLSession, memory, disk)
+- Enhanced cache manager with automatic invalidation and warming
+- Memory-efficient image processing and optimization
+- Memory monitoring and performance optimization utilities
 - Lazy loading capabilities for features
-- Centralized caching and performance optimization
 - Efficient memory management through proper architecture
+- Background cache warming on app launch
+
+## App Initialization
+
+The app follows a structured initialization pattern in `SniffTestApp.swift`:
+
+### Startup Sequence
+1. **Service Initialization**: Shared service instances created (AuthService, PetService, NotificationManager, CacheManager)
+2. **Cache Warming**: Cache manager warms cache on app launch for better performance
+3. **Configuration**: RevenueCat and PostHog configured via AppDelegate
+4. **Push Notifications**: Push notification delegate configured
+5. **System Configuration**: System warning suppression configured
+
+### Key Services
+- **AuthService.shared**: Centralized authentication management
+- **CachedPetService.shared**: Pet data with caching
+- **NotificationManager.shared**: Push and local notifications
+- **EnhancedCacheManager.shared**: Multi-layer caching system
+
+### Third-Party Integrations
+- **RevenueCat**: Configured via `RevenueCatConfigurator` using Info.plist values
+- **PostHog**: Configured via `PostHogConfigurator` using Info.plist values
+- **StoreKit**: Configured via `Configuration.storekit` for testing
 
 ## Getting Started
 
@@ -421,6 +484,7 @@ Cross-feature components and utilities:
 3. Explore `Features/` to understand feature organization
 4. Check `Shared/` for common utilities and components
 5. Review `Core/` for infrastructure components
+6. Review `SniffTestApp.swift` to understand app initialization
 
 ### **For Adding New Features**
 1. Create new feature directory in `Features/`
@@ -438,23 +502,53 @@ Cross-feature components and utilities:
 
 ---
 
+## Tech Stack & Dependencies
+
+### Core Frameworks
+- **SwiftUI** - Modern declarative UI framework
+- **Combine** - Reactive programming for data flow
+- **Foundation** - Core system frameworks
+- **UIKit** - UI components and system integration
+
+### Third-Party Libraries
+- **RevenueCat** - Subscription management and analytics
+- **RevenueCatUI** - Pre-built subscription UI components
+- **PostHog** - Product analytics and user behavior tracking
+
+### iOS Features
+- **StoreKit** - In-app purchases and subscriptions
+- **UserNotifications** - Push and local notifications
+- **AVFoundation** - Camera and media capture
+- **Vision** - OCR and image analysis
+- **CoreML** - Machine learning (if applicable)
+
+### Configuration
+- **Info.plist** - App configuration and permissions
+- **PrivacyInfo.xcprivacy** - Privacy manifest for App Store
+- **Configuration.storekit** - StoreKit testing configuration
+- **SniffTest.entitlements** - App capabilities (push notifications, etc.)
+
 ## Documentation Status
 
-**Last Verified**: November 2025  
+**Last Verified**: January 2025  
 **Architecture**: Feature-based MVVM with SOLID principles  
 **Status**: ✅ Production-ready - Verified against codebase  
-**Total Files**: 130+ Swift files across all features
+**Total Files**: 103+ Swift files across all features
 
-### Recent Updates (November 2025)
-- ✅ Added Tracking feature with Health Events and Medication Reminders
-- ✅ Enhanced Subscription feature with RevenueCat integration
-- ✅ Updated Nutrition feature with additional models and cached services
-- ✅ Enhanced Scanning feature with nutritional label scanning and product views
-- ✅ Updated Authentication with session recovery and lifecycle management
-- ✅ Added Profile caching service
-- ✅ Enhanced Notifications with meal reminder service
-- ✅ Updated Pets feature with data aggregation and PDF export
-- ✅ Added OCR spell checker utility
-- ✅ Updated file count summary to 130+ files
+### Recent Updates (January 2025)
+- ✅ Added PostHog analytics integration with PostHogConfigurator
+- ✅ Enhanced caching with EnhancedCacheManager (multi-layer caching)
+- ✅ Added CacheHydrationService for cache warming
+- ✅ Added MemoryEfficientImageProcessor for optimized image handling
+- ✅ Added PetSensitivityService for sensitivity analysis
+- ✅ Added DataQualityService for data quality assessment
+- ✅ Enhanced utilities: KeyboardManager, OrientationManager, SystemWarningSuppressionHelper
+- ✅ Added UIImage+MemoryOptimization extension
+- ✅ Added ModernSwiftUIAnimations and ModernSwiftUIConcurrency helpers
+- ✅ Enhanced Core/Performance with ModernPerformanceOptimizer and MemoryMonitor
+- ✅ Updated Subscription feature with SubscriptionBlockerView
+- ✅ Enhanced Scanning feature with additional views (15 total views)
+- ✅ Updated Nutrition feature with 11 services (including cached variants)
 - ✅ All directory structures verified against actual codebase
+- ✅ Updated file count to reflect current structure (103+ files)
 

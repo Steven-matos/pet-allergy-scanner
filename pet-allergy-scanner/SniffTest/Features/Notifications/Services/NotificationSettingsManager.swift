@@ -104,6 +104,7 @@ class NotificationSettingsManager: NSObject, ObservableObject {
         static let engagementNotificationsEnabled = "engagement_notifications_enabled"
         static let lastScanDate = "last_scan_date"
         static let lastEngagementNotificationDate = "last_engagement_notification_date"
+        static let lastEngagementReminderShownDate = "last_engagement_reminder_shown_date"
         static let birthdayCelebrationsShownThisYear = "birthday_celebrations_shown_this_year"
     }
     
@@ -250,12 +251,35 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     }
     
     /// Check if user needs engagement reminder
+    /// Only shows once per day when app opens if user hasn't been active for a while
     /// - Returns: Boolean indicating if engagement reminder should be shown
     func shouldShowEngagementReminder() -> Bool {
-        guard let lastScan = lastScanDate else { return true }
+        // Check if we've already shown the reminder today
+        let lastShownDate = userDefaults.object(forKey: UserDefaultsKeys.lastEngagementReminderShownDate) as? Date
+        let calendar = Calendar.current
+        let today = Date()
         
-        let daysSinceLastScan = Calendar.current.dateComponents([.day], from: lastScan, to: Date()).day ?? 0
+        if let lastShown = lastShownDate,
+           calendar.isDate(lastShown, inSameDayAs: today) {
+            // Already shown today, don't show again
+            return false
+        }
+        
+        // Check if user hasn't been active for a while (14 days since last scan)
+        guard let lastScan = lastScanDate else {
+            // No scan history, show reminder
+            return true
+        }
+        
+        let daysSinceLastScan = calendar.dateComponents([.day], from: lastScan, to: today).day ?? 0
         return daysSinceLastScan >= 14 // 2 weeks
+    }
+    
+    /// Mark engagement reminder as shown today
+    /// This prevents showing the reminder multiple times per day
+    func markEngagementReminderShown() {
+        userDefaults.set(Date(), forKey: UserDefaultsKeys.lastEngagementReminderShownDate)
+        userDefaults.synchronize()
     }
     
     /// Birthday notifications are now an easter egg - no toggle needed
