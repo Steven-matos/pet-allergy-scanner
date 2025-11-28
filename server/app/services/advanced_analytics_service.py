@@ -10,7 +10,7 @@ from app.shared.services.database_operation_service import DatabaseOperationServ
 from decimal import Decimal
 import statistics
 import json
-from ..database import get_supabase_client
+from supabase import Client
 from ..models.advanced_nutrition import (
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
@@ -27,8 +27,14 @@ class AdvancedAnalyticsService:
     Follows KISS by keeping analytics methods focused and simple
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize advanced analytics service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def generate_analytics(
         self, 

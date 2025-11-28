@@ -29,39 +29,47 @@ from app.services.advanced_analytics_service import AdvancedAnalyticsService
 
 router = APIRouter(prefix="/advanced-nutrition", tags=["advanced-nutrition"])
 
-# Service instances will be created lazily to avoid database initialization issues
-weight_service = None
-trends_service = None
-comparison_service = None
-analytics_service = None
+# Service factory functions
+# Services are instantiated per-request with authenticated clients for RLS compliance
 
-def get_weight_service():
-    """Get weight tracking service instance (lazy initialization)"""
-    global weight_service
-    if weight_service is None:
-        weight_service = WeightTrackingService()
-    return weight_service
+def get_weight_service(supabase: Client):
+    """
+    Get weight tracking service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+        
+    Returns:
+        WeightTrackingService instance with authenticated client
+    """
+    return WeightTrackingService(supabase)
 
-def get_trends_service():
-    """Get nutritional trends service instance (lazy initialization)"""
-    global trends_service
-    if trends_service is None:
-        trends_service = NutritionalTrendsService()
-    return trends_service
+def get_trends_service(supabase: Client):
+    """
+    Get nutritional trends service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return NutritionalTrendsService(supabase)
 
-def get_comparison_service():
-    """Get food comparison service instance (lazy initialization)"""
-    global comparison_service
-    if comparison_service is None:
-        comparison_service = FoodComparisonService()
-    return comparison_service
+def get_comparison_service(supabase: Client):
+    """
+    Get food comparison service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return FoodComparisonService(supabase)
 
-def get_analytics_service():
-    """Get advanced analytics service instance (lazy initialization)"""
-    global analytics_service
-    if analytics_service is None:
-        analytics_service = AdvancedAnalyticsService()
-    return analytics_service
+def get_analytics_service(supabase: Client):
+    """
+    Get advanced analytics service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return AdvancedAnalyticsService(supabase)
 
 
 # Weight Tracking Endpoints
@@ -90,7 +98,7 @@ async def record_weight(
         await verify_pet_ownership(weight_record.pet_id, current_user.id, supabase)
         
         # Record weight - service assumes ownership is already verified
-        return await get_weight_service().record_weight(weight_record, current_user.id)
+        return await get_weight_service(supabase).record_weight(weight_record, current_user.id)
     except HTTPException:
         # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
         raise
@@ -121,7 +129,7 @@ async def get_weight_history(
         List of weight records
     """
     try:
-        history = await get_weight_service().get_weight_history(pet_id, current_user.id, days_back)
+        history = await get_weight_service(supabase).get_weight_history(pet_id, current_user.id, days_back)
         # Return empty list if no history (200 status with empty data)
         return history if history else []
     except ValueError as e:
@@ -157,7 +165,7 @@ async def create_weight_goal(
         await verify_pet_ownership(goal.pet_id, current_user.id, supabase)
         
         # Upsert weight goal - service assumes ownership is already verified
-        return await get_weight_service().upsert_weight_goal(goal, current_user.id)
+        return await get_weight_service(supabase).upsert_weight_goal(goal, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -183,7 +191,7 @@ async def upsert_weight_goal(
         Created or updated weight goal
     """
     try:
-        return await get_weight_service().upsert_weight_goal(goal, current_user.id)
+        return await get_weight_service(supabase).upsert_weight_goal(goal, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -209,7 +217,7 @@ async def get_active_weight_goal(
         Active weight goal or None
     """
     try:
-        goal = await get_weight_service().get_active_weight_goal(pet_id, current_user.id)
+        goal = await get_weight_service(supabase).get_active_weight_goal(pet_id, current_user.id)
         # Return None if no goal exists (200 status with null/empty data)
         return goal
     except ValueError as e:
@@ -247,7 +255,7 @@ async def analyze_weight_trend(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze weight trend - service assumes ownership is already verified
-        return await get_weight_service().analyze_weight_trend(pet_id, current_user.id, days_back)
+        return await get_weight_service(supabase).analyze_weight_trend(pet_id, current_user.id, days_back)
     except HTTPException:
         # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
         raise
@@ -283,7 +291,7 @@ async def get_weight_management_dashboard(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight management dashboard - service assumes ownership is already verified
-        return await get_weight_service().get_weight_management_dashboard(pet_id, current_user.id)
+        return await get_weight_service(supabase).get_weight_management_dashboard(pet_id, current_user.id)
     except HTTPException:
         # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
         raise
@@ -323,7 +331,7 @@ async def get_nutritional_trends(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get trends - service will return empty list if no data exists
-        trends = await get_trends_service().get_nutritional_trends(pet_id, current_user.id, days_back)
+        trends = await get_trends_service(supabase).get_nutritional_trends(pet_id, current_user.id, days_back)
         # Return empty list if no trends (200 status with empty data)
         return trends if trends else []
     except HTTPException:
@@ -364,7 +372,7 @@ async def get_trends_dashboard(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get dashboard - service already handles empty data gracefully
-        dashboard = await get_trends_service().get_trends_dashboard(pet_id, current_user.id, period)
+        dashboard = await get_trends_service(supabase).get_trends_dashboard(pet_id, current_user.id, period)
         # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)
         return dashboard
     except HTTPException:
@@ -398,7 +406,7 @@ async def create_food_comparison(
         Created comparison
     """
     try:
-        return await get_comparison_service().create_comparison(comparison, current_user.id)
+        return await get_comparison_service(supabase).create_comparison(comparison, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
@@ -424,7 +432,7 @@ async def get_food_comparison(
         Food comparison data
     """
     try:
-        return await get_comparison_service().get_comparison(comparison_id, current_user.id)
+        return await get_comparison_service(supabase).get_comparison(comparison_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -450,7 +458,7 @@ async def get_user_comparisons(
         List of user's comparisons
     """
     try:
-        return await get_comparison_service().get_user_comparisons(current_user.id, limit)
+        return await get_comparison_service(supabase).get_user_comparisons(current_user.id, limit)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -474,7 +482,7 @@ async def get_comparison_dashboard(
         Comparison dashboard data
     """
     try:
-        return await get_comparison_service().get_comparison_dashboard(comparison_id, current_user.id)
+        return await get_comparison_service(supabase).get_comparison_dashboard(comparison_id, current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:
@@ -500,7 +508,7 @@ async def delete_food_comparison(
         Success message
     """
     try:
-        success = await get_comparison_service().delete_comparison(comparison_id, current_user.id)
+        success = await get_comparison_service(supabase).delete_comparison(comparison_id, current_user.id)
         if success:
             return {"message": "Comparison deleted successfully"}
         else:
@@ -541,7 +549,7 @@ async def generate_analytics(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Generate analytics - service assumes ownership is already verified
-        return await get_analytics_service().generate_analytics(
+        return await get_analytics_service(supabase).generate_analytics(
             pet_id, current_user.id, analysis_type, force_refresh
         )
     except HTTPException:
@@ -579,7 +587,7 @@ async def get_health_insights(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get health insights - service assumes ownership is already verified
-        return await get_analytics_service().get_health_insights(pet_id, current_user.id)
+        return await get_analytics_service(supabase).get_health_insights(pet_id, current_user.id)
     except HTTPException:
         # Re-raise HTTP exceptions (like 404 from verify_pet_ownership)
         raise
@@ -617,7 +625,7 @@ async def analyze_nutritional_patterns(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze nutritional patterns - service assumes ownership is already verified
-        return await get_analytics_service().analyze_nutritional_patterns(
+        return await get_analytics_service(supabase).analyze_nutritional_patterns(
             pet_id, current_user.id, analysis_period
         )
     except ValueError as e:
@@ -650,10 +658,10 @@ async def get_advanced_nutrition_dashboard(
         # Get all advanced nutrition data in parallel
         import asyncio
         
-        weight_records_task = get_weight_service().get_weight_history(pet_id, current_user.id, 30)
-        weight_goals_task = get_weight_service().get_active_weight_goal(pet_id, current_user.id)
-        trends_task = get_trends_service().get_nutritional_trends(pet_id, current_user.id, 30)
-        health_insights_task = get_analytics_service().get_health_insights(pet_id, current_user.id)
+        weight_records_task = get_weight_service(supabase).get_weight_history(pet_id, current_user.id, 30)
+        weight_goals_task = get_weight_service(supabase).get_active_weight_goal(pet_id, current_user.id)
+        trends_task = get_trends_service(supabase).get_nutritional_trends(pet_id, current_user.id, 30)
+        health_insights_task = get_analytics_service(supabase).get_health_insights(pet_id, current_user.id)
         
         # Wait for all tasks to complete
         weight_records, weight_goals, trends, health_insights = await asyncio.gather(

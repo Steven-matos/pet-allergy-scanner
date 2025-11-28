@@ -11,7 +11,7 @@ from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
 
-from app.database import get_supabase_client
+from supabase import Client
 from app.models.advanced_nutrition import HealthInsights
 
 
@@ -26,8 +26,14 @@ class HealthAnalyticsService:
     - Weight management analysis
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize health analytics service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def get_health_insights(
         self, 

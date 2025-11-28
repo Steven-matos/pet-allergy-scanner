@@ -28,39 +28,43 @@ from app.services.analytics import (
 
 router = APIRouter(prefix="/analytics", tags=["advanced-nutrition-analytics"])
 
-# Lazy service initialization
-health_analytics_service = None
-pattern_analytics_service = None
-trend_analytics_service = None
-recommendation_service = None
+# Service factory functions
 
-def get_health_analytics_service():
-    """Get health analytics service instance (lazy initialization)"""
-    global health_analytics_service
-    if health_analytics_service is None:
-        health_analytics_service = HealthAnalyticsService()
-    return health_analytics_service
+def get_health_analytics_service(supabase: Client):
+    """
+    Get health analytics service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return HealthAnalyticsService(supabase)
 
-def get_pattern_analytics_service():
-    """Get pattern analytics service instance (lazy initialization)"""
-    global pattern_analytics_service
-    if pattern_analytics_service is None:
-        pattern_analytics_service = PatternAnalyticsService()
-    return pattern_analytics_service
+def get_pattern_analytics_service(supabase: Client):
+    """
+    Get pattern analytics service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return PatternAnalyticsService(supabase)
 
-def get_trend_analytics_service():
-    """Get trend analytics service instance (lazy initialization)"""
-    global trend_analytics_service
-    if trend_analytics_service is None:
-        trend_analytics_service = TrendAnalyticsService()
-    return trend_analytics_service
+def get_trend_analytics_service(supabase: Client):
+    """
+    Get trend analytics service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return TrendAnalyticsService(supabase)
 
-def get_recommendation_service():
-    """Get recommendation service instance (lazy initialization)"""
-    global recommendation_service
-    if recommendation_service is None:
-        recommendation_service = RecommendationService()
-    return recommendation_service
+def get_recommendation_service(supabase: Client):
+    """
+    Get recommendation service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return RecommendationService(supabase)
 
 
 @router.post("/generate", response_model=NutritionalAnalyticsCacheResponse)
@@ -94,13 +98,13 @@ async def generate_analytics(
         
         # Generate analytics based on type
         if analysis_type == AnalyticsType.HEALTH:
-            service = get_health_analytics_service()
+            service = get_health_analytics_service(supabase)
             result = await service.get_health_insights(pet_id, current_user.id)
         elif analysis_type == AnalyticsType.PATTERNS:
-            service = get_pattern_analytics_service()
+            service = get_pattern_analytics_service(supabase)
             result = await service.analyze_nutritional_patterns(pet_id, current_user.id)
         elif analysis_type == AnalyticsType.TRENDS:
-            service = get_trend_analytics_service()
+            service = get_trend_analytics_service(supabase)
             result = await service.analyze_nutritional_trends(pet_id, current_user.id)
         else:
             raise HTTPException(
@@ -149,7 +153,7 @@ async def get_health_insights(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get health insights
-        service = get_health_analytics_service()
+        service = get_health_analytics_service(supabase)
         insights = await service.get_health_insights(pet_id, current_user.id)
         
         return insights
@@ -187,7 +191,7 @@ async def analyze_nutritional_patterns(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze nutritional patterns
-        service = get_pattern_analytics_service()
+        service = get_pattern_analytics_service(supabase)
         patterns = await service.analyze_nutritional_patterns(pet_id, current_user.id)
         
         return patterns
@@ -225,10 +229,10 @@ async def get_advanced_nutrition_dashboard(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get comprehensive dashboard data
-        health_service = get_health_analytics_service()
-        pattern_service = get_pattern_analytics_service()
-        trend_service = get_trend_analytics_service()
-        recommendation_service = get_recommendation_service()
+        health_service = get_health_analytics_service(supabase)
+        pattern_service = get_pattern_analytics_service(supabase)
+        trend_service = get_trend_analytics_service(supabase)
+        recommendation_service = get_recommendation_service(supabase)
         
         # Gather all analytics data
         health_insights = await health_service.get_health_insights(pet_id, current_user.id)

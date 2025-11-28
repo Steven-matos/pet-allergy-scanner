@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
 from app.shared.services.datetime_service import DateTimeService
 
-from app.database import get_supabase_client
+from supabase import Client
 from app.models.advanced_nutrition import (
     NutritionalRecommendationCreate, 
     NutritionalRecommendationResponse
@@ -27,8 +27,14 @@ class RecommendationService:
     - Preventive care recommendations
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize recommendation service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def generate_health_recommendations(
         self, 

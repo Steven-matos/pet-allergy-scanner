@@ -9,7 +9,7 @@ from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
 import json
-from ..database import get_supabase_client
+from supabase import Client
 from ..models.advanced_nutrition import (
     NutritionalTrendResponse, NutritionalTrendsDashboard,
     WeeklyNutritionSummary, MonthlyTrendAnalysis,
@@ -26,8 +26,14 @@ class NutritionalTrendsService:
     Follows KISS by keeping analysis methods focused and simple
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize nutritional trends service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def get_nutritional_trends(
         self, 

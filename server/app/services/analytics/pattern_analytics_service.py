@@ -10,7 +10,7 @@ from datetime import datetime, date, timedelta
 from app.shared.services.datetime_service import DateTimeService
 import statistics
 
-from app.database import get_supabase_client
+from supabase import Client
 from app.models.advanced_nutrition import NutritionalPatterns
 
 
@@ -25,8 +25,14 @@ class PatternAnalyticsService:
     - Seasonal pattern analysis
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize pattern analytics service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def analyze_nutritional_patterns(
         self, 

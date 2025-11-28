@@ -5,8 +5,10 @@ Multi-Factor Authentication (MFA) router
 from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Optional
+from supabase import Client
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.services.mfa_service import MFAService
 from app.utils.logging_config import get_logger
 
@@ -28,14 +30,17 @@ class MFABackupCodeRequest(BaseModel):
     code: str
 
 @router.post("/setup", response_model=MFASetupResponse)
-async def setup_mfa(current_user: dict = Depends(get_current_user)):
+async def setup_mfa(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
     """
     Set up MFA for the current user
     
     Generates a new TOTP secret, QR code, and backup codes
     """
     try:
-        mfa_service = MFAService()
+        mfa_service = MFAService(supabase)
         
         # Check if MFA is already enabled
         if mfa_service.is_mfa_enabled(current_user.id):
@@ -71,7 +76,8 @@ async def setup_mfa(current_user: dict = Depends(get_current_user)):
 @router.post("/verify")
 async def verify_mfa(
     request: MFAVerifyRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Verify MFA token
@@ -79,7 +85,7 @@ async def verify_mfa(
     Verifies the TOTP token and enables MFA if not already enabled
     """
     try:
-        mfa_service = MFAService()
+        mfa_service = MFAService(supabase)
         
         # Verify token
         if not mfa_service.verify_token(current_user.id, request.token):
@@ -106,7 +112,8 @@ async def verify_mfa(
 @router.post("/backup-verify")
 async def verify_backup_code(
     request: MFABackupCodeRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Verify MFA backup code
@@ -114,7 +121,7 @@ async def verify_backup_code(
     Verifies a backup code for MFA authentication
     """
     try:
-        mfa_service = MFAService()
+        mfa_service = MFAService(supabase)
         
         # Verify backup code
         if not mfa_service.verify_backup_code(current_user.id, request.code):
@@ -142,7 +149,7 @@ async def disable_mfa(current_user: dict = Depends(get_current_user)):
     Disables MFA and removes all associated data
     """
     try:
-        mfa_service = MFAService()
+        mfa_service = MFAService(supabase)
         
         # Check if MFA is enabled
         if not mfa_service.is_mfa_enabled(current_user.id):
@@ -166,14 +173,17 @@ async def disable_mfa(current_user: dict = Depends(get_current_user)):
         )
 
 @router.get("/status")
-async def get_mfa_status(current_user: dict = Depends(get_current_user)):
+async def get_mfa_status(
+    current_user: dict = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
     """
     Get MFA status for the current user
     
     Returns whether MFA is enabled and other status information
     """
     try:
-        mfa_service = MFAService()
+        mfa_service = MFAService(supabase)
         
         is_enabled = mfa_service.is_mfa_enabled(current_user.id)
         backup_codes_count = mfa_service.get_backup_codes_count(current_user.id)

@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import statistics
-from ..database import get_supabase_client
+from supabase import Client
 from ..utils.logging_config import get_logger
 from ..shared.services.datetime_service import DateTimeService
 from ..shared.services.database_operation_service import DatabaseOperationService
@@ -30,8 +30,14 @@ class WeightTrackingService:
     Follows KISS by keeping methods focused and simple
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: 'Client'):
+        """
+        Initialize weight tracking service
+        
+        Args:
+            supabase: Authenticated Supabase client with user session (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def record_weight(
         self, 

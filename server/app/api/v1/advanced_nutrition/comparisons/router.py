@@ -20,15 +20,16 @@ from app.services.food_comparison_service import FoodComparisonService
 
 router = APIRouter(prefix="/comparisons", tags=["advanced-nutrition-comparisons"])
 
-# Lazy service initialization
-comparison_service = None
+# Service factory function
 
-def get_comparison_service():
-    """Get food comparison service instance (lazy initialization)"""
-    global comparison_service
-    if comparison_service is None:
-        comparison_service = FoodComparisonService()
-    return comparison_service
+def get_comparison_service(supabase: Client):
+    """
+    Get food comparison service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return FoodComparisonService(supabase)
 
 
 @router.post("", response_model=FoodComparisonResponse)
@@ -59,7 +60,7 @@ async def create_food_comparison_with_slash(
     """
     try:
         # Create food comparison
-        service = get_comparison_service()
+        service = get_comparison_service(supabase)
         result = await service.create_comparison(comparison, current_user.id)
         
         return result
@@ -91,7 +92,7 @@ async def get_food_comparison(
     """
     try:
         # Get food comparison
-        service = get_comparison_service()
+        service = get_comparison_service(supabase)
         comparison = await service.get_comparison(comparison_id, current_user.id)
         
         if not comparison:
@@ -129,7 +130,7 @@ async def get_user_comparisons(
     """
     try:
         # Get user comparisons
-        service = get_comparison_service()
+        service = get_comparison_service(supabase)
         comparisons = await service.get_user_comparisons(current_user.id)
         
         return comparisons
@@ -161,7 +162,7 @@ async def get_comparison_dashboard(
     """
     try:
         # Get comparison dashboard
-        service = get_comparison_service()
+        service = get_comparison_service(supabase)
         dashboard = await service.get_comparison_dashboard(comparison_id, current_user.id)
         
         if not dashboard:
@@ -201,7 +202,7 @@ async def delete_food_comparison(
     """
     try:
         # Delete food comparison
-        service = get_comparison_service()
+        service = get_comparison_service(supabase)
         success = await service.delete_comparison(comparison_id, current_user.id)
         
         if not success:

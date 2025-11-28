@@ -8,7 +8,7 @@ from datetime import datetime
 from app.shared.services.datetime_service import DateTimeService
 from decimal import Decimal
 import statistics
-from ..database import get_supabase_client
+from supabase import Client
 from app.shared.services.database_operation_service import DatabaseOperationService
 from ..models.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
@@ -26,8 +26,14 @@ class FoodComparisonService:
     Follows KISS by keeping comparison logic focused and simple
     """
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize food comparison service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     async def create_comparison(
         self, 

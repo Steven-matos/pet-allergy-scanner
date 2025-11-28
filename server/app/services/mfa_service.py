@@ -10,15 +10,21 @@ from app.utils.logging_config import get_logger
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from app.core.config import settings
-from app.database import get_supabase_client
+from supabase import Client
 
 logger = get_logger(__name__)
 
 class MFAService:
     """Multi-Factor Authentication service using TOTP"""
     
-    def __init__(self):
-        self.supabase = get_supabase_client()
+    def __init__(self, supabase: Client):
+        """
+        Initialize MFA service
+        
+        Args:
+            supabase: Authenticated Supabase client (for RLS compliance)
+        """
+        self.supabase = supabase
     
     def generate_secret(self, user_id: str) -> str:
         """

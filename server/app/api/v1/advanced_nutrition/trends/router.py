@@ -22,15 +22,16 @@ from supabase import Client
 
 router = APIRouter(prefix="/trends", tags=["advanced-nutrition-trends"])
 
-# Lazy service initialization
-trends_service = None
+# Service factory function
 
-def get_trends_service():
-    """Get nutritional trends service instance (lazy initialization)"""
-    global trends_service
-    if trends_service is None:
-        trends_service = NutritionalTrendsService()
-    return trends_service
+def get_trends_service(supabase: Client):
+    """
+    Get nutritional trends service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+    """
+    return NutritionalTrendsService(supabase)
 
 
 @router.get("/{pet_id}", response_model=List[NutritionalTrendResponse])
@@ -63,7 +64,7 @@ async def get_nutritional_trends(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get nutritional trends
-        service = get_trends_service()
+        service = get_trends_service(supabase)
         trends = await service.get_nutritional_trends(pet_id, current_user.id, days)
         
         # Return empty list if no trends (200 status with empty data)
@@ -118,7 +119,7 @@ async def get_trends_dashboard(
         else:
             period = "90_days"
         
-        service = get_trends_service()
+        service = get_trends_service(supabase)
         dashboard = await service.get_trends_dashboard(pet_id, current_user.id, period)
         
         # Service already handles empty data gracefully, return dashboard (200 status with default/empty data)

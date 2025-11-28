@@ -24,15 +24,19 @@ from supabase import Client
 
 router = APIRouter(prefix="/weight", tags=["advanced-nutrition-weight"])
 
-# Lazy service initialization
-weight_service = None
+# Service factory function
 
-def get_weight_service():
-    """Get weight tracking service instance (lazy initialization)"""
-    global weight_service
-    if weight_service is None:
-        weight_service = WeightTrackingService()
-    return weight_service
+def get_weight_service(supabase: Client):
+    """
+    Get weight tracking service instance with authenticated client
+    
+    Args:
+        supabase: Authenticated Supabase client (for RLS compliance)
+        
+    Returns:
+        WeightTrackingService instance with authenticated client
+    """
+    return WeightTrackingService(supabase)
 
 
 @router.post("/record", response_model=PetWeightRecordResponse)
@@ -61,7 +65,7 @@ async def record_weight(
         await verify_pet_ownership(weight_record.pet_id, current_user.id, supabase)
         
         # Create weight record
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         result = await service.record_weight(weight_record, current_user.id)
         
         return result
@@ -101,7 +105,7 @@ async def get_weight_history(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight history
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         history = await service.get_weight_history(pet_id, current_user.id, days)
         
         # Return empty list if no history (200 status with empty data)
@@ -139,7 +143,7 @@ async def create_weight_goal(
         await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Create weight goal
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         result = await service.create_weight_goal(weight_goal, current_user.id)
         
         return result
@@ -176,7 +180,7 @@ async def upsert_weight_goal(
         await verify_pet_ownership(weight_goal.pet_id, current_user.id, supabase)
         
         # Upsert weight goal
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         result = await service.upsert_weight_goal(weight_goal, current_user.id)
         
         return result
@@ -214,7 +218,7 @@ async def get_active_weight_goal(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get active weight goal
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         goal = await service.get_active_weight_goal(pet_id, current_user.id)
         
         # Return None if no goal exists (200 status with null/empty data)
@@ -255,7 +259,7 @@ async def analyze_weight_trend(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze weight trend
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         analysis = await service.analyze_weight_trend(pet_id, current_user.id, days)
         
         return analysis
@@ -295,7 +299,7 @@ async def get_weight_management_dashboard(
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight management dashboard
-        service = get_weight_service()
+        service = get_weight_service(supabase)
         dashboard = await service.get_weight_management_dashboard(pet_id, current_user.id)
         
         return dashboard
