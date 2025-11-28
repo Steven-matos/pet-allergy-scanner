@@ -36,22 +36,36 @@ def get_authenticated_supabase_client(
     """
     Get an authenticated Supabase client with user session
     
-    This dependency reuses the global Supabase client and sets the user's authentication
-    session, allowing RLS policies to work correctly. This ensures connection pooling
-    is maintained instead of creating new clients for each request.
+    This dependency creates a new client instance with the JWT token set in the session,
+    allowing RLS policies to work correctly. Each request gets its own client instance
+    to avoid session conflicts.
     
     Args:
         credentials: HTTP authorization credentials from the request
         
     Returns:
-        Authenticated Supabase client instance (reused from global pool)
+        Authenticated Supabase client instance with session set
     """
-    # Reuse global client for connection pooling
-    supabase = get_supabase_client()
+    from supabase import create_client
+    
+    # Create a new client instance for this request to avoid session conflicts
+    # This ensures RLS policies work correctly with the JWT token
+    supabase = create_client(
+        settings.supabase_url,
+        settings.supabase_key
+    )
     
     # Set user session for RLS policies
-    # Note: This sets the session on the shared client, but Supabase client
-    # handles per-request sessions internally via the auth header
-    supabase.auth.set_session(credentials.credentials, "")
+    # Pass the access token as both access_token and refresh_token
+    # The Supabase client will decode the JWT and set the user context for RLS
+    try:
+        # Try to set session with the JWT token
+        # For RLS to work, we need to set the session so PostgREST can extract auth.uid()
+        supabase.auth.set_session(credentials.credentials, credentials.credentials)
+    except Exception as session_error:
+        # If set_session fails, log but continue - the explicit user_id filter will work
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to set Supabase session: {session_error}. RLS may not work, but explicit filters will.")
     
     return supabase

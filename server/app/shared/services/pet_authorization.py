@@ -68,6 +68,8 @@ async def verify_pet_ownership(
         except Exception as session_error:
             logger.warning(f"[PET_AUTH] Could not verify session: {session_error}")
         
+        # Try RLS query first (without explicit user_id filter)
+        # If RLS is working, this should return the pet if user owns it
         try:
             response = await execute_async(
                 lambda: supabase.table("pets")
@@ -90,24 +92,36 @@ async def verify_pet_ownership(
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Pet not found or access denied"
                     )
+                # Success - RLS worked and pet belongs to user
+                return found_pet
             else:
-                logger.warning(f"[PET_AUTH] RLS query returned no results for pet_id={pet_id}")
+                # RLS query returned no results - RLS might not be working
+                # Fall back to explicit user_id filter
+                logger.warning(
+                    f"[PET_AUTH] RLS query returned no results for pet_id={pet_id}. "
+                    f"Falling back to explicit user_id filter. This may indicate RLS session not properly set."
+                )
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"[PET_AUTH] Error querying pet with authenticated client: {type(e).__name__}: {e}", exc_info=True)
-            # Fall back to explicit user_id filter
-            try:
-                response = await execute_async(
-                    lambda: supabase.table("pets")
-                        .select("*")
-                        .eq("id", pet_id)
-                        .eq("user_id", user_id)
-                        .execute()
-                )
-            except Exception as fallback_error:
-                logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
-                raise
+            logger.warning(
+                f"[PET_AUTH] RLS query failed: {type(e).__name__}: {e}. "
+                f"Falling back to explicit user_id filter."
+            )
+        
+        # Fallback: Use explicit user_id filter (works even if RLS isn't properly configured)
+        # This ensures the query works regardless of RLS session state
+        try:
+            response = await execute_async(
+                lambda: supabase.table("pets")
+                    .select("*")
+                    .eq("id", pet_id)
+                    .eq("user_id", user_id)
+                    .execute()
+            )
+        except Exception as fallback_error:
+            logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
+            raise
     else:
         # Unauthenticated client - must filter explicitly
         response = await execute_async(
