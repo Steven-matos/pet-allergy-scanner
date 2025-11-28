@@ -114,7 +114,7 @@ class GDPRService:
         """
         try:
             # Log deletion request
-            self._log_deletion_request(user_id)
+            await self._log_deletion_request(user_id)
             
             # Get user and pet data before deletion for image cleanup
             user_data = self.supabase.table("users").select("image_url").eq("id", user_id).execute()
@@ -154,7 +154,7 @@ class GDPRService:
                 detail="Failed to delete user data"
             )
     
-    def anonymize_user_data(self, user_id: str) -> bool:
+    async def anonymize_user_data(self, user_id: str) -> bool:
         """
         Anonymize user data while preserving functionality
         
@@ -230,7 +230,7 @@ class GDPRService:
                 detail="Failed to anonymize user data"
             )
     
-    def get_data_retention_info(self, user_id: str) -> Dict[str, Any]:
+    async def get_data_retention_info(self, user_id: str) -> Dict[str, Any]:
         """
         Get data retention information for a user
         
@@ -431,7 +431,7 @@ class GDPRService:
             logger.error(f"Failed to export audit logs for {user_id}: {e}")
             return []
     
-    def _log_deletion_request(self, user_id: str):
+    async def _log_deletion_request(self, user_id: str):
         """Log data deletion request"""
         try:
             deletion_log = {

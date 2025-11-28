@@ -105,7 +105,7 @@ async def anonymize_user_data(
         gdpr_service = GDPRService()
         
         # Anonymize user data
-        success = gdpr_service.anonymize_user_data(current_user.id)
+        success = await gdpr_service.anonymize_user_data(current_user.id)
         
         if success:
             return {"message": "User data anonymized successfully"}
@@ -136,7 +136,7 @@ async def get_data_retention_info(
     try:
         gdpr_service = GDPRService()
         
-        retention_info = gdpr_service.get_data_retention_info(current_user.id)
+        retention_info = await gdpr_service.get_data_retention_info(current_user.id)
         
         return retention_info
         
