@@ -22,6 +22,7 @@ from app.models.health_event import (
 )
 from app.services.health_event_service import HealthEventService
 from app.shared.services.pet_authorization import verify_pet_ownership
+from app.shared.services.response_utils import handle_empty_response
 
 router = APIRouter(prefix="/health-events", tags=["health-events"])
 
@@ -59,7 +60,7 @@ async def create_health_event_with_slash(
 @router.get("/pet/{pet_id}", response_model=HealthEventListResponse)
 async def get_pet_health_events(
     pet_id: str,
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=100, description="Maximum results (default optimized for mobile)"),
     offset: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
     current_user: UserResponse = Depends(get_current_user),
@@ -80,7 +81,11 @@ async def get_pet_health_events(
                 pet_id, category_enum.value, current_user.id, supabase, limit, offset
             )
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid category")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid format")
+            )
     else:
         events = await HealthEventService.get_health_events_for_pet(
             pet_id, current_user.id, supabase, limit, offset
@@ -102,6 +107,39 @@ async def get_pet_health_events(
     )
 
 
+@router.get("/pet/{pet_id}/mobile", response_model=List[dict])
+async def get_pet_health_events_mobile(
+    pet_id: str,
+    limit: int = Query(20, ge=1, le=50, description="Maximum results (mobile optimized)"),
+    offset: int = Query(0, ge=0),
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Mobile-optimized endpoint to get health events with minimal fields.
+    
+    Returns only essential fields (id, pet_id, event_category, event_date, severity, created_at)
+    for faster loading on mobile devices with limited bandwidth.
+    """
+    # Verify pet ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Get events using service with minimal fields
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    query_builder = QueryBuilderService(
+        supabase,
+        "health_events",
+        default_columns=["id", "pet_id", "event_category", "event_date", "severity", "created_at"]
+    )
+    result = await query_builder.with_filters({"pet_id": pet_id, "user_id": current_user.id})\
+        .with_ordering("event_date", desc=True)\
+        .with_limit(limit)\
+        .execute()
+    
+    return handle_empty_response(result["data"])
+
+
 @router.get("/{event_id}", response_model=HealthEventResponse)
 async def get_health_event(
     event_id: str,
@@ -117,7 +155,11 @@ async def get_health_event(
     )
 
     if not event:
-        raise HTTPException(status_code=404, detail="Health event not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("health event not found", context="health_event", action="not_found")
+        )
 
     return HealthEventResponse(**event)
 
@@ -138,7 +180,11 @@ async def update_health_event(
     )
 
     if not event:
-        raise HTTPException(status_code=404, detail="Health event not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("health event not found", context="health_event", action="not_found")
+        )
 
     return HealthEventResponse(**event)
 
@@ -158,7 +204,11 @@ async def delete_health_event(
     )
     
     if not success:
-        raise HTTPException(status_code=404, detail="Health event not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("health event not found", context="health_event", action="not_found")
+        )
     
     return {"message": "Health event deleted successfully"}
 

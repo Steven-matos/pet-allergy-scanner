@@ -34,7 +34,8 @@ from app.api.v1.health_events.router import router as health_events_router
 from app.api.v1.waitlist.router import router as waitlist_router
 from app.api.v1.subscriptions.revenuecat_webhook import router as revenuecat_webhook_router
 from app.core.config import settings
-from app.middleware.security import SecurityHeadersMiddleware, RateLimitMiddleware
+from app.middleware.security import SecurityHeadersMiddleware
+from app.middleware.rate_limit_redis import RedisRateLimitMiddleware
 from app.middleware.audit import AuditLogMiddleware
 from app.middleware.request_limits import (
     RangeHeaderValidationMiddleware,
@@ -42,6 +43,7 @@ from app.middleware.request_limits import (
     APIVersionMiddleware,
     RequestTimeoutMiddleware
 )
+from app.middleware.query_monitoring import QueryMonitoringMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -96,13 +98,17 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 if settings.environment != "production":
     app.add_middleware(AuditLogMiddleware)  # Only in dev/staging
-app.add_middleware(RateLimitMiddleware)
+# Use Redis-backed rate limiting (falls back to in-memory if Redis unavailable)
+app.add_middleware(RedisRateLimitMiddleware)
 # Range header validation mitigates CVE-2025-62727 (Starlette ReDoS)
 # Must be early in stack to intercept before Starlette parsing
 app.add_middleware(RangeHeaderValidationMiddleware)
 app.add_middleware(RequestSizeMiddleware)
 app.add_middleware(APIVersionMiddleware)
 app.add_middleware(RequestTimeoutMiddleware)
+# Query performance monitoring (only in non-production to avoid overhead)
+if settings.environment != "production":
+    app.add_middleware(QueryMonitoringMiddleware)
 
 # Configure CORS with security
 app.add_middleware(
@@ -110,8 +116,25 @@ app.add_middleware(
     allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers",
+        "X-API-Version",
+        "X-Client-Version"
+    ],
+    expose_headers=[
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+        "X-API-Version",
+        "X-Response-Size",
+        "Content-Encoding"
+    ]
 )
 
 # Add trusted host middleware
@@ -120,8 +143,11 @@ app.add_middleware(
     allowed_hosts=settings.allowed_hosts
 )
 
-# Add compression middleware
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Add compression middleware (lower threshold for mobile optimization)
+app.add_middleware(GZipMiddleware, minimum_size=200)  # Compress responses >200 bytes
+# Add JSON compression middleware (always compresses JSON for mobile)
+from app.middleware.json_compression import JSONCompressionMiddleware
+app.add_middleware(JSONCompressionMiddleware)  # Always compress JSON responses
 
 # Add error handlers
 from app.utils.error_handling import (
@@ -162,18 +188,76 @@ async def root():
     return {"message": "SniffTest API is running", "version": "1.0.0"}
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
+async def health_check(check_db: bool = False) -> dict[str, str]:
     """
-    Simple health check endpoint for Railway deployment
+    Health check endpoint for Railway deployment
     
-    Returns basic health status without database dependency to ensure
-    health checks pass during initial deployment startup
+    Args:
+        check_db: Optional flag to include database connectivity check (default: False)
+                  Set to True for more thorough health checks.
+                  When True, performs a quick database query with 5s timeout.
+    
+    Returns:
+        Health status with optional database connectivity information
     """
-    return {
+    health_status = {
         "status": "healthy",
         "version": "1.0.0",
         "service": "SniffTest API"
     }
+    
+    # Optional database connectivity check with timeout
+    if check_db:
+        try:
+            import asyncio
+            from app.database import get_supabase_client, get_connection_stats
+            
+            # Perform quick database connectivity check with timeout
+            async def check_db_connectivity():
+                supabase = get_supabase_client()
+                # Simple query to verify connectivity
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        lambda: supabase.table("users").select("id").limit(1).execute()
+                    ),
+                    timeout=5.0  # 5 second timeout for health check
+                )
+                return True
+            
+            # Try database connectivity check
+            try:
+                await check_db_connectivity()
+                # Get connection stats if connectivity check passes
+                db_stats = await get_connection_stats()
+                health_status["database"] = {
+                    **db_stats,
+                    "connectivity": "ok"
+                }
+            except asyncio.TimeoutError:
+                health_status["database"] = {
+                    "status": "timeout",
+                    "connectivity": "timeout",
+                    "error": "Database connectivity check timed out after 5s"
+                }
+                health_status["status"] = "degraded"
+            except Exception as db_error:
+                health_status["database"] = {
+                    "status": "error",
+                    "connectivity": "error",
+                    "error": "Database connectivity check failed"
+                }
+                health_status["status"] = "degraded"
+                logger.warning(f"Database health check failed: {db_error}")
+        except Exception as e:
+            logger.warning(f"Database health check setup failed: {e}")
+            health_status["database"] = {
+                "status": "error",
+                "connectivity": "error",
+                "error": "Connection check failed"
+            }
+            health_status["status"] = "degraded"
+    
+    return health_status
 
 @app.head("/health")
 async def health_check_head() -> Response:

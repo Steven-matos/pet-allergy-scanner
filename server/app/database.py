@@ -203,10 +203,16 @@ async def close_db():
 
 async def get_connection_stats() -> dict:
     """
-    Get database connection statistics (non-blocking)
+    Get connection pool statistics and health metrics
     
     Returns:
-        Dictionary with connection statistics
+        Dictionary with connection statistics including:
+        - status: Connection status
+        - response_time_ms: Query response time in milliseconds
+        - pool_size: Configured pool size
+        - timeout_seconds: Query timeout setting
+        - connection_reuse: Whether connection reuse is enabled (True - using global client)
+        - client_instances: Number of client instances (should be 2: anon + service_role)
     """
     try:
         if not supabase:
@@ -222,11 +228,20 @@ async def get_connection_stats() -> dict:
         )
         response_time = time.time() - start_time
         
+        # Count active client instances
+        client_count = sum([
+            1 if supabase else 0,
+            1 if supabase_service_role else 0
+        ])
+        
         return {
             "status": "connected",
             "response_time_ms": round(response_time * 1000, 2),
             "pool_size": settings.database_pool_size,
-            "timeout_seconds": settings.database_timeout
+            "timeout_seconds": settings.database_timeout,
+            "connection_reuse": True,  # Using global client instances
+            "client_instances": client_count,
+            "note": "Supabase Python client uses httpx connection pooling internally"
         }
         
     except asyncio.TimeoutError:

@@ -71,7 +71,7 @@ async def create_nutritional_requirements_with_slash(
     # Upsert to nutritional_requirements table using centralized service
     # Using pet_id as unique constraint (per schema: UNIQUE(pet_id))
     db_service = DatabaseOperationService(supabase)
-    result = db_service.upsert_with_timestamps(
+    result = await db_service.upsert_with_timestamps(
         "nutritional_requirements",
         db_requirements,
         conflict_column="pet_id"
@@ -113,7 +113,7 @@ async def get_nutritional_requirements(
     # Note: nutritional_requirements table only has pet_id, not user_id
     # Authorization is handled via RLS policies checking pet ownership
     query_builder = QueryBuilderService(supabase, "nutritional_requirements")
-    result = query_builder.with_filters({"pet_id": pet_id}).execute()
+    result = await query_builder.with_filters({"pet_id": pet_id}).execute()
         
     # If requirements exist, return them
     if result["data"]:

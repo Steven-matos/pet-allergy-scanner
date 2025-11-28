@@ -21,6 +21,7 @@ from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.utils.error_handling import create_error_response, APIError
 from app.utils.logging_config import get_logger
+from app.shared.utils.async_supabase import execute_async
 
 # Import centralized services
 from app.shared.services.database_operation_service import DatabaseOperationService
@@ -56,7 +57,7 @@ async def get_recent_foods(
     """
     # Get recent food items using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    result = query_builder.with_ordering("created_at", desc=True)\
+    result = await query_builder.with_ordering("created_at", desc=True)\
         .with_limit(limit)\
         .execute()
     
@@ -149,7 +150,7 @@ async def search_foods(
             query_builder.with_ilike("brand", brand)
         
         # Execute with pagination
-        result = query_builder.with_pagination(limit, offset, include_count=True).execute()
+        result = await query_builder.with_pagination(limit, offset, include_count=True).execute()
         
         # Parse JSON fields (nutritional_info)
         parsed_data = QueryResultParser.parse_list_json_fields(
@@ -227,7 +228,7 @@ async def get_food_by_barcode(
     
     # Query food_items table by barcode using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    result = query_builder.with_filters({"barcode": barcode}).with_limit(1).execute()
+    result = await query_builder.with_filters({"barcode": barcode}).with_limit(1).execute()
     
     if not result["data"]:
         return None
@@ -293,7 +294,7 @@ async def create_food_item_with_slash(
     """
     # Check if food item with same name and brand already exists using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    existing_result = query_builder.select(["id"]).with_filters({
+    existing_result = await query_builder.select(["id"]).with_filters({
         "name": food_item.name,
         "brand": food_item.brand
     }).with_limit(1).execute()
@@ -312,7 +313,7 @@ async def create_food_item_with_slash(
     from app.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
-    created_item = db_service.insert_with_timestamps("food_items", item_data)
+    created_item = await db_service.insert_with_timestamps("food_items", item_data)
     
     # Parse nutritional_info and build response model
     parsed_item = QueryResultParser.parse_json_fields(
@@ -365,7 +366,7 @@ async def update_food_item(
     """
     # Check if food item exists using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    existing_result = query_builder.select(["id"]).with_filters({"id": food_id}).with_limit(1).execute()
+    existing_result = await query_builder.select(["id"]).with_filters({"id": food_id}).with_limit(1).execute()
     
     if not existing_result["data"]:
         raise HTTPException(status_code=404, detail="Food item not found")
@@ -377,7 +378,7 @@ async def update_food_item(
     from app.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
-    updated_item = db_service.update_with_timestamp("food_items", food_id, update_data)
+    updated_item = await db_service.update_with_timestamp("food_items", food_id, update_data)
     
     # Parse nutritional_info and build response model
     parsed_item = QueryResultParser.parse_json_fields(
@@ -428,7 +429,7 @@ async def delete_food_item(
     """
     # Check if food item exists using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    existing_result = query_builder.select(["id"]).with_filters({"id": food_id}).with_limit(1).execute()
+    existing_result = await query_builder.select(["id"]).with_filters({"id": food_id}).with_limit(1).execute()
     
     if not existing_result["data"]:
         raise HTTPException(status_code=404, detail="Food item not found")
@@ -437,7 +438,7 @@ async def delete_food_item(
     from app.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
-    db_service.delete_record("food_items", food_id)
+    await db_service.delete_record("food_items", food_id)
     
     return {"message": "Food item deleted successfully"}
 
@@ -462,7 +463,7 @@ async def get_food_item(
     """
     # Get food item using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    result = query_builder.with_filters({"id": food_id}).with_limit(1).execute()
+    result = await query_builder.with_filters({"id": food_id}).with_limit(1).execute()
     
     if not result["data"]:
         raise HTTPException(status_code=404, detail="Food item not found")
@@ -518,7 +519,7 @@ async def get_food_categories(
     # Get all unique categories using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
     query_builder.select(["category"])
-    result = query_builder.execute()
+    result = await query_builder.execute()
     
     # Handle empty response
     items_data = handle_empty_response(result["data"])
@@ -551,7 +552,7 @@ async def get_food_brands(
     # Get all unique brands using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
     query_builder.select(["brand"])
-    result = query_builder.execute()
+    result = await query_builder.execute()
     
     # Handle empty response
     items_data = handle_empty_response(result["data"])

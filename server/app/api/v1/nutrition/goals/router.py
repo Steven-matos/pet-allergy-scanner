@@ -65,7 +65,7 @@ async def create_calorie_goal(
     
     # Insert into database using centralized service (user_id not needed - RLS handles authorization via pet_id)
     db_service = DatabaseOperationService(supabase)
-    created_goal = db_service.insert_with_timestamps("calorie_goals", goal_data)
+    created_goal = await db_service.insert_with_timestamps("calorie_goals", goal_data)
     
     # Convert to response model
     return ResponseModelService.convert_to_model(created_goal, CalorieGoalResponse)
@@ -92,7 +92,7 @@ async def get_calorie_goals(
     """
     # Get calorie goals using query builder (RLS automatically filters by pet ownership)
     query_builder = QueryBuilderService(supabase, "calorie_goals")
-    result = query_builder.execute()
+    result = await query_builder.execute()
     
     # Handle empty response
     goals_data = handle_empty_response(result["data"])
@@ -128,7 +128,7 @@ async def get_pet_calorie_goal(
     
     # Get calorie goal using query builder (RLS automatically ensures user owns the pet)
     query_builder = QueryBuilderService(supabase, "calorie_goals")
-    result = query_builder.with_filters({"pet_id": pet_id}).with_limit(1).execute()
+    result = await query_builder.with_filters({"pet_id": pet_id}).with_limit(1).execute()
     
     if result["data"]:
         return ResponseModelService.convert_to_model(result["data"][0], CalorieGoalResponse)
@@ -162,7 +162,7 @@ async def delete_calorie_goal(
     
     # Check if calorie goal exists using query builder (RLS automatically ensures user owns the pet)
     query_builder = QueryBuilderService(supabase, "calorie_goals")
-    check_result = query_builder.select(["id"]).with_filters({"pet_id": pet_id}).with_limit(1).execute()
+    check_result = await query_builder.select(["id"]).with_filters({"pet_id": pet_id}).with_limit(1).execute()
     
     if not check_result["data"]:
         raise HTTPException(
@@ -175,6 +175,6 @@ async def delete_calorie_goal(
     # Note: Delete by pet_id requires a custom query, so we use the existing method
     # First get the goal ID
     goal_id = check_result["data"][0]["id"]
-    db_service.delete_record("calorie_goals", goal_id)
+    await db_service.delete_record("calorie_goals", goal_id)
     
     return {"message": "Calorie goal deleted successfully"}

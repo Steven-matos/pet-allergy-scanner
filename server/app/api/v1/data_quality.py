@@ -10,12 +10,15 @@ from app.database import get_db
 from app.services.data_quality_service import DataQualityService, DataQualityMetrics
 from app.models.food_items import FoodItemResponse
 import logging
+import asyncio
 
 # Import centralized services
 from app.shared.services.response_model_service import ResponseModelService
 from app.shared.services.response_utils import handle_empty_response
 from app.shared.services.query_builder_service import QueryBuilderService
 from app.shared.decorators.error_handler import handle_errors
+from app.shared.utils.async_supabase import execute_async
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,7 @@ async def assess_food_item_quality(
     """
     # Fetch food item data using query builder
     query_builder = QueryBuilderService(db, 'food_items')
-    result = query_builder.with_filters({'id': food_item_id}).execute()
+    result = await query_builder.with_filters({'id': food_item_id}).execute()
     
     if not result["data"]:
         raise HTTPException(status_code=404, detail="Food item not found")
@@ -88,7 +91,9 @@ async def assess_multiple_food_items_quality(
         
     # Fetch food items data using query builder
     # Note: QueryBuilderService doesn't support .in_() yet, so we use direct query for this case
-    response = db.table('food_items').select('*').in_('id', food_item_ids).execute()
+    response = await execute_async(
+        lambda: db.table('food_items').select('*').in_('id', food_item_ids).execute()
+    )
     
     results = handle_empty_response(response.data)
     if not results:
@@ -143,7 +148,7 @@ async def get_quality_statistics_overview(
     # Fetch sample of food items using query builder
     query_builder = QueryBuilderService(db, 'food_items')
     query_builder.select(['id', 'name', 'brand', 'barcode', 'nutritional_info', 'data_completeness'])
-    result = query_builder.with_ordering('updated_at', desc=True).with_limit(limit).execute()
+    result = await query_builder.with_ordering('updated_at', desc=True).with_limit(limit).execute()
     
     results = handle_empty_response(result["data"])
     
@@ -246,7 +251,9 @@ async def get_low_quality_items(
     """
     # Fetch food items with low data completeness
     # Note: QueryBuilderService doesn't support .lt() yet, so we use direct query for this case
-    response = db.table('food_items').select('id, name, brand, barcode, category, nutritional_info, data_completeness').lt('data_completeness', threshold).order('data_completeness', desc=False).limit(limit).execute()
+    response = await execute_async(
+        lambda: db.table('food_items').select('id, name, brand, barcode, category, nutritional_info, data_completeness').lt('data_completeness', threshold).order('data_completeness', desc=False).limit(limit).execute()
+    )
     
     results = handle_empty_response(response.data)
     

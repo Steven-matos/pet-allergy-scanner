@@ -59,6 +59,15 @@ class PetWeightRecordBase(BaseModel):
     notes: Optional[str] = Field(None, max_length=500)
     
     model_config = ConfigDict(populate_by_name=True)
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        from app.shared.services.html_sanitization_service import HTMLSanitizationService
+        return HTMLSanitizationService.sanitize_notes(v, max_length=500)
 
 
 class PetWeightRecordCreate(PetWeightRecordBase):
@@ -85,6 +94,15 @@ class PetWeightGoalBase(BaseModel):
     target_date: Optional[date] = Field(None, alias="targetDate")
     is_active: bool = Field(True, alias="isActive")
     notes: Optional[str] = Field(None, max_length=1000)
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        from app.shared.services.html_sanitization_service import HTMLSanitizationService
+        return HTMLSanitizationService.sanitize_notes(v, max_length=1000)
     
     @field_validator('target_date', mode='before')
     @classmethod
@@ -317,6 +335,15 @@ class WeightTrackingRequest(BaseModel):
     pet_id: str
     weight_kg: float = Field(..., gt=0, le=200)
     notes: Optional[str] = None
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        from app.shared.services.html_sanitization_service import HTMLSanitizationService
+        return HTMLSanitizationService.sanitize_notes(v, max_length=500)
 
 
 class TrendAnalysisRequest(BaseModel):

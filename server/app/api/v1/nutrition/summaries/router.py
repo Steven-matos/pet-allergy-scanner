@@ -44,7 +44,10 @@ async def get_multi_pet_insights(
     """
     try:
         # Get user's pets
-        pets_response = supabase.table("pets").select("*").eq("user_id", current_user.id).execute()
+        from app.shared.utils.async_supabase import execute_async
+        pets_response = await execute_async(
+            lambda: supabase.table("pets").select("*").eq("user_id", current_user.id).execute()
+        )
         
         pets = pets_response.data if pets_response.data else []
         

@@ -2,7 +2,7 @@
 Scan management and analysis router
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import List, Dict
 from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus, ScanMethod
 from app.models.ingredient import IngredientAnalysis
@@ -64,7 +64,7 @@ async def create_scan_with_slash(
     
     # Insert scan into database using centralized service
     db_service = DatabaseOperationService(supabase)
-    created_scan = db_service.insert_with_timestamps("scans", scan_record)
+    created_scan = await db_service.insert_with_timestamps("scans", scan_record)
     
     # Convert to response model - need to handle enum conversions
     scan_dict = created_scan.copy()
@@ -87,7 +87,7 @@ async def get_user_scans(
     
     # Get scans for the current user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
-    result = query_builder.with_filters({"user_id": current_user.id})\
+    result = await query_builder.with_filters({"user_id": current_user.id})\
         .with_ordering("created_at", desc=True)\
         .execute()
     
@@ -101,6 +101,40 @@ async def get_user_scans(
     
     # Convert to response models
     return ResponseModelService.convert_list_to_models(scans_data, ScanResponse)
+
+@router.get("/mobile", response_model=List[dict])
+@handle_errors("get_user_scans_mobile")
+async def get_user_scans_mobile(
+    current_user: UserResponse = Depends(get_current_user),
+    limit: int = Query(20, ge=1, le=50, description="Maximum results (mobile optimized)")
+):
+    """
+    Mobile-optimized endpoint to get scans with minimal fields.
+    
+    Returns only essential fields (id, pet_id, status, created_at, image_url)
+    for faster loading on mobile devices with limited bandwidth.
+    """
+    supabase = get_supabase_client()
+    
+    # Select only essential fields for mobile
+    query_builder = QueryBuilderService(
+        supabase, 
+        "scans",
+        default_columns=["id", "pet_id", "status", "created_at", "image_url"]
+    )
+    result = await query_builder.with_filters({"user_id": current_user.id})\
+        .with_ordering("created_at", desc=True)\
+        .with_limit(limit)\
+        .execute()
+    
+    # Handle empty response
+    scans_data = handle_empty_response(result["data"])
+    
+    # Convert status enum
+    for scan in scans_data:
+        scan["status"] = ScanStatus(scan["status"]).value if scan.get("status") else "pending"
+    
+    return scans_data
 
 @router.get("/{scan_id}", response_model=ScanResponse)
 @handle_errors("get_scan")
@@ -117,15 +151,16 @@ async def get_scan(
     
     # Get scan by ID and verify ownership using query builder
     query_builder = QueryBuilderService(supabase, "scans")
-    result = query_builder.with_filters({
+    result = await query_builder.with_filters({
         "id": scan_id,
         "user_id": current_user.id
     }).execute()
     
     if not result["data"]:
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scan not found"
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("scan not found", context="scan", action="not_found")
         )
     
     # Convert enum fields before model conversion
@@ -151,15 +186,16 @@ async def update_scan(
     
     # Verify scan exists and belongs to user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
-    existing_result = query_builder.select(["id"]).with_filters({
+    existing_result = await query_builder.select(["id"]).with_filters({
         "id": scan_id,
         "user_id": current_user.id
     }).execute()
     
     if not existing_result["data"]:
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scan not found"
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("scan not found", context="scan", action="not_found")
         )
     
     # Prepare update data using data transformation service
@@ -173,7 +209,7 @@ async def update_scan(
     
     # Update scan using centralized service
     db_service = DatabaseOperationService(supabase)
-    updated_scan = db_service.update_with_timestamp("scans", scan_id, update_data)
+    updated_scan = await db_service.update_with_timestamp("scans", scan_id, update_data)
     
     # Convert enum fields before model conversion
     updated_scan["status"] = ScanStatus(updated_scan["status"])
@@ -196,20 +232,21 @@ async def delete_scan(
     
     # Verify scan exists and belongs to user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
-    existing_result = query_builder.select(["id"]).with_filters({
+    existing_result = await query_builder.select(["id"]).with_filters({
         "id": scan_id,
         "user_id": current_user.id
     }).execute()
     
     if not existing_result["data"]:
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scan not found"
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("scan not found", context="scan", action="not_found")
         )
     
     # Delete scan using centralized service
     db_service = DatabaseOperationService(supabase)
-    db_service.delete_record("scans", scan_id)
+    await db_service.delete_record("scans", scan_id)
     
     return {"message": "Scan record deleted successfully"}
 
@@ -229,15 +266,16 @@ async def analyze_scan(
     
     # Get scan and verify ownership using query builder
     query_builder = QueryBuilderService(supabase, "scans")
-    scan_result = query_builder.with_filters({
+    scan_result = await query_builder.with_filters({
         "id": scan_id,
         "user_id": current_user.id
     }).execute()
     
     if not scan_result["data"]:
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Scan not found"
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("scan not found", context="scan", action="not_found")
         )
     
     scan = scan_result["data"][0]
@@ -280,7 +318,7 @@ async def analyze_scan(
     
     # Update scan with analysis results using centralized service
     db_service = DatabaseOperationService(supabase)
-    updated_scan = db_service.update_with_timestamp("scans", scan_id, update_data)
+    updated_scan = await db_service.update_with_timestamp("scans", scan_id, update_data)
     
     # Convert enum fields and use scan_result_obj for result
     updated_scan["status"] = ScanStatus(updated_scan["status"])

@@ -148,7 +148,10 @@ async def revenuecat_webhook(
             
             # Verify the update was successful by checking user role
             try:
-                user_response = supabase.table("users").select("role").eq("id", user_id).execute()
+                from app.shared.utils.async_supabase import execute_async
+                user_response = await execute_async(
+                    lambda: supabase.table("users").select("role").eq("id", user_id).execute()
+                )
                 if user_response.data:
                     updated_role = user_response.data[0].get("role")
                     logger.info(f"✅ Verified backend update: user {user_id} role is now {updated_role}")

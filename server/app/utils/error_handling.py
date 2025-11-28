@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
+from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
 
 logger = logging.getLogger(__name__)
 
@@ -150,35 +151,53 @@ def create_error_response(
     # Determine status code and message
     if isinstance(error, SecurityError):
         status_code = status.HTTP_403_FORBIDDEN
-        message = "Access denied"
+        message = UserFriendlyErrorMessages.get_user_friendly_message("access denied")
         details = {"error_type": "security_error"}
     elif isinstance(error, ValidationError):
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-        message = "Validation error"
-        details = {"error_type": "validation_error", "details": str(error)}
+        message = UserFriendlyErrorMessages.get_user_friendly_message("validation error")
+        # Sanitize error details in production
+        error_details = str(error) if settings.environment != "production" else "Invalid input provided"
+        details = {"error_type": "validation_error", "details": error_details}
     elif isinstance(error, RequestValidationError):
         status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-        message = "Invalid request data"
-        details = {"error_type": "validation_error", "errors": error.errors()}
+        message = UserFriendlyErrorMessages.get_user_friendly_message("invalid request data")
+        # Only include detailed errors in development
+        if settings.environment == "production":
+            details = {"error_type": "validation_error"}
+        else:
+            details = {"error_type": "validation_error", "errors": error.errors()}
     elif isinstance(error, DatabaseError):
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        message = "Database error occurred"
+        message = UserFriendlyErrorMessages.get_user_friendly_message("database error")
         details = {"error_type": "database_error"}
     elif isinstance(error, APIError):
         status_code = error.status_code
-        message = error.message
+        # Convert to user-friendly message
+        user_friendly = UserFriendlyErrorMessages.get_user_friendly_message(error.message)
+        # Sanitize API error messages in production
+        message = user_friendly if settings.environment != "production" else sanitize_error_message(user_friendly)
         details = {"error_type": "api_error", "details": error.details}
     elif isinstance(error, HTTPException):
         status_code = error.status_code
-        message = error.detail
+        # Convert to user-friendly message
+        original_message = str(error.detail)
+        user_friendly = UserFriendlyErrorMessages.get_user_friendly_message(original_message)
+        # Sanitize HTTP exception messages in production
+        message = user_friendly if settings.environment != "production" else sanitize_error_message(user_friendly)
         details = {"error_type": "http_error"}
     elif isinstance(error, StarletteHTTPException):
         status_code = error.status_code
-        message = error.detail
+        # Convert to user-friendly message
+        original_message = str(error.detail)
+        user_friendly = UserFriendlyErrorMessages.get_user_friendly_message(original_message)
+        # Sanitize Starlette HTTP exception messages in production
+        message = user_friendly if settings.environment != "production" else sanitize_error_message(user_friendly)
         details = {"error_type": "http_error"}
     else:
         status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-        message = "Internal server error"
+        # Use user-friendly message
+        message = UserFriendlyErrorMessages.get_user_friendly_message("an unexpected error occurred")
         details = {"error_type": "internal_error"}
     
     # Add request ID for tracking
@@ -201,7 +220,7 @@ def create_error_response(
     )
 
 def handle_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
-    """Handle Pydantic validation errors"""
+    """Handle Pydantic validation errors with user-friendly messages"""
     import json
     user_id = _extract_user_id_from_request(request)
     
@@ -218,7 +237,55 @@ def handle_validation_error(request: Request, exc: RequestValidationError) -> JS
     except Exception:
         pass
     
-    return create_error_response(exc, request, user_id=user_id, include_details=True)
+    # Convert validation errors to user-friendly messages
+    user_friendly_errors = []
+    for error in error_details:
+        field_path = ".".join(str(loc) for loc in error.get("loc", []))
+        error_type = error.get("type", "")
+        error_msg = error.get("msg", "")
+        
+        # Get field name (last part of path)
+        field_name = field_path.split(".")[-1] if field_path else "field"
+        
+        # Create user-friendly message
+        friendly_msg = UserFriendlyErrorMessages.enhance_validation_error(
+            field_name=field_name,
+            error_type=error_type,
+            provided_value=error.get("input")
+        )
+        user_friendly_errors.append({
+            "field": field_path,
+            "message": friendly_msg
+        })
+    
+    # Create custom error response with user-friendly messages
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    message = UserFriendlyErrorMessages.get_user_friendly_message("validation error")
+    
+    # In production, only show generic message; in development, show field-specific errors
+    if settings.environment == "production":
+        details = {"error_type": "validation_error"}
+    else:
+        details = {
+            "error_type": "validation_error",
+            "errors": user_friendly_errors,
+            "technical_errors": error_details  # Include technical details in development
+        }
+    
+    # Add request ID for tracking
+    request_id = getattr(request.state, "request_id", None)
+    if request_id:
+        details["request_id"] = request_id
+    
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": message,
+            "details": details,
+            "timestamp": DateTimeService.now_iso(),
+            "path": request.url.path
+        }
+    )
 
 def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
     """Handle HTTP exceptions"""

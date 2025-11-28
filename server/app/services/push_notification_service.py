@@ -72,7 +72,8 @@ class PushNotificationService:
                             # Handle specific APNs error codes
                             if error_reason == "BadDeviceToken":
                                 logger.warning(f"Invalid device token: {device_token[:20]}...")
-                                # TODO: Remove invalid token from database
+                                # Remove invalid token from database
+                                await self._cleanup_invalid_token(device_token)
                             elif error_reason == "BadTopic":
                                 logger.error(f"Bundle ID mismatch. Expected: {self.apns_bundle_id}")
                             elif error_reason == "ExpiredProviderToken":
@@ -93,7 +94,8 @@ class PushNotificationService:
                                 logger.error("Missing device token in APNs request")
                             elif error_reason == "Unregistered":
                                 logger.warning(f"Device token unregistered: {device_token[:20]}...")
-                                # TODO: Remove unregistered token from database
+                                # Remove unregistered token from database
+                                await self._cleanup_invalid_token(device_token)
                             else:
                                 logger.error(f"APNs error ({response.status}): {error_reason}")
                             
@@ -255,3 +257,59 @@ class PushNotificationService:
         except Exception as e:
             logger.error(f"Error validating device token: {e}")
             return False
+    
+    async def _cleanup_invalid_token(self, device_token: str) -> None:
+        """
+        Remove invalid or unregistered device token from database
+        
+        This method removes the token from:
+        - users.device_token field
+        - device_tokens_temp table
+        
+        Args:
+            device_token: Invalid device token to remove
+        """
+        try:
+            from app.database import get_supabase_service_role_client
+            from app.shared.services.database_operation_service import DatabaseOperationService
+            from app.shared.utils.async_supabase import execute_async
+            
+            service_supabase = get_supabase_service_role_client()
+            db_service = DatabaseOperationService(service_supabase)
+            
+            # Remove from users table
+            try:
+                # Find users with this device token
+                user_response = await execute_async(
+                    lambda: service_supabase.table("users")
+                        .select("id")
+                        .eq("device_token", device_token)
+                        .execute()
+                )
+                
+                if user_response.data:
+                    for user in user_response.data:
+                        user_id = user.get("id")
+                        await db_service.update_with_timestamp(
+                            "users",
+                            user_id,
+                            {"device_token": None}
+                        )
+                        logger.info(f"Removed invalid device token from user {user_id}")
+            except Exception as user_error:
+                logger.warning(f"Error removing token from users table: {user_error}")
+            
+            # Remove from device_tokens_temp table
+            try:
+                await execute_async(
+                    lambda: service_supabase.table("device_tokens_temp")
+                        .delete()
+                        .eq("device_token", device_token)
+                        .execute()
+                )
+                logger.info(f"Removed invalid device token from device_tokens_temp table")
+            except Exception as temp_error:
+                logger.warning(f"Error removing token from device_tokens_temp table: {temp_error}")
+            
+        except Exception as e:
+            logger.error(f"Error cleaning up invalid device token: {e}")

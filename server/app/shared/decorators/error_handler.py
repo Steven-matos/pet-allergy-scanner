@@ -43,9 +43,10 @@ def handle_errors(operation_name: str):
                 raise
             except Exception as e:
                 logger.error(f"Error in {operation_name}: {e}", exc_info=True)
+                # Don't leak error details - let exception handlers sanitize
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Internal server error: {str(e)}"
+                    detail="Internal server error"
                 )
         
         @wraps(func)
@@ -57,9 +58,10 @@ def handle_errors(operation_name: str):
                 raise
             except Exception as e:
                 logger.error(f"Error in {operation_name}: {e}", exc_info=True)
+                # Don't leak error details - let exception handlers sanitize
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Internal server error: {str(e)}"
+                    detail="Internal server error"
                 )
         
         # Return appropriate wrapper based on whether function is async
@@ -97,9 +99,10 @@ def handle_errors_with_custom_message(operation_name: str, custom_message: str):
                 raise
             except Exception as e:
                 logger.error(f"Error in {operation_name}: {e}", exc_info=True)
+                # Don't leak error details - use custom message only
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"{custom_message}: {str(e)}"
+                    detail=custom_message
                 )
         
         @wraps(func)
@@ -111,9 +114,10 @@ def handle_errors_with_custom_message(operation_name: str, custom_message: str):
                 raise
             except Exception as e:
                 logger.error(f"Error in {operation_name}: {e}", exc_info=True)
+                # Don't leak error details - use custom message only
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"{custom_message}: {str(e)}"
+                    detail=custom_message
                 )
         
         # Return appropriate wrapper based on whether function is async

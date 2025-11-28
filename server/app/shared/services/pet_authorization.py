@@ -12,6 +12,7 @@ from typing import Any, Dict
 
 from app.database import get_supabase_client
 from app.models.user import User
+from app.shared.utils.async_supabase import execute_async
 
 
 async def verify_pet_ownership(
@@ -68,10 +69,12 @@ async def verify_pet_ownership(
             logger.warning(f"[PET_AUTH] Could not verify session: {session_error}")
         
         try:
-            response = supabase.table("pets")\
-                .select("*")\
-                .eq("id", pet_id)\
-                .execute()
+            response = await execute_async(
+                lambda: supabase.table("pets")
+                    .select("*")
+                    .eq("id", pet_id)
+                    .execute()
+            )
             
             if response.data:
                 found_pet = response.data[0]
@@ -95,21 +98,25 @@ async def verify_pet_ownership(
             logger.error(f"[PET_AUTH] Error querying pet with authenticated client: {type(e).__name__}: {e}", exc_info=True)
             # Fall back to explicit user_id filter
             try:
-                response = supabase.table("pets")\
-                    .select("*")\
-                    .eq("id", pet_id)\
-                    .eq("user_id", user_id)\
-                    .execute()
+                response = await execute_async(
+                    lambda: supabase.table("pets")
+                        .select("*")
+                        .eq("id", pet_id)
+                        .eq("user_id", user_id)
+                        .execute()
+                )
             except Exception as fallback_error:
                 logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
                 raise
     else:
         # Unauthenticated client - must filter explicitly
-        response = supabase.table("pets")\
-            .select("*")\
-            .eq("id", pet_id)\
-            .eq("user_id", user_id)\
-            .execute()
+        response = await execute_async(
+            lambda: supabase.table("pets")
+                .select("*")
+                .eq("id", pet_id)
+                .eq("user_id", user_id)
+                .execute()
+        )
     
     if not response.data:
         # Log for debugging - check if pet exists at all
@@ -119,10 +126,12 @@ async def verify_pet_ownership(
             # Use service role client to check if pet exists (bypasses RLS)
             from app.database import get_supabase_service_role_client
             service_client = get_supabase_service_role_client()
-            pet_check = service_client.table("pets")\
-                .select("id, user_id, name, created_at")\
-                .eq("id", pet_id)\
-                .execute()
+            pet_check = await execute_async(
+                lambda: service_client.table("pets")
+                    .select("id, user_id, name, created_at")
+                    .eq("id", pet_id)
+                    .execute()
+            )
             
             if pet_check.data:
                 pet_info = pet_check.data[0]

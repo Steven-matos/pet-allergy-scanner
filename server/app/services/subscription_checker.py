@@ -164,7 +164,7 @@ class SubscriptionChecker:
                         }
             
             # Step 3: Check if user is admin (bypass subscription requirement via email)
-            if self.revenuecat_service.is_admin_user(user_id):
+            if await self.revenuecat_service.is_admin_user(user_id):
                 logger.info(f"🛡️ User {user_id} is admin user - granting premium access without subscription")
                 
                 # Ensure user role is premium in database

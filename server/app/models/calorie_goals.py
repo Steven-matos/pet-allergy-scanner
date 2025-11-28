@@ -3,9 +3,10 @@ Calorie Goals Models
 Models for managing pet calorie goals
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import Optional
+from app.shared.services.html_sanitization_service import HTMLSanitizationService
 
 
 class CalorieGoalBase(BaseModel):
@@ -13,6 +14,14 @@ class CalorieGoalBase(BaseModel):
     pet_id: str
     daily_calories: float = Field(..., gt=0, description="Daily calorie goal in kcal")
     notes: Optional[str] = Field(None, max_length=500, description="Optional notes about the goal")
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_notes(v, max_length=500)
 
 
 class CalorieGoalCreate(CalorieGoalBase):
@@ -24,6 +33,14 @@ class CalorieGoalUpdate(BaseModel):
     """Calorie goal update model"""
     daily_calories: float = Field(..., gt=0, description="Daily calorie goal in kcal")
     notes: Optional[str] = Field(None, max_length=500, description="Optional notes about the goal")
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_notes(v, max_length=500)
 
 
 class CalorieGoalResponse(CalorieGoalBase):

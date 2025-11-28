@@ -144,7 +144,8 @@ async def get_nutritional_standards(
         if life_stage:
             query = query.eq("life_stage", life_stage.value)
         
-        response = query.execute()
+        from app.shared.utils.async_supabase import execute_async
+        response = await execute_async(lambda: query.execute())
         
         # Convert to response models
         standards = []

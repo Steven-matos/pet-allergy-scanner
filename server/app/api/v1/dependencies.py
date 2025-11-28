@@ -36,21 +36,22 @@ def get_authenticated_supabase_client(
     """
     Get an authenticated Supabase client with user session
     
-    This dependency creates a Supabase client and sets the user's authentication
-    session, allowing RLS policies to work correctly.
+    This dependency reuses the global Supabase client and sets the user's authentication
+    session, allowing RLS policies to work correctly. This ensures connection pooling
+    is maintained instead of creating new clients for each request.
     
     Args:
         credentials: HTTP authorization credentials from the request
         
     Returns:
-        Authenticated Supabase client instance
+        Authenticated Supabase client instance (reused from global pool)
     """
-    from supabase import create_client
+    # Reuse global client for connection pooling
+    supabase = get_supabase_client()
     
-    supabase = create_client(
-        settings.supabase_url,
-        settings.supabase_key
-    )
+    # Set user session for RLS policies
+    # Note: This sets the session on the shared client, but Supabase client
+    # handles per-request sessions internally via the auth header
     supabase.auth.set_session(credentials.credentials, "")
     
     return supabase

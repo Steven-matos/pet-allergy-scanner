@@ -13,6 +13,7 @@ import httpx
 from datetime import datetime, timezone
 from app.shared.services.datetime_service import DateTimeService
 from app.shared.services.database_operation_service import DatabaseOperationService
+from app.shared.utils.async_supabase import execute_async
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, status
 from supabase import Client
@@ -233,7 +234,9 @@ class RevenueCatService:
                     await self._update_user_role(user_id, UserRole.FREE, allow_downgrade=False)
                     
                     # Check if downgrade was actually applied
-                    verify_response = self.supabase.table("users").select("role").eq("id", user_id).execute()
+                    verify_response = await execute_async(
+                        lambda: self.supabase.table("users").select("role").eq("id", user_id).execute()
+                    )
                     if verify_response.data:
                         final_role = verify_response.data[0].get("role")
                         if final_role == "premium":
@@ -431,7 +434,9 @@ class RevenueCatService:
         """
         try:
             # Check if subscription exists for this user
-            existing_response = self.supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
+            existing_response = await execute_async(
+                lambda: self.supabase.table("subscriptions").select("*").eq("user_id", user_id).execute()
+            )
             
             # Determine tier from product_id
             tier = "monthly"  # default
@@ -462,7 +467,7 @@ class RevenueCatService:
                 
                 if subscription_id:
                     # Use DatabaseOperationService for update
-                    db_service.update_with_timestamp(
+                    await db_service.update_with_timestamp(
                         "subscriptions",
                         subscription_id,
                         subscription_data
@@ -473,15 +478,19 @@ class RevenueCatService:
                     if original_transaction_id:
                         # Direct update for this edge case - add updated_at manually
                         subscription_data["updated_at"] = DateTimeService.now_iso()
-                        response = self.supabase.table("subscriptions").update(subscription_data).eq(
-                            "original_transaction_id", original_transaction_id
-                        ).execute()
+                        response = await execute_async(
+                            lambda: self.supabase.table("subscriptions").update(subscription_data).eq(
+                                "original_transaction_id", original_transaction_id
+                            ).execute()
+                        )
                     else:
                         # Fallback to user_id
                         subscription_data["updated_at"] = DateTimeService.now_iso()
-                        response = self.supabase.table("subscriptions").update(subscription_data).eq(
-                            "user_id", user_id
-                        ).execute()
+                        response = await execute_async(
+                            lambda: self.supabase.table("subscriptions").update(subscription_data).eq(
+                                "user_id", user_id
+                            ).execute()
+                        )
             else:
                 # Create new subscription using centralized service - need required fields
                 subscription_data["purchase_date"] = DateTimeService.now_iso()
@@ -489,10 +498,12 @@ class RevenueCatService:
                 subscription_data["latest_transaction_id"] = subscription_data["original_transaction_id"]
                 subscription_data["auto_renew"] = True
                 
-                db_service.insert_with_timestamps("subscriptions", subscription_data)
+                await db_service.insert_with_timestamps("subscriptions", subscription_data)
             
             # Verify the update succeeded
-            verify_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
+            verify_response = await execute_async(
+                lambda: self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
+            )
             if verify_response.data:
                 verified_sub = verify_response.data[0]
                 if verified_sub.get("status") == status:
@@ -507,7 +518,7 @@ class RevenueCatService:
             logger.error(f"Error updating subscription in database for user {user_id}: {str(e)}", exc_info=True)
             raise
     
-    def is_admin_user(self, user_id: str) -> bool:
+    async def is_admin_user(self, user_id: str) -> bool:
         """
         Check if a user is an admin user with full access without subscription
         
@@ -521,9 +532,9 @@ class RevenueCatService:
         Returns:
             True if user is an admin user
         """
-        return self._should_protect_from_downgrade(user_id)
+        return await self._should_protect_from_downgrade(user_id)
     
-    def _should_protect_from_downgrade(self, user_id: str) -> bool:
+    async def _should_protect_from_downgrade(self, user_id: str) -> bool:
         """
         Check if a user should be protected from automatic downgrades
         This protects admin/developer accounts from RevenueCat webhook downgrades
@@ -545,7 +556,9 @@ class RevenueCatService:
             logger.info(f"🔍 Checking downgrade protection for user {user_id}")
             
             # First check if user has bypass_subscription flag set
-            user_response = self.supabase.table("users").select("email, role, bypass_subscription").eq("id", user_id).execute()
+            user_response = await execute_async(
+                lambda: self.supabase.table("users").select("email, role, bypass_subscription").eq("id", user_id).execute()
+            )
             
             if user_response.data:
                 bypass_subscription = user_response.data[0].get("bypass_subscription", False)
@@ -555,7 +568,9 @@ class RevenueCatService:
             
             # Get user email to check against protected list
             if not user_response.data:
-                user_response = self.supabase.table("users").select("email, role").eq("id", user_id).execute()
+                user_response = await execute_async(
+                    lambda: self.supabase.table("users").select("email, role").eq("id", user_id).execute()
+                )
             
             if not user_response.data:
                 logger.warning(f"⚠️ User {user_id} not found in database - cannot protect")
@@ -606,7 +621,9 @@ class RevenueCatService:
             # NOTE: This only works if user is STILL premium - if already downgraded, check protected emails above
             if current_role == "premium":
                 # Check if there's an active subscription from RevenueCat
-                subscription_response = self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
+                subscription_response = await execute_async(
+                    lambda: self.supabase.table("subscriptions").select("status, product_id").eq("user_id", user_id).execute()
+                )
                 has_active_subscription = False
                 has_any_subscription = False
                 

@@ -68,7 +68,7 @@ async def analyze_food(
     
     # Insert into database using centralized service
     db_service = DatabaseOperationService(supabase)
-    created_analysis = db_service.insert_with_timestamps("food_analyses", analysis_data)
+    created_analysis = await db_service.insert_with_timestamps("food_analyses", analysis_data)
     
     # Convert to response model
     return ResponseModelService.convert_to_model(created_analysis, FoodAnalysisResponse)
@@ -101,7 +101,7 @@ async def get_food_analyses(
     
     # Get food analyses using query builder
     query_builder = QueryBuilderService(supabase, "food_analyses")
-    result = query_builder.with_filters({
+    result = await query_builder.with_filters({
         "pet_id": pet_id,
         "user_id": current_user.id
     }).execute()
@@ -184,7 +184,7 @@ async def get_food_analysis(
     """
     # Get food analysis using query builder
     query_builder = QueryBuilderService(supabase, "food_analyses")
-    result = query_builder.with_filters({
+    result = await query_builder.with_filters({
         "id": food_analysis_id,
         "user_id": current_user.id
     }).with_limit(1).execute()

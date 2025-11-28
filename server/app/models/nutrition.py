@@ -2,7 +2,7 @@
 Nutrition data models and schemas for pet nutrition tracking
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
@@ -147,6 +147,15 @@ class FeedingRecordBase(BaseModel):
     amount_grams: float = Field(..., gt=0)
     feeding_time: datetime
     notes: Optional[str] = Field(None, max_length=500)
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        from app.shared.services.html_sanitization_service import HTMLSanitizationService
+        return HTMLSanitizationService.sanitize_notes(v, max_length=500)
 
 class FeedingRecordCreate(FeedingRecordBase):
     """Feeding record creation model"""

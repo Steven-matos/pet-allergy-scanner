@@ -74,9 +74,12 @@ async def signup_waitlist(signup_data: WaitlistSignup):
     
     try:
         # First, check if email already exists
-        existing = supabase.table("waitlist").select(
-            "id, email, notified, notified_at, created_at, updated_at"
-        ).eq("email", normalized_email).execute()
+        from app.shared.utils.async_supabase import execute_async
+        existing = await execute_async(
+            lambda: supabase.table("waitlist").select(
+                "id, email, notified, notified_at, created_at, updated_at"
+            ).eq("email", normalized_email).execute()
+        )
         
         if existing.data:
             # Email already exists, return existing entry with duplicate flag
@@ -86,7 +89,7 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         from app.shared.services.database_operation_service import DatabaseOperationService
         
         db_service = DatabaseOperationService(supabase)
-        entry = db_service.insert_with_timestamps("waitlist", {
+        entry = await db_service.insert_with_timestamps("waitlist", {
             "email": normalized_email
         })
         return _build_waitlist_response(entry, is_duplicate=False)
@@ -108,9 +111,12 @@ async def signup_waitlist(signup_data: WaitlistSignup):
         if 'duplicate' in error_str.lower() or 'unique' in error_str.lower() or '23505' in error_str:
             # Fetch existing entry
             try:
-                existing = supabase.table("waitlist").select(
-                    "id, email, notified, notified_at, created_at, updated_at"
-                ).eq("email", normalized_email).execute()
+                from app.shared.utils.async_supabase import execute_async
+                existing = await execute_async(
+                    lambda: supabase.table("waitlist").select(
+                        "id, email, notified, notified_at, created_at, updated_at"
+                    ).eq("email", normalized_email).execute()
+                )
                 
                 if existing.data:
                     return _build_waitlist_response(existing.data[0], is_duplicate=True)

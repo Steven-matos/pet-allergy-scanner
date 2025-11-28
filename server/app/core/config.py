@@ -76,6 +76,21 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = Field(default=60, ge=1, le=1000, description="Rate limit per minute")
     auth_rate_limit_per_minute: int = Field(default=10, ge=1, le=20, description="Auth rate limit per minute")
+    redis_url: Optional[str] = Field(
+        default=None,
+        alias="REDIS_URL",
+        description="Redis connection URL for distributed rate limiting (e.g., redis://localhost:6379). If not set, falls back to in-memory rate limiting."
+    )
+    redis_host: Optional[str] = Field(
+        default=None,
+        alias="REDIS_HOST",
+        description="Redis host (used if REDIS_URL not set)"
+    )
+    redis_port: int = Field(
+        default=6379,
+        alias="REDIS_PORT",
+        description="Redis port (used if REDIS_URL not set)"
+    )
     
     # Database Configuration
     database_url: str = Field(..., alias="DATABASE_URL", description="Database connection URL")

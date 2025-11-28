@@ -44,6 +44,7 @@ bleach>=6.2.0  # Updated
 # Rate Limiting & Performance
 slowapi>=0.1.9
 psutil>=7.0.0  # Updated to latest
+redis>=5.0.0  # Optional: For distributed rate limiting (falls back to in-memory if unavailable)
 
 # Testing
 pytest>=8.4.0  # Updated to latest

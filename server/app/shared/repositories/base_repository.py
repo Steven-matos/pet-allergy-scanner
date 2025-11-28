@@ -7,9 +7,11 @@ Implements DRY: Common database operations in one place
 
 from typing import Generic, TypeVar, Type, Optional, List, Any, Dict
 from abc import ABC, abstractmethod
+import asyncio
 
 from app.shared.services.query_builder_service import QueryBuilderService
 from app.shared.services.pagination_service import PaginationService, PaginationResponse
+from app.core.config import settings
 
 
 T = TypeVar('T')
@@ -47,17 +49,22 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Entity data or None if not found
         """
-        response = self.supabase.table(self.table_name)\
-            .select("*")\
-            .eq("id", id)\
-            .execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: self.supabase.table(self.table_name)
+                    .select("*")
+                    .eq("id", id)
+                    .execute()
+            ),
+            timeout=settings.database_timeout
+        )
         
         return response.data[0] if response.data else None
     
     async def get_all(
         self, 
         filters: Optional[Dict[str, Any]] = None,
-        limit: int = 100,
+        limit: int = 20,  # Reduced default for mobile optimization
         offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
@@ -65,19 +72,25 @@ class BaseRepository(ABC, Generic[T]):
         
         Args:
             filters: Optional dictionary of field:value filters
-            limit: Maximum number of results to return
+            limit: Maximum number of results to return (default: 20 for mobile)
             offset: Number of results to skip
             
         Returns:
             List of entity data dictionaries
         """
-        query = self.supabase.table(self.table_name).select("*")
+        def _execute_query():
+            query = self.supabase.table(self.table_name).select("*")
+            
+            if filters:
+                for key, value in filters.items():
+                    query = query.eq(key, value)
+            
+            return query.limit(limit).offset(offset).execute()
         
-        if filters:
-            for key, value in filters.items():
-                query = query.eq(key, value)
-        
-        response = query.limit(limit).offset(offset).execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_execute_query),
+            timeout=settings.database_timeout
+        )
         return response.data or []
     
     async def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -93,9 +106,14 @@ class BaseRepository(ABC, Generic[T]):
         Raises:
             Exception: If creation fails
         """
-        response = self.supabase.table(self.table_name)\
-            .insert(data)\
-            .execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: self.supabase.table(self.table_name)
+                    .insert(data)
+                    .execute()
+            ),
+            timeout=settings.database_timeout
+        )
         
         if not response.data:
             raise Exception(f"Failed to create {self.table_name} record")
@@ -116,10 +134,15 @@ class BaseRepository(ABC, Generic[T]):
         Raises:
             Exception: If update fails or entity not found
         """
-        response = self.supabase.table(self.table_name)\
-            .update(data)\
-            .eq("id", id)\
-            .execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: self.supabase.table(self.table_name)
+                    .update(data)
+                    .eq("id", id)
+                    .execute()
+            ),
+            timeout=settings.database_timeout
+        )
         
         if not response.data:
             raise Exception(f"Failed to update {self.table_name} record with id {id}")
@@ -136,10 +159,15 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             True if deleted, False if not found
         """
-        response = self.supabase.table(self.table_name)\
-            .delete()\
-            .eq("id", id)\
-            .execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                lambda: self.supabase.table(self.table_name)
+                    .delete()
+                    .eq("id", id)
+                    .execute()
+            ),
+            timeout=settings.database_timeout
+        )
         
         return bool(response.data)
     
@@ -153,13 +181,19 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Count of matching entities
         """
-        query = self.supabase.table(self.table_name).select("id", count="exact")
+        def _execute_count():
+            query = self.supabase.table(self.table_name).select("id", count="exact")
+            
+            if filters:
+                for key, value in filters.items():
+                    query = query.eq(key, value)
+            
+            return query.execute()
         
-        if filters:
-            for key, value in filters.items():
-                query = query.eq(key, value)
-        
-        response = query.execute()
+        response = await asyncio.wait_for(
+            asyncio.to_thread(_execute_count),
+            timeout=settings.database_timeout
+        )
         return response.count or 0
     
     async def exists(self, id: str) -> bool:
@@ -189,7 +223,7 @@ class BaseRepository(ABC, Generic[T]):
         search_fields: List[str],
         search_term: Optional[str] = None,
         filters: Optional[Dict[str, Any]] = None,
-        limit: int = 100,
+        limit: int = 20,  # Reduced default for mobile optimization
         offset: int = 0,
         order_by: Optional[str] = None,
         desc: bool = True,
@@ -202,7 +236,7 @@ class BaseRepository(ABC, Generic[T]):
             search_fields: List of field names to search in
             search_term: Search term to look for
             filters: Optional dictionary of field:value filters
-            limit: Maximum number of results
+            limit: Maximum number of results (default: 20 for mobile)
             offset: Number of results to skip
             order_by: Field name to order by
             desc: Whether to order descending
@@ -224,12 +258,12 @@ class BaseRepository(ABC, Generic[T]):
         
         query_builder.with_pagination(limit, offset, include_count)
         
-        return query_builder.execute()
+        return await query_builder.execute()
     
     async def get_paginated(
         self,
         filters: Optional[Dict[str, Any]] = None,
-        limit: int = 100,
+        limit: int = 20,  # Reduced default for mobile optimization
         offset: int = 0,
         order_by: Optional[str] = None,
         desc: bool = True
@@ -239,7 +273,7 @@ class BaseRepository(ABC, Generic[T]):
         
         Args:
             filters: Optional dictionary of field:value filters
-            limit: Maximum number of results
+            limit: Maximum number of results (default: 20 for mobile)
             offset: Number of results to skip
             order_by: Field name to order by
             desc: Whether to order descending
@@ -255,7 +289,7 @@ class BaseRepository(ABC, Generic[T]):
         if order_by:
             query_builder.with_ordering(order_by, desc)
         
-        result = query_builder.with_pagination(limit, offset, include_count=True).execute()
+        result = await query_builder.with_pagination(limit, offset, include_count=True).execute()
         
         return PaginationService.build_pagination_response(
             items=result["data"],
@@ -267,7 +301,7 @@ class BaseRepository(ABC, Generic[T]):
     async def get_all_with_ordering(
         self,
         filters: Optional[Dict[str, Any]] = None,
-        limit: int = 100,
+        limit: int = 20,  # Reduced default for mobile optimization
         offset: int = 0,
         order_by: str = "created_at",
         desc: bool = True
@@ -277,7 +311,7 @@ class BaseRepository(ABC, Generic[T]):
         
         Args:
             filters: Optional dictionary of field:value filters
-            limit: Maximum number of results to return
+            limit: Maximum number of results to return (default: 20 for mobile)
             offset: Number of results to skip
             order_by: Field name to order by
             desc: Whether to order descending
@@ -292,5 +326,5 @@ class BaseRepository(ABC, Generic[T]):
         
         query_builder.with_ordering(order_by, desc)
         
-        result = query_builder.with_pagination(limit, offset).execute()
+        result = await query_builder.with_pagination(limit, offset).execute()
         return result["data"]

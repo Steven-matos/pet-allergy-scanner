@@ -77,7 +77,7 @@ async def record_feeding_with_slash(
     
     # Insert into database using centralized service
     db_service = DatabaseOperationService(supabase)
-    created_record = db_service.insert_with_timestamps("feeding_records", record_data)
+    created_record = await db_service.insert_with_timestamps("feeding_records", record_data)
     
     # Convert to response model
     return ResponseModelService.convert_to_model(created_record, FeedingRecordResponse)
@@ -112,7 +112,7 @@ async def get_feeding_records(
     # Note: feeding_records table only has pet_id, not user_id
     # Authorization is handled via RLS policies checking pet ownership
     query_builder = QueryBuilderService(supabase, "feeding_records")
-    result = query_builder.with_filters({"pet_id": pet_id})\
+    result = await query_builder.with_filters({"pet_id": pet_id})\
         .with_ordering("created_at", desc=True)\
         .execute()
     

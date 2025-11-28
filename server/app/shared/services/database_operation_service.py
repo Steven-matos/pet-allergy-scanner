@@ -13,8 +13,11 @@ All database operations should use this service for consistency.
 import logging
 from typing import Optional, Dict, Any, List
 from supabase import Client
+import asyncio
 
 from app.shared.services.datetime_service import DateTimeService
+from app.shared.utils.async_supabase import execute_async
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +42,7 @@ class DatabaseOperationService:
         """
         self.supabase = supabase
     
-    def insert_with_timestamps(
+    async def insert_with_timestamps(
         self,
         table_name: str,
         data: Dict[str, Any],
@@ -68,7 +71,9 @@ class DatabaseOperationService:
             if include_updated_at and "updated_at" not in data:
                 data["updated_at"] = DateTimeService.now_iso()
             
-            response = self.supabase.table(table_name).insert(data).execute()
+            response = await execute_async(
+                lambda: self.supabase.table(table_name).insert(data).execute()
+            )
             
             if not response.data:
                 raise Exception(f"Insert failed: No data returned for {table_name}")
@@ -80,7 +85,7 @@ class DatabaseOperationService:
             logger.error(f"❌ Error inserting into {table_name}: {str(e)}", exc_info=True)
             raise
     
-    def update_with_timestamp(
+    async def update_with_timestamp(
         self,
         table_name: str,
         record_id: str,
@@ -124,9 +129,11 @@ class DatabaseOperationService:
             if include_updated_at and "updated_at" not in data:
                 data["updated_at"] = DateTimeService.now_iso()
             
-            response = self.supabase.table(table_name).update(data).eq(
-                id_column, record_id
-            ).execute()
+            response = await execute_async(
+                lambda: self.supabase.table(table_name).update(data).eq(
+                    id_column, record_id
+                ).execute()
+            )
             
             if not response.data:
                 raise Exception(
@@ -144,7 +151,7 @@ class DatabaseOperationService:
             )
             raise
     
-    def upsert_with_timestamps(
+    async def upsert_with_timestamps(
         self,
         table_name: str,
         data: Dict[str, Any],
@@ -170,19 +177,21 @@ class DatabaseOperationService:
         """
         try:
             # Check if record exists
-            existing = self.supabase.table(table_name).select("*").eq(
-                conflict_column, data.get(conflict_column)
-            ).execute()
+            existing = await execute_async(
+                lambda: self.supabase.table(table_name).select("*").eq(
+                    conflict_column, data.get(conflict_column)
+                ).execute()
+            )
             
             if existing.data:
                 # Update existing record
                 record_id = existing.data[0].get("id")
-                return self.update_with_timestamp(
+                return await self.update_with_timestamp(
                     table_name, record_id, data, include_updated_at=include_updated_at
                 )
             else:
                 # Insert new record
-                return self.insert_with_timestamps(
+                return await self.insert_with_timestamps(
                     table_name, data,
                     include_created_at=include_created_at,
                     include_updated_at=include_updated_at
@@ -192,7 +201,7 @@ class DatabaseOperationService:
             logger.error(f"❌ Error upserting into {table_name}: {str(e)}", exc_info=True)
             raise
     
-    def delete_record(
+    async def delete_record(
         self,
         table_name: str,
         record_id: str,
@@ -213,9 +222,11 @@ class DatabaseOperationService:
             Exception: If delete fails
         """
         try:
-            response = self.supabase.table(table_name).delete().eq(
-                id_column, record_id
-            ).execute()
+            response = await execute_async(
+                lambda: self.supabase.table(table_name).delete().eq(
+                    id_column, record_id
+                ).execute()
+            )
             
             deleted = bool(response.data)
             if deleted:
@@ -232,7 +243,7 @@ class DatabaseOperationService:
             )
             raise
     
-    def get_by_id(
+    async def get_by_id(
         self,
         table_name: str,
         record_id: str,
@@ -255,11 +266,13 @@ class DatabaseOperationService:
             Exception: If query fails
         """
         try:
-            query = self.supabase.table(table_name).select(
-                ",".join(columns) if columns else "*"
-            ).eq(id_column, record_id)
+            def _execute_query():
+                query = self.supabase.table(table_name).select(
+                    ",".join(columns) if columns else "*"
+                ).eq(id_column, record_id)
+                return query.execute()
             
-            response = query.execute()
+            response = await execute_async(_execute_query)
             return response.data[0] if response.data else None
         
         except Exception as e:

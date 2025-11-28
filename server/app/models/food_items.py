@@ -3,9 +3,10 @@ Food Items Models
 Models for managing food database and items
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from app.shared.services.html_sanitization_service import HTMLSanitizationService
 
 
 class NutritionalInfoBase(BaseModel):
@@ -52,6 +53,14 @@ class FoodItemBase(BaseModel):
     nutritional_info: Optional[NutritionalInfoBase] = Field(None, description="Nutritional information")
     category: Optional[str] = Field(None, max_length=50, description="Food category")
     description: Optional[str] = Field(None, max_length=500, description="Food description")
+    
+    @field_validator('description')
+    @classmethod
+    def sanitize_description(cls, v):
+        """Sanitize description field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_description(v, max_length=500)
 
 
 class FoodItemCreate(FoodItemBase):
@@ -71,6 +80,14 @@ class FoodItemUpdate(BaseModel):
     nutritional_info: Optional[NutritionalInfoBase] = None
     category: Optional[str] = Field(None, max_length=50)
     description: Optional[str] = Field(None, max_length=500)
+    
+    @field_validator('description')
+    @classmethod
+    def sanitize_description(cls, v):
+        """Sanitize description field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_description(v, max_length=500)
 
 
 class FoodItemResponse(FoodItemBase):

@@ -92,7 +92,7 @@ async def register_device_token(
         from app.shared.services.database_operation_service import DatabaseOperationService
         
         db_service = DatabaseOperationService(supabase)
-        db_service.update_with_timestamp(
+        await db_service.update_with_timestamp(
             "users",
             current_user.id,
             {"device_token": device_token}
@@ -136,7 +136,7 @@ async def register_device_token_anonymous(
             
             service_supabase = get_supabase_service_role_client()
             db_service = DatabaseOperationService(service_supabase)
-            db_service.insert_with_timestamps("device_tokens_temp", {
+            await db_service.insert_with_timestamps("device_tokens_temp", {
                 "device_token": device_token,
                 "expires_at": expires_at,
                 "user_id": None  # Will be linked after authentication
@@ -177,13 +177,25 @@ async def send_push_notification(
         # Log request details for debugging
         # Validate request fields
         if not request.device_token:
-            raise HTTPException(status_code=400, detail="device_token is required")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("required field missing")
+            )
         
         if not request.payload:
-            raise HTTPException(status_code=400, detail="payload is required")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("required field missing")
+            )
         
         if not isinstance(request.payload, dict):
-            raise HTTPException(status_code=400, detail="payload must be a dictionary")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid format")
+            )
         
         device_token = request.device_token
         payload = request.payload
@@ -208,7 +220,11 @@ async def send_push_notification(
                 delay = 0
         
         if push_service is None:
-            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=503, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("service unavailable")
+            )
         
         if delay > 0:
             # Schedule notification for later
@@ -252,7 +268,11 @@ async def cancel_all_notifications(
     """
     try:
         if push_service is None:
-            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=503, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("service unavailable")
+            )
         
         # Cancel all scheduled notifications for this user
         await push_service.cancel_user_notifications(current_user.id)
@@ -280,7 +300,11 @@ async def schedule_engagement_notifications(
     """
     try:
         if not current_user.device_token:
-            raise HTTPException(status_code=400, detail="No device token registered")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail="Please register your device for push notifications first."
+            )
         
         # Schedule weekly reminder (7 days)
         weekly_payload = {
@@ -366,7 +390,11 @@ async def send_birthday_notification(
     """
     try:
         if not current_user.device_token:
-            raise HTTPException(status_code=400, detail="No device token registered")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=400, 
+                detail="Please register your device for push notifications first."
+            )
         
         birthday_payload = {
             "aps": {
@@ -384,7 +412,11 @@ async def send_birthday_notification(
         }
         
         if push_service is None:
-            raise HTTPException(status_code=503, detail="Push notification service is not configured")
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+            raise HTTPException(
+                status_code=503, 
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("service unavailable")
+            )
         
         # Send immediately
         await push_service.send_notification(current_user.device_token, birthday_payload)

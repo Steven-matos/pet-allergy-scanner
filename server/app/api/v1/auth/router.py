@@ -213,7 +213,10 @@ async def login_user(login_data: UserLogin):
                     # based on the email, assuming the user exists in auth.users
                     
                     # First, check if a user with this email exists in public.users
-                    existing_check = service_supabase.table("users").select("id, email").eq("email", login_data.email_or_username).execute()
+                    from app.shared.utils.async_supabase import execute_async
+                    existing_check = await execute_async(
+                        lambda: service_supabase.table("users").select("id, email").eq("email", login_data.email_or_username).execute()
+                    )
                     
                     if existing_check.data:
                         # User exists in public.users - this might be a different issue (constraint violation, etc.)
@@ -456,10 +459,13 @@ async def update_user_profile(
                 from app.shared.services.database_operation_service import DatabaseOperationService
                 
                 db_service = DatabaseOperationService(supabase)
-                db_service.update_with_timestamp("users", user_id, db_update)
+                await db_service.update_with_timestamp("users", user_id, db_update)
         
         # Get updated user data
-        updated_response = supabase.table("users").select("*").eq("id", user_id).execute()
+        from app.shared.utils.async_supabase import execute_async
+        updated_response = await execute_async(
+            lambda: supabase.table("users").select("*").eq("id", user_id).execute()
+        )
         
         if not updated_response.data:
             logger.error(f"Failed to fetch updated user {user_id}")

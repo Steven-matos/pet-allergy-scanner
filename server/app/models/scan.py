@@ -2,10 +2,11 @@
 Scan data models and schemas
 """
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+from app.shared.services.html_sanitization_service import HTMLSanitizationService
 
 class ScanStatus(str, Enum):
     """Scan status enumeration"""
@@ -63,6 +64,14 @@ class ScanUpdate(BaseModel):
     confidence_score: Optional[float] = Field(None, ge=0.0, le=1.0)
     notes: Optional[str] = Field(None, max_length=1000)
     method: Optional[ScanMethod] = None
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_notes(v, max_length=1000)
 
 class ScanResponse(ScanBase):
     """Scan response model"""

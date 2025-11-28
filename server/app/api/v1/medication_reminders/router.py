@@ -49,10 +49,17 @@ async def create_medication_reminder_with_slash(
     await verify_pet_ownership(reminder.pet_id, current_user.id, supabase)
 
     # Verify health event ownership
-    health_event_response = supabase.table("health_events").select("id").eq("id", reminder.health_event_id).eq("user_id", current_user.id).execute()
+    from app.shared.utils.async_supabase import execute_async
+    health_event_response = await execute_async(
+        lambda: supabase.table("health_events").select("id").eq("id", reminder.health_event_id).eq("user_id", current_user.id).execute()
+    )
 
     if not health_event_response.data:
-        raise HTTPException(status_code=404, detail="Health event not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("health event not found", context="health_event", action="not_found")
+        )
 
     # Create medication reminder using service
     db_reminder = await MedicationReminderService.create_medication_reminder(
@@ -65,7 +72,7 @@ async def create_medication_reminder_with_slash(
 @router.get("/pet/{pet_id}", response_model=MedicationReminderListResponse)
 async def get_pet_medication_reminders(
     pet_id: str,
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=100, description="Maximum results (default optimized for mobile)"),
     offset: int = Query(0, ge=0),
     active_only: bool = Query(True),
     current_user: UserResponse = Depends(get_current_user),
@@ -96,10 +103,49 @@ async def get_pet_medication_reminders(
     )
 
 
+@router.get("/pet/{pet_id}/mobile", response_model=List[dict])
+async def get_pet_medication_reminders_mobile(
+    pet_id: str,
+    limit: int = Query(20, ge=1, le=50, description="Maximum results (mobile optimized)"),
+    offset: int = Query(0, ge=0),
+    active_only: bool = Query(True),
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Mobile-optimized endpoint to get medication reminders with minimal fields.
+    
+    Returns only essential fields (id, pet_id, medication_name, frequency, is_active, created_at)
+    for faster loading on mobile devices with limited bandwidth.
+    """
+    # Verify pet ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Get reminders with minimal fields using query builder
+    from app.shared.services.query_builder_service import QueryBuilderService
+    from app.shared.services.response_utils import handle_empty_response
+    
+    query_builder = QueryBuilderService(
+        supabase,
+        "medication_reminders",
+        default_columns=["id", "pet_id", "medication_name", "frequency", "is_active", "created_at"]
+    )
+    filters = {"pet_id": pet_id, "user_id": current_user.id}
+    if active_only:
+        filters["is_active"] = True
+    
+    result = await query_builder.with_filters(filters)\
+        .with_ordering("created_at", desc=True)\
+        .with_limit(limit)\
+        .execute()
+    
+    return handle_empty_response(result["data"])
+
+
 @router.get("/health-event/{health_event_id}", response_model=MedicationReminderListResponse)
 async def get_health_event_medication_reminders(
     health_event_id: str,
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=100, description="Maximum results (default optimized for mobile)"),
     offset: int = Query(0, ge=0),
     current_user: UserResponse = Depends(get_current_user),
     supabase: Client = Depends(get_authenticated_supabase_client)
@@ -108,10 +154,17 @@ async def get_health_event_medication_reminders(
     Get medication reminders for a specific health event
     """
     # Verify health event ownership
-    health_event_response = supabase.table("health_events").select("id").eq("id", health_event_id).eq("user_id", current_user.id).execute()
+    from app.shared.utils.async_supabase import execute_async
+    health_event_response = await execute_async(
+        lambda: supabase.table("health_events").select("id").eq("id", health_event_id).eq("user_id", current_user.id).execute()
+    )
     
     if not health_event_response.data:
-        raise HTTPException(status_code=404, detail="Health event not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("health event not found", context="health_event", action="not_found")
+        )
     
     # Get reminders using service
     reminders = await MedicationReminderService.get_medication_reminders_for_health_event(
@@ -145,7 +198,11 @@ async def get_medication_reminder(
     )
 
     if not reminder:
-        raise HTTPException(status_code=404, detail="Medication reminder not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("medication reminder not found", context="medication", action="not_found")
+        )
 
     return reminder
 
@@ -165,7 +222,11 @@ async def update_medication_reminder(
     )
 
     if not reminder:
-        raise HTTPException(status_code=404, detail="Medication reminder not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("medication reminder not found", context="medication", action="not_found")
+        )
 
     return reminder
 
@@ -184,7 +245,11 @@ async def delete_medication_reminder(
     )
     
     if not success:
-        raise HTTPException(status_code=404, detail="Medication reminder not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("medication reminder not found", context="medication", action="not_found")
+        )
     
     return {"message": "Medication reminder deleted successfully"}
 
@@ -218,7 +283,11 @@ async def activate_medication_reminder(
     )
     
     if not success:
-        raise HTTPException(status_code=404, detail="Medication reminder not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("medication reminder not found", context="medication", action="not_found")
+        )
     
     return {"message": "Medication reminder activated successfully"}
 
@@ -237,6 +306,10 @@ async def deactivate_medication_reminder(
     )
     
     if not success:
-        raise HTTPException(status_code=404, detail="Medication reminder not found")
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+        raise HTTPException(
+            status_code=404, 
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("medication reminder not found", context="medication", action="not_found")
+        )
     
     return {"message": "Medication reminder deactivated successfully"}

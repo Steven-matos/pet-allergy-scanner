@@ -59,7 +59,11 @@ class UserDataService:
             User object or None if not found and not creating
         """
         try:
-            response = self.supabase.table("users").select("*").eq("id", user_id).execute()
+            # Use async execution to prevent blocking event loop
+            from app.shared.utils.async_supabase import execute_async
+            response = await execute_async(
+                lambda: self.supabase.table("users").select("*").eq("id", user_id).execute()
+            )
             
             if response.data:
                 return User(**response.data[0])
@@ -119,7 +123,7 @@ class UserDataService:
             
             # Create user in database using centralized service
             db_service = DatabaseOperationService(self.supabase)
-            result = db_service.insert_with_timestamps("users", user_data)
+            result = await db_service.insert_with_timestamps("users", user_data)
             
             logger.info(f"✅ Created user {user_id} in public.users table")
             return User(**result)
@@ -149,9 +153,12 @@ class UserDataService:
         """
         try:
             # Get data from public.users table
-            user_response = self.supabase.table("users").select(
-                "onboarded, image_url, bypass_subscription, role"
-            ).eq("id", user_id).execute()
+            from app.shared.utils.async_supabase import execute_async
+            user_response = await execute_async(
+                lambda: self.supabase.table("users").select(
+                    "onboarded, image_url, bypass_subscription, role"
+                ).eq("id", user_id).execute()
+            )
             
             # Extract public.users data or use defaults
             if user_response.data:
@@ -212,7 +219,11 @@ class UserDataService:
             User data dictionary or None
         """
         try:
-            response = self.supabase.table("users").select("*").eq("id", user_id).execute()
+            # Use async execution to prevent blocking event loop
+            from app.shared.utils.async_supabase import execute_async
+            response = await execute_async(
+                lambda: self.supabase.table("users").select("*").eq("id", user_id).execute()
+            )
             return response.data[0] if response.data else None
         except Exception as e:
             logger.error(f"Error fetching user {user_id} (sync): {str(e)}")

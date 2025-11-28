@@ -4,9 +4,10 @@ Pet health event tracking for vomiting, shedding, vaccinations, etc.
 """
 
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator, ConfigDict, computed_field
+from pydantic import BaseModel, Field, field_validator, ConfigDict, computed_field, model_validator
 from typing import Optional, List
 from enum import Enum
+from app.shared.services.html_sanitization_service import HTMLSanitizationService
 
 
 class HealthEventCategory(str, Enum):
@@ -61,6 +62,22 @@ class HealthEventBase(BaseModel):
         """Validate event type and set category"""
         return v
     
+    @field_validator('title')
+    @classmethod
+    def sanitize_title(cls, v):
+        """Sanitize title field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_title(v, max_length=200)
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_notes(v, max_length=1000)
+    
     @computed_field
     @property
     def event_category(self) -> HealthEventCategory:
@@ -113,6 +130,22 @@ class HealthEventUpdate(BaseModel):
     severity_level: Optional[int] = Field(None, ge=1, le=5)
     event_date: Optional[datetime] = None
     documents: Optional[List[str]] = None  # Array of document URLs for vet paperwork
+    
+    @field_validator('title')
+    @classmethod
+    def sanitize_title(cls, v):
+        """Sanitize title field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_title(v, max_length=200)
+    
+    @field_validator('notes')
+    @classmethod
+    def sanitize_notes(cls, v):
+        """Sanitize notes field to prevent XSS"""
+        if v is None:
+            return v
+        return HTMLSanitizationService.sanitize_notes(v, max_length=1000)
     
     model_config = ConfigDict(
         json_schema_extra={

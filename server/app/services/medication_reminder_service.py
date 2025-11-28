@@ -14,6 +14,7 @@ from app.models.medication_reminder import (
     MedicationReminderResponse
 )
 from app.shared.services.database_operation_service import DatabaseOperationService
+from app.shared.utils.async_supabase import execute_async
 
 
 class MedicationReminderService:
@@ -44,7 +45,7 @@ class MedicationReminderService:
         
         # Insert into database using centralized service
         db_service = DatabaseOperationService(supabase)
-        return db_service.insert_with_timestamps("medication_reminders", db_reminder)
+        return await db_service.insert_with_timestamps("medication_reminders", db_reminder)
     
     @staticmethod
     async def get_medication_reminders_for_pet(
@@ -65,7 +66,7 @@ class MedicationReminderService:
         
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
         
-        response = query.execute()
+        response = await execute_async(lambda: query.execute())
         
         if not response.data:
             return []
@@ -94,7 +95,7 @@ class MedicationReminderService:
         query = supabase.table("medication_reminders").select("*").eq("health_event_id", health_event_id).eq("user_id", user_id)
         query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
         
-        response = query.execute()
+        response = await execute_async(lambda: query.execute())
         
         if not response.data:
             return []
@@ -118,7 +119,9 @@ class MedicationReminderService:
         """
         Get a specific medication reminder by ID
         """
-        response = supabase.table("medication_reminders").select("*").eq("id", reminder_id).eq("user_id", user_id).execute()
+        response = await execute_async(
+            lambda: supabase.table("medication_reminders").select("*").eq("id", reminder_id).eq("user_id", user_id).execute()
+        )
         
         if not response.data:
             return None
@@ -175,7 +178,7 @@ class MedicationReminderService:
         # Update in database using centralized service
         db_service = DatabaseOperationService(supabase)
         try:
-            reminder = db_service.update_with_timestamp("medication_reminders", reminder_id, update_data)
+            reminder = await db_service.update_with_timestamp("medication_reminders", reminder_id, update_data)
         except Exception:
             return None
         
@@ -197,7 +200,9 @@ class MedicationReminderService:
         """
         Delete a medication reminder
         """
-        response = supabase.table("medication_reminders").delete().eq("id", reminder_id).eq("user_id", user_id).execute()
+        response = await execute_async(
+            lambda: supabase.table("medication_reminders").delete().eq("id", reminder_id).eq("user_id", user_id).execute()
+        )
         
         return len(response.data) > 0
     
@@ -211,7 +216,7 @@ class MedicationReminderService:
         Activate a medication reminder
         """
         db_service = DatabaseOperationService(supabase)
-        db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": True})
+        await db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": True})
         return True
     
     @staticmethod
@@ -224,7 +229,7 @@ class MedicationReminderService:
         Deactivate a medication reminder
         """
         db_service = DatabaseOperationService(supabase)
-        db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": False})
+        await db_service.update_with_timestamp("medication_reminders", reminder_id, {"is_active": False})
         return True
     
     @staticmethod
@@ -242,7 +247,7 @@ class MedicationReminderService:
         if active_only:
             query = query.eq("is_active", True)
         
-        response = query.execute()
+        response = await execute_async(lambda: query.execute())
         
         return response.count or 0
     
@@ -255,6 +260,8 @@ class MedicationReminderService:
         """
         Get count of medication reminders for a health event
         """
-        response = supabase.table("medication_reminders").select("id", count="exact").eq("health_event_id", health_event_id).eq("user_id", user_id).execute()
+        response = await execute_async(
+            lambda: supabase.table("medication_reminders").select("id", count="exact").eq("health_event_id", health_event_id).eq("user_id", user_id).execute()
+        )
         
         return response.count or 0

@@ -64,7 +64,7 @@ async def create_pet_with_slash(
     
     # Insert pet into database using centralized service
     db_service = DatabaseOperationService(supabase)
-    created_pet = db_service.insert_with_timestamps("pets", pet_record)
+    created_pet = await db_service.insert_with_timestamps("pets", pet_record)
     
     # Convert to response model using centralized service
     return ResponseModelService.convert_to_model(created_pet, PetResponse)
@@ -84,13 +84,41 @@ async def get_user_pets(
     from app.shared.services.query_builder_service import QueryBuilderService
     
     query_builder = QueryBuilderService(supabase, "pets")
-    result = query_builder.with_filters({"user_id": current_user.id}).execute()
+    result = await query_builder.with_filters({"user_id": current_user.id}).execute()
     
     # Handle empty response using centralized utility
     pets_data = handle_empty_response(result["data"])
     
     # Convert to response models using centralized service
     return ResponseModelService.convert_list_to_models(pets_data, PetResponse)
+
+@router.get("/mobile", response_model=List[dict])
+@handle_errors("get_user_pets_mobile")
+async def get_user_pets_mobile(
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Mobile-optimized endpoint to get pets with minimal fields
+    
+    Returns only essential fields (id, name, species, image_url) for faster
+    loading on mobile devices with limited bandwidth.
+    """
+    from app.shared.services.query_builder_service import QueryBuilderService
+    
+    # Select only essential fields for mobile
+    query_builder = QueryBuilderService(
+        supabase, 
+        "pets",
+        default_columns=["id", "name", "species", "image_url", "created_at"]
+    )
+    result = await query_builder.with_filters({"user_id": current_user.id}).execute()
+    
+    # Handle empty response
+    pets_data = handle_empty_response(result["data"])
+    
+    # Return minimal data structure
+    return pets_data
 
 @router.get("/{pet_id}", response_model=PetResponse)
 @handle_errors("get_pet")
@@ -108,7 +136,7 @@ async def get_pet(
     from app.shared.services.query_builder_service import QueryBuilderService
     
     query_builder = QueryBuilderService(supabase, "pets")
-    result = query_builder.with_filters({
+    result = await query_builder.with_filters({
         "id": pet_id,
         "user_id": current_user.id
     }).execute()
@@ -139,7 +167,7 @@ async def update_pet(
     from app.shared.services.query_builder_service import QueryBuilderService
     
     query_builder = QueryBuilderService(supabase, "pets")
-    existing_result = query_builder.with_filters({
+    existing_result = await query_builder.with_filters({
         "id": pet_id,
         "user_id": current_user.id
     }).select(["id"]).execute()
@@ -154,7 +182,7 @@ async def update_pet(
         from app.shared.services.query_builder_service import QueryBuilderService
         
         query_builder = QueryBuilderService(supabase, "pets")
-        existing_result = query_builder.select(["species"]).with_filters({
+        existing_result = await query_builder.select(["species"]).with_filters({
             "id": pet_id,
             "user_id": current_user.id
         }).execute()
@@ -178,7 +206,7 @@ async def update_pet(
         
         # Update pet using centralized service
         db_service = DatabaseOperationService(supabase)
-        updated_pet = db_service.update_with_timestamp("pets", pet_id, update_data)
+        updated_pet = await db_service.update_with_timestamp("pets", pet_id, update_data)
         
         # Convert to response model using centralized service
         return ResponseModelService.convert_to_model(updated_pet, PetResponse)
@@ -199,7 +227,7 @@ async def delete_pet(
     from app.shared.services.query_builder_service import QueryBuilderService
     
     query_builder = QueryBuilderService(supabase, "pets")
-    existing_result = query_builder.select(["id"]).with_filters({
+    existing_result = await query_builder.select(["id"]).with_filters({
         "id": pet_id,
         "user_id": current_user.id
     }).execute()
@@ -212,6 +240,6 @@ async def delete_pet(
     
     # Delete pet using centralized service
     db_service = DatabaseOperationService(supabase)
-    db_service.delete_record("pets", pet_id)
+    await db_service.delete_record("pets", pet_id)
     
     return {"message": "Pet profile deleted successfully"}
