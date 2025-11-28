@@ -6,7 +6,8 @@ Provides nutritional analysis and recommendations for pet food
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 from datetime import datetime
-from app.database import get_supabase_client
+from app.api.v1.dependencies import get_authenticated_supabase_client
+from supabase import Client
 from app.models.nutritional_standards import (
     NutritionalStandardResponse,
     NutritionalRecommendation,
@@ -37,7 +38,8 @@ nutritional_calculator = NutritionalCalculator()
 @handle_errors("analyze_nutritional_content")
 async def analyze_nutritional_content(
     analysis_request: NutritionalAnalysisRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze nutritional content of pet food and provide recommendations
@@ -45,13 +47,13 @@ async def analyze_nutritional_content(
     Args:
         analysis_request: Nutritional data from OCR or manual input
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Nutritional analysis with recommendations
     """
     try:
         # Verify pet ownership using centralized service
-        supabase = get_supabase_client()
         pet_data = await verify_pet_ownership(analysis_request.pet_id, current_user.id, supabase)
         pet = PetResponse(
             id=pet_data["id"],
@@ -122,7 +124,9 @@ async def analyze_nutritional_content(
 @router.get("/standards", response_model=List[NutritionalStandardResponse])
 async def get_nutritional_standards(
     species: Optional[Species] = None,
-    life_stage: Optional[LifeStage] = None
+    life_stage: Optional[LifeStage] = None,
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get nutritional standards for pets
@@ -130,13 +134,15 @@ async def get_nutritional_standards(
     Args:
         species: Filter by species (dog/cat)
         life_stage: Filter by life stage
+        current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         List of nutritional standards
     """
     try:
         # Query nutritional standards from Supabase
-        supabase = get_supabase_client()
+        # Note: This is public data, but we use authenticated client for consistency
         query = supabase.table("nutritional_standards").select("*")
         
         if species:
@@ -205,7 +211,8 @@ async def get_nutritional_standards(
 @router.get("/recommendations/{pet_id}", response_model=NutritionalRecommendation)
 async def get_nutritional_recommendations(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get nutritional recommendations for a specific pet
@@ -213,13 +220,13 @@ async def get_nutritional_recommendations(
     Args:
         pet_id: Pet ID
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Nutritional recommendations for the pet
     """
     try:
         # Verify pet ownership using centralized service
-        supabase = get_supabase_client()
         pet_data = await verify_pet_ownership(pet_id, current_user.id, supabase)
         pet = PetResponse(
             id=pet_data["id"],

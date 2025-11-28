@@ -9,7 +9,7 @@ from app.models.ingredient import IngredientAnalysis
 from app.models.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.api.v1.ingredients.router import analyze_ingredients
-from app.database import get_supabase_client
+from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.services.storage_service import StorageService
 from supabase import Client
 from app.utils.logging_config import get_logger
@@ -32,23 +32,24 @@ logger = get_logger(__name__)
 @router.post("", response_model=ScanResponse)
 async def create_scan_no_slash(
     scan_data: ScanCreate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create scan (without trailing slash)"""
-    return await create_scan_with_slash(scan_data, current_user)
+    return await create_scan_with_slash(scan_data, current_user, supabase)
 
 @router.post("/", response_model=ScanResponse)
 @handle_errors("create_scan")
 async def create_scan_with_slash(
     scan_data: ScanCreate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a new scan record
     
     Creates a new scan record for processing ingredient analysis
     """
-    supabase = get_supabase_client()
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(scan_data.pet_id, current_user.id, supabase)
@@ -76,14 +77,14 @@ async def create_scan_with_slash(
 @router.get("/", response_model=List[ScanResponse])
 @handle_errors("get_user_scans")
 async def get_user_scans(
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get all scans for the current user
     
     Returns a list of all scan records belonging to the authenticated user
     """
-    supabase = get_supabase_client()
     
     # Get scans for the current user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
@@ -106,7 +107,8 @@ async def get_user_scans(
 @handle_errors("get_user_scans_mobile")
 async def get_user_scans_mobile(
     current_user: UserResponse = Depends(get_current_user),
-    limit: int = Query(20, ge=1, le=50, description="Maximum results (mobile optimized)")
+    limit: int = Query(20, ge=1, le=50, description="Maximum results (mobile optimized)"),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Mobile-optimized endpoint to get scans with minimal fields.
@@ -114,7 +116,6 @@ async def get_user_scans_mobile(
     Returns only essential fields (id, pet_id, status, created_at, image_url)
     for faster loading on mobile devices with limited bandwidth.
     """
-    supabase = get_supabase_client()
     
     # Select only essential fields for mobile
     query_builder = QueryBuilderService(
@@ -140,14 +141,14 @@ async def get_user_scans_mobile(
 @handle_errors("get_scan")
 async def get_scan(
     scan_id: str,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get a specific scan by ID
     
     Returns the scan record if it belongs to the authenticated user
     """
-    supabase = get_supabase_client()
     
     # Get scan by ID and verify ownership using query builder
     query_builder = QueryBuilderService(supabase, "scans")
@@ -175,14 +176,14 @@ async def get_scan(
 async def update_scan(
     scan_id: str,
     scan_update: ScanUpdate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Update a scan record
     
     Updates the scan record if it belongs to the authenticated user
     """
-    supabase = get_supabase_client()
     
     # Verify scan exists and belongs to user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
@@ -221,14 +222,14 @@ async def update_scan(
 @handle_errors("delete_scan")
 async def delete_scan(
     scan_id: str,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Delete a scan record
     
     Deletes the scan record if it belongs to the authenticated user
     """
-    supabase = get_supabase_client()
     
     # Verify scan exists and belongs to user using query builder
     query_builder = QueryBuilderService(supabase, "scans")
@@ -255,14 +256,14 @@ async def delete_scan(
 async def analyze_scan(
     scan_id: str,
     analysis_request: ScanAnalysisRequest,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze a scan for ingredients and potential issues
     
     Performs ingredient analysis on the scan data and returns the updated scan
     """
-    supabase = get_supabase_client()
     
     # Get scan and verify ownership using query builder
     query_builder = QueryBuilderService(supabase, "scans")

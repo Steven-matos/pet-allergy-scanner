@@ -613,7 +613,7 @@ async def refresh_token(
             # Refresh the session to get new access and refresh tokens
             # refresh_session() may raise an exception or return None on failure
             try:
-                response = supabase.auth.refresh_session()
+            response = supabase.auth.refresh_session()
             except AttributeError as attr_error:
                 # refresh_session() might not exist in this Supabase version
                 logger.error(f"refresh_session() method not available: {attr_error}")
@@ -712,15 +712,15 @@ async def refresh_token(
         
         # Get user data
         try:
-            user_metadata = user.user_metadata or {}
-            
-            # Return merged user data with new session
-            user_data = await get_merged_user_data(user.id, {
-                "email": user.email,
-                "user_metadata": user_metadata,
-                "created_at": user.created_at,
-                "updated_at": user.updated_at
-            })
+        user_metadata = user.user_metadata or {}
+        
+        # Return merged user data with new session
+        user_data = await get_merged_user_data(user.id, {
+            "email": user.email,
+            "user_metadata": user_metadata,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        })
         except Exception as user_data_error:
             logger.error(f"Failed to get merged user data: {user_data_error}", exc_info=True)
             # If we can't get full user data, return basic user info from auth response

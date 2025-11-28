@@ -10,7 +10,8 @@ from typing import List
 from datetime import datetime
 from app.shared.services.datetime_service import DateTimeService
 
-from app.database import get_supabase_client
+from app.api.v1.dependencies import get_authenticated_supabase_client
+from supabase import Client
 from app.models.nutrition import (
     NutritionalRequirementsCreate,
     NutritionalRequirementsResponse
@@ -33,16 +34,18 @@ router = APIRouter(prefix="/requirements", tags=["nutrition-requirements"])
 @router.post("", response_model=NutritionalRequirementsResponse)
 async def create_nutritional_requirements_no_slash(
     requirements: NutritionalRequirementsCreate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create nutritional requirements (without trailing slash)"""
-    return await create_nutritional_requirements_with_slash(requirements, current_user)
+    return await create_nutritional_requirements_with_slash(requirements, current_user, supabase)
 
 @router.post("/", response_model=NutritionalRequirementsResponse)
 @handle_errors("create_nutritional_requirements")
 async def create_nutritional_requirements_with_slash(
     requirements: NutritionalRequirementsCreate,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create or update nutritional requirements for a pet
@@ -50,6 +53,7 @@ async def create_nutritional_requirements_with_slash(
     Args:
         requirements: Nutritional requirements data
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Created nutritional requirements
@@ -57,11 +61,9 @@ async def create_nutritional_requirements_with_slash(
     Raises:
         HTTPException: If pet not found or user not authorized
     """
-    supabase = get_supabase_client()
-    
     # Verify pet ownership
     from app.shared.services.pet_authorization import verify_pet_ownership
-    await verify_pet_ownership(requirements.pet_id, current_user.id)
+    await verify_pet_ownership(requirements.pet_id, current_user.id, supabase)
     
     # Create nutritional requirements using data transformation service
     # Note: nutritional_requirements table only has pet_id, not user_id
@@ -85,7 +87,8 @@ async def create_nutritional_requirements_with_slash(
 @handle_errors("get_nutritional_requirements")
 async def get_nutritional_requirements(
     pet_id: str,
-    current_user: UserResponse = Depends(get_current_user)
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get nutritional requirements for a pet
@@ -96,6 +99,7 @@ async def get_nutritional_requirements(
     Args:
         pet_id: Pet ID
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Nutritional requirements for the pet (from database or default zeros if not found)
@@ -103,11 +107,9 @@ async def get_nutritional_requirements(
     Raises:
         HTTPException: If pet not found or user not authorized
     """
-    supabase = get_supabase_client()
-    
     # Verify pet ownership and get pet data
     from app.shared.services.pet_authorization import verify_pet_ownership
-    pet_data = await verify_pet_ownership(pet_id, current_user.id)
+    pet_data = await verify_pet_ownership(pet_id, current_user.id, supabase)
     
     # Get nutritional requirements from database using query builder
     # Note: nutritional_requirements table only has pet_id, not user_id

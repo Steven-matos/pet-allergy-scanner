@@ -10,7 +10,8 @@ from typing import Optional
 from datetime import datetime
 from app.shared.services.datetime_service import DateTimeService
 
-from app.database import get_supabase_client
+from app.api.v1.dependencies import get_authenticated_supabase_client
+from supabase import Client
 from app.models.advanced_nutrition import (
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
@@ -67,7 +68,8 @@ async def generate_analytics(
     pet_id: str,
     analysis_type: AnalyticsType,
     force_refresh: bool = False,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Generate advanced analytics for a pet
@@ -77,6 +79,7 @@ async def generate_analytics(
         analysis_type: Type of analysis to perform
         force_refresh: Force regeneration even if cache exists
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Analytics cache response
@@ -87,7 +90,7 @@ async def generate_analytics(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Generate analytics based on type
         if analysis_type == AnalyticsType.HEALTH:
@@ -123,7 +126,8 @@ async def generate_analytics(
 @router.get("/health-insights/{pet_id}", response_model=HealthInsights)
 async def get_health_insights(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get health insights for a pet
@@ -131,6 +135,7 @@ async def get_health_insights(
     Args:
         pet_id: Pet ID
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Health insights data
@@ -141,7 +146,7 @@ async def get_health_insights(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get health insights
         service = get_health_analytics_service()
@@ -159,7 +164,8 @@ async def get_health_insights(
 @router.get("/patterns/{pet_id}", response_model=NutritionalPatterns)
 async def analyze_nutritional_patterns(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze nutritional patterns for a pet
@@ -167,6 +173,7 @@ async def analyze_nutritional_patterns(
     Args:
         pet_id: Pet ID
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Nutritional patterns analysis
@@ -177,7 +184,7 @@ async def analyze_nutritional_patterns(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze nutritional patterns
         service = get_pattern_analytics_service()
@@ -195,7 +202,8 @@ async def analyze_nutritional_patterns(
 @router.get("/dashboard/{pet_id}", response_model=AdvancedNutritionResponse)
 async def get_advanced_nutrition_dashboard(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get comprehensive advanced nutrition dashboard for a pet
@@ -203,6 +211,7 @@ async def get_advanced_nutrition_dashboard(
     Args:
         pet_id: Pet ID
         current_user: Current authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Advanced nutrition dashboard
@@ -213,7 +222,7 @@ async def get_advanced_nutrition_dashboard(
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
-        await verify_pet_ownership(pet_id, current_user.id)
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get comprehensive dashboard data
         health_service = get_health_analytics_service()

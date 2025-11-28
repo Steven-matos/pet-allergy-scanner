@@ -52,23 +52,27 @@ async def verify_pet_ownership(
     # If db is an authenticated client, RLS will automatically filter by auth.uid()
     # Try querying with RLS first (without explicit user_id filter) if authenticated client
     # This ensures RLS policies are properly enforced
+    
+    # Check if client is actually authenticated (has session)
+    is_authenticated = False
+    auth_user_id = None
     if db is not None:
-        # Authenticated client - rely on RLS to filter by auth.uid()
-        # RLS policy: (select auth.uid()) = user_id
-        # Check if client is actually authenticated
         try:
             session = supabase.auth.get_session()
-            if session:
-                auth_user_id = session.user.id if hasattr(session, 'user') and session.user else None
-                if auth_user_id and auth_user_id != user_id:
+            if session and hasattr(session, 'user') and session.user:
+                is_authenticated = True
+                auth_user_id = session.user.id
+                if auth_user_id != user_id:
                     logger.warning(
                         f"[PET_AUTH] Session user_id mismatch! Session auth.uid()={auth_user_id}, "
                         f"but expected user_id={user_id}. This may cause RLS to block access."
                     )
         except Exception as session_error:
-            logger.warning(f"[PET_AUTH] Could not verify session: {session_error}")
-        
-        # Try RLS query first (without explicit user_id filter)
+            logger.debug(f"[PET_AUTH] Could not verify session: {session_error}")
+            is_authenticated = False
+    
+    if is_authenticated:
+        # Authenticated client - try RLS query first (without explicit user_id filter)
         # If RLS is working, this should return the pet if user owns it
         try:
             response = await execute_async(
@@ -108,22 +112,12 @@ async def verify_pet_ownership(
                 f"[PET_AUTH] RLS query failed: {type(e).__name__}: {e}. "
                 f"Falling back to explicit user_id filter."
             )
-        
-        # Fallback: Use explicit user_id filter (works even if RLS isn't properly configured)
-        # This ensures the query works regardless of RLS session state
-        try:
-            response = await execute_async(
-                lambda: supabase.table("pets")
-                    .select("*")
-                    .eq("id", pet_id)
-                    .eq("user_id", user_id)
-                    .execute()
-            )
-        except Exception as fallback_error:
-            logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
-            raise
-    else:
-        # Unauthenticated client - must filter explicitly
+    
+    # Fallback: Use explicit user_id filter (works for both authenticated and unauthenticated clients)
+    # This ensures the query works regardless of RLS session state
+    # For authenticated clients, this is a fallback if RLS didn't work
+    # For unauthenticated clients, this is the primary method
+    try:
         response = await execute_async(
             lambda: supabase.table("pets")
                 .select("*")
@@ -131,6 +125,9 @@ async def verify_pet_ownership(
                 .eq("user_id", user_id)
                 .execute()
         )
+    except Exception as fallback_error:
+        logger.error(f"[PET_AUTH] Fallback query also failed: {type(fallback_error).__name__}: {fallback_error}", exc_info=True)
+        raise
     
     if not response.data:
         # Log for debugging - check if pet exists at all

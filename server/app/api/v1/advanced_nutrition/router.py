@@ -69,7 +69,8 @@ def get_analytics_service():
 @router.post("/weight/record", response_model=PetWeightRecordResponse)
 async def record_weight(
     weight_record: PetWeightRecordCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Record a new weight measurement for a pet
@@ -77,14 +78,15 @@ async def record_weight(
     Args:
         weight_record: Weight record data
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Created weight record
     """
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
+        # Use authenticated client to ensure RLS works correctly
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(weight_record.pet_id, current_user.id, supabase)
         
         # Record weight - service assumes ownership is already verified
@@ -135,7 +137,8 @@ async def get_weight_history(
 @router.post("/weight/goals", response_model=PetWeightGoalResponse)
 async def create_weight_goal(
     goal: PetWeightGoalCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create or update a weight goal for a pet (one goal per pet)
@@ -143,6 +146,7 @@ async def create_weight_goal(
     Args:
         goal: Weight goal data
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Created or updated weight goal
@@ -150,7 +154,6 @@ async def create_weight_goal(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(goal.pet_id, current_user.id, supabase)
         
         # Upsert weight goal - service assumes ownership is already verified
@@ -223,7 +226,8 @@ async def get_active_weight_goal(
 async def analyze_weight_trend(
     pet_id: str,
     days_back: int = Query(30, ge=7, le=365),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze weight trend for a pet
@@ -232,6 +236,7 @@ async def analyze_weight_trend(
         pet_id: Pet ID
         days_back: Number of days to analyze
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Weight trend analysis
@@ -239,7 +244,6 @@ async def analyze_weight_trend(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze weight trend - service assumes ownership is already verified
@@ -259,7 +263,8 @@ async def analyze_weight_trend(
 @router.get("/weight/dashboard/{pet_id}", response_model=WeightManagementDashboard)
 async def get_weight_management_dashboard(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get comprehensive weight management dashboard data
@@ -267,6 +272,7 @@ async def get_weight_management_dashboard(
     Args:
         pet_id: Pet ID
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Weight management dashboard data
@@ -274,7 +280,6 @@ async def get_weight_management_dashboard(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get weight management dashboard - service assumes ownership is already verified
@@ -514,7 +519,8 @@ async def generate_analytics(
     pet_id: str,
     analysis_type: AnalyticsType,
     force_refresh: bool = Query(False),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Generate advanced analytics for a pet
@@ -524,6 +530,7 @@ async def generate_analytics(
         analysis_type: Type of analysis to perform
         force_refresh: Force regeneration even if cache exists
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Analytics cache response
@@ -531,7 +538,6 @@ async def generate_analytics(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Generate analytics - service assumes ownership is already verified
@@ -553,7 +559,8 @@ async def generate_analytics(
 @router.get("/analytics/health-insights/{pet_id}", response_model=HealthInsights)
 async def get_health_insights(
     pet_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get comprehensive health insights for a pet
@@ -561,6 +568,7 @@ async def get_health_insights(
     Args:
         pet_id: Pet ID
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Health insights data
@@ -568,7 +576,6 @@ async def get_health_insights(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Get health insights - service assumes ownership is already verified
@@ -589,7 +596,8 @@ async def get_health_insights(
 async def analyze_nutritional_patterns(
     pet_id: str,
     analysis_period: str = Query("30_days", regex="^(7_days|30_days|90_days)$"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Analyze nutritional patterns for a pet
@@ -598,6 +606,7 @@ async def analyze_nutritional_patterns(
         pet_id: Pet ID
         analysis_period: Period for analysis
         current_user: Authenticated user
+        supabase: Authenticated Supabase client with session
         
     Returns:
         Nutritional patterns analysis
@@ -605,7 +614,6 @@ async def analyze_nutritional_patterns(
     try:
         # Verify pet ownership first using centralized service (handles RLS properly)
         from app.shared.services.pet_authorization import verify_pet_ownership
-        supabase = get_supabase_client()
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
         # Analyze nutritional patterns - service assumes ownership is already verified
