@@ -73,7 +73,7 @@ async def delete_user_data(
             )
         
         # Delete user data
-        success = gdpr_service.delete_user_data(current_user.id)
+        success = await gdpr_service.delete_user_data(current_user.id)
         
         if success:
             return {"message": "User data deleted successfully"}

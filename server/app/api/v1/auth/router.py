@@ -258,7 +258,7 @@ async def login_user(login_data: UserLogin):
                     # Try to get IP from request if available
                     # Note: This might not work if called from a dependency
                     pass
-                except:
+                except Exception:
                     pass
                 
                 AuthSecurityService.record_failed_attempt(
@@ -327,7 +327,7 @@ async def login_user(login_data: UserLogin):
             from fastapi import Request
             # IP tracking would be done via request if available
             pass
-        except:
+        except Exception:
             pass
         
         AuthSecurityService.clear_failed_attempts(login_data.email_or_username)
@@ -396,7 +396,7 @@ async def logout_user(
             session = supabase.auth.get_session()
             if session and hasattr(session, 'user') and session.user:
                 user_id = session.user.id
-        except:
+        except Exception:
             pass
         
         # Sign out the user

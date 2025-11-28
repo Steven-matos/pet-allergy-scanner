@@ -99,7 +99,7 @@ class GDPRService:
                 detail="Failed to export user data"
             )
     
-    def delete_user_data(self, user_id: str) -> bool:
+    async def delete_user_data(self, user_id: str) -> bool:
         """
         Delete all user data (Right to be Forgotten)
         
@@ -484,7 +484,7 @@ class GDPRService:
         except Exception as e:
             logger.error(f"Failed to delete images from storage: {e}")
     
-    def cleanup_expired_data(self):
+    async def cleanup_expired_data(self):
         """
         Clean up data that has exceeded retention period
         
@@ -500,7 +500,7 @@ class GDPRService:
                 user_id = user["id"]
                 
                 # Anonymize instead of delete for research purposes
-                self.anonymize_user_data(user_id)
+                await self.anonymize_user_data(user_id)
             
             
         except Exception as e:

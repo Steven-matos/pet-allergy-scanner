@@ -113,7 +113,7 @@ def get_current_user(
             )
             user_id = expired_payload.get("sub")
             AuthEventTracker.track_auth_failure("expired_token", user_id=user_id)
-        except:
+        except Exception:
             AuthEventTracker.track_auth_failure("expired_token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
