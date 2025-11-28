@@ -17,6 +17,7 @@ from app.models.advanced_nutrition import (
 from app.models.user import User
 from app.core.security.jwt_handler import get_current_user
 from app.services.food_comparison_service import FoodComparisonService
+from supabase import Client
 
 router = APIRouter(prefix="/comparisons", tags=["advanced-nutrition-comparisons"])
 
