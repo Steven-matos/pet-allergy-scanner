@@ -11,6 +11,7 @@ from supabase import Client
 from app.utils.logging_config import get_logger
 from app.core.validation.input_validator import InputValidator
 from app.core.security.jwt_handler import security, get_current_user
+from app.core.security.auth_enhancements import AuthSecurityService, AuthEventTracker
 
 async def get_merged_user_data(user_id: str, auth_metadata: dict) -> UserResponse:
     """
@@ -198,15 +199,12 @@ async def login_user(login_data: UserLogin):
                 # Try to fix the issue automatically by creating the missing public.users record
                 try:
                     logger.info("Attempting to auto-fix: Creating missing public.users record...")
-                    from supabase import create_client
-                    from app.core.config import settings
+                    from app.shared.services.supabase_auth_service import SupabaseAuthService
                     from app.shared.services.user_data_service import UserDataService
                     
                     # Use service role to bypass RLS and access auth schema
-                    service_supabase = create_client(
-                        settings.supabase_url,
-                        settings.supabase_service_role_key
-                    )
+                    # Use centralized service to avoid code duplication
+                    service_supabase = SupabaseAuthService.create_service_role_client()
                     
                     # Query auth.users directly using service role (requires direct SQL or admin API)
                     # Since we can't easily query auth.users from Python, we'll try to create the record
@@ -252,6 +250,27 @@ async def login_user(login_data: UserLogin):
             # Check for invalid credentials
             if "invalid" in error_str or "credentials" in error_str or "password" in error_str or "auth" in error_type.lower():
                 logger.warning(f"Invalid credentials for email: {login_data.email_or_username}")
+                
+                # Track failed login attempt
+                ip_address = None
+                try:
+                    from fastapi import Request
+                    # Try to get IP from request if available
+                    # Note: This might not work if called from a dependency
+                    pass
+                except:
+                    pass
+                
+                AuthSecurityService.record_failed_attempt(
+                    login_data.email_or_username,
+                    user_id=None
+                )
+                AuthEventTracker.track_auth_failure(
+                    "invalid_credentials",
+                    user_id=None,
+                    method="login"
+                )
+                
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid email or password"
@@ -302,6 +321,22 @@ async def login_user(login_data: UserLogin):
             "updated_at": auth_response.user.updated_at
         })
         
+        # Track successful login
+        ip_address = None
+        try:
+            from fastapi import Request
+            # IP tracking would be done via request if available
+            pass
+        except:
+            pass
+        
+        AuthSecurityService.clear_failed_attempts(login_data.email_or_username)
+        AuthEventTracker.track_auth_success(
+            user_data.id,
+            method="login",
+            ip_address=ip_address
+        )
+        
         return {
             "access_token": auth_response.session.access_token,
             "refresh_token": auth_response.session.refresh_token,
@@ -320,11 +355,17 @@ async def login_user(login_data: UserLogin):
         )
 
 @router.post("/logout/")
-async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def logout_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """
     Logout user and invalidate session
     
+    Invalidates the user's session, blacklists the token, and tracks the logout event.
+    
     Args:
+        request: FastAPI request object (for IP tracking)
         credentials: JWT token credentials
         
     Returns:
@@ -340,13 +381,34 @@ async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(securi
                 detail="No authentication token provided"
             )
         
-        supabase = get_supabase_client()
+        # Use authenticated client for logout
+        from app.shared.services.supabase_auth_service import SupabaseAuthService
+        from app.core.security.auth_enhancements import TokenBlacklist, AuthEventTracker
         
-        # Set the session for the current request
-        supabase.auth.set_session(credentials.credentials, "")
+        supabase = SupabaseAuthService.create_authenticated_client(
+            access_token=credentials.credentials,
+            refresh_token=None  # Not needed for logout
+        )
+        
+        # Get user ID before logout (for tracking)
+        user_id = None
+        try:
+            session = supabase.auth.get_session()
+            if session and hasattr(session, 'user') and session.user:
+                user_id = session.user.id
+        except:
+            pass
         
         # Sign out the user
         supabase.auth.sign_out()
+        
+        # Blacklist the token to prevent reuse after logout
+        TokenBlacklist.add_token(credentials.credentials)
+        
+        # Track logout event
+        ip_address = request.client.host if hasattr(request, 'client') and request.client else None
+        if user_id:
+            AuthEventTracker.track_logout(user_id, ip_address)
         
         return {"message": "Successfully logged out"}
         
@@ -413,13 +475,10 @@ async def update_user_profile(
             )
         
         # Use service role client to bypass RLS policies
-        from supabase import create_client
-        from app.core.config import settings
+        # Use centralized service to avoid code duplication
+        from app.shared.services.supabase_auth_service import SupabaseAuthService
         
-        supabase = create_client(
-            settings.supabase_url,
-            settings.supabase_service_role_key
-        )
+        supabase = SupabaseAuthService.create_service_role_client()
         
         # Get current user from our validated JWT
         user_id = current_user.id
@@ -536,25 +595,20 @@ async def refresh_token(
         
         # Use Supabase to exchange refresh token for new session
         # This works even when access token is expired
-        from supabase import create_client
+        # According to Supabase Python 2.9.1 documentation
         
         try:
-            # Create a client instance with anon key
-            supabase = create_client(
-                settings.supabase_url,
-                settings.supabase_key  # Fixed: use supabase_key (not supabase_anon_key)
-            )
+            # Use centralized auth service for consistency with other auth operations
+            # This ensures we use the same client creation pattern everywhere
+            from app.shared.services.supabase_auth_service import SupabaseAuthService
             
-            # Set session with refresh token (access token can be empty when expired)
-            # Supabase will use the refresh token to get new tokens
-            # Note: set_session expects (access_token, refresh_token) tuple
-            # When refreshing, we pass empty string for access_token since it's expired
-            try:
-                supabase.auth.set_session("", refresh_token_value)
-            except Exception as set_session_error:
-                logger.error(f"Failed to set session: {set_session_error}", exc_info=True)
-                # Log the error but continue - refresh_session might still work
-                raise
+            # For refresh, we have refresh_token but access_token is expired/empty
+            # Supabase Python 2.9.1 allows setting session with empty access_token
+            # when we have a valid refresh_token
+            supabase = SupabaseAuthService.create_authenticated_client(
+                access_token="",  # Expired, will be refreshed by refresh_session()
+                refresh_token=refresh_token_value
+            )
             
             # Refresh the session to get new access and refresh tokens
             # refresh_session() may raise an exception or return None on failure

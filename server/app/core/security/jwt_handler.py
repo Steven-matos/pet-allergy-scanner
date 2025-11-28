@@ -17,6 +17,10 @@ from jwt.exceptions import InvalidTokenError
 from app.core.config import settings
 from app.database import get_supabase_client
 from app.models.user import User
+from app.core.security.auth_enhancements import (
+    AuthSecurityService,
+    AuthEventTracker
+)
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)  # Don't auto-raise on missing header
@@ -50,9 +54,20 @@ def get_current_user(
     # Check if credentials were provided
     if credentials is None:
         logger.error("No Authorization header found in request")
+        AuthEventTracker.track_auth_failure("missing_credentials")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Check if token is blacklisted (revoked)
+    if not AuthSecurityService.validate_token_not_blacklisted(credentials.credentials):
+        logger.warning("Attempted use of blacklisted/revoked token")
+        AuthEventTracker.track_auth_failure("blacklisted_token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked. Please sign in again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -88,6 +103,18 @@ def get_current_user(
         
     except jwt.ExpiredSignatureError:
         logger.warning("Token has expired")
+        # Extract user_id from expired token if possible (for tracking)
+        try:
+            expired_payload = jwt.decode(
+                credentials.credentials,
+                settings.supabase_jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_signature": False, "verify_exp": False}
+            )
+            user_id = expired_payload.get("sub")
+            AuthEventTracker.track_auth_failure("expired_token", user_id=user_id)
+        except:
+            AuthEventTracker.track_auth_failure("expired_token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",

@@ -138,8 +138,9 @@ async def verify_pet_ownership(
         logger.warning(f"[PET_AUTH] Pet query returned no results. Checking if pet exists in database...")
         try:
             # Use service role client to check if pet exists (bypasses RLS)
-            from app.database import get_supabase_service_role_client
-            service_client = get_supabase_service_role_client()
+            # Use centralized service to avoid code duplication
+            from app.shared.services.supabase_auth_service import SupabaseAuthService
+            service_client = SupabaseAuthService.create_service_role_client()
             pet_check = await execute_async(
                 lambda: service_client.table("pets")
                     .select("id, user_id, name, created_at")
