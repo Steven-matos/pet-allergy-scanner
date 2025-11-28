@@ -208,9 +208,12 @@ class UserDataService:
             logger.error(f"Error merging user data for {user_id}: {str(e)}", exc_info=True)
             raise
     
-    def get_user_by_id_sync(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_id_sync(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
-        Synchronous version of get_user_by_id (for non-async contexts)
+        Synchronous-style version of get_user_by_id (uses async internally)
+        
+        Note: Despite the name, this is an async function to prevent blocking the event loop.
+        Use this when you need a simpler interface than get_user_by_id.
         
         Args:
             user_id: User ID to fetch

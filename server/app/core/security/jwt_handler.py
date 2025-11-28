@@ -126,20 +126,22 @@ def get_current_user(
     # Get user from database using centralized service
     try:
         from app.shared.services.user_data_service import UserDataService
+        import asyncio
         
         user_service = UserDataService()
-        # Use sync method since get_current_user is not async
-        user_data = user_service.get_user_by_id_sync(user_id)
+        # Use async method in sync context since get_current_user is not async
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        user_data = loop.run_until_complete(
+            user_service.get_user_by_id_sync(user_id)
+        )
         
         if not user_data:
             # User not found - create using async method in sync context
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
             user = loop.run_until_complete(
                 user_service.create_user(user_id, auth_metadata=payload)
             )
