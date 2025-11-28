@@ -57,10 +57,22 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         try:
             # Try to get Redis URL from environment
             redis_url = getattr(settings, 'redis_url', None)
-            if not redis_url:
-                # Try to construct from common environment variables
-                redis_host = getattr(settings, 'redis_host', 'localhost')
+            
+            # Skip Redis if URL is None or explicitly set to 'none'
+            if not redis_url or redis_url.lower() == 'none':
+                logger.info("Redis not configured. Using in-memory rate limiting.")
+                return
+            
+            # Try to construct from host/port if URL not provided
+            if not redis_url.startswith('redis://'):
+                redis_host = getattr(settings, 'redis_host', None)
                 redis_port = getattr(settings, 'redis_port', 6379)
+                
+                # Skip if host is None or 'none'
+                if not redis_host or redis_host.lower() == 'none':
+                    logger.info("Redis not configured. Using in-memory rate limiting.")
+                    return
+                
                 redis_url = f"redis://{redis_host}:{redis_port}"
             
             self.redis_client = redis.from_url(
