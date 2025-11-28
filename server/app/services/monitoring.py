@@ -49,7 +49,7 @@ class MonitoringService:
             # Store in database if enabled using centralized service
             if settings.enable_audit_logging:
                 db_service = DatabaseOperationService(self.supabase)
-                db_service.insert_with_timestamps("security_events", event_data, include_created_at=False)
+                await db_service.insert_with_timestamps("security_events", event_data, include_created_at=False)
             
             # Check if alert is needed
             if severity in ["high", "critical"]:
@@ -116,7 +116,7 @@ class MonitoringService:
             # Store in database if enabled using centralized service
             if settings.enable_audit_logging:
                 db_service = DatabaseOperationService(self.supabase)
-                db_service.insert_with_timestamps("user_activities", activity_data, include_created_at=False)
+                await db_service.insert_with_timestamps("user_activities", activity_data, include_created_at=False)
                 
         except Exception as e:
             logger.error(f"Failed to log user activity: {e}")

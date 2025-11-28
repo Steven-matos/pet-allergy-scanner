@@ -63,7 +63,7 @@ class HealthEventService:
         
         # Insert into database using centralized service
         db_service = DatabaseOperationService(supabase)
-        return db_service.insert_with_timestamps("health_events", db_event)
+        return await db_service.insert_with_timestamps("health_events", db_event)
     
     @staticmethod
     async def get_health_events_for_pet(
@@ -150,7 +150,7 @@ class HealthEventService:
         # Update in database using centralized service
         db_service = DatabaseOperationService(supabase)
         try:
-            return db_service.update_with_timestamp("health_events", event_id, update_data)
+            return await db_service.update_with_timestamp("health_events", event_id, update_data)
         except Exception:
             return None
     

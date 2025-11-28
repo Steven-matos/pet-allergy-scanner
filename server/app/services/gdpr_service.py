@@ -173,7 +173,7 @@ class GDPRService:
             
             # Anonymize user profile using centralized service
             db_service = DatabaseOperationService(self.supabase)
-            db_service.update_with_timestamp(
+            await db_service.update_with_timestamp(
                 "users",
                 user_id,
                 {
@@ -187,7 +187,7 @@ class GDPRService:
             pets_response = self.supabase.table("pets").select("id").eq("user_id", user_id).execute()
             if pets_response.data:
                 for pet in pets_response.data:
-                    db_service.update_with_timestamp(
+                    await db_service.update_with_timestamp(
                         "pets",
                         pet["id"],
                         {
@@ -201,7 +201,7 @@ class GDPRService:
             scans_response = self.supabase.table("scans").select("id").eq("user_id", user_id).execute()
             if scans_response.data:
                 for scan in scans_response.data:
-                    db_service.update_with_timestamp(
+                    await db_service.update_with_timestamp(
                         "scans",
                         scan["id"],
                         {"raw_text": "[ANONYMIZED]"}
@@ -211,7 +211,7 @@ class GDPRService:
             favorites_response = self.supabase.table("favorites").select("id").eq("user_id", user_id).execute()
             if favorites_response.data:
                 for favorite in favorites_response.data:
-                    db_service.update_with_timestamp(
+                    await db_service.update_with_timestamp(
                         "favorites",
                         favorite["id"],
                         {
@@ -284,7 +284,7 @@ class GDPRService:
                             "image_url": None
                         }
                         db_service = DatabaseOperationService(self.service_supabase)
-                        db_service.upsert_with_timestamps("users", user_data, conflict_column="id", include_created_at=False)
+                        await db_service.upsert_with_timestamps("users", user_data, conflict_column="id", include_created_at=False)
                         created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
                     else:
                         raise HTTPException(
@@ -326,7 +326,7 @@ class GDPRService:
                                 "image_url": None
                             }
                             db_service = DatabaseOperationService(self.service_supabase)
-                            db_service.upsert_with_timestamps("users", user_data, conflict_column="id")
+                            await db_service.upsert_with_timestamps("users", user_data, conflict_column="id")
                             created_at = DateTimeService.now()
                         except Exception as create_error:
                             logger.error(f"Failed to create minimal user record: {create_error}")
@@ -443,7 +443,7 @@ class GDPRService:
             }
             
             db_service = DatabaseOperationService(self.supabase)
-            db_service.insert_with_timestamps("gdpr_requests", deletion_log)
+            await db_service.insert_with_timestamps("gdpr_requests", deletion_log)
             
         except Exception as e:
             logger.error(f"Failed to log deletion request for {user_id}: {e}")

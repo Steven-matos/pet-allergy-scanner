@@ -66,7 +66,7 @@ class WeightTrackingService:
         }
         
         db_service = DatabaseOperationService(self.supabase)
-        result = db_service.insert_with_timestamps("pet_weight_records", weight_data, include_created_at=False)
+        result = await db_service.insert_with_timestamps("pet_weight_records", weight_data, include_created_at=False)
         
         # Update nutritional trends for this date
         await self._update_nutritional_trends(weight_record.pet_id, weight_record.recorded_at.date())
@@ -159,7 +159,7 @@ class WeightTrackingService:
         else:
             # Create new goal
             db_service = DatabaseOperationService(self.supabase)
-            result = db_service.insert_with_timestamps("pet_weight_goals", goal_data)
+            result = await db_service.insert_with_timestamps("pet_weight_goals", goal_data)
             
             return PetWeightGoalResponse(**result)
     

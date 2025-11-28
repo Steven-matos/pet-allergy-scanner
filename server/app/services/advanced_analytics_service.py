@@ -290,7 +290,7 @@ class AdvancedAnalyticsService:
         }
         
         db_service = DatabaseOperationService(self.supabase)
-        result = db_service.insert_with_timestamps("nutritional_analytics_cache", cache_data)
+        result = await db_service.insert_with_timestamps("nutritional_analytics_cache", cache_data)
         
         return NutritionalAnalyticsCacheResponse(**result)
     

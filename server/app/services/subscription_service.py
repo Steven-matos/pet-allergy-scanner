@@ -220,14 +220,14 @@ class SubscriptionService:
                 "latest_transaction_id": transaction_id
             }
             # Use original_transaction_id as the ID column for update
-            result = db_service.update_with_timestamp(
+            result = await db_service.update_with_timestamp(
                 "subscriptions",
                 existing_sub.get("id"),
                 update_data
             )
         else:
             # Create new subscription using centralized service
-            result = db_service.insert_with_timestamps("subscriptions", subscription_data)
+            result = await db_service.insert_with_timestamps("subscriptions", subscription_data)
         
         return subscription_data
     
@@ -318,7 +318,7 @@ class SubscriptionService:
                 return False
             
             db_service = DatabaseOperationService(self.supabase)
-            db_service.update_with_timestamp(
+            await db_service.update_with_timestamp(
                 "subscriptions",
                 sub_response.data[0]["id"],
                 {"auto_renew": False}

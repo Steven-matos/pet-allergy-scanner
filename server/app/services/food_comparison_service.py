@@ -59,7 +59,7 @@ class FoodComparisonService:
         }
         
         db_service = DatabaseOperationService(self.supabase)
-        result = db_service.insert_with_timestamps("food_comparisons", comparison_record)
+        result = await db_service.insert_with_timestamps("food_comparisons", comparison_record)
         
         return FoodComparisonResponse(**result)
     
