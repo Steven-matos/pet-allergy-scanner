@@ -528,9 +528,10 @@ async def refresh_token(
             refresh_token_value = credentials.credentials
         
         if not refresh_token_value:
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="No refresh token provided. Provide refresh_token in request body or Authorization header."
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("authentication required")
             )
         
         # Use Supabase to exchange refresh token for new session
@@ -546,33 +547,57 @@ async def refresh_token(
             
             # Set session with refresh token (access token can be empty when expired)
             # Supabase will use the refresh token to get new tokens
-            supabase.auth.set_session("", refresh_token_value)
+            # Note: set_session expects (access_token, refresh_token) tuple
+            # When refreshing, we pass empty string for access_token since it's expired
+            try:
+                supabase.auth.set_session("", refresh_token_value)
+            except Exception as set_session_error:
+                logger.error(f"Failed to set session: {set_session_error}", exc_info=True)
+                # Log the error but continue - refresh_session might still work
+                raise
             
             # Refresh the session to get new access and refresh tokens
-            response = supabase.auth.refresh_session()
+            # refresh_session() may raise an exception or return None on failure
+            try:
+                response = supabase.auth.refresh_session()
+            except AttributeError as attr_error:
+                # refresh_session() might not exist in this Supabase version
+                logger.error(f"refresh_session() method not available: {attr_error}")
+                # Try alternative: use set_session with refresh token to get new session
+                # This might work if refresh_session() isn't available
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Token refresh method not available. Please contact support."
+                )
+            except Exception as refresh_error:
+                logger.error(f"refresh_session() raised exception: {refresh_error}", exc_info=True)
+                raise  # Re-raise to be caught by outer exception handler
             
             # Validate response structure
             if not response:
                 logger.error("refresh_session() returned None")
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Refresh token expired or invalid"
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid token")
                 )
             
             # Check if response has session attribute
             if not hasattr(response, 'session') or not response.session:
                 logger.error(f"Response missing session: {type(response)}, attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Refresh token expired or invalid"
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid token")
                 )
             
             # Check if response has user attribute
             if not hasattr(response, 'user') or not response.user:
                 logger.error(f"Response missing user: {type(response)}, attributes: {dir(response) if hasattr(response, '__dict__') else 'N/A'}")
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Refresh token expired or invalid - user not found"
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid token")
                 )
             
             session = response.session
@@ -581,53 +606,98 @@ async def refresh_token(
         except HTTPException:
             raise
         except Exception as refresh_error:
-            logger.error(f"Token refresh failed: {refresh_error}", exc_info=True)
+            # Log detailed error information for debugging
+            error_type = type(refresh_error).__name__
             error_str = str(refresh_error).lower()
+            error_repr = repr(refresh_error)
+            
+            logger.error(
+                f"Token refresh failed: {error_type}: {refresh_error}",
+                exc_info=True
+            )
+            logger.error(f"Error details - type: {error_type}, str: {error_str}, repr: {error_repr}")
+            
+            # Check for specific Supabase error types
+            # Supabase may raise different exception types
+            if hasattr(refresh_error, 'message'):
+                error_message = str(refresh_error.message).lower()
+            else:
+                error_message = error_str
             
             # Check if it's a rate limit error from Supabase
-            if "rate limit" in error_str or "rate_limit" in error_str or "429" in error_str:
+            if "rate limit" in error_message or "rate_limit" in error_message or "429" in error_message:
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Rate limit exceeded. Please try again later.",
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("rate limit exceeded"),
                     headers={"Retry-After": "60"}
                 )
             
-            # Check if it's a token expiration issue
-            if "expired" in error_str or "invalid" in error_str or "401" in error_str:
+            # Check if it's a token expiration/invalid issue
+            if any(keyword in error_message for keyword in ["expired", "invalid", "401", "unauthorized", "token"]):
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Refresh token expired or invalid. Please login again."
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid token")
                 )
             
+            # Check for network/connection errors
+            if any(keyword in error_message for keyword in ["connection", "timeout", "network", "unreachable"]):
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("connection error")
+                )
+            
+            # Generic error with user-friendly message
+            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal server error refreshing token"
+                detail=UserFriendlyErrorMessages.get_user_friendly_message("an unexpected error occurred")
             )
         
         # Get user data
-        user_metadata = user.user_metadata or {}
-        
-        # Return merged user data with new session
-        user_data = await get_merged_user_data(user.id, {
-            "email": user.email,
-            "user_metadata": user_metadata,
-            "created_at": user.created_at,
-            "updated_at": user.updated_at
-        })
+        try:
+            user_metadata = user.user_metadata or {}
+            
+            # Return merged user data with new session
+            user_data = await get_merged_user_data(user.id, {
+                "email": user.email,
+                "user_metadata": user_metadata,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            })
+        except Exception as user_data_error:
+            logger.error(f"Failed to get merged user data: {user_data_error}", exc_info=True)
+            # If we can't get full user data, return basic user info from auth response
+            # This allows token refresh to succeed even if user data fetch fails
+            from app.models.user import UserResponse
+            user_data = UserResponse(
+                id=user.id,
+                email=user.email or "",
+                username=user_metadata.get("username") if user_metadata else None,
+                first_name=user_metadata.get("first_name") if user_metadata else None,
+                last_name=user_metadata.get("last_name") if user_metadata else None,
+                role=user_metadata.get("role", "free") if user_metadata else "free",
+                onboarded=False,
+                created_at=user.created_at if hasattr(user, 'created_at') else None,
+                updated_at=user.updated_at if hasattr(user, 'updated_at') else None
+            )
         
         return {
             "access_token": session.access_token,
             "refresh_token": session.refresh_token,
             "token_type": "Bearer",
-            "expires_in": session.expires_in,
+            "expires_in": session.expires_in if hasattr(session, 'expires_in') else 3600,
             "user": user_data
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Refresh token error: {e}")
+        logger.error(f"Refresh token error: {e}", exc_info=True)
+        from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error refreshing token"
+            detail=UserFriendlyErrorMessages.get_user_friendly_message("an unexpected error occurred")
         )
