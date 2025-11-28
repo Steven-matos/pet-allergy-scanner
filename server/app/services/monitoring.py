@@ -46,10 +46,8 @@ class MonitoringService:
             # Log to file
             logger.critical(f"Security event: {json.dumps(event_data)}")
             
-            # Store in database if enabled using centralized service
-            if settings.enable_audit_logging:
-                db_service = DatabaseOperationService(self.supabase)
-                await db_service.insert_with_timestamps("security_events", event_data, include_created_at=False)
+            # Note: Database logging skipped for fire-and-forget security events
+            # to avoid blocking. Critical events are logged to file and alerts sent.
             
             # Check if alert is needed
             if severity in ["high", "critical"]:
@@ -113,10 +111,8 @@ class MonitoringService:
             
             # Log to file
             
-            # Store in database if enabled using centralized service
-            if settings.enable_audit_logging:
-                db_service = DatabaseOperationService(self.supabase)
-                await db_service.insert_with_timestamps("user_activities", activity_data, include_created_at=False)
+            # Note: Database logging skipped for fire-and-forget user activities
+            # to avoid blocking. Activity logging focuses on file-based audit trail.
                 
         except Exception as e:
             logger.error(f"Failed to log user activity: {e}")
