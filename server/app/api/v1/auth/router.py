@@ -613,7 +613,7 @@ async def refresh_token(
             # Refresh the session to get new access and refresh tokens
             # refresh_session() may raise an exception or return None on failure
             try:
-            response = supabase.auth.refresh_session()
+                response = supabase.auth.refresh_session()
             except AttributeError as attr_error:
                 # refresh_session() might not exist in this Supabase version
                 logger.error(f"refresh_session() method not available: {attr_error}")
