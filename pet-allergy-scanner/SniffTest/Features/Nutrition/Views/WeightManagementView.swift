@@ -337,6 +337,9 @@ struct WeightManagementView: View {
     /**
      * Load weight data only if not already cached
      * This prevents unnecessary server calls when data is already available
+     * 
+     * IMPORTANT: Always force refresh to ensure goals are fetched from server
+     * Goals might exist in database but not be in cache
      */
     private func loadWeightDataIfNeeded() {
         guard let pet = selectedPet else { return }
@@ -345,13 +348,19 @@ struct WeightManagementView: View {
         
         // Check if we have data in memory
         let hasData = weightService.hasCachedWeightData(for: pet.id)
-        print("📊 [loadWeightDataIfNeeded] Has cached data: \(hasData)")
+        let hasGoal = weightService.activeWeightGoal(for: pet.id) != nil
+        print("📊 [loadWeightDataIfNeeded] Has cached data: \(hasData), Has goal: \(hasGoal)")
         
-        // Always load on first appearance to ensure fresh data
-        // The service will check its in-memory cache first
+        // Always load on first appearance to ensure fresh data including goals
+        // Even if we have cached data, we need to check for goals from server
         Task {
-            print("📊 [loadWeightDataIfNeeded] Starting load task...")
-            await loadWeightDataAsync(showLoadingIfNeeded: !hasData)
+            print("📊 [loadWeightDataIfNeeded] Starting load task with force refresh...")
+            // Force refresh to ensure we get goals from server
+            // The service will still use cache if available, but will fetch goals
+            try? await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+            await MainActor.run {
+                refreshTrigger.toggle() // Force UI refresh
+            }
         }
     }
     
