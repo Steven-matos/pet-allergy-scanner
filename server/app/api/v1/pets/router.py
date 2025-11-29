@@ -165,51 +165,51 @@ async def update_pet(
     """
     # Verify pet exists and belongs to user
     from app.shared.services.query_builder_service import QueryBuilderService
+    from app.shared.services.validation_service import ValidationService
     
     query_builder = QueryBuilderService(supabase, "pets")
     existing_result = await query_builder.with_filters({
         "id": pet_id,
         "user_id": current_user.id
-    }).select(["id"]).execute()
+    }).select(["id", "species"]).execute()
     
     if not existing_result["data"]:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Pet not found"
         )
-        
-        # Get existing pet to validate species-specific requirements
-        from app.shared.services.query_builder_service import QueryBuilderService
-        
-        query_builder = QueryBuilderService(supabase, "pets")
-        existing_result = await query_builder.select(["species"]).with_filters({
-            "id": pet_id,
-            "user_id": current_user.id
-        }).execute()
-        
-        if existing_result["data"]:
-            existing_species = existing_result["data"][0]["species"]
-            # Validate species-specific requirements for updates using centralized validation
-            ValidationService.validate_pet_weight(existing_species, pet_update.weight_kg)
-        
-        # Prepare update data using data transformation service
-        update_data = DataTransformationService.model_to_dict(pet_update, exclude_none=True)
-        
-        # Convert date objects to strings for JSON serialization
-        if 'birthday' in update_data and update_data['birthday'] is not None:
-            if hasattr(update_data['birthday'], 'isoformat'):
-                update_data['birthday'] = update_data['birthday'].isoformat()
-        
-        # Handle enum serialization
-        if 'activity_level' in update_data and hasattr(update_data['activity_level'], 'value'):
-            update_data['activity_level'] = update_data['activity_level'].value
-        
-        # Update pet using centralized service
-        db_service = DatabaseOperationService(supabase)
-        updated_pet = await db_service.update_with_timestamp("pets", pet_id, update_data)
-        
-        # Convert to response model using centralized service
-        return ResponseModelService.convert_to_model(updated_pet, PetResponse)
+    
+    # Get existing pet to validate species-specific requirements
+    existing_species = existing_result["data"][0]["species"]
+    
+    # Validate species-specific requirements for updates using centralized validation
+    if pet_update.weight_kg is not None:
+        ValidationService.validate_pet_weight(existing_species, pet_update.weight_kg)
+    
+    # Prepare update data using data transformation service
+    update_data = DataTransformationService.model_to_dict(pet_update, exclude_none=True)
+    
+    # Convert date objects to strings for JSON serialization
+    if 'birthday' in update_data and update_data['birthday'] is not None:
+        if hasattr(update_data['birthday'], 'isoformat'):
+            update_data['birthday'] = update_data['birthday'].isoformat()
+    
+    # Handle enum serialization
+    if 'activity_level' in update_data and hasattr(update_data['activity_level'], 'value'):
+        update_data['activity_level'] = update_data['activity_level'].value
+    
+    # Update pet using centralized service
+    db_service = DatabaseOperationService(supabase)
+    updated_pet = await db_service.update_with_timestamp("pets", pet_id, update_data)
+    
+    if not updated_pet:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update pet: No data returned"
+        )
+    
+    # Convert to response model using centralized service
+    return ResponseModelService.convert_to_model(updated_pet, PetResponse)
 
 @router.delete("/{pet_id}")
 @handle_errors("delete_pet")

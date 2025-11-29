@@ -132,7 +132,7 @@ class DatabaseOperationService:
             response = await execute_async(
                 lambda: self.supabase.table(table_name).update(data).eq(
                     id_column, record_id
-                ).execute()
+                ).select("*").execute()
             )
             
             if not response.data:
