@@ -5,7 +5,7 @@ Handles weight tracking, goals, and weight-related analytics.
 Extracted from advanced_nutrition.py for better organization.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 from datetime import datetime, date, timedelta
@@ -80,6 +80,7 @@ async def record_weight(
 @router.get("/history/{pet_id}", response_model=List[PetWeightRecordResponse])
 async def get_weight_history(
     pet_id: str,
+    response: Response,
     days: int = Query(365, description="Number of days to retrieve (default: 1 year, use 0 for all)"),
     current_user: User = Depends(get_current_user),
     supabase: Client = Depends(get_authenticated_supabase_client)
@@ -89,6 +90,7 @@ async def get_weight_history(
     
     Args:
         pet_id: Pet ID
+        response: Response object to set headers
         days: Number of days to retrieve (default: 365, use 0 for all records)
         current_user: Current authenticated user
         
@@ -100,6 +102,11 @@ async def get_weight_history(
     """
     from app.utils.logging_config import get_logger
     logger = get_logger(__name__)
+    
+    # CRITICAL: Disable caching for dynamic weight data
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     
     logger.info(f"[ROUTER] GET /history/{pet_id} - Starting request")
     logger.info(f"[ROUTER] User: {current_user.id}, Days: {days}")
@@ -209,6 +216,7 @@ async def upsert_weight_goal(
 @router.get("/goals/{pet_id}/active", response_model=Optional[PetWeightGoalResponse])
 async def get_active_weight_goal(
     pet_id: str,
+    response: Response,
     current_user: User = Depends(get_current_user),
     supabase: Client = Depends(get_authenticated_supabase_client)
 ):
@@ -217,6 +225,7 @@ async def get_active_weight_goal(
     
     Args:
         pet_id: Pet ID
+        response: Response object to set headers
         current_user: Current authenticated user
         
     Returns:
@@ -227,6 +236,11 @@ async def get_active_weight_goal(
     """
     from app.utils.logging_config import get_logger
     logger = get_logger(__name__)
+    
+    # CRITICAL: Disable caching for dynamic goal data
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     
     logger.info(f"[ROUTER] GET /goals/{pet_id}/active - Starting request")
     logger.info(f"[ROUTER] User: {current_user.id}")
