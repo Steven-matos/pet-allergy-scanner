@@ -7,6 +7,7 @@ Extracted from advanced_nutrition.py for better organization.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Response
 from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 
@@ -271,6 +272,101 @@ async def get_active_weight_goal(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get active weight goal: {str(e)}"
+        )
+
+
+@router.get("/trend/{pet_id}", response_model=WeightTrendAnalysis)
+async def analyze_weight_trend(
+    pet_id: str,
+    days: int = Query(30, description="Number of days to analyze"),
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Analyze weight trend for a pet
+    
+    Args:
+        pet_id: Pet ID
+        days: Number of days to analyze
+        current_user: Current authenticated user
+        
+    Returns:
+        Weight trend analysis
+        
+    Raises:
+        HTTPException: If pet not found or user not authorized
+    """
+    try:
+        
+
+
+@router.delete("/record/{record_id}")
+async def delete_weight_record(
+    record_id: str,
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Delete a weight record and update pet's weight to previous record
+    
+    This is primarily used for the "undo" functionality after recording a weight.
+    When a record is deleted, the pet's weight is automatically updated to the
+    previous recorded weight (or cleared if no previous weights exist).
+    
+    Args:
+        record_id: Weight record ID to delete
+        current_user: Current authenticated user
+        
+    Returns:
+        Success message with updated pet weight info
+        
+    Raises:
+        HTTPException: If record not found, user not authorized, or deletion fails
+    """
+    from app.utils.logging_config import get_logger
+    logger = get_logger(__name__)
+    
+    logger.info(f"[ROUTER] DELETE /record/{record_id} - Starting request")
+    logger.info(f"[ROUTER] User: {current_user.id}")
+    
+    try:
+        # Get the weight record to verify ownership
+        record_response = supabase.table("pet_weight_records").select("*").eq("id", record_id).execute()
+        
+        if not record_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Weight record not found"
+            )
+        
+        record = record_response.data[0]
+        pet_id = record["pet_id"]
+        
+        # Verify pet ownership
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        
+        logger.info(f"[ROUTER] Pet ownership verified for pet: {pet_id}")
+        
+        # Delete the record using the service
+        service = get_weight_service(supabase)
+        result = await service.delete_weight_record(record_id, pet_id, current_user.id)
+        
+        logger.info(f"[ROUTER] Weight record deleted successfully")
+        logger.info(f"[ROUTER] Result: {result}")
+        
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=result
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[ROUTER] Error deleting weight record: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete weight record: {str(e)}"
         )
 
 

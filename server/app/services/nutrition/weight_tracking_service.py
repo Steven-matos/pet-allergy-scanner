@@ -270,6 +270,71 @@ class WeightTrackingService:
             logger.warning(f"  3. RLS policy blocking access")
             logger.warning(f"  4. Goal exists for different pet_id")
             return None
+    
+    async def delete_weight_record(self, record_id: str, pet_id: str, user_id: str) -> dict:
+        """
+        Delete a weight record and update pet's weight to previous record
+        
+        This is used for the "undo" functionality. When a weight record is deleted,
+        the pet's weight is automatically updated to the second-most-recent weight,
+        or cleared if no previous weights exist.
+        
+        Args:
+            record_id: Weight record ID to delete
+            pet_id: Pet ID
+            user_id: User ID for authorization (used for logging/audit)
+            
+        Returns:
+            Dict with success message and updated pet weight info
+        """
+        logger.info(f"[delete_weight_record] Starting - record_id: {record_id}, pet_id: {pet_id}")
+        
+        try:
+            # Delete the weight record
+            delete_response = self.supabase.table("pet_weight_records").delete().eq("id", record_id).execute()
+            
+            if not delete_response.data:
+                logger.error(f"[delete_weight_record] Failed to delete record {record_id}")
+                raise Exception("Failed to delete weight record")
+            
+            logger.info(f"[delete_weight_record] Record deleted successfully")
+            
+            # Get the most recent weight after deletion (if any)
+            history_response = self.supabase.table("pet_weight_records") \
+                .select("*") \
+                .eq("pet_id", pet_id) \
+                .order("recorded_at", desc=True) \
+                .limit(1) \
+                .execute()
+            
+            if history_response.data and len(history_response.data) > 0:
+                # Update pet weight to the previous recorded weight
+                previous_weight = float(history_response.data[0]["weight_kg"])
+                logger.info(f"[delete_weight_record] Found previous weight: {previous_weight} kg")
+                
+                await self._update_pet_weight(pet_id, previous_weight)
+                
+                return {
+                    "success": True,
+                    "message": "Weight record deleted and pet weight updated to previous record",
+                    "updated_weight_kg": previous_weight
+                }
+            else:
+                # No previous weights - clear the pet's weight
+                logger.info(f"[delete_weight_record] No previous weights found, clearing pet weight")
+                
+                db_service = DatabaseOperationService(self.supabase)
+                await db_service.update_with_timestamp("pets", pet_id, {"weight_kg": None})
+                
+                return {
+                    "success": True,
+                    "message": "Weight record deleted and pet weight cleared (no previous records)",
+                    "updated_weight_kg": None
+                }
+                
+        except Exception as e:
+            logger.error(f"[delete_weight_record] Error: {str(e)}")
+            raise
         
         goal_data = response.data[0]
         logger.info(f"[get_active_weight_goal] Found active weight goal:")
