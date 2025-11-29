@@ -142,16 +142,18 @@ struct NutritionalTrendResponse: Codable {
  * Dashboard response from backend API
  * Matches server/app/models/nutrition/advanced_nutrition.py:NutritionalTrendsDashboard
  * 
- * Note: Uses AnyCodable for dynamic JSON fields (Dict[str, Any] from Python)
+ * Note: Backend returns empty arrays when no data, so all collections are non-optional
  */
 struct NutritionalTrendsDashboard: Codable {
     let petId: String
     let trendPeriod: String
-    let calorieTrends: [[String: AnyCodable]]
-    let macronutrientTrends: [[String: AnyCodable]]
-    let weightCorrelation: [String: AnyCodable]
-    let feedingPatterns: [[String: AnyCodable]]
     let insights: [String]
+    
+    // Optional dynamic fields that may not always be present
+    let calorieTrends: [String: String]?
+    let macronutrientTrends: [String: String]?
+    let weightCorrelation: [String: String]?
+    let feedingPatterns: [String: String]?
     
     enum CodingKeys: String, CodingKey {
         case petId = "pet_id"
@@ -161,6 +163,20 @@ struct NutritionalTrendsDashboard: Codable {
         case weightCorrelation = "weight_correlation"
         case feedingPatterns = "feeding_patterns"
         case insights
+    }
+    
+    // Custom decoder to handle the dynamic arrays/dicts from backend
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        petId = try container.decode(String.self, forKey: .petId)
+        trendPeriod = try container.decode(String.self, forKey: .trendPeriod)
+        insights = try container.decode([String].self, forKey: .insights)
+        
+        // Decode optional dynamic fields - ignore if not present or wrong type
+        calorieTrends = try? container.decode([String: String].self, forKey: .calorieTrends)
+        macronutrientTrends = try? container.decode([String: String].self, forKey: .macronutrientTrends)
+        weightCorrelation = try? container.decode([String: String].self, forKey: .weightCorrelation)
+        feedingPatterns = try? container.decode([String: String].self, forKey: .feedingPatterns)
     }
 }
 
