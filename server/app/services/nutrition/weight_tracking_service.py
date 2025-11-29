@@ -232,7 +232,17 @@ class WeightTrackingService:
         # Get active goal
         # Note: Pet ownership is verified by the router before calling this method
         logger.info(f"[get_active_weight_goal] Fetching active weight goal for pet {pet_id}")
+        logger.info(f"[get_active_weight_goal] User ID: {user_id}")
         logger.info(f"[get_active_weight_goal] Query: pet_weight_goals where pet_id={pet_id} AND is_active=True")
+        
+        # First, verify the pet exists and user has access
+        try:
+            pet_check = self.supabase.table("pets").select("id, user_id").eq("id", pet_id).execute()
+            logger.info(f"[get_active_weight_goal] Pet check result: {len(pet_check.data)} pets found")
+            if pet_check.data:
+                logger.info(f"[get_active_weight_goal] Pet belongs to user: {pet_check.data[0].get('user_id')}")
+        except Exception as e:
+            logger.error(f"[get_active_weight_goal] Error checking pet: {e}")
         
         response = self.supabase.table("pet_weight_goals")\
             .select("*")\
@@ -240,10 +250,18 @@ class WeightTrackingService:
             .eq("is_active", True)\
             .execute()
         
-        logger.info(f"[get_active_weight_goal] Query response: data count = {len(response.data)}")
+        logger.info(f"[get_active_weight_goal] Query executed")
+        logger.info(f"[get_active_weight_goal] Response status: {getattr(response, 'status_code', 'N/A')}")
+        logger.info(f"[get_active_weight_goal] Response data count: {len(response.data) if response.data else 0}")
+        logger.info(f"[get_active_weight_goal] Response data: {response.data}")
         
         if not response.data:
-            logger.info(f"[get_active_weight_goal] No active weight goal found for pet {pet_id}")
+            logger.warning(f"[get_active_weight_goal] No active weight goal found for pet {pet_id}")
+            logger.warning(f"[get_active_weight_goal] This might be due to:")
+            logger.warning(f"  1. No goal exists in database")
+            logger.warning(f"  2. Goal exists but is_active=false")
+            logger.warning(f"  3. RLS policy blocking access")
+            logger.warning(f"  4. Goal exists for different pet_id")
             return None
         
         goal_data = response.data[0]
