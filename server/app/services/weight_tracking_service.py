@@ -1,6 +1,8 @@
 """
 Weight Tracking Service
 Handles pet weight management, goal tracking, and trend analysis
+
+Fixed: 2025-11-29 - Correct descending parameter for Supabase order()
 """
 
 from typing import List, Optional, Dict, Any, Tuple
