@@ -367,7 +367,7 @@ class RecommendationService:
             if recommendation_type:
                 query = query.eq("recommendation_type", recommendation_type)
             
-            response = query.order("created_at", descending=True).execute()
+            response = query.order("created_at", desc=True).execute()
             
             return [
                 NutritionalRecommendationResponse(**rec) 

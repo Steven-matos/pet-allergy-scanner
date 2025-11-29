@@ -119,7 +119,7 @@ class WeightTrackingService:
             logger.info("Getting ALL weight records (no date filter)")
         
         # Execute query with descending order (most recent first)
-        response = query.order("recorded_at", descending=True).execute()
+        response = query.order("recorded_at", desc=True).execute()
         
         logger.info(f"Found {len(response.data)} weight records for pet {pet_id}")
         

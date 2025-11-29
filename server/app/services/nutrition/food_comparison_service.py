@@ -113,7 +113,7 @@ class FoodComparisonService:
         response = self.supabase.table("food_comparisons")\
             .select("*")\
             .eq("user_id", user_id)\
-            .order("created_at", descending=True)\
+            .order("created_at", desc=True)\
             .limit(limit)\
             .execute()
         
