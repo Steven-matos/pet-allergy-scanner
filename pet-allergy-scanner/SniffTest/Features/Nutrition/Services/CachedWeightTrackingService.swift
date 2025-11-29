@@ -665,9 +665,15 @@ class CachedWeightTrackingService: ObservableObject {
             waitCount += 1
         }
         
-        // Verify the pet was updated
+        // Verify the pet was updated and refresh the selected pet if needed
         if let updatedPet = petService.pets.first(where: { $0.id == petId }) {
             print("✅ [updatePetWeight] Pet refreshed - current weight: \(updatedPet.weightKg ?? 0) kg")
+            
+            // Update the selected pet in PetSelectionService to trigger UI refresh
+            await MainActor.run {
+                NutritionPetSelectionService.shared.selectPet(updatedPet)
+                print("🔄 [updatePetWeight] Updated selected pet to trigger UI refresh")
+            }
         } else {
             print("⚠️ [updatePetWeight] Pet not found after refresh - ID: \(petId)")
         }
