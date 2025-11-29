@@ -212,7 +212,6 @@ async def get_active_weight_goal(
         HTTPException: If pet not found or user not authorized
     """
     try:
-        
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id, supabase)
@@ -221,7 +220,8 @@ async def get_active_weight_goal(
         service = get_weight_service(supabase)
         goal = await service.get_active_weight_goal(pet_id, current_user.id)
         
-        # Return None if no goal exists (200 status with null/empty data)
+        # FastAPI automatically serializes None as null in JSON for Optional response types
+        # This should work correctly with Swift's JSONDecoder for optional types
         return goal
         
     except Exception as e:

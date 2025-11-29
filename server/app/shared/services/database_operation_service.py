@@ -129,10 +129,21 @@ class DatabaseOperationService:
             if include_updated_at and "updated_at" not in data:
                 data["updated_at"] = DateTimeService.now_iso()
             
+            # Perform the update
+            update_response = await execute_async(
+                lambda: self.supabase.table(table_name)
+                    .update(data)
+                    .eq(id_column, record_id)
+                    .execute()
+            )
+            
+            # Fetch the updated record separately since Supabase update doesn't return data by default
+            # This ensures we get the complete updated record with all fields
             response = await execute_async(
-                lambda: self.supabase.table(table_name).update(data).eq(
-                    id_column, record_id
-                ).select("*").execute()
+                lambda: self.supabase.table(table_name)
+                    .select("*")
+                    .eq(id_column, record_id)
+                    .execute()
             )
             
             if not response.data:

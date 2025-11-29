@@ -224,6 +224,7 @@ class WeightTrackingService:
         """
         # Get active goal
         # Note: Pet ownership is verified by the router before calling this method
+        logger.info(f"Fetching active weight goal for pet {pet_id}")
         response = self.supabase.table("pet_weight_goals")\
             .select("*")\
             .eq("pet_id", pet_id)\
@@ -231,8 +232,10 @@ class WeightTrackingService:
             .execute()
         
         if not response.data:
+            logger.info(f"No active weight goal found for pet {pet_id}")
             return None
         
+        logger.info(f"Found active weight goal for pet {pet_id}: {response.data[0].get('id')}, target_weight={response.data[0].get('target_weight_kg')}")
         return PetWeightGoalResponse(**response.data[0])
     
     async def analyze_weight_trend(
