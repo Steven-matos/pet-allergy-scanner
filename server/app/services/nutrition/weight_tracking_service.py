@@ -76,6 +76,10 @@ class WeightTrackingService:
         db_service = DatabaseOperationService(self.supabase)
         result = await db_service.insert_with_timestamps("pet_weight_records", weight_data, include_created_at=False)
         
+        # Update pet's current weight in the pets table
+        # Use the most recent recorded weight as the pet's current weight
+        await self._update_pet_weight(weight_record.pet_id, float(weight_record.weight_kg))
+        
         # Update nutritional trends for this date
         await self._update_nutritional_trends(weight_record.pet_id, weight_record.recorded_at.date())
         
@@ -374,6 +378,30 @@ class WeightTrackingService:
             .eq("pet_id", pet_id)\
             .eq("is_active", True)\
             .execute()
+    
+    async def _update_pet_weight(self, pet_id: str, weight_kg: float) -> None:
+        """
+        Update pet's current weight in the pets table
+        
+        This ensures the pet's profile weight matches the most recent recorded weight.
+        We always update the pet table with the newly recorded weight since we know
+        there's at least one recorded weight (the one we just created).
+        
+        Args:
+            pet_id: Pet ID
+            weight_kg: Weight in kg to set as current weight (from the newly recorded weight)
+        """
+        try:
+            logger.info(f"Updating pet {pet_id} weight to {weight_kg} kg (from newly recorded weight)")
+            
+            # Update pet's weight in the pets table
+            update_data = {"weight_kg": float(weight_kg)}
+            db_service = DatabaseOperationService(self.supabase)
+            await db_service.update_with_timestamp("pets", pet_id, update_data)
+            logger.info(f"Successfully updated pet {pet_id} weight to {weight_kg} kg")
+        except Exception as e:
+            # Log error but don't fail the weight recording
+            logger.warning(f"Failed to update pet weight: {e}")
     
     async def _update_nutritional_trends(self, pet_id: str, trend_date: date) -> None:
         """Update nutritional trends for a specific date"""

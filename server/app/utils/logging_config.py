@@ -45,6 +45,20 @@ class CleanFormatter(logging.Formatter):
         return super().format(record)
 
 
+class NoisyLogFilter(logging.Filter):
+    """
+    Filter to suppress noisy debug logs containing decoding/hpack messages
+    These logs don't provide meaningful information and clutter the output
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Suppress DEBUG level logs that contain decoding or hpack information
+        if record.levelno == logging.DEBUG:
+            message = str(record.getMessage()).lower()
+            if any(keyword in message for keyword in ['decoding', 'hpack', 'header compression', 'http/2']):
+                return False
+        return True
+
+
 def setup_logging(log_level: Optional[str] = None) -> None:
     """
     Set up centralized logging configuration with clean console output
@@ -99,6 +113,8 @@ def setup_logging(log_level: Optional[str] = None) -> None:
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_handler.setFormatter(formatter)
+    # Add filter to suppress noisy debug logs (decoding, hpack, etc.)
+    console_handler.addFilter(NoisyLogFilter())
     root_logger.addHandler(console_handler)
     
     # Suppress noisy third-party loggers
@@ -111,6 +127,7 @@ def setup_logging(log_level: Optional[str] = None) -> None:
 def _suppress_noisy_loggers() -> None:
     """
     Suppress noisy third-party loggers to reduce console clutter
+    Specifically targets hpack, decoding, and other verbose debug logs
     In production: Only log CRITICAL errors to avoid Railway rate limits
     """
     # In production and Railway, suppress almost all third-party logging
@@ -120,6 +137,10 @@ def _suppress_noisy_loggers() -> None:
             "uvicorn.error": logging.CRITICAL,      # Disable uvicorn errors completely
             "httpx": logging.CRITICAL,              # Disable HTTP client logs
             "httpcore": logging.CRITICAL,           # Disable HTTP core logs
+            "httpcore.http11": logging.CRITICAL,    # Disable HTTP/1.1 specific logs
+            "httpcore.http2": logging.CRITICAL,      # Disable HTTP/2 specific logs
+            "h2": logging.CRITICAL,                 # Disable HTTP/2 hpack logs
+            "hpack": logging.CRITICAL,              # Disable hpack header compression logs
             "supabase": logging.CRITICAL,           # Disable Supabase logs completely
             "urllib3": logging.CRITICAL,            # Disable urllib3 logs
             "asyncio": logging.CRITICAL,            # Disable asyncio logs
@@ -128,12 +149,17 @@ def _suppress_noisy_loggers() -> None:
             "starlette": logging.CRITICAL,          # Disable Starlette logs completely
         }
     else:
-        # Development: Show warnings and above
+        # Development: Suppress DEBUG logs but show warnings and above
+        # Specifically suppress hpack and decoding logs even in development
         noisy_loggers = {
             "uvicorn.access": logging.WARNING,      # Only show access errors
             "uvicorn.error": logging.INFO,          # Show uvicorn errors
             "httpx": logging.WARNING,               # Only show HTTP client errors
             "httpcore": logging.WARNING,            # Only show HTTP core errors
+            "httpcore.http11": logging.WARNING,     # Suppress HTTP/1.1 debug logs
+            "httpcore.http2": logging.WARNING,     # Suppress HTTP/2 debug logs
+            "h2": logging.CRITICAL,                 # Completely disable hpack logs (too verbose)
+            "hpack": logging.CRITICAL,              # Completely disable hpack logs (too verbose)
             "supabase": logging.WARNING,            # Only show Supabase errors
             "urllib3": logging.WARNING,             # Only show urllib3 errors
             "asyncio": logging.WARNING,             # Only show asyncio errors
@@ -141,7 +167,10 @@ def _suppress_noisy_loggers() -> None:
         }
     
     for logger_name, level in noisy_loggers.items():
-        logging.getLogger(logger_name).setLevel(level)
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(level)
+        # Add filter to catch any remaining debug logs with decoding/hpack messages
+        logger.addFilter(NoisyLogFilter())
 
 
 def _setup_audit_logging() -> None:
