@@ -101,7 +101,7 @@ class AdvancedAnalyticsService:
             .select("*")\
             .eq("pet_id", pet_id)\
             .gte("trend_date", (DateTimeService.now() - timedelta(days=30)).date().isoformat())\
-            .order("trend_date", desc=True)\
+            .order("trend_date", descending=True)\
             .execute()
         
         trends = trends_response.data
@@ -182,7 +182,7 @@ class AdvancedAnalyticsService:
             .select("*")\
             .eq("pet_id", pet_id)\
             .gte("trend_date", (DateTimeService.now() - timedelta(days=days_back)).date().isoformat())\
-            .order("trend_date", desc=True)\
+            .order("trend_date", descending=True)\
             .execute()
         
         trends = trends_response.data
@@ -241,7 +241,7 @@ class AdvancedAnalyticsService:
             .eq("pet_id", pet_id)\
             .eq("analysis_type", analysis_type.value)\
             .gt("expires_at", DateTimeService.now_iso())\
-            .order("generated_at", desc=True)\
+            .order("generated_at", descending=True)\
             .limit(1)\
             .execute()
         

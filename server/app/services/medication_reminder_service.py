@@ -64,7 +64,7 @@ class MedicationReminderService:
         if active_only:
             query = query.eq("is_active", True)
         
-        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+        query = query.order("created_at", descending=True).range(offset, offset + limit - 1)
         
         response = await execute_async(lambda: query.execute())
         
@@ -93,7 +93,7 @@ class MedicationReminderService:
         Get medication reminders for a specific health event
         """
         query = supabase.table("medication_reminders").select("*").eq("health_event_id", health_event_id).eq("user_id", user_id)
-        query = query.order("created_at", desc=True).range(offset, offset + limit - 1)
+        query = query.order("created_at", descending=True).range(offset, offset + limit - 1)
         
         response = await execute_async(lambda: query.execute())
         

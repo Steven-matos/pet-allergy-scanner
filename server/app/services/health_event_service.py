@@ -76,7 +76,7 @@ class HealthEventService:
         """
         Get health events for a specific pet
         """
-        response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
+        response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", descending=True).range(offset, offset + limit - 1).execute()
         
         if not response.data:
             return []
@@ -95,7 +95,7 @@ class HealthEventService:
         """
         Get health events for a specific pet filtered by category
         """
-        response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).eq("event_category", category).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
+        response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).eq("event_category", category).order("event_date", descending=True).range(offset, offset + limit - 1).execute()
         
         if not response.data:
             return []

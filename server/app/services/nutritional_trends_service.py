@@ -64,7 +64,7 @@ class NutritionalTrendsService:
             .select("*")\
             .eq("pet_id", pet_id)\
             .gte("trend_date", start_date.date().isoformat())\
-            .order("trend_date", desc=True)\
+            .order("trend_date", descending=True)\
             .execute()
         
         # Return empty list if no trends exist (200 status with empty data)
