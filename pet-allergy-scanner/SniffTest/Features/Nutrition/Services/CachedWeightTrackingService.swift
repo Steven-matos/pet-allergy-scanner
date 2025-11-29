@@ -83,8 +83,9 @@ class CachedWeightTrackingService: ObservableObject {
      * - Parameter petId: The pet's ID
      * - Parameter weight: Weight in the user's selected unit
      * - Parameter notes: Optional notes about the measurement
+     * - Returns: The ID of the newly created weight record
      */
-    func recordWeight(petId: String, weight: Double, notes: String? = nil) async throws {
+    func recordWeight(petId: String, weight: Double, notes: String? = nil) async throws -> String {
         print("📝 [recordWeight] Starting - petId: \(petId), weight: \(weight)")
         
         // Convert weight to kg for storage (backend expects kg)
@@ -133,6 +134,21 @@ class CachedWeightTrackingService: ObservableObject {
         await generateRecommendations(for: petId)
         
         print("✅ [recordWeight] Complete!")
+        
+        // Return the weight record ID for undo functionality
+        return weightRecord.id
+    }
+    
+    /**
+     * Delete a weight record (for undo functionality)
+     * - Parameter recordId: The weight record ID to delete
+     */
+    func deleteWeightRecord(recordId: String) async throws {
+        print("🗑️ [deleteWeightRecord] Deleting record: \(recordId)")
+        
+        try await apiService.deleteWeightRecord(recordId: recordId)
+        
+        print("✅ [deleteWeightRecord] Record deleted successfully")
     }
     
     /**

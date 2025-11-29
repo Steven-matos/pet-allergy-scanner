@@ -749,4 +749,12 @@ extension APIService {
             throw error
         }
     }
+    
+    /**
+     * Delete a weight record
+     * - Parameter recordId: The weight record ID to delete
+     */
+    func deleteWeightRecord(recordId: String) async throws {
+        try await delete(endpoint: "/advanced-nutrition/weight/record/\(recordId)")
+    }
 }

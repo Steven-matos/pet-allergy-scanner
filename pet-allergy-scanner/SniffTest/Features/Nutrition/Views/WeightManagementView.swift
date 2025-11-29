@@ -47,6 +47,8 @@ struct WeightManagementView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var refreshTrigger = false
+    @State private var lastRecordedWeightId: String?
+    @State private var showingUndoToast = false
     
     // MARK: - Computed Properties
     
@@ -68,7 +70,7 @@ struct WeightManagementView: View {
         .background(ModernDesignSystem.Colors.background)
         .sheet(isPresented: $showingWeightEntry) {
             if let pet = selectedPet {
-                WeightEntryView(pet: pet)
+                WeightEntryView(pet: pet, lastRecordedWeightId: $lastRecordedWeightId)
                     .onDisappear {
                         // Refresh weight data when the entry sheet is dismissed
                         loadWeightData()
@@ -76,6 +78,22 @@ struct WeightManagementView: View {
                         syncService.enableFastPolling()
                         // Force UI refresh
                         refreshTrigger.toggle()
+                        
+                        // Show undo toast if a weight was recorded
+                        if lastRecordedWeightId != nil {
+                            showingUndoToast = true
+                            
+                            // Auto-hide undo toast after 5 seconds
+                            Task {
+                                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                                await MainActor.run {
+                                    if showingUndoToast {
+                                        showingUndoToast = false
+                                        lastRecordedWeightId = nil
+                                    }
+                                }
+                            }
+                        }
                     }
             }
         }
@@ -121,6 +139,53 @@ struct WeightManagementView: View {
             // Pull to refresh weight data
             await refreshWeightData()
         }
+        .overlay(alignment: .bottom) {
+            // Undo toast for recently recorded weight
+            if showingUndoToast {
+                undoToastView
+                    .padding(.bottom, 100)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+    
+    // MARK: - Undo Toast View
+    
+    private var undoToastView: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+                .font(ModernDesignSystem.Typography.title3)
+            
+            Text("Weight recorded")
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            Spacer()
+            
+            Button {
+                undoLastWeight()
+            } label: {
+                Text("UNDO")
+                    .font(ModernDesignSystem.Typography.callout)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
+        )
+        .padding(.horizontal, ModernDesignSystem.Spacing.md)
     }
     
     // MARK: - Pet Selection View
@@ -387,6 +452,60 @@ struct WeightManagementView: View {
             print("❌ Failed to refresh weight data: \(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = "Failed to refresh weight data: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /**
+     * Undo the last recorded weight
+     * Deletes the record and updates pet weight to previous value
+     */
+    private func undoLastWeight() {
+        guard let weightId = lastRecordedWeightId, let pet = selectedPet else {
+            return
+        }
+        
+        // Hide the undo toast immediately
+        withAnimation {
+            showingUndoToast = false
+        }
+        
+        Task {
+            do {
+                // Call the delete API
+                try await weightService.deleteWeightRecord(recordId: weightId)
+                
+                // Refresh the data
+                try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+                
+                // Refresh pet data to get updated weight
+                await MainActor.run {
+                    petService.loadPets(forceRefresh: true)
+                }
+                
+                // Wait for refresh
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                
+                // Update selected pet
+                if let updatedPet = petService.pets.first(where: { $0.id == pet.id }) {
+                    await MainActor.run {
+                        NutritionPetSelectionService.shared.selectPet(updatedPet)
+                    }
+                }
+                
+                // Trigger UI refresh
+                await MainActor.run {
+                    refreshTrigger.toggle()
+                    lastRecordedWeightId = nil
+                }
+                
+                print("✅ Weight record undone successfully")
+            } catch {
+                print("❌ Failed to undo weight: \(error.localizedDescription)")
+                // Show error to user
+                await MainActor.run {
+                    errorMessage = "Failed to undo: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -1065,8 +1184,9 @@ struct RecommendationsCard: View {
  */
 struct WeightEntryView: View {
     let pet: Pet
+    @Binding var lastRecordedWeightId: String?
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var weightService = WeightTrackingService.shared
+    @StateObject private var weightService = CachedWeightTrackingService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var weight: String = ""
     @State private var notes: String = ""
@@ -1309,13 +1429,15 @@ struct WeightEntryView: View {
         Task {
             do {
                 // Store weight directly in the selected unit (no conversion needed)
-                try await weightService.recordWeight(
+                let recordId = try await weightService.recordWeight(
                     petId: pet.id,
                     weight: weightValue,
                     notes: notes.isEmpty ? nil : notes
                 )
                 
                 await MainActor.run {
+                    // Store the record ID for undo functionality
+                    lastRecordedWeightId = recordId
                     dismiss()
                 }
             } catch {
