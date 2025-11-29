@@ -1052,7 +1052,7 @@ struct EmptyWeightChartCard: View {
             y: ModernDesignSystem.Shadows.small.y
         )
         .sheet(isPresented: $showingWeightEntry) {
-            WeightEntryView(pet: pet)
+            WeightEntryView(pet: pet, lastRecordedWeightId: .constant(nil))
         }
     }
 }

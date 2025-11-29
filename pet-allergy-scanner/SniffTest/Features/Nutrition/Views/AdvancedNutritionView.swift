@@ -139,7 +139,7 @@ struct AdvancedNutritionView: View {
         }
         .sheet(isPresented: $showingWeightEntry) {
             if let pet = selectedPet {
-                WeightEntryView(pet: pet)
+                WeightEntryView(pet: pet, lastRecordedWeightId: .constant(nil))
                     .onDisappear {
                         // Refresh nutrition data when the weight entry sheet is dismissed
                         loadNutritionData()
