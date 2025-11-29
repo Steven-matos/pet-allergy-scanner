@@ -98,20 +98,34 @@ async def get_weight_history(
     Raises:
         HTTPException: If pet not found or user not authorized
     """
+    from app.utils.logging_config import get_logger
+    logger = get_logger(__name__)
+    
+    logger.info(f"[ROUTER] GET /history/{pet_id} - Starting request")
+    logger.info(f"[ROUTER] User: {current_user.id}, Days: {days}")
+    
     try:
         
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
+        logger.info(f"[ROUTER] Pet ownership verified")
+        
         # Get weight history
         service = get_weight_service(supabase)
+        logger.info(f"[ROUTER] Calling service.get_weight_history()")
         history = await service.get_weight_history(pet_id, current_user.id, days)
         
+        logger.info(f"[ROUTER] Service returned {len(history)} records")
+        
         # Return empty list if no history (200 status with empty data)
-        return history if history else []
+        result = history if history else []
+        logger.info(f"[ROUTER] Returning {len(result)} records to client")
+        return result
         
     except Exception as e:
+        logger.error(f"[ROUTER] Error getting weight history: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get weight history: {str(e)}"
@@ -211,20 +225,35 @@ async def get_active_weight_goal(
     Raises:
         HTTPException: If pet not found or user not authorized
     """
+    from app.utils.logging_config import get_logger
+    logger = get_logger(__name__)
+    
+    logger.info(f"[ROUTER] GET /goals/{pet_id}/active - Starting request")
+    logger.info(f"[ROUTER] User: {current_user.id}")
+    
     try:
         # Verify pet ownership
         from app.shared.services.pet_authorization import verify_pet_ownership
         await verify_pet_ownership(pet_id, current_user.id, supabase)
         
+        logger.info(f"[ROUTER] Pet ownership verified")
+        
         # Get active weight goal
         service = get_weight_service(supabase)
+        logger.info(f"[ROUTER] Calling service.get_active_weight_goal()")
         goal = await service.get_active_weight_goal(pet_id, current_user.id)
+        
+        logger.info(f"[ROUTER] Service returned goal: {goal is not None}")
+        if goal:
+            logger.info(f"[ROUTER] Goal ID: {goal.id}, Target: {goal.target_weight_kg}kg")
         
         # FastAPI automatically serializes None as null in JSON for Optional response types
         # This should work correctly with Swift's JSONDecoder for optional types
+        logger.info(f"[ROUTER] Returning goal to client: {goal}")
         return goal
         
     except Exception as e:
+        logger.error(f"[ROUTER] Error getting active weight goal: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get active weight goal: {str(e)}"
