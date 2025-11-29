@@ -83,7 +83,7 @@ class WeightTrackingService:
         self, 
         pet_id: str, 
         user_id: str,
-        days_back: int = 30
+        days_back: int = 365
     ) -> List[PetWeightRecordResponse]:
         """
         Get weight history for a pet
@@ -95,21 +95,30 @@ class WeightTrackingService:
         Args:
             pet_id: Pet ID
             user_id: User ID for authorization (used for logging/audit)
-            days_back: Number of days to look back
+            days_back: Number of days to look back (default: 365, use 0 for all records)
             
         Returns:
             List of weight records (empty list if no records exist)
         """
         # Get weight records
         # Note: Pet ownership is verified by the router before calling this method
-        start_date = DateTimeService.now() - timedelta(days=days_back)
+        logger.info(f"Getting weight history for pet {pet_id}, days_back: {days_back}")
         
-        response = self.supabase.table("pet_weight_records")\
+        query = self.supabase.table("pet_weight_records")\
             .select("*")\
-            .eq("pet_id", pet_id)\
-            .gte("recorded_at", start_date.isoformat())\
-            .order("recorded_at", desc=True)\
-            .execute()
+            .eq("pet_id", pet_id)
+        
+        # If days_back is 0, get all records; otherwise filter by date
+        if days_back > 0:
+            start_date = DateTimeService.now() - timedelta(days=days_back)
+            query = query.gte("recorded_at", start_date.isoformat())
+            logger.info(f"Filtering records from {start_date.isoformat()}")
+        else:
+            logger.info("Getting ALL weight records (no date filter)")
+        
+        response = query.order("recorded_at", desc=True).execute()
+        
+        logger.info(f"Found {len(response.data)} weight records for pet {pet_id}")
         
         # Return empty list if no records exist (200 status with empty data)
         return [PetWeightRecordResponse(**record) for record in response.data]

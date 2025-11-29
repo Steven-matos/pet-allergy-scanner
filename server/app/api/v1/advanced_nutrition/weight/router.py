@@ -80,7 +80,7 @@ async def record_weight(
 @router.get("/history/{pet_id}", response_model=List[PetWeightRecordResponse])
 async def get_weight_history(
     pet_id: str,
-    days: int = Query(30, description="Number of days to retrieve"),
+    days: int = Query(365, description="Number of days to retrieve (default: 1 year, use 0 for all)"),
     current_user: User = Depends(get_current_user),
     supabase: Client = Depends(get_authenticated_supabase_client)
 ):
@@ -89,7 +89,7 @@ async def get_weight_history(
     
     Args:
         pet_id: Pet ID
-        days: Number of days to retrieve
+        days: Number of days to retrieve (default: 365, use 0 for all records)
         current_user: Current authenticated user
         
     Returns:
