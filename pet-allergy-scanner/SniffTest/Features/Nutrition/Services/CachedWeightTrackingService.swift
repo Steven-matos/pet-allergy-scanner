@@ -649,31 +649,27 @@ class CachedWeightTrackingService: ObservableObject {
     private func updatePetWeight(petId: String, weightKg: Double) async {
         print("🐾 [updatePetWeight] Starting - petId: \(petId), weightKg: \(weightKg)")
         
-        // Find the pet in PetService and update its weight
-        if let petIndex = petService.pets.firstIndex(where: { $0.id == petId }) {
-            print("🐾 [updatePetWeight] Found pet at index \(petIndex)")
-            
-            let petUpdate = PetUpdate(
-                name: nil,
-                breed: nil,
-                birthday: nil,
-                weightKg: weightKg,
-                activityLevel: nil,
-                imageUrl: nil,
-                knownSensitivities: nil,
-                vetName: nil,
-                vetPhone: nil
-            )
-            
-            // Update the pet's weight through PetService
-            await MainActor.run {
-                print("🐾 [updatePetWeight] Calling petService.updatePet...")
-                petService.updatePet(id: petId, petUpdate: petUpdate)
-                print("✅ [updatePetWeight] Pet weight updated in PetService")
-            }
+        // The backend has already updated the pet's weight in the database
+        // We need to refresh the pet data from the server to get the updated weight
+        
+        // Force refresh pets from server to get the latest weight
+        await MainActor.run {
+            print("🔄 [updatePetWeight] Forcing pet data refresh from server...")
+            petService.loadPets(forceRefresh: true)
+        }
+        
+        // Wait for pets to reload
+        var waitCount = 0
+        while petService.isLoading && waitCount < 30 { // Max 3 seconds
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            waitCount += 1
+        }
+        
+        // Verify the pet was updated
+        if let updatedPet = petService.pets.first(where: { $0.id == petId }) {
+            print("✅ [updatePetWeight] Pet refreshed - current weight: \(updatedPet.weightKg ?? 0) kg")
         } else {
-            print("⚠️ [updatePetWeight] Pet not found in PetService - ID: \(petId)")
-            print("   Available pet IDs: \(petService.pets.map { $0.id })")
+            print("⚠️ [updatePetWeight] Pet not found after refresh - ID: \(petId)")
         }
     }
     
