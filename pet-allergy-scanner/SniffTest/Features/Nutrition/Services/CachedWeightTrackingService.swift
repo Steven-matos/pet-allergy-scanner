@@ -270,20 +270,26 @@ class CachedWeightTrackingService: ObservableObject {
             }
         }
         
-        // Check if we already have data in @Published properties
-        let hasInMemoryHistory = !(weightHistory[petId]?.isEmpty ?? true)
-        let hasInMemoryGoal = weightGoals[petId] != nil
-        let hasInMemoryData = hasInMemoryHistory || hasInMemoryGoal
-        
-        print("📊 [loadWeightData] In-memory data check:")
-        print("   - History count: \(weightHistory[petId]?.count ?? 0)")
-        print("   - Has goal: \(hasInMemoryGoal)")
-        print("   - Has in-memory data: \(hasInMemoryData)")
-        
-        // If we already have data in memory and not forcing refresh, use it
-        if hasInMemoryData && !forceRefresh {
-            print("✅ [loadWeightData] Already have data in memory, skipping load")
-            return
+        // CRITICAL: If forceRefresh is true, always fetch from server
+        // This ensures we get the latest data including goals from database
+        if !forceRefresh {
+            // Only check in-memory data if NOT forcing refresh
+            let hasInMemoryHistory = !(weightHistory[petId]?.isEmpty ?? true)
+            let hasInMemoryGoal = weightGoals[petId] != nil
+            let hasInMemoryData = hasInMemoryHistory || hasInMemoryGoal
+            
+            print("📊 [loadWeightData] In-memory data check:")
+            print("   - History count: \(weightHistory[petId]?.count ?? 0)")
+            print("   - Has goal: \(hasInMemoryGoal)")
+            print("   - Has in-memory data: \(hasInMemoryData)")
+            
+            // If we already have data in memory and not forcing refresh, use it
+            if hasInMemoryData {
+                print("✅ [loadWeightData] Already have data in memory, skipping load")
+                return
+            }
+        } else {
+            print("🔄 [loadWeightData] Force refresh requested - fetching from server regardless of cached data")
         }
         
         // Create and track the load task
