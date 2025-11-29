@@ -89,10 +89,10 @@ class PetWeightGoalBase(BaseModel):
     """Base weight goal model"""
     pet_id: str
     goal_type: WeightGoalType
-    target_weight_kg: Optional[float] = Field(None, gt=0, le=200, alias="targetWeightKg")
-    current_weight_kg: Optional[float] = Field(None, gt=0, le=200, alias="currentWeightKg")
-    target_date: Optional[date] = Field(None, alias="targetDate")
-    is_active: bool = Field(True, alias="isActive")
+    target_weight_kg: Optional[float] = Field(None, gt=0, le=200, serialization_alias="targetWeightKg", validation_alias="targetWeightKg")
+    current_weight_kg: Optional[float] = Field(None, gt=0, le=200, serialization_alias="currentWeightKg", validation_alias="currentWeightKg")
+    target_date: Optional[date] = Field(None, serialization_alias="targetDate", validation_alias="targetDate")
+    is_active: bool = Field(True, serialization_alias="isActive", validation_alias="isActive")
     notes: Optional[str] = Field(None, max_length=1000)
     
     @field_validator('notes')
@@ -138,8 +138,8 @@ class PetWeightGoalCreate(PetWeightGoalBase):
 class PetWeightGoalResponse(PetWeightGoalBase):
     """Weight goal response model"""
     id: str
-    created_at: datetime = Field(alias="createdAt")
-    updated_at: datetime = Field(alias="updatedAt")
+    created_at: datetime = Field(serialization_alias="createdAt", validation_alias="createdAt")
+    updated_at: datetime = Field(serialization_alias="updatedAt", validation_alias="updatedAt")
     
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
