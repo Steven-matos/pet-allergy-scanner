@@ -105,6 +105,7 @@ class WeightTrackingService:
         # Get weight records
         # Note: Pet ownership is verified by the router before calling this method
         logger.info(f"Getting weight history for pet {pet_id}, days_back: {days_back}")
+        logger.info(f"self.supabase type: {type(self.supabase)}")
         
         # Build query with pet filter
         query = self.supabase.table("pet_weight_records").select("*").eq("pet_id", pet_id)
