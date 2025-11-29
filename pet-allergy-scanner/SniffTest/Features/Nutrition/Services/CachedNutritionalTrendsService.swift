@@ -540,12 +540,17 @@ class CachedNutritionalTrendsService: ObservableObject {
                 responseType: NutritionalTrendsDashboard.self
             )
             
-            guard let correlation = response.weightCorrelation else { return nil }
+            guard let correlationDict = response.weightCorrelation else { return nil }
+            
+            // Extract values from dictionary with defaults
+            let correlationValue = Double(correlationDict["correlation"] ?? "0") ?? 0.0
+            let strengthValue = correlationDict["strength"] ?? "insufficient_data"
+            let interpretationValue = correlationDict["interpretation"] ?? "Not enough data"
             
             return WeightCorrelation(
-                correlation: correlation.correlation,
-                strength: correlation.strength,
-                interpretation: correlation.interpretation
+                correlation: correlationValue,
+                strength: strengthValue,
+                interpretation: interpretationValue
             )
         } catch {
             return nil
