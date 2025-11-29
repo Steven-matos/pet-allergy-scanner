@@ -270,6 +270,19 @@ class WeightTrackingService:
             logger.warning(f"  3. RLS policy blocking access")
             logger.warning(f"  4. Goal exists for different pet_id")
             return None
+        
+        # Found an active goal - process and return it
+        goal_data = response.data[0]
+        logger.info(f"[get_active_weight_goal] Found active weight goal:")
+        logger.info(f"  - ID: {goal_data.get('id')}")
+        logger.info(f"  - Goal Type: {goal_data.get('goal_type')}")
+        logger.info(f"  - Target Weight: {goal_data.get('target_weight_kg')} kg")
+        logger.info(f"  - Current Weight: {goal_data.get('current_weight_kg')} kg")
+        logger.info(f"  - Target Date: {goal_data.get('target_date')}")
+        logger.info(f"  - Is Active: {goal_data.get('is_active')}")
+        logger.info(f"  - Notes: {goal_data.get('notes')}")
+        
+        return PetWeightGoalResponse(**goal_data)
     
     async def delete_weight_record(self, record_id: str, pet_id: str, user_id: str) -> dict:
         """
@@ -335,18 +348,6 @@ class WeightTrackingService:
         except Exception as e:
             logger.error(f"[delete_weight_record] Error: {str(e)}")
             raise
-        
-        goal_data = response.data[0]
-        logger.info(f"[get_active_weight_goal] Found active weight goal:")
-        logger.info(f"  - ID: {goal_data.get('id')}")
-        logger.info(f"  - Goal Type: {goal_data.get('goal_type')}")
-        logger.info(f"  - Target Weight: {goal_data.get('target_weight_kg')} kg")
-        logger.info(f"  - Current Weight: {goal_data.get('current_weight_kg')} kg")
-        logger.info(f"  - Target Date: {goal_data.get('target_date')}")
-        logger.info(f"  - Is Active: {goal_data.get('is_active')}")
-        logger.info(f"  - Notes: {goal_data.get('notes')}")
-        
-        return PetWeightGoalResponse(**goal_data)
     
     async def analyze_weight_trend(
         self, 
