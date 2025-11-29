@@ -56,6 +56,110 @@ struct WeightManagementView: View {
         petSelectionService.selectedPet
     }
     
+    // MARK: - Data Loading Functions
+    
+    /**
+     * Load weight data synchronously (for button taps)
+     */
+    private func loadWeightData() {
+        guard let pet = selectedPet else { return }
+        Task {
+            await loadWeightDataAsync(showLoadingIfNeeded: true)
+        }
+    }
+    
+    /**
+     * Refresh weight data (alias for loadWeightData for clarity)
+     */
+    private func refreshWeightData() async {
+        guard let pet = selectedPet else { return }
+        await loadWeightDataAsync(showLoadingIfNeeded: false)
+    }
+    
+    /**
+     * Load weight data asynchronously with force refresh
+     */
+    private func loadWeightDataAsync(showLoadingIfNeeded: Bool) async {
+        guard let pet = selectedPet else { return }
+        
+        if showLoadingIfNeeded {
+            await MainActor.run {
+                isLoading = true
+                errorMessage = nil
+            }
+        }
+        
+        do {
+            // Force refresh to get latest data from server
+            try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+            
+            await MainActor.run {
+                isLoading = false
+                refreshTrigger.toggle() // Force UI refresh
+            }
+        } catch {
+            await MainActor.run {
+                isLoading = false
+                errorMessage = "Failed to load weight data: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /**
+     * Undo the most recent weight entry
+     */
+    private func undoLastWeight() {
+        Task {
+            await undoLastWeightEntry()
+        }
+    }
+    
+    /**
+     * Undo the most recent weight entry (async)
+     */
+    private func undoLastWeightEntry() async {
+        guard let pet = selectedPet, let recordId = lastRecordedWeightId else { return }
+        
+        print("↩️ [undoLastWeightEntry] Attempting to undo last weight entry: \(recordId)")
+        
+        await MainActor.run {
+            isLoading = true
+            errorMessage = nil
+            showingUndoToast = false // Dismiss toast immediately
+        }
+        
+        do {
+            try await weightService.deleteWeightRecord(recordId: recordId, petId: pet.id)
+            print("✅ [undoLastWeightEntry] Last weight entry undone successfully.")
+            
+            // After undo, refresh all weight data to reflect the change
+            await loadWeightDataAsync(showLoadingIfNeeded: false)
+            
+            await MainActor.run {
+                isLoading = false
+                lastRecordedWeightId = nil // Clear the ID after undo
+            }
+        } catch {
+            print("❌ [undoLastWeightEntry] Failed to undo last weight entry: \(error.localizedDescription)")
+            await MainActor.run {
+                isLoading = false
+                errorMessage = "Failed to undo: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /**
+     * Load weight data only if not already loaded
+     */
+    private func loadWeightDataIfNeeded() {
+        guard let pet = selectedPet else { return }
+        
+        // Only load if we don't have data for this pet
+        if weightService.weightHistory(for: pet.id).isEmpty {
+            loadWeightData()
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
             if isLoading {
