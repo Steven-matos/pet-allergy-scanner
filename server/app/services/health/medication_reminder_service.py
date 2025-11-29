@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 import json
 
-from app.models.medication_reminder import (
+from app.models.health.medication_reminder import (
     MedicationReminder,
     MedicationReminderCreate,
     MedicationReminderUpdate,

@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from supabase import Client
-from app.models.nutritional_standards import (
+from app.models.nutrition.nutritional_standards import (
     NutritionalStandardResponse,
     NutritionalRecommendation,
     NutritionalAnalysisRequest,
@@ -16,10 +16,10 @@ from app.models.nutritional_standards import (
     LifeStage,
     ActivityLevel
 )
-from app.models.pet import PetResponse, PetLifeStage, PetActivityLevel
-from app.models.scan import NutritionalAnalysis
-from app.services.nutritional_calculator import NutritionalCalculator
-from app.models.user import User
+from app.models.core.pet import PetResponse, PetLifeStage, PetActivityLevel
+from app.models.scanning.scan import NutritionalAnalysis
+from app.services import NutritionalCalculator
+from app.models.core.user import User
 from app.core.security.jwt_handler import get_current_user
 from app.shared.services.pet_authorization import verify_pet_ownership
 

@@ -3,7 +3,7 @@ Database configuration and initialization with connection pooling
 """
 
 from supabase import create_client, Client
-from app.core.config import settings
+from ..config import settings
 import logging
 import asyncio
 from typing import Optional

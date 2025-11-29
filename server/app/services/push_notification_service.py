@@ -270,7 +270,7 @@ class PushNotificationService:
             device_token: Invalid device token to remove
         """
         try:
-            from app.database import get_supabase_service_role_client
+            from app.core.database import get_supabase_service_role_client
             from app.shared.services.database_operation_service import DatabaseOperationService
             from app.shared.utils.async_supabase import execute_async
             

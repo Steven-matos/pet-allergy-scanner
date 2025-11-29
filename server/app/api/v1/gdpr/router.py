@@ -3,7 +3,7 @@ GDPR compliance router
 """
 
 from fastapi import APIRouter, HTTPException, Depends, status, Response
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.services.gdpr_service import GDPRService
 from app.core.config import settings

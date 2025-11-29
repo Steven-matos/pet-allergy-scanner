@@ -4,9 +4,9 @@ Scan management and analysis router
 
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import List, Dict
-from app.models.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus, ScanMethod
-from app.models.ingredient import IngredientAnalysis
-from app.models.user import UserResponse
+from app.models.scanning.scan import ScanCreate, ScanResponse, ScanUpdate, ScanAnalysisRequest, ScanResult, ScanStatus, ScanMethod
+from app.models.scanning.ingredient import IngredientAnalysis
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.api.v1.ingredients.router import analyze_ingredients
 from app.api.v1.dependencies import get_authenticated_supabase_client

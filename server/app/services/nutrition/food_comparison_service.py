@@ -10,11 +10,11 @@ from decimal import Decimal
 import statistics
 from supabase import Client
 from app.shared.services.database_operation_service import DatabaseOperationService
-from ..models.advanced_nutrition import (
+from app.models.nutrition.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
     FoodComparisonMetrics, FoodComparisonDashboard
 )
-from ..models.nutrition import FoodAnalysisResponse
+from app.models.nutrition.nutrition import FoodAnalysisResponse
 
 
 class FoodComparisonService:

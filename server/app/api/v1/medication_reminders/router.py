@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 
-from app.database import get_db
+from app.core.database import get_db
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from supabase import Client
-from app.models.medication_reminder import (
+from app.models.health.medication_reminder import (
     MedicationReminder,
     MedicationReminderCreate,
     MedicationReminderUpdate,
@@ -20,7 +20,7 @@ from app.models.medication_reminder import (
     MedicationReminderListResponse,
     MedicationFrequency
 )
-from app.services.medication_reminder_service import MedicationReminderService
+from app.services import MedicationReminderService
 from app.shared.services.pet_authorization import verify_pet_ownership
 
 router = APIRouter(prefix="/medication-reminders", tags=["medication-reminders"])

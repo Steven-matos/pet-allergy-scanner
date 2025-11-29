@@ -169,7 +169,7 @@ class SupabaseAuthService:
         Returns:
             Supabase client with service role privileges (from connection pool)
         """
-        from app.database import get_supabase_service_role_client
+        from app.core.database import get_supabase_service_role_client
         return get_supabase_service_role_client()
     
     @staticmethod

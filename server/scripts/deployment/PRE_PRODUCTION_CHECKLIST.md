@@ -6,7 +6,7 @@ Run the pre-production check script before deploying:
 
 ```bash
 cd server
-PYTHONPATH=/path/to/server python3 scripts/pre_production_check.py
+PYTHONPATH=/path/to/server python3 scripts/deployment/pre_production_check.py
 ```
 
 ## What the Script Checks
@@ -77,7 +77,7 @@ PYTHONPATH=/path/to/server python3 scripts/pre_production_check.py
 
 ```bash
 # Run pre-production check
-python3 scripts/pre_production_check.py
+python3 scripts/deployment/pre_production_check.py
 
 # Run all tests
 python tests/run_tests.py

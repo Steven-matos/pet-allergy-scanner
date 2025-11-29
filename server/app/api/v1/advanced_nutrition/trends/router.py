@@ -10,14 +10,14 @@ from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from datetime import datetime, date, timedelta
 
-from app.database import get_supabase_client
-from app.models.advanced_nutrition import (
+from app.core.database import get_supabase_client
+from app.models.nutrition.advanced_nutrition import (
     NutritionalTrendResponse, NutritionalTrendsDashboard
 )
-from app.models.user import User
+from app.models.core.user import User
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
-from app.services.nutritional_trends_service import NutritionalTrendsService
+from app.services import NutritionalTrendsService
 from supabase import Client
 
 router = APIRouter(prefix="/trends", tags=["advanced-nutrition-trends"])

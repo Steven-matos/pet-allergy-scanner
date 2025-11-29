@@ -12,12 +12,12 @@ from app.shared.services.datetime_service import DateTimeService
 
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from supabase import Client
-from app.models.advanced_nutrition import (
+from app.models.nutrition.advanced_nutrition import (
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
     AdvancedNutritionResponse
 )
-from app.models.user import User
+from app.models.core.user import User
 from app.core.security.jwt_handler import get_current_user
 from app.services.analytics import (
     HealthAnalyticsService, 

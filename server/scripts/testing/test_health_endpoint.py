@@ -10,7 +10,8 @@ import sys
 from pathlib import Path
 
 # Add server directory to path
-server_dir = Path(__file__).parent
+# Script is now in scripts/testing/, so go up two levels to get to server/
+server_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(server_dir))
 
 async def test_health_endpoint():

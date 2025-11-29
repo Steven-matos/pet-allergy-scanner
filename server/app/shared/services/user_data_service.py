@@ -14,8 +14,8 @@ import logging
 from typing import Optional, Dict, Any
 from supabase import Client
 
-from app.models.user import User, UserResponse
-from app.database import get_supabase_service_role_client
+from app.models.core.user import User, UserResponse
+from app.core.database import get_supabase_service_role_client
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

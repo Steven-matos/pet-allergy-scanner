@@ -4,9 +4,9 @@ Authentication router for user management
 
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from app.models.user import UserCreate, UserResponse, UserUpdate, UserLogin
+from app.models.core.user import UserCreate, UserResponse, UserUpdate, UserLogin
 from app.core.config import settings
-from app.database import get_supabase_client
+from app.core.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
 from app.core.validation.input_validator import InputValidator
@@ -725,7 +725,7 @@ async def refresh_token(
             logger.error(f"Failed to get merged user data: {user_data_error}", exc_info=True)
             # If we can't get full user data, return basic user info from auth response
             # This allows token refresh to succeed even if user data fetch fails
-            from app.models.user import UserResponse
+            from app.models.core.user import UserResponse
             user_data = UserResponse(
                 id=user.id,
                 email=user.email or "",

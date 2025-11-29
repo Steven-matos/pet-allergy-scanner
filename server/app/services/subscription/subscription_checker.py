@@ -9,8 +9,8 @@ import logging
 from typing import Optional, Dict, Any
 from supabase import Client
 
-from app.services.revenuecat_service import RevenueCatService
-from app.models.user import UserRole
+from app.services.subscription.revenuecat_service import RevenueCatService
+from app.models.core.user import UserRole
 
 logger = logging.getLogger(__name__)
 

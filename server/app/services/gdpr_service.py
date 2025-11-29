@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from app.shared.services.datetime_service import DateTimeService
 from fastapi import HTTPException, status
 from app.core.config import settings
-from app.database import get_supabase_client
-from app.database import get_supabase_service_role_client
+from app.core.database import get_supabase_client
+from app.core.database import get_supabase_service_role_client
 from app.shared.services.database_operation_service import DatabaseOperationService
 
 logger = get_logger(__name__)

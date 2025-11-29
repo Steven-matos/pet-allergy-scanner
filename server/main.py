@@ -16,7 +16,7 @@ import time
 import logging
 from dotenv import load_dotenv
 
-from app.database import init_db
+from app.core.database import init_db
 from app.api.v1.auth.router import router as auth_router
 from app.api.v1.pets.router import router as pets_router
 from app.api.v1.ingredients.router import router as ingredients_router
@@ -27,23 +27,23 @@ from app.api.v1.monitoring.router import router as monitoring_router
 from app.api.v1.gdpr.router import router as gdpr_router
 from app.api.v1.notifications.router import router as notifications_router
 from app.api.v1.nutritional_analysis.router import router as nutritional_analysis_router
-from app.api.v1.advanced_nutrition.router import router as advanced_nutrition_router
+from app.api.v1.advanced_nutrition import router as advanced_nutrition_router
 from app.api.v1.nutrition import router as nutrition_router
 from app.api.v1.data_quality import router as data_quality_router
 from app.api.v1.health_events.router import router as health_events_router
 from app.api.v1.waitlist.router import router as waitlist_router
 from app.api.v1.subscriptions.revenuecat_webhook import router as revenuecat_webhook_router
 from app.core.config import settings
-from app.middleware.security import SecurityHeadersMiddleware
-from app.middleware.rate_limit_redis import RedisRateLimitMiddleware
-from app.middleware.audit import AuditLogMiddleware
-from app.middleware.request_limits import (
+from app.core.middleware import (
+    SecurityHeadersMiddleware,
+    RedisRateLimitMiddleware,
+    AuditLogMiddleware,
     RangeHeaderValidationMiddleware,
     RequestSizeMiddleware,
     APIVersionMiddleware,
-    RequestTimeoutMiddleware
+    RequestTimeoutMiddleware,
+    QueryMonitoringMiddleware,
 )
-from app.middleware.query_monitoring import QueryMonitoringMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -146,7 +146,7 @@ app.add_middleware(
 # Add compression middleware (lower threshold for mobile optimization)
 app.add_middleware(GZipMiddleware, minimum_size=200)  # Compress responses >200 bytes
 # Add JSON compression middleware (always compresses JSON for mobile)
-from app.middleware.json_compression import JSONCompressionMiddleware
+from app.core.middleware import JSONCompressionMiddleware
 app.add_middleware(JSONCompressionMiddleware)  # Always compress JSON responses
 
 # Add error handlers

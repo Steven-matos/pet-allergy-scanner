@@ -13,14 +13,14 @@ from fastapi import HTTPException, status
 from supabase import Client
 import logging
 
-from app.models.subscription import (
+from app.models.core.subscription import (
     SubscriptionCreate,
     SubscriptionUpdate,
     SubscriptionStatus,
     SubscriptionTier,
     SubscriptionResponse
 )
-from app.models.user import UserRole
+from app.models.core.user import UserRole
 
 logger = logging.getLogger(__name__)
 

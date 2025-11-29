@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 
-from app.database import get_db
+from app.core.database import get_db
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from supabase import Client
-from app.models.health_event import (
+from app.models.health.health_event import (
     HealthEvent,
     HealthEventCreate,
     HealthEventUpdate,
@@ -20,7 +20,7 @@ from app.models.health_event import (
     HealthEventListResponse,
     HealthEventCategory
 )
-from app.services.health_event_service import HealthEventService
+from app.services import HealthEventService
 from app.shared.services.pet_authorization import verify_pet_ownership
 from app.shared.services.response_utils import handle_empty_response
 
@@ -226,7 +226,7 @@ async def get_health_event_types():
     """
     Get list of available health event types with their categories
     """
-    from app.models.health_event import HealthEventType
+    from app.models.health.health_event import HealthEventType
     
     return [
         {

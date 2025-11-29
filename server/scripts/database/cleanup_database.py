@@ -9,7 +9,7 @@ This script will:
 3. Provide statistics on what was cleaned up
 
 Usage:
-    python scripts/cleanup_database.py [--dry-run] [--confirm]
+    python scripts/database/cleanup_database.py [--dry-run] [--confirm]
 """
 
 import asyncio

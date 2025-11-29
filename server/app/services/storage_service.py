@@ -5,7 +5,7 @@ Manages uploads for user images, pet images, and scan images
 
 from typing import Optional, Tuple
 from fastapi import UploadFile, HTTPException, status
-from app.database import get_supabase_client
+from app.core.database import get_supabase_client
 from app.services.image_optimizer import ImageOptimizerService
 from app.utils.logging_config import get_logger
 import uuid

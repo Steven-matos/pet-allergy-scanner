@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from app.shared.services.datetime_service import DateTimeService
 from app.shared.services.database_operation_service import DatabaseOperationService
 from app.core.config import settings
-from app.database import get_supabase_client
+from app.core.database import get_supabase_client
 
 logger = get_logger(__name__)
 

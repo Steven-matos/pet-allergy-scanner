@@ -8,14 +8,14 @@ from typing import Optional
 import logging
 
 from app.api.v1.dependencies import get_current_user, get_supabase_client
-from app.models.user import User, UserRole
-from app.models.subscription import (
+from app.models.core.user import User, UserRole
+from app.models.core.subscription import (
     AppStoreReceiptVerification,
     AppStoreServerNotification,
     SubscriptionResponse
 )
 from app.services.subscription_service import SubscriptionService
-from app.services.revenuecat_service import RevenueCatService
+from app.services.subscription import RevenueCatService
 from app.services.subscription_checker import SubscriptionChecker
 from app.core.config import settings
 from pydantic import BaseModel

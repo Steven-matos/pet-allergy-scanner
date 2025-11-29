@@ -10,14 +10,14 @@ from fastapi.security import HTTPAuthorizationCredentials
 from typing import List
 from datetime import datetime
 
-from app.database import get_db
-from app.models.nutrition import (
+from app.core.database import get_db
+from app.models.nutrition.nutrition import (
     FoodAnalysisCreate,
     FoodAnalysisResponse,
     NutritionCompatibilityResponse,
     NutritionAnalysisRequest
 )
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.utils.logging_config import get_logger

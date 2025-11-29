@@ -11,7 +11,7 @@ from decimal import Decimal
 import statistics
 import json
 from supabase import Client
-from ..models.advanced_nutrition import (
+from app.models.nutrition.advanced_nutrition import (
     AnalyticsType, NutritionalAnalyticsCacheResponse,
     HealthInsights, NutritionalPatterns,
     NutritionalRecommendationCreate, NutritionalRecommendationResponse

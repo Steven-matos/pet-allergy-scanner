@@ -6,9 +6,9 @@ API endpoints for data quality assessment and analysis
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Dict, Any, Optional
 
-from app.database import get_db
+from app.core.database import get_db
 from app.services.data_quality_service import DataQualityService, DataQualityMetrics
-from app.models.food_items import FoodItemResponse
+from app.models.nutrition.food_items import FoodItemResponse
 import logging
 import asyncio
 

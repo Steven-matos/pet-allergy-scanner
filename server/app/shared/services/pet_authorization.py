@@ -10,8 +10,8 @@ Follows DRY principle: Single source of truth for pet authorization
 from fastapi import HTTPException, status
 from typing import Any, Dict
 
-from app.database import get_supabase_client
-from app.models.user import User
+from app.core.database import get_supabase_client
+from app.models.core.user import User
 from app.shared.utils.async_supabase import execute_async
 
 

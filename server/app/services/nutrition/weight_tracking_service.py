@@ -10,10 +10,10 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 import statistics
 from supabase import Client
-from ..utils.logging_config import get_logger
-from ..shared.services.datetime_service import DateTimeService
-from ..shared.services.database_operation_service import DatabaseOperationService
-from ..models.advanced_nutrition import (
+from ...utils.logging_config import get_logger
+from ...shared.services.datetime_service import DateTimeService
+from ...shared.services.database_operation_service import DatabaseOperationService
+from app.models.nutrition.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
     WeightTrendAnalysis, TrendDirection, TrendStrength,

@@ -15,8 +15,8 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 
 from app.core.config import settings
-from app.database import get_supabase_client
-from app.models.user import User
+from app.core.database import get_supabase_client
+from app.models.core.user import User
 from app.core.security.auth_enhancements import (
     AuthSecurityService,
     AuthEventTracker

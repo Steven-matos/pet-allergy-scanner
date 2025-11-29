@@ -14,8 +14,8 @@ from app.shared.services.database_operation_service import DatabaseOperationServ
 from typing import Optional
 from supabase import Client
 
-from app.models.user import UserRole
-from app.services.revenuecat_service import RevenueCatService
+from app.models.core.user import UserRole
+from app.services.subscription import RevenueCatService
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from datetime import datetime, date, timedelta
 from app.shared.services.datetime_service import DateTimeService
 
 from supabase import Client
-from app.models.advanced_nutrition import (
+from app.models.nutrition.advanced_nutrition import (
     NutritionalRecommendationCreate, 
     NutritionalRecommendationResponse
 )

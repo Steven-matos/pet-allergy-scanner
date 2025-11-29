@@ -12,12 +12,12 @@ from app.shared.services.datetime_service import DateTimeService
 
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from supabase import Client
-from app.models.nutrition import (
+from app.models.nutrition.nutrition import (
     NutritionalRequirementsCreate,
     NutritionalRequirementsResponse
 )
-from app.models.user import UserResponse
-from app.models.pet import PetResponse
+from app.models.core.user import UserResponse
+from app.models.core.pet import PetResponse
 from app.core.security.jwt_handler import get_current_user
 
 # Import centralized services

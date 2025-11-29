@@ -1,21 +1,200 @@
-# Data models for SniffTest
+"""
+Data Models for SniffTest
 
-from .health_event import (
-    HealthEvent,
+Organized by domain: core, nutrition, health, scanning
+All models are re-exported here for convenient imports.
+"""
+
+# Core models
+from .core import (
+    # User models
+    User,
+    UserRole,
+    UserBase,
+    UserCreate,
+    UserUpdate,
+    UserResponse,
+    UserInDB,
+    UserLogin,
+    # Pet models
+    PetSpecies,
+    PetActivityLevel,
+    PetLifeStage,
+    PetBreed,
+    PetBase,
+    PetCreate,
+    PetUpdate,
+    PetResponse,
+    # Subscription models
+    SubscriptionStatus,
+    SubscriptionTier,
+    SubscriptionBase,
+    SubscriptionCreate,
+    SubscriptionUpdate,
+    SubscriptionResponse,
+    # Waitlist models
+    WaitlistSignup,
+    WaitlistResponse,
+)
+
+# Nutrition models
+from .nutrition import (
+    # Nutrition models
+    NutritionCompatibilityLevel,
+    NutritionalRequirementsBase,
+    NutritionalRequirementsCreate,
+    NutritionalRequirementsResponse,
+    FoodAnalysisBase,
+    FoodAnalysisCreate,
+    NutritionalInfo,
+    FoodAnalysisResponse,
+    NutritionCompatibilityResponse,
+    FeedingRecordBase,
+    FeedingRecordCreate,
+    FeedingRecordResponse,
+    DailyNutritionSummaryBase,
+    DailyNutritionSummaryResponse,
+    MultiPetNutritionInsights,
+    ComparativeInsight,
+    NutritionAnalysisRequest,
+    NutritionRecommendation,
+    NutritionGoal,
+    # Food items models
+    NutritionalInfoBase,
+    FoodItemBase,
+    FoodItemCreate,
+    FoodItemUpdate,
+    FoodItemResponse,
+    FoodSearchRequest,
+    FoodSearchResponse,
+    FoodItemAnalysisResponse,
+    # Calorie goals models
+    CalorieGoalBase,
+    CalorieGoalCreate,
+    CalorieGoalUpdate,
+    CalorieGoalResponse,
+    CalorieGoalProgress,
+    # Advanced nutrition models
+    WeightGoalType,
+    RecommendationPriority,
+    RecommendationCategory,
+    TrendDirection,
+    TrendStrength,
+    PetWeightRecordBase,
+    PetWeightRecordCreate,
+    PetWeightRecordResponse,
+    PetWeightGoalBase,
+    PetWeightGoalCreate,
+    PetWeightGoalResponse,
+    NutritionalTrendBase,
+    NutritionalTrendResponse,
+    WeightTrendAnalysis,
+    FoodComparisonBase,
+    FoodComparisonCreate,
+    FoodComparisonResponse,
+    FoodComparisonMetrics,
+    AnalyticsType,
+    NutritionalAnalyticsCacheBase,
+    NutritionalAnalyticsCacheResponse,
+    NutritionalRecommendationBase,
+    NutritionalRecommendationCreate,
+    NutritionalRecommendationResponse,
+    WeeklyNutritionSummary,
+    MonthlyTrendAnalysis,
+    HealthInsights,
+    NutritionalPatterns,
+    WeightTrackingRequest,
+    TrendAnalysisRequest,
+    FoodComparisonRequest,
+    AnalyticsRequest,
+    AdvancedNutritionResponse,
+    WeightManagementDashboard,
+    NutritionalTrendsDashboard,
+    FoodComparisonDashboard,
+    # Nutritional standards models
+    Species,
+    LifeStage,
+    ActivityLevel,
+    NutritionalStandardBase,
+    NutritionalStandardCreate,
+    NutritionalStandardUpdate,
+    NutritionalStandardResponse,
+    StandardNutritionalRecommendation,
+    StandardNutritionalAnalysisRequest,
+)
+
+# Health models
+from .health import (
     HealthEventCategory,
     HealthEventType,
+    HealthEventBase,
     HealthEventCreate,
     HealthEventUpdate,
     HealthEventResponse,
-    HealthEventListResponse
+    HealthEventListResponse,
+    HealthEvent,
+    MedicationFrequency,
+    MedicationReminderTime,
+    MedicationReminderBase,
+    MedicationReminderCreate,
+    MedicationReminderUpdate,
+    MedicationReminderResponse,
+    MedicationReminderListResponse,
+    MedicationReminder,
+)
+
+# Scanning models
+from .scanning import (
+    ScanStatus,
+    ScanMethod,
+    NutritionalAnalysis,
+    ScanBase,
+    ScanCreate,
+    ScanUpdate,
+    ScanResponse,
+    ScanAnalysisRequest,
+    ScanResult,
+    IngredientSafety,
+    SpeciesCompatibility,
+    IngredientNutritionalValue,
+    IngredientAnalysisResult,
+    IngredientAnalysis,
 )
 
 __all__ = [
-    "HealthEvent",
-    "HealthEventCategory", 
-    "HealthEventType",
-    "HealthEventCreate",
-    "HealthEventUpdate",
-    "HealthEventResponse",
-    "HealthEventListResponse"
+    # Core models
+    'User', 'UserRole', 'UserBase', 'UserCreate', 'UserUpdate', 'UserResponse', 'UserInDB', 'UserLogin',
+    'PetSpecies', 'PetActivityLevel', 'PetLifeStage', 'PetBreed', 'PetBase', 'PetCreate', 'PetUpdate', 'PetResponse',
+    'SubscriptionStatus', 'SubscriptionTier', 'SubscriptionBase', 'SubscriptionCreate', 'SubscriptionUpdate', 'SubscriptionResponse',
+    'WaitlistSignup', 'WaitlistResponse',
+    # Nutrition models (abbreviated for brevity - all nutrition models are exported)
+    'NutritionCompatibilityLevel', 'NutritionalRequirementsBase', 'NutritionalRequirementsCreate', 'NutritionalRequirementsResponse',
+    'FoodAnalysisBase', 'FoodAnalysisCreate', 'NutritionalInfo', 'FoodAnalysisResponse', 'NutritionCompatibilityResponse',
+    'FeedingRecordBase', 'FeedingRecordCreate', 'FeedingRecordResponse',
+    'DailyNutritionSummaryBase', 'DailyNutritionSummaryResponse', 'MultiPetNutritionInsights', 'ComparativeInsight',
+    'NutritionAnalysisRequest', 'NutritionRecommendation', 'NutritionGoal',
+    'NutritionalInfoBase', 'FoodItemBase', 'FoodItemCreate', 'FoodItemUpdate', 'FoodItemResponse',
+    'FoodSearchRequest', 'FoodSearchResponse', 'FoodItemAnalysisResponse',
+    'CalorieGoalBase', 'CalorieGoalCreate', 'CalorieGoalUpdate', 'CalorieGoalResponse', 'CalorieGoalProgress',
+    'WeightGoalType', 'RecommendationPriority', 'RecommendationCategory', 'TrendDirection', 'TrendStrength',
+    'PetWeightRecordBase', 'PetWeightRecordCreate', 'PetWeightRecordResponse',
+    'PetWeightGoalBase', 'PetWeightGoalCreate', 'PetWeightGoalResponse',
+    'NutritionalTrendBase', 'NutritionalTrendResponse', 'WeightTrendAnalysis',
+    'FoodComparisonBase', 'FoodComparisonCreate', 'FoodComparisonResponse', 'FoodComparisonMetrics',
+    'AnalyticsType', 'NutritionalAnalyticsCacheBase', 'NutritionalAnalyticsCacheResponse',
+    'NutritionalRecommendationBase', 'NutritionalRecommendationCreate', 'NutritionalRecommendationResponse',
+    'WeeklyNutritionSummary', 'MonthlyTrendAnalysis', 'HealthInsights', 'NutritionalPatterns',
+    'WeightTrackingRequest', 'TrendAnalysisRequest', 'FoodComparisonRequest', 'AnalyticsRequest',
+    'AdvancedNutritionResponse', 'WeightManagementDashboard', 'NutritionalTrendsDashboard', 'FoodComparisonDashboard',
+    'Species', 'LifeStage', 'ActivityLevel', 'NutritionalStandardBase', 'NutritionalStandardCreate',
+    'NutritionalStandardUpdate', 'NutritionalStandardResponse', 'StandardNutritionalRecommendation', 'StandardNutritionalAnalysisRequest',
+    # Health models
+    'HealthEventCategory', 'HealthEventType', 'HealthEventBase', 'HealthEventCreate', 'HealthEventUpdate',
+    'HealthEventResponse', 'HealthEventListResponse', 'HealthEvent',
+    'MedicationFrequency', 'MedicationReminderTime', 'MedicationReminderBase', 'MedicationReminderCreate',
+    'MedicationReminderUpdate', 'MedicationReminderResponse', 'MedicationReminderListResponse', 'MedicationReminder',
+    # Scanning models
+    'ScanStatus', 'ScanMethod', 'NutritionalAnalysis', 'ScanBase', 'ScanCreate', 'ScanUpdate', 'ScanResponse',
+    'ScanAnalysisRequest', 'ScanResult',
+    'IngredientSafety', 'SpeciesCompatibility', 'IngredientNutritionalValue', 'IngredientAnalysisResult', 'IngredientAnalysis',
 ]

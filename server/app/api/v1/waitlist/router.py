@@ -3,8 +3,8 @@ Waitlist router for email signup management
 """
 from fastapi import APIRouter, HTTPException, status
 from datetime import datetime
-from app.models.waitlist import WaitlistSignup, WaitlistResponse
-from app.database import get_supabase_service_role_client
+from app.models.core.waitlist import WaitlistSignup, WaitlistResponse
+from app.core.database import get_supabase_service_role_client
 from app.utils.logging_config import get_logger
 
 router = APIRouter()

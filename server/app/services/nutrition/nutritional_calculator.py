@@ -6,14 +6,14 @@ Implements AAFCO guidelines and nutritional recommendations
 from typing import Dict, Optional, Tuple
 from decimal import Decimal, ROUND_HALF_UP
 import math
-from ..models.nutritional_standards import (
+from app.models.nutrition.nutritional_standards import (
     NutritionalStandardResponse, 
     NutritionalRecommendation,
     Species,
     LifeStage,
     ActivityLevel
 )
-from ..models.scan import NutritionalAnalysis
+from app.models.scanning.scan import NutritionalAnalysis
 
 
 class NutritionalCalculator:

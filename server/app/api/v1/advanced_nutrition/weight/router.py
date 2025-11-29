@@ -10,16 +10,16 @@ from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 
-from app.database import get_supabase_client
-from app.models.advanced_nutrition import (
+from app.core.database import get_supabase_client
+from app.models.nutrition.advanced_nutrition import (
     PetWeightRecordCreate, PetWeightRecordResponse,
     PetWeightGoalCreate, PetWeightGoalResponse,
     WeightTrendAnalysis, WeightManagementDashboard
 )
-from app.models.user import User
+from app.models.core.user import User
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
-from app.services.weight_tracking_service import WeightTrackingService
+from app.services import WeightTrackingService
 from supabase import Client
 
 router = APIRouter(prefix="/weight", tags=["advanced-nutrition-weight"])

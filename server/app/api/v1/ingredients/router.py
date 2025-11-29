@@ -4,11 +4,11 @@ Ingredient management and analysis router
 
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Dict
-from app.models.ingredient import IngredientAnalysisResult, IngredientAnalysis
-from app.models.pet import PetSpecies
-from app.models.user import UserResponse
+from app.models.scanning.ingredient import IngredientAnalysisResult, IngredientAnalysis
+from app.models.core.pet import PetSpecies
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
-from app.database import get_supabase_client
+from app.core.database import get_supabase_client
 from supabase import Client
 from app.utils.logging_config import get_logger
 import re

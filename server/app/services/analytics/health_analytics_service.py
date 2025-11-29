@@ -12,7 +12,7 @@ from decimal import Decimal
 import statistics
 
 from supabase import Client
-from app.models.advanced_nutrition import HealthInsights
+from app.models.nutrition.advanced_nutrition import HealthInsights
 
 
 class HealthAnalyticsService:

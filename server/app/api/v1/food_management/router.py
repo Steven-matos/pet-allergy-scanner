@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
 
-from app.database import get_supabase_client, get_db
-from app.models.food_items import (
+from app.core.database import get_supabase_client, get_db
+from app.models.nutrition.food_items import (
     FoodItemCreate,
     FoodItemResponse,
     FoodItemUpdate,
@@ -17,7 +17,7 @@ from app.models.food_items import (
     FoodAnalysisResponse,
     NutritionalInfoBase
 )
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.utils.error_handling import create_error_response, APIError
 from app.utils.logging_config import get_logger
@@ -223,7 +223,7 @@ async def get_food_by_barcode(
     Returns:
         Food item with full details or None if not found
     """
-    from app.database import get_supabase_client
+    from app.core.database import get_supabase_client
     supabase = get_supabase_client()
     
     # Query food_items table by barcode using query builder
@@ -310,7 +310,7 @@ async def create_food_item_with_slash(
     item_data["id"] = IDGenerationService.generate_uuid()
     
     # Insert new food item using service role client to bypass RLS
-    from app.database import get_supabase_service_role_client
+    from app.core.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
     created_item = await db_service.insert_with_timestamps("food_items", item_data)
@@ -375,7 +375,7 @@ async def update_food_item(
     update_data = DataTransformationService.model_to_dict_with_nested(food_update, exclude_none=True)
     
     # Update food item using centralized service
-    from app.database import get_supabase_service_role_client
+    from app.core.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
     updated_item = await db_service.update_with_timestamp("food_items", food_id, update_data)
@@ -435,7 +435,7 @@ async def delete_food_item(
         raise HTTPException(status_code=404, detail="Food item not found")
     
     # Delete food item using centralized service
-    from app.database import get_supabase_service_role_client
+    from app.core.database import get_supabase_service_role_client
     service_supabase = get_supabase_service_role_client()
     db_service = DatabaseOperationService(service_supabase)
     await db_service.delete_record("food_items", food_id)

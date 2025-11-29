@@ -16,7 +16,7 @@ import hmac
 import hashlib
 
 from app.api.v1.dependencies import get_supabase_client
-from app.services.revenuecat_service import RevenueCatService
+from app.services.subscription import RevenueCatService
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)

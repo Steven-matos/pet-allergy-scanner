@@ -12,8 +12,8 @@ from datetime import datetime, timedelta
 from app.shared.services.datetime_service import DateTimeService
 from pydantic import BaseModel
 
-from app.database import get_db
-from app.models.user import UserResponse
+from app.core.database import get_db
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user, security
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.utils.logging_config import get_logger
@@ -131,7 +131,7 @@ async def register_device_token_anonymous(
         try:
             # Use service role client for anonymous device token registration
             # This bypasses RLS policies since this is a backend operation
-            from app.database import get_supabase_service_role_client
+            from app.core.database import get_supabase_service_role_client
             from app.shared.services.database_operation_service import DatabaseOperationService
             
             service_supabase = get_supabase_service_role_client()

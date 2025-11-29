@@ -11,7 +11,7 @@ from app.shared.services.datetime_service import DateTimeService
 import statistics
 
 from supabase import Client
-from app.models.advanced_nutrition import NutritionalPatterns
+from app.models.nutrition.advanced_nutrition import NutritionalPatterns
 
 
 class PatternAnalyticsService:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from typing import List, Optional
 from supabase import Client
-from app.models.user import UserResponse
+from app.models.core.user import UserResponse
 from app.core.security.jwt_handler import get_current_user
 from app.api.v1.dependencies import get_authenticated_supabase_client
 from app.services.mfa_service import MFAService

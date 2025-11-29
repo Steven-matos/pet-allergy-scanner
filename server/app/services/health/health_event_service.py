@@ -6,7 +6,7 @@ Business logic for health event management
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
-from app.models.health_event import (
+from app.models.health.health_event import (
     HealthEvent,
     HealthEventCreate,
     HealthEventUpdate,

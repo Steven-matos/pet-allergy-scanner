@@ -14,7 +14,7 @@ from supabase import Client
 # Use new refactored modules
 from app.core.security.jwt_handler import get_current_user, security
 from app.core.config import settings
-from app.database import get_supabase_client
+from app.core.database import get_supabase_client
 
 # Import shared services
 from app.shared.services.pet_authorization import verify_pet_ownership

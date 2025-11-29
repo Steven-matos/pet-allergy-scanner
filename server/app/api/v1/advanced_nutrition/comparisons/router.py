@@ -9,14 +9,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from datetime import datetime
 
-from app.database import get_supabase_client
-from app.models.advanced_nutrition import (
+from app.core.database import get_supabase_client
+from app.models.nutrition.advanced_nutrition import (
     FoodComparisonCreate, FoodComparisonResponse,
     FoodComparisonDashboard
 )
-from app.models.user import User
+from app.models.core.user import User
 from app.core.security.jwt_handler import get_current_user
-from app.services.food_comparison_service import FoodComparisonService
+from app.api.v1.dependencies import get_authenticated_supabase_client
+from app.services import FoodComparisonService
 from supabase import Client
 
 router = APIRouter(prefix="/comparisons", tags=["advanced-nutrition-comparisons"])
@@ -36,15 +37,17 @@ def get_comparison_service(supabase: Client):
 @router.post("", response_model=FoodComparisonResponse)
 async def create_food_comparison_no_slash(
     comparison: FoodComparisonCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """Create food comparison (without trailing slash)"""
-    return await create_food_comparison_with_slash(comparison, current_user)
+    return await create_food_comparison_with_slash(comparison, current_user, supabase)
 
 @router.post("/", response_model=FoodComparisonResponse)
 async def create_food_comparison_with_slash(
     comparison: FoodComparisonCreate,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Create a food comparison analysis
@@ -76,7 +79,8 @@ async def create_food_comparison_with_slash(
 @router.get("/{comparison_id}", response_model=FoodComparisonResponse)
 async def get_food_comparison(
     comparison_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get a specific food comparison
@@ -115,7 +119,8 @@ async def get_food_comparison(
 
 @router.get("/", response_model=List[FoodComparisonResponse])
 async def get_user_comparisons(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get all food comparisons for the current user
@@ -146,7 +151,8 @@ async def get_user_comparisons(
 @router.get("/dashboard/{comparison_id}", response_model=FoodComparisonDashboard)
 async def get_comparison_dashboard(
     comparison_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Get food comparison dashboard
@@ -186,7 +192,8 @@ async def get_comparison_dashboard(
 @router.delete("/{comparison_id}")
 async def delete_food_comparison(
     comparison_id: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
 ):
     """
     Delete a food comparison

@@ -15,9 +15,9 @@ import logging
 from pathlib import Path
 
 # Add parent directory to Python path so we can import the app module
-# This is necessary because the script is now in scripts/ subdirectory
+# This is necessary because the script is now in scripts/deployment/ subdirectory
 script_dir = Path(__file__).resolve().parent
-server_dir = script_dir.parent
+server_dir = script_dir.parent.parent  # Go up from deployment/ to scripts/ to server/
 sys.path.insert(0, str(server_dir))
 
 # Configure basic logging first - write to stdout instead of stderr
