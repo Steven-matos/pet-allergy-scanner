@@ -101,14 +101,19 @@ struct WeightManagementView: View {
             if let pet = selectedPet {
                 WeightGoalSettingView(pet: pet, existingGoal: nil)
                     .onDisappear {
-                        // Refresh weight data when the goal setting sheet is dismissed
-                        // Force refresh from server to get the newly created goal
+                        // After creating a goal, the goal is already stored locally in weightService
+                        // We just need to refresh the UI to show it
+                        // Don't immediately fetch from backend as it might not be saved yet
                         Task {
+                            // Small delay to ensure backend has processed the goal
+                            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                            
+                            // Now refresh from server to get the latest goal data
                             await loadWeightDataAsync(showLoadingIfNeeded: false)
                         }
                         // Enable fast polling to quickly pick up changes
                         syncService.enableFastPolling()
-                        // Force UI refresh
+                        // Force UI refresh immediately to show the locally stored goal
                         refreshTrigger.toggle()
                     }
             }
