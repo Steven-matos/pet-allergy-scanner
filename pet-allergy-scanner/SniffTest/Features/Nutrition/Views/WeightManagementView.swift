@@ -17,20 +17,38 @@ import Charts
  * - Trend analysis and visualization
  * - Progress monitoring and recommendations
  * 
+ * SwiftUI Best Practices:
+ * - Uses @StateObject for observable objects owned by this view
+ * - Uses @EnvironmentObject for injected dependencies
+ * - Uses @State for view-local state only
+ * - Computed properties for derived values
+ * - ViewBuilder for conditional content
+ * - Proper lifecycle management (onAppear/onDisappear)
+ * 
  * Follows SOLID principles with single responsibility for weight management
  * Implements DRY by reusing common UI components
  * Follows KISS by keeping the interface intuitive and focused
  */
 struct WeightManagementView: View {
+    // MARK: - Dependencies (Injected or Shared)
+    
     @EnvironmentObject var authService: AuthService
     @StateObject private var weightService = CachedWeightTrackingService.shared
-    @State private var petService = CachedPetService.shared
+    @StateObject private var syncService = WeightDataSyncService.shared
     @StateObject private var petSelectionService = NutritionPetSelectionService.shared
+    
+    // Note: petService is intentionally @State (not @StateObject) because it's a shared singleton
+    @State private var petService = CachedPetService.shared
+    
+    // MARK: - View State
+    
     @State private var showingWeightEntry = false
     @State private var showingGoalSetting = false
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var refreshTrigger = false
+    
+    // MARK: - Computed Properties
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -54,6 +72,8 @@ struct WeightManagementView: View {
                     .onDisappear {
                         // Refresh weight data when the entry sheet is dismissed
                         loadWeightData()
+                        // Enable fast polling to quickly pick up changes
+                        syncService.enableFastPolling()
                         // Force UI refresh
                         refreshTrigger.toggle()
                     }
@@ -64,7 +84,12 @@ struct WeightManagementView: View {
                 WeightGoalSettingView(pet: pet, existingGoal: nil)
                     .onDisappear {
                         // Refresh weight data when the goal setting sheet is dismissed
-                        loadWeightData()
+                        // Force refresh from server to get the newly created goal
+                        Task {
+                            await loadWeightDataAsync(showLoadingIfNeeded: false)
+                        }
+                        // Enable fast polling to quickly pick up changes
+                        syncService.enableFastPolling()
                         // Force UI refresh
                         refreshTrigger.toggle()
                     }
@@ -72,6 +97,29 @@ struct WeightManagementView: View {
         }
         .onAppear {
             loadWeightDataIfNeeded()
+            // Start auto-syncing when view appears
+            if let pet = selectedPet {
+                syncService.startSyncing(forPetId: pet.id)
+            }
+        }
+        .onDisappear {
+            // Stop syncing when view disappears
+            if let pet = selectedPet {
+                syncService.stopSyncing(forPetId: pet.id)
+            }
+        }
+        .onChange(of: selectedPet) { oldPet, newPet in
+            // Stop syncing old pet, start syncing new pet
+            if let oldPet = oldPet {
+                syncService.stopSyncing(forPetId: oldPet.id)
+            }
+            if let newPet = newPet {
+                syncService.startSyncing(forPetId: newPet.id)
+            }
+        }
+        .refreshable {
+            // Pull to refresh weight data
+            await refreshWeightData()
         }
     }
     
@@ -126,14 +174,60 @@ struct WeightManagementView: View {
                 .id(refreshTrigger) // Force refresh when trigger changes
                 
                 // Weight Trend Chart
-                if !weightService.weightHistory(for: pet.id).isEmpty {
-                    WeightTrendChart(
-                        weightHistory: weightService.weightHistory(for: pet.id),
-                        petName: pet.name
-                    )
+                let weightHistory = weightService.weightHistory(for: pet.id)
+                let _ = print("📊 [UI RENDER] Weight history count for \(pet.name): \(weightHistory.count)")
+                
+                if !weightHistory.isEmpty {
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // Debug info banner (temporary for troubleshooting)
+                        HStack {
+                            Text("📊 \(weightHistory.count) record(s) loaded")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button("Force Refresh") {
+                                Task {
+                                    print("🔄 Manual force refresh triggered")
+                                    await refreshWeightData()
+                                }
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(8)
+                        
+                        WeightTrendChart(
+                            weightHistory: weightHistory,
+                            petName: pet.name,
+                            pet: pet  // Pass pet for background image
+                        )
+                    }
                 } else {
                     // No weight data - show empty state with chart preview
-                    EmptyWeightChartCard(pet: pet)
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        // Debug info banner (temporary for troubleshooting)
+                        HStack {
+                            Text("⚠️ No weight records loaded")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Spacer()
+                            Button("Force Refresh") {
+                                Task {
+                                    print("🔄 Manual force refresh triggered (empty state)")
+                                    await refreshWeightData()
+                                }
+                            }
+                            .font(.caption)
+                        }
+                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                        
+                        EmptyWeightChartCard(pet: pet)
+                    }
                 }
                 
                 // Goal Progress
@@ -175,12 +269,19 @@ struct WeightManagementView: View {
      * This prevents unnecessary server calls when data is already available
      */
     private func loadWeightDataIfNeeded() {
-        guard selectedPet != nil else { return }
+        guard let pet = selectedPet else { return }
         
-        // Call the service - it will check cache first and populate in-memory if cache exists
-        // We don't show loading immediately - let the service check cache first
+        print("📊 [loadWeightDataIfNeeded] Checking if need to load for \(pet.name)")
+        
+        // Check if we have data in memory
+        let hasData = weightService.hasCachedWeightData(for: pet.id)
+        print("📊 [loadWeightDataIfNeeded] Has cached data: \(hasData)")
+        
+        // Always load on first appearance to ensure fresh data
+        // The service will check its in-memory cache first
         Task {
-            await loadWeightDataAsync(showLoadingIfNeeded: false)
+            print("📊 [loadWeightDataIfNeeded] Starting load task...")
+            await loadWeightDataAsync(showLoadingIfNeeded: !hasData)
         }
     }
     
@@ -197,10 +298,19 @@ struct WeightManagementView: View {
     }
     
     private func loadWeightDataAsync(showLoadingIfNeeded: Bool = false) async {
-        guard let pet = selectedPet else { return }
+        guard let pet = selectedPet else {
+            print("⚠️ [loadWeightDataAsync] No selected pet, cannot load weight data")
+            return
+        }
+        
+        print("📊 === Starting weight data load for \(pet.name) (ID: \(pet.id)) ===")
+        print("📊 [loadWeightDataAsync] showLoadingIfNeeded: \(showLoadingIfNeeded)")
         
         // Check if we already have data in memory (from cache or previous load)
         let hadDataBefore = weightService.hasCachedWeightData(for: pet.id)
+        let recordsBeforeCount = weightService.weightHistory(for: pet.id).count
+        let goalBeforeCount = weightService.activeWeightGoal(for: pet.id) != nil ? 1 : 0
+        print("📊 [loadWeightDataAsync] Before load - hadData: \(hadDataBefore), records: \(recordsBeforeCount), goal: \(goalBeforeCount)")
         
         // Only show loading if explicitly requested and we don't have data
         if showLoadingIfNeeded && !hadDataBefore {
@@ -208,23 +318,75 @@ struct WeightManagementView: View {
                 isLoading = true
                 errorMessage = nil
             }
+            print("⏳ [loadWeightDataAsync] Showing loading indicator")
         }
         
         do {
-            // Load data - this will check cache first and populate in-memory if cache exists
-            try await weightService.loadWeightData(for: pet.id)
+            // Force refresh from server to ensure we have the latest data including goals
+            print("📊 [loadWeightDataAsync] Calling loadWeightData with forceRefresh=true")
+            try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
             
             // Check if we have data now
-            _ = weightService.hasCachedWeightData(for: pet.id)
+            let hasDataAfter = weightService.hasCachedWeightData(for: pet.id)
+            let weightHistoryCount = weightService.weightHistory(for: pet.id).count
+            let weightHistory = weightService.weightHistory(for: pet.id)
+            let hasGoal = weightService.activeWeightGoal(for: pet.id) != nil
+            
+            print("✅ [loadWeightDataAsync] Weight data loaded successfully")
+            print("   - Has data after: \(hasDataAfter)")
+            print("   - Records count: \(weightHistoryCount)")
+            print("   - Has goal: \(hasGoal)")
+            print("   - Actual records: \(weightHistory.map { "\($0.weightKg)kg on \($0.recordedAt)" })")
+            
+            // If we still don't have data, log warning
+            if !hasDataAfter {
+                print("⚠️ [loadWeightDataAsync] WARNING: Load completed but still no data!")
+                print("   This might indicate:")
+                print("   1. No data exists in database for this pet")
+                print("   2. API call failed silently")
+                print("   3. Data not being stored in @Published properties")
+            }
             
             await MainActor.run {
                 isLoading = false
-                refreshTrigger.toggle() // Trigger UI refresh
+                refreshTrigger.toggle()
+                print("🔄 [loadWeightDataAsync] Toggled refreshTrigger to force UI update")
             }
         } catch {
+            print("❌ [loadWeightDataAsync] Failed to load weight data: \(error)")
+            print("   Error type: \(type(of: error))")
+            print("   Error details: \(error.localizedDescription)")
+            
             await MainActor.run {
                 isLoading = false
                 errorMessage = error.localizedDescription
+            }
+        }
+        
+        print("📊 === Finished weight data load ===")
+    }
+    
+    /**
+     * Force refresh weight data from server (bypasses cache)
+     * Used for pull-to-refresh gesture
+     */
+    private func refreshWeightData() async {
+        guard let pet = selectedPet else { return }
+        
+        print("🔄 Force refreshing weight data for pet: \(pet.name)")
+        
+        do {
+            // Force refresh from server
+            try await weightService.refreshWeightData(petId: pet.id)
+            
+            await MainActor.run {
+                refreshTrigger.toggle() // Force UI refresh
+                print("✅ Weight data refreshed successfully")
+            }
+        } catch {
+            print("❌ Failed to refresh weight data: \(error.localizedDescription)")
+            await MainActor.run {
+                errorMessage = "Failed to refresh weight data: \(error.localizedDescription)"
             }
         }
     }
@@ -332,9 +494,18 @@ struct CurrentWeightCard: View {
     }
 }
 
+/// Weight Trend Chart Component
+///
+/// Follows SwiftUI best practices:
+/// - Uses `let` properties (immutable data)
+/// - Minimizes re-renders by accepting only necessary data
+/// - Uses StateObject for shared services
+/// - Avoids unnecessary state management
 struct WeightTrendChart: View {
     let weightHistory: [WeightRecord]
     let petName: String
+    let pet: Pet
+    
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
@@ -343,57 +514,8 @@ struct WeightTrendChart: View {
                 .font(ModernDesignSystem.Typography.title3)
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
-            PerformanceOptimizer.optimizedChart {
-                if #available(iOS 16.0, *) {
-                    Chart(weightHistory.prefix(30)) { record in
-                        // Area under the line for better visual appeal
-                        AreaMark(
-                            x: .value("Date", record.recordedAt),
-                            y: .value("Weight", record.weightKg)
-                        )
-                        .foregroundStyle(ModernDesignSystem.Colors.primary.opacity(0.2))
-                        
-                        // Main line
-                        LineMark(
-                            x: .value("Date", record.recordedAt),
-                            y: .value("Weight", record.weightKg)
-                        )
-                        .foregroundStyle(ModernDesignSystem.Colors.primary)
-                        .lineStyle(StrokeStyle(lineWidth: 3))
-                        
-                        // Data points
-                        PointMark(
-                            x: .value("Date", record.recordedAt),
-                            y: .value("Weight", record.weightKg)
-                        )
-                        .foregroundStyle(ModernDesignSystem.Colors.primary)
-                        .symbolSize(60)
-                        .symbol(.circle)
-                    }
-                    .frame(height: 200)
-                    .chartXAxis {
-                        AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                            AxisValueLabel(format: .dateTime.month().day())
-                                .foregroundStyle(ModernDesignSystem.Colors.textSecondary)
-                        }
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisValueLabel {
-                                if let weight = value.as(Double.self) {
-                                    Text(unitService.formatWeight(weight))
-                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                }
-                            }
-                        }
-                    }
-                    .chartBackground { chartProxy in
-                        // Add subtle grid lines
-                        Rectangle()
-                            .fill(ModernDesignSystem.Colors.lightGray.opacity(0.3))
-                    }
-                }
-            }
+            // Chart with pet image background
+            chartContent
         }
         .padding(ModernDesignSystem.Spacing.lg)
         .background(ModernDesignSystem.Colors.softCream)
@@ -408,6 +530,84 @@ struct WeightTrendChart: View {
             x: ModernDesignSystem.Shadows.small.x,
             y: ModernDesignSystem.Shadows.small.y
         )
+    }
+    
+    /// Chart content with background image
+    /// Extracted as computed property for better readability
+    @ViewBuilder
+    private var chartContent: some View {
+        ZStack {
+            // Faded pet image background
+            backgroundImage
+            
+            // Chart overlay
+            weightChart
+        }
+    }
+    
+    /// Background image based on pet species
+    private var backgroundImage: some View {
+        Image(pet.species == .dog ? "Illustrations/dog-scale" : "Illustrations/cat-scale")
+            .resizable()
+            .renderingMode(.original)
+            .aspectRatio(contentMode: .fit)
+            .frame(height: 120)
+            .opacity(0.15)
+            .offset(y: 20)
+    }
+    
+    /// Weight chart with data visualization
+    @ViewBuilder
+    private var weightChart: some View {
+        PerformanceOptimizer.optimizedChart {
+            if #available(iOS 16.0, *) {
+                Chart(weightHistory.prefix(30)) { record in
+                    // Area under the line
+                    AreaMark(
+                        x: .value("Date", record.recordedAt),
+                        y: .value("Weight", record.weightKg)
+                    )
+                    .foregroundStyle(ModernDesignSystem.Colors.primary.opacity(0.25))
+                    
+                    // Main line
+                    LineMark(
+                        x: .value("Date", record.recordedAt),
+                        y: .value("Weight", record.weightKg)
+                    )
+                    .foregroundStyle(ModernDesignSystem.Colors.primary)
+                    .lineStyle(StrokeStyle(lineWidth: 3))
+                    
+                    // Data points
+                    PointMark(
+                        x: .value("Date", record.recordedAt),
+                        y: .value("Weight", record.weightKg)
+                    )
+                    .foregroundStyle(ModernDesignSystem.Colors.primary)
+                    .symbolSize(80)
+                    .symbol(.circle)
+                }
+                .frame(height: 200)
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                        AxisValueLabel(format: .dateTime.month().day())
+                            .foregroundStyle(ModernDesignSystem.Colors.textSecondary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { value in
+                        AxisValueLabel {
+                            if let weight = value.as(Double.self) {
+                                Text(unitService.formatWeight(weight))
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            }
+                        }
+                    }
+                }
+                .chartBackground { _ in
+                    Color.clear
+                }
+            }
+        }
     }
 }
 
@@ -1151,7 +1351,7 @@ struct WeightGoalSettingView: View {
     let pet: Pet
     let existingGoal: WeightGoal?
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var weightService = WeightTrackingService.shared
+    @StateObject private var weightService = CachedWeightTrackingService.shared
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @State private var goalType: WeightGoalType = .maintenance
     @State private var targetWeight: String = ""

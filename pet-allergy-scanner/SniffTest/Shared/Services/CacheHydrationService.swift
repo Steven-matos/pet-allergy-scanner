@@ -183,11 +183,12 @@ final class CacheHydrationService {
         await waitForPetsToLoad()
         currentStep += 1.0
         
-        // Step 4: Load weight data for all pets
+        // Step 4: Load weight data for all pets (force refresh from server)
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading weight data...")
         for pet in petService.pets {
             do {
-                try await weightService.loadWeightData(for: pet.id)
+                // Force refresh to ensure we get latest data from server including goals
+                try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
             } catch {
                 // Log but don't fail - individual pet data load failures are non-critical
                 // New pets may not have data yet, which is expected
@@ -359,8 +360,8 @@ final class CacheHydrationService {
                     guard let self = self else { return }
                     
                     do {
-                        // Refresh weight data
-                        try await self.weightService.loadWeightData(for: pet.id)
+                        // Refresh weight data (force refresh from server to get latest goals)
+                        try await self.weightService.loadWeightData(for: pet.id, forceRefresh: true)
                         
                         // Refresh nutrition data
                         try await self.nutritionService.loadFeedingRecords(for: pet.id)

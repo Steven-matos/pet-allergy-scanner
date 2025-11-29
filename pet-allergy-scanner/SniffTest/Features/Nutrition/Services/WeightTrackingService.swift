@@ -137,8 +137,27 @@ class WeightTrackingService: ObservableObject {
         
         // Send to backend
         do {
-            try await apiService.createWeightGoal(weightGoal) // Backend now handles upsert
-            print("✅ Successfully saved weight goal to backend: \(weightGoal.id)")
+            // Get the response from backend to ensure we have the correct ID and data
+            let response = try await apiService.createWeightGoal(weightGoal) // Backend now handles upsert
+            
+            // Update local goal with backend response to ensure consistency
+            let backendGoal = WeightGoal(
+                id: response.id,
+                petId: response.pet_id,
+                goalType: WeightGoalType(rawValue: response.goal_type) ?? goalType,
+                targetWeightKg: response.targetWeightKg,
+                currentWeightKg: response.currentWeightKg,
+                targetDate: response.targetDate,
+                isActive: response.isActive,
+                notes: response.notes,
+                createdAt: response.createdAt,
+                updatedAt: response.updatedAt
+            )
+            
+            // Update local storage with backend response
+            weightGoals[petId] = backendGoal
+            print("✅ Successfully saved weight goal to backend: \(backendGoal.id)")
+            print("   Target weight: \(backendGoal.targetWeightKg ?? 0) kg, Active: \(backendGoal.isActive)")
         } catch {
             print("❌ Failed to save weight goal to backend: \(error.localizedDescription)")
             // Don't throw error - keep the goal locally even if backend fails
@@ -613,8 +632,9 @@ extension APIService {
     /**
      * Create a new weight goal for a pet
      * - Parameter weightGoal: Weight goal data
+     * - Returns: Created weight goal response from backend
      */
-    func createWeightGoal(_ weightGoal: WeightGoal) async throws {
+    func createWeightGoal(_ weightGoal: WeightGoal) async throws -> WeightGoalResponse {
         let requestBody = WeightGoalCreate(
             pet_id: weightGoal.petId,
             goal_type: weightGoal.goalType.rawValue,
@@ -624,11 +644,13 @@ extension APIService {
             notes: weightGoal.notes
         )
         
-        let _: WeightGoalResponse = try await post(
+        let response: WeightGoalResponse = try await post(
             endpoint: "/advanced-nutrition/weight/goals",
             body: requestBody,
             responseType: WeightGoalResponse.self
         )
+        
+        return response
     }
     
     /**
@@ -665,9 +687,11 @@ extension APIService {
         // Build endpoint with query parameter
         let endpoint = "/advanced-nutrition/weight/history/\(petId)?days=\(days)"
         
+        // CRITICAL: Bypass cache to always get fresh weight data
         let response: [WeightRecordResponse] = try await get(
             endpoint: endpoint,
-            responseType: [WeightRecordResponse].self
+            responseType: [WeightRecordResponse].self,
+            bypassCache: true  // Always fetch fresh data
         )
         
         return response.map { response in
@@ -688,24 +712,41 @@ extension APIService {
      * - Returns: Active weight goal or nil
      */
     func getActiveWeightGoal(petId: String) async throws -> WeightGoal? {
-        let response: WeightGoalResponse? = try await get(
-            endpoint: "/advanced-nutrition/weight/goals/\(petId)/active",
-            responseType: WeightGoalResponse?.self
-        )
+        print("🔍 [getActiveWeightGoal] Fetching goal for pet: \(petId)")
         
-        guard let response = response else { return nil }
-        
-        return WeightGoal(
-            id: response.id,
-            petId: response.pet_id,
-            goalType: WeightGoalType(rawValue: response.goal_type) ?? .maintenance,
-            targetWeightKg: response.targetWeightKg,
-            currentWeightKg: response.currentWeightKg,
-            targetDate: response.targetDate,
-            isActive: response.isActive,
-            notes: response.notes,
-            createdAt: response.createdAt,
-            updatedAt: response.updatedAt
-        )
+        do {
+            // CRITICAL: Bypass cache to always get fresh goal data
+            // Try to decode as optional - FastAPI returns null if no goal exists
+            let response: WeightGoalResponse? = try await get(
+                endpoint: "/advanced-nutrition/weight/goals/\(petId)/active",
+                responseType: WeightGoalResponse?.self,
+                bypassCache: true  // Always fetch fresh data
+            )
+            
+            if let response = response {
+                print("✅ [getActiveWeightGoal] Received goal response: id=\(response.id), targetWeight=\(response.targetWeightKg ?? 0)")
+                
+                return WeightGoal(
+                    id: response.id,
+                    petId: response.pet_id,
+                    goalType: WeightGoalType(rawValue: response.goal_type) ?? .maintenance,
+                    targetWeightKg: response.targetWeightKg,
+                    currentWeightKg: response.currentWeightKg,
+                    targetDate: response.targetDate,
+                    isActive: response.isActive,
+                    notes: response.notes,
+                    createdAt: response.createdAt,
+                    updatedAt: response.updatedAt
+                )
+            } else {
+                print("⚠️ [getActiveWeightGoal] No goal found (response is nil)")
+                return nil
+            }
+        } catch {
+            print("❌ [getActiveWeightGoal] Error fetching goal: \(error.localizedDescription)")
+            print("   Error type: \(type(of: error))")
+            // Re-throw to let caller handle
+            throw error
+        }
     }
 }

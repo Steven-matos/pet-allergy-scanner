@@ -11,6 +11,17 @@ import Security
 /// Empty response model for API calls that don't return data
 struct EmptyResponse: Codable {}
 
+/// Protocol to help handle optional types at runtime
+private protocol AnyOptional {
+    static var nilValue: Any { get }
+}
+
+extension Optional: AnyOptional {
+    static var nilValue: Any {
+        return Optional<Wrapped>.none as Any
+    }
+}
+
 /// Main API service for communicating with the backend using Swift Concurrency
 /// Enhanced with URLSession-level caching for optimal performance
 @MainActor
@@ -602,14 +613,15 @@ class APIService: ObservableObject, @unchecked Sendable {
     /**
      * Generic GET request method
      * - Parameter endpoint: The API endpoint to call
+     * - Parameter bypassCache: If true, ignores local cache and fetches fresh data
      * - Returns: Decoded response of type T
      */
-    func get<T: Codable>(endpoint: String, responseType: T.Type) async throws -> T {
+    func get<T: Codable>(endpoint: String, responseType: T.Type, bypassCache: Bool = false) async throws -> T {
         guard let url = URL(string: "\(baseURL)\(endpoint)") else {
             throw APIError.invalidURL
         }
         
-        let request = await createRequest(url: url)
+        let request = await createRequest(url: url, bypassCache: bypassCache)
         return try await performRequest(request, responseType: T.self)
     }
     
@@ -749,7 +761,7 @@ class APIService: ObservableObject, @unchecked Sendable {
     }
     
     /// Create URL request with authentication headers and security features
-    private func createRequest(url: URL, method: String = "GET", body: Data? = nil) async -> URLRequest {
+    private func createRequest(url: URL, method: String = "GET", body: Data? = nil, bypassCache: Bool = false) async -> URLRequest {
         // Check if token needs refresh before making the request
         if await shouldRefreshToken() {
             do {
@@ -768,6 +780,15 @@ class APIService: ObservableObject, @unchecked Sendable {
         // Add security headers
         request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
+        
+        // CRITICAL: Bypass cache for dynamic data endpoints (weight, goals, etc.)
+        if bypassCache {
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+            #if DEBUG
+            print("🚫 APIService: Cache bypassed for fresh data")
+            #endif
+        }
         
         // Add authorization header
         let token = await authToken
@@ -931,14 +952,40 @@ class APIService: ObservableObject, @unchecked Sendable {
             
             // Decode successful response
             let decoder = createJSONDecoder()
+            let responseString = String(data: data, encoding: .utf8) ?? ""
+            
+            // Handle null responses for optional types
+            let trimmedResponse = responseString.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedResponse == "null" || data.isEmpty {
+                // For optional types, Swift's JSONDecoder should handle null automatically
+                // But we'll try to handle it explicitly if decoding fails
+                print("📝 [APIService] Received null/empty response: '\(trimmedResponse)'")
+            }
             
             do {
-                return try decoder.decode(T.self, from: data)
+                let decoded = try decoder.decode(T.self, from: data)
+                if trimmedResponse == "null" {
+                    print("✅ [APIService] Successfully decoded null as optional type")
+                }
+                return decoded
             } catch let decodingError as DecodingError {
                 // Log the raw response for debugging
+                print("❌ [APIService] Decoding error. Response: '\(trimmedResponse)'")
+                print("   Error: \(decodingError)")
+                
+                // If it's a null response, try to handle it for optional types
+                if trimmedResponse == "null" {
+                    if let optionalType = T.self as? AnyOptional.Type {
+                        print("✅ [APIService] Returning nil for optional type from null response")
+                        return optionalType.nilValue as! T
+                    }
+                }
+                
                 throw APIError.networkError("Failed to decode response: \(decodingError.localizedDescription)")
             } catch {
                 // Log the raw response for debugging
+                print("❌ [APIService] Unexpected error. Response: '\(trimmedResponse)'")
+                print("   Error: \(error)")
                 throw error
             }
             
