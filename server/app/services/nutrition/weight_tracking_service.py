@@ -78,7 +78,14 @@ class WeightTrackingService:
         
         # Update pet's current weight in the pets table
         # Use the most recent recorded weight as the pet's current weight
-        await self._update_pet_weight(weight_record.pet_id, float(weight_record.weight_kg))
+        logger.info(f"[record_weight] About to update pet weight - pet_id: {weight_record.pet_id}, weight: {weight_record.weight_kg}")
+        try:
+            await self._update_pet_weight(weight_record.pet_id, float(weight_record.weight_kg))
+            logger.info(f"[record_weight] Pet weight update completed successfully")
+        except Exception as e:
+            logger.error(f"[record_weight] Failed to update pet weight: {str(e)}")
+            logger.error(f"[record_weight] Error type: {type(e).__name__}")
+            # Continue even if pet weight update fails - we still have the weight record
         
         # Update nutritional trends for this date
         await self._update_nutritional_trends(weight_record.pet_id, weight_record.recorded_at.date())
