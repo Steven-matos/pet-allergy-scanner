@@ -104,9 +104,8 @@ class WeightTrackingService:
         # Note: Pet ownership is verified by the router before calling this method
         logger.info(f"Getting weight history for pet {pet_id}, days_back: {days_back}")
         
-        query = self.supabase.table("pet_weight_records")\
-            .select("*")\
-            .eq("pet_id", pet_id)
+        # Build query with pet filter
+        query = self.supabase.table("pet_weight_records").select("*").eq("pet_id", pet_id)
         
         # If days_back is 0, get all records; otherwise filter by date
         if days_back > 0:
@@ -116,7 +115,8 @@ class WeightTrackingService:
         else:
             logger.info("Getting ALL weight records (no date filter)")
         
-        response = query.order("recorded_at", desc=True).execute()
+        # Execute query with descending order (most recent first)
+        response = query.order("recorded_at", descending=True).execute()
         
         logger.info(f"Found {len(response.data)} weight records for pet {pet_id}")
         

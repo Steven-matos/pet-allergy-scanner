@@ -655,9 +655,18 @@ extension APIService {
      * - Parameter petId: Pet ID
      * - Returns: Array of weight records
      */
-    func getWeightHistory(petId: String) async throws -> [WeightRecord] {
+    /**
+     * Get weight history for a pet
+     * - Parameter petId: Pet ID
+     * - Parameter days: Number of days to retrieve (default: 365, use 0 for all)
+     * - Returns: Array of weight records
+     */
+    func getWeightHistory(petId: String, days: Int = 365) async throws -> [WeightRecord] {
+        // Build endpoint with query parameter
+        let endpoint = "/advanced-nutrition/weight/history/\(petId)?days=\(days)"
+        
         let response: [WeightRecordResponse] = try await get(
-            endpoint: "/advanced-nutrition/weight/history/\(petId)",
+            endpoint: endpoint,
             responseType: [WeightRecordResponse].self
         )
         
