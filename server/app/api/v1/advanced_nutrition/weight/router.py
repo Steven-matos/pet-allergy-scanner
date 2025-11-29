@@ -297,7 +297,21 @@ async def analyze_weight_trend(
         HTTPException: If pet not found or user not authorized
     """
     try:
+        # Verify pet ownership
+        from app.shared.services.pet_authorization import verify_pet_ownership
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
         
+        service = get_weight_service(supabase)
+        trend_analysis = await service.analyze_weight_trend(pet_id, days)
+        return trend_analysis
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze weight trend: {str(e)}"
+        )
 
 
 @router.delete("/record/{record_id}")
