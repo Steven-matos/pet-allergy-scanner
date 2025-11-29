@@ -108,8 +108,8 @@ class WeightTrackingService:
         """
         # Get weight records
         # Note: Pet ownership is verified by the router before calling this method
-        logger.info(f"Getting weight history for pet {pet_id}, days_back: {days_back}")
-        logger.info(f"self.supabase type: {type(self.supabase)}")
+        logger.info(f"[get_weight_history] Starting - pet_id: {pet_id}, days_back: {days_back}")
+        logger.info(f"[get_weight_history] Supabase client type: {type(self.supabase)}")
         
         # Build query with pet filter
         query = self.supabase.table("pet_weight_records").select("*").eq("pet_id", pet_id)
@@ -118,17 +118,24 @@ class WeightTrackingService:
         if days_back > 0:
             start_date = DateTimeService.now() - timedelta(days=days_back)
             query = query.gte("recorded_at", start_date.isoformat())
-            logger.info(f"Filtering records from {start_date.isoformat()}")
+            logger.info(f"[get_weight_history] Filtering records from {start_date.isoformat()}")
         else:
-            logger.info("Getting ALL weight records (no date filter)")
+            logger.info(f"[get_weight_history] Getting ALL weight records (no date filter)")
         
         # Execute query with descending order (most recent first)
         response = query.order("recorded_at", desc=True).execute()
         
-        logger.info(f"Found {len(response.data)} weight records for pet {pet_id}")
+        logger.info(f"[get_weight_history] Query executed successfully")
+        logger.info(f"[get_weight_history] Found {len(response.data)} weight records for pet {pet_id}")
+        
+        # Log each record for debugging
+        for i, record in enumerate(response.data):
+            logger.info(f"[get_weight_history] Record {i+1}: weight={record.get('weight_kg')}kg, recorded_at={record.get('recorded_at')}")
         
         # Return empty list if no records exist (200 status with empty data)
-        return [PetWeightRecordResponse(**record) for record in response.data]
+        records = [PetWeightRecordResponse(**record) for record in response.data]
+        logger.info(f"[get_weight_history] Returning {len(records)} serialized records")
+        return records
     
     async def upsert_weight_goal(
         self, 
@@ -224,19 +231,32 @@ class WeightTrackingService:
         """
         # Get active goal
         # Note: Pet ownership is verified by the router before calling this method
-        logger.info(f"Fetching active weight goal for pet {pet_id}")
+        logger.info(f"[get_active_weight_goal] Fetching active weight goal for pet {pet_id}")
+        logger.info(f"[get_active_weight_goal] Query: pet_weight_goals where pet_id={pet_id} AND is_active=True")
+        
         response = self.supabase.table("pet_weight_goals")\
             .select("*")\
             .eq("pet_id", pet_id)\
             .eq("is_active", True)\
             .execute()
         
+        logger.info(f"[get_active_weight_goal] Query response: data count = {len(response.data)}")
+        
         if not response.data:
-            logger.info(f"No active weight goal found for pet {pet_id}")
+            logger.info(f"[get_active_weight_goal] No active weight goal found for pet {pet_id}")
             return None
         
-        logger.info(f"Found active weight goal for pet {pet_id}: {response.data[0].get('id')}, target_weight={response.data[0].get('target_weight_kg')}")
-        return PetWeightGoalResponse(**response.data[0])
+        goal_data = response.data[0]
+        logger.info(f"[get_active_weight_goal] Found active weight goal:")
+        logger.info(f"  - ID: {goal_data.get('id')}")
+        logger.info(f"  - Goal Type: {goal_data.get('goal_type')}")
+        logger.info(f"  - Target Weight: {goal_data.get('target_weight_kg')} kg")
+        logger.info(f"  - Current Weight: {goal_data.get('current_weight_kg')} kg")
+        logger.info(f"  - Target Date: {goal_data.get('target_date')}")
+        logger.info(f"  - Is Active: {goal_data.get('is_active')}")
+        logger.info(f"  - Notes: {goal_data.get('notes')}")
+        
+        return PetWeightGoalResponse(**goal_data)
     
     async def analyze_weight_trend(
         self, 
@@ -395,16 +415,29 @@ class WeightTrackingService:
             weight_kg: Weight in kg to set as current weight (from the newly recorded weight)
         """
         try:
-            logger.info(f"Updating pet {pet_id} weight to {weight_kg} kg (from newly recorded weight)")
+            logger.info(f"[_update_pet_weight] Starting - pet_id: {pet_id}, weight_kg: {weight_kg}")
+            
+            # First, verify the pet exists before updating
+            check_response = self.supabase.table("pets").select("id, weight_kg").eq("id", pet_id).execute()
+            if not check_response.data:
+                logger.error(f"[_update_pet_weight] Pet {pet_id} not found in database")
+                return
+            
+            existing_weight = check_response.data[0].get("weight_kg")
+            logger.info(f"[_update_pet_weight] Current pet weight in DB: {existing_weight} kg")
             
             # Update pet's weight in the pets table
             update_data = {"weight_kg": float(weight_kg)}
             db_service = DatabaseOperationService(self.supabase)
-            await db_service.update_with_timestamp("pets", pet_id, update_data)
-            logger.info(f"Successfully updated pet {pet_id} weight to {weight_kg} kg")
+            updated_pet = await db_service.update_with_timestamp("pets", pet_id, update_data)
+            
+            logger.info(f"[_update_pet_weight] Update successful")
+            logger.info(f"[_update_pet_weight] Updated pet data: {updated_pet}")
+            logger.info(f"[_update_pet_weight] New weight from update: {updated_pet.get('weight_kg')} kg")
+            
         except Exception as e:
             # Log error but don't fail the weight recording
-            logger.warning(f"Failed to update pet weight: {e}")
+            logger.error(f"[_update_pet_weight] Failed to update pet weight: {e}", exc_info=True)
     
     async def _update_nutritional_trends(self, pet_id: str, trend_date: date) -> None:
         """Update nutritional trends for a specific date"""
