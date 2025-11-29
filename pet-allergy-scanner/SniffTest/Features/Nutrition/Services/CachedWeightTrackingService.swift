@@ -462,42 +462,42 @@ class CachedWeightTrackingService: ObservableObject {
         do {
             let goal = try await goalTask
             
+            // CRITICAL: Always update the goal from backend response
+            // This ensures existing goals in database are loaded
             await MainActor.run {
-                // Only update goal if we got a valid response from backend
-                // This preserves locally created goals that might not be saved yet
+                weightGoals[petId] = goal  // Set to backend response (can be nil)
+                
                 if let goal = goal {
-                    weightGoals[petId] = goal
                     print("✅ [loadWeightData] Updated goal from backend: \(goal.id)")
-                    
-                    // Cache weight goal
-                    if currentUserId != nil {
-                        let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                        cacheService.store(goal, forKey: cacheKey)
-                        print("💾 [loadWeightData] Cached weight goal")
-                    }
+                    print("   Target weight: \(goal.targetWeightKg ?? 0) kg, Active: \(goal.isActive)")
                 } else {
-                    // If backend returns nil, check if we have a local goal
-                    // If we do, keep it (might be newly created and not saved yet)
-                    // Only clear if we truly have no goal
-                    if weightGoals[petId] == nil {
-                        print("⚠️ [loadWeightData] No goal in backend and no local goal - clearing")
-                        // Invalidate goal cache
-                        if currentUserId != nil {
-                            let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                            cacheService.invalidate(forKey: cacheKey)
-                        }
-                    } else {
-                        print("⚠️ [loadWeightData] Backend returned nil but we have local goal - preserving it")
-                    }
+                    print("⚠️ [loadWeightData] Backend returned nil goal - no goal set for pet")
+                }
+            }
+            
+            if let goal = goal {
+                // Cache weight goal
+                if currentUserId != nil {
+                    let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
+                    cacheService.store(goal, forKey: cacheKey)
+                    print("💾 [loadWeightData] Cached weight goal")
+                }
+            } else {
+                // Clear goal cache if backend has no goal
+                if currentUserId != nil {
+                    let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
+                    cacheService.invalidate(forKey: cacheKey)
+                    print("💾 [loadWeightData] Cleared goal cache")
                 }
             }
         } catch {
             // If goal task was cancelled or failed, log but continue
             if error is CancellationError {
                 print("⚠️ [loadWeightData] Weight goal task was cancelled")
+            } else {
+                print("❌ [loadWeightData] Goal fetch failed: \(error.localizedDescription)")
             }
-            // Don't clear existing goal if request was cancelled - might be temporary
-            print("⚠️ [loadWeightData] Goal fetch failed but preserving existing goal if any")
+            // Don't clear existing goal if request failed - might be temporary network issue
         }
         
         // Update current weight
