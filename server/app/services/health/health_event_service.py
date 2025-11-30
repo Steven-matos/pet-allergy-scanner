@@ -84,6 +84,10 @@ class HealthEventService:
         logger.info(f"   user_id: {user_id}")
         logger.info(f"   limit: {limit}, offset: {offset}")
         
+        # Initialize diagnostic variables
+        pet_owner_id = None
+        event_count = 0
+        
         # First, verify pet ownership (RLS requires this)
         try:
             pet_check = supabase.table("pets").select("id, user_id").eq("id", pet_id).execute()
@@ -125,45 +129,43 @@ class HealthEventService:
             logger.warning(f"   Could not check events without RLS: {e}")
             print(f"   ❌ Diagnostic query failed: {e}")
         
-        # Now check with user_id filter (with RLS)
-        logger.info(f"   Executing query with RLS: pet_id={pet_id}, user_id={user_id}")
-        print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}, user_id={user_id}")
+        # Query with RLS - DO NOT add explicit user_id filter
+        # RLS policy automatically filters by auth.uid() = user_id AND verifies pet ownership
+        # Adding .eq("user_id", user_id) might conflict with RLS or cause issues
+        logger.info(f"   Executing query with RLS: pet_id={pet_id}")
+        print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}")
         
-        # Try query WITHOUT explicit user_id filter first - RLS should handle it
-        # RLS policy should automatically filter by auth.uid(), so we might not need .eq("user_id", user_id)
         try:
-            # First try without user_id filter (RLS should handle it)
+            # Query WITHOUT explicit user_id filter - let RLS handle it
+            # The RLS policy checks: auth.uid() = user_id AND pet belongs to user
             response = supabase.table("health_events").select("*").eq("pet_id", pet_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
-            result_count = len(response.data) if response.data else 0
-            logger.info(f"   Events found with RLS only (no user_id filter): {result_count}")
-            print(f"🔍 [QUERY] Results with RLS only: {result_count}")
             
-            if result_count > 0:
-                logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events (RLS filtered)")
-                print(f"✅ [QUERY] Returning {len(response.data)} events (RLS filtered)")
-                return response.data
-        except Exception as e:
-            logger.warning(f"   Query without user_id filter failed: {e}")
-            print(f"   ⚠️ Query without user_id filter failed: {e}")
-        
-        # Fallback: Try with explicit user_id filter
-        try:
-            response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
             result_count = len(response.data) if response.data else 0
-            logger.info(f"   Events found with explicit user_id filter: {result_count}")
-            print(f"🔍 [QUERY] Results with explicit user_id: {result_count}")
+            logger.info(f"   Events found with RLS: {result_count}")
+            print(f"🔍 [QUERY] Results with RLS: {result_count}")
             
             if result_count > 0:
                 logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")
                 print(f"✅ [QUERY] Returning {len(response.data)} events")
                 return response.data
+            else:
+                # If RLS returns 0, try to understand why
+                # Check if events exist but RLS is blocking
+                logger.warning(f"⚠️ [get_health_events_for_pet] RLS query returned 0 events")
+                print(f"⚠️ [QUERY] RLS returned 0 events - checking if events exist...")
+                
+                # Diagnostic: Check if events exist (we already did this above)
+                if event_count > 0:
+                    logger.error(f"❌ [get_health_events_for_pet] Events exist ({event_count}) but RLS is blocking them!")
+                    print(f"❌ [QUERY] Events exist ({event_count}) but RLS is blocking them!")
+                    print(f"   This suggests RLS policy is not working correctly")
+                    print(f"   Pet owner: {pet_owner_id}, User: {user_id}, Match: {pet_owner_id == user_id}")
+                
         except Exception as e:
-            logger.error(f"   Query with user_id filter failed: {e}")
-            print(f"   ❌ Query with user_id filter failed: {e}")
+            logger.error(f"   Query failed: {e}", exc_info=True)
+            print(f"   ❌ Query failed: {e}")
+            raise
         
-        # If we get here, no events found
-        logger.warning(f"⚠️ [get_health_events_for_pet] No events found for pet_id={pet_id}, user_id={user_id}")
-        print(f"⚠️ [QUERY] No events found - RLS may be blocking or query is incorrect")
         return []
     
     @staticmethod

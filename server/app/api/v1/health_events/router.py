@@ -291,3 +291,57 @@ async def get_health_event_types():
         }
         for event_type in HealthEventType
     ]
+
+
+@router.get("/pet/{pet_id}/debug", response_model=dict)
+async def debug_health_events(
+    pet_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Debug endpoint to test health events query - bypasses RLS to diagnose issues
+    WARNING: Only use for debugging, remove in production
+    """
+    from app.utils.logging_config import get_logger
+    from app.shared.services.supabase_auth_service import SupabaseAuthService
+    logger = get_logger(__name__)
+    
+    logger.info(f"🔧 [DEBUG] Testing health events for pet: {pet_id}, user: {current_user.id}")
+    print(f"🔧 [DEBUG] Testing health events for pet: {pet_id}, user: {current_user.id}")
+    
+    # Use service role to bypass RLS
+    service_client = SupabaseAuthService.create_service_role_client()
+    
+    # Check pet ownership
+    pet_check = service_client.table("pets").select("id, user_id, name").eq("id", pet_id).execute()
+    pet_data = pet_check.data[0] if pet_check.data else None
+    
+    # Check events with service role (bypasses RLS)
+    events_check = service_client.table("health_events").select("*").eq("pet_id", pet_id).execute()
+    all_events = events_check.data if events_check.data else []
+    
+    # Check events with authenticated client (with RLS)
+    rls_events_check = supabase.table("health_events").select("*").eq("pet_id", pet_id).execute()
+    rls_events = rls_events_check.data if rls_events_check.data else []
+    
+    # Check events filtered by user_id with RLS
+    user_filtered_check = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", current_user.id).execute()
+    user_filtered_events = user_filtered_check.data if user_filtered_check.data else []
+    
+    result = {
+        "pet_id": pet_id,
+        "user_id": current_user.id,
+        "pet": pet_data,
+        "events_bypassing_rls": len(all_events),
+        "events_with_rls": len(rls_events),
+        "events_with_user_filter": len(user_filtered_events),
+        "all_events_sample": all_events[:2] if all_events else [],
+        "rls_events_sample": rls_events[:2] if rls_events else [],
+        "user_filtered_sample": user_filtered_events[:2] if user_filtered_events else []
+    }
+    
+    logger.info(f"🔧 [DEBUG] Result: {result}")
+    print(f"🔧 [DEBUG] Result: {result}")
+    
+    return result
