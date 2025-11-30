@@ -123,7 +123,28 @@ async def get_pet_health_events(
         raise
 
     # Convert raw database dictionaries to HealthEventResponse objects
-    health_event_responses = [HealthEventResponse(**event) for event in events]
+    # Map database fields to API model fields
+    health_event_responses = []
+    for event in events:
+        try:
+            # Map 'description' to 'notes' if present (database has description, API expects notes)
+            event_dict = dict(event)
+            if 'description' in event_dict and 'notes' not in event_dict:
+                event_dict['notes'] = event_dict.pop('description', None)
+            elif 'description' in event_dict and event_dict.get('notes') is None:
+                # If notes is None but description exists, use description
+                event_dict['notes'] = event_dict.get('description')
+            
+            # Remove any extra fields that aren't in the model
+            response = HealthEventResponse(**event_dict)
+            health_event_responses.append(response)
+        except Exception as e:
+            logger.error(f"❌ [get_pet_health_events] Error converting event {event.get('id', 'unknown')}: {e}")
+            logger.error(f"   Event data: {event}")
+            # Skip invalid events but log them
+            continue
+    
+    logger.info(f"✅ [get_pet_health_events] Converted {len(health_event_responses)} events to response format")
     
     return HealthEventListResponse(
         events=health_event_responses,

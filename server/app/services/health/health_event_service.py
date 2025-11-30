@@ -89,24 +89,38 @@ class HealthEventService:
         try:
             from app.shared.services.supabase_auth_service import SupabaseAuthService
             service_client = SupabaseAuthService.create_service_role_client()
-            all_events_check = service_client.table("health_events").select("id, pet_id, user_id").eq("pet_id", pet_id).execute()
-            logger.info(f"   Events found for pet_id (any user, bypassing RLS): {len(all_events_check.data) if all_events_check.data else 0}")
+            all_events_check = service_client.table("health_events").select("id, pet_id, user_id, title, event_type").eq("pet_id", pet_id).execute()
+            event_count = len(all_events_check.data) if all_events_check.data else 0
+            logger.info(f"   Events found for pet_id (any user, bypassing RLS): {event_count}")
+            print(f"🔍 [DIAGNOSTIC] Events found for pet_id (bypassing RLS): {event_count}")
             if all_events_check.data:
                 for event in all_events_check.data[:3]:  # Log first 3
-                    logger.info(f"   Sample event: id={event.get('id')}, pet_id={event.get('pet_id')}, user_id={event.get('user_id')}")
+                    logger.info(f"   Sample event: id={event.get('id')}, pet_id={event.get('pet_id')}, user_id={event.get('user_id')}, title={event.get('title')}")
+                    print(f"   Sample: id={event.get('id')}, user_id={event.get('user_id')}, title={event.get('title')}")
+                    # Check if user_id matches
+                    if event.get('user_id') != user_id:
+                        logger.warning(f"   ⚠️ User ID mismatch! Event user_id={event.get('user_id')}, requested user_id={user_id}")
+                        print(f"   ⚠️ User ID mismatch! Event has {event.get('user_id')}, querying for {user_id}")
         except Exception as e:
             logger.warning(f"   Could not check events without RLS: {e}")
+            print(f"   ❌ Diagnostic query failed: {e}")
         
         # Now check with user_id filter (with RLS)
+        logger.info(f"   Executing query with RLS: pet_id={pet_id}, user_id={user_id}")
+        print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}, user_id={user_id}")
         response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
         
-        logger.info(f"   Events found with user_id filter (with RLS): {len(response.data) if response.data else 0}")
+        result_count = len(response.data) if response.data else 0
+        logger.info(f"   Events found with user_id filter (with RLS): {result_count}")
+        print(f"🔍 [QUERY] Results with RLS: {result_count}")
         
         if not response.data:
             logger.warning(f"⚠️ [get_health_events_for_pet] No events found for pet_id={pet_id}, user_id={user_id}")
+            print(f"⚠️ [QUERY] No events found - RLS may be blocking or query is incorrect")
             return []
         
         logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")
+        print(f"✅ [QUERY] Returning {len(response.data)} events")
         return response.data
     
     @staticmethod
