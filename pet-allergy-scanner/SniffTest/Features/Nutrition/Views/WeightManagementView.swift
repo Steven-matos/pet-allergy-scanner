@@ -244,12 +244,14 @@ struct WeightManagementView: View {
         ScrollView {
             VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Current Weight Card
+                // CRITICAL: Always use weightService.currentWeights instead of pet.weightKg
+                // pet.weightKg may be stale from cache, but currentWeights is always fresh
                 CurrentWeightCard(
                     pet: pet,
                     currentWeight: weightService.currentWeights[pet.id] ?? pet.weightKg,
                     weightGoal: weightService.activeWeightGoal(for: pet.id)
                 )
-                .id(refreshTrigger) // Force refresh when trigger changes
+                .id("\(pet.id)-\(weightService.currentWeights[pet.id] ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
                 
                 // Weight Trend Chart
                 let weightHistory = weightService.weightHistory(for: pet.id)

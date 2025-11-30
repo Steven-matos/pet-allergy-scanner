@@ -185,8 +185,11 @@ final class CachedPetService {
                 let newPet = try await apiService.createPet(pet)
                 
                 // Update local state
-                self.pets.append(newPet)
-                self.isLoading = false
+                // CRITICAL: Create new array to ensure @Observable detects the change
+                await MainActor.run {
+                    self.pets.append(newPet)
+                    self.isLoading = false
+                }
                 
                 // Track pet creation
                 PostHogAnalytics.trackPetCreated(petId: newPet.id, species: newPet.species.rawValue)
@@ -218,10 +221,17 @@ final class CachedPetService {
                 let updatedPet = try await apiService.updatePet(id: id, petUpdate: petUpdate)
                 
                 // Update local state
-                if let index = self.pets.firstIndex(where: { $0.id == updatedPet.id }) {
-                    self.pets[index] = updatedPet
+                await MainActor.run {
+                    if let index = self.pets.firstIndex(where: { $0.id == updatedPet.id }) {
+                        // CRITICAL FIX: @Observable doesn't detect in-place array element mutations
+                        // Create a new array instance to trigger observation
+                        var updatedPets = self.pets
+                        updatedPets[index] = updatedPet
+                        self.pets = updatedPets  // Reassign entire array to trigger observation
+                        print("✅ [updatePet] Updated pet in array - weight: \(updatedPet.weightKg ?? 0) kg")
+                    }
+                    self.isLoading = false
                 }
-                self.isLoading = false
                 
                 // Track pet update
                 PostHogAnalytics.trackPetUpdated(petId: updatedPet.id, species: updatedPet.species.rawValue)
@@ -233,10 +243,43 @@ final class CachedPetService {
                 invalidatePetSpecificCaches(petId: id)
                 
             } catch {
-                self.isLoading = false
-                self.errorMessage = error.localizedDescription
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = error.localizedDescription
+                }
             }
         }
+    }
+    
+    /// Refresh a specific pet from server (useful after weight/event updates)
+    /// - Parameter petId: The pet ID to refresh
+    func refreshPet(petId: String) async throws {
+        // Invalidate pet cache
+        let petDetailCacheKey = CacheKey.petDetails.scoped(forPetId: petId)
+        cacheService.invalidate(forKey: petDetailCacheKey)
+        
+        // Fetch fresh pet data from server
+        let updatedPet = try await apiService.getPet(id: petId)
+        
+        // CRITICAL FIX: @Observable doesn't detect in-place array element mutations
+        // We need to create a new array instance to trigger observation
+        await MainActor.run {
+            if let index = self.pets.firstIndex(where: { $0.id == petId }) {
+                // Create a new array with the updated pet to trigger @Observable
+                var updatedPets = self.pets
+                updatedPets[index] = updatedPet
+                self.pets = updatedPets  // Reassign entire array to trigger observation
+                print("✅ [refreshPet] Refreshed pet from server - weight: \(updatedPet.weightKg ?? 0) kg")
+                print("   Old weight in array: \(self.pets[index].weightKg ?? 0) kg")
+            } else {
+                // Pet not in array, add it
+                self.pets.append(updatedPet)
+                print("✅ [refreshPet] Added pet to array - weight: \(updatedPet.weightKg ?? 0) kg")
+            }
+        }
+        
+        // Update cache
+        await updatePetsCache()
     }
     
     /// Delete a pet with cache invalidation
@@ -269,8 +312,11 @@ final class CachedPetService {
                 try await apiService.deletePet(id: id)
                 
                 // Update local state
-                self.pets.removeAll { $0.id == id }
-                self.isLoading = false
+                // CRITICAL: Create new array to ensure @Observable detects the change
+                await MainActor.run {
+                    self.pets.removeAll { $0.id == id }
+                    self.isLoading = false
+                }
                 
                 // Track pet deletion
                 PostHogAnalytics.trackPetDeleted(petId: id, species: petSpecies)

@@ -81,12 +81,20 @@ class HealthEventService: ObservableObject {
                 responseType: HealthEvent.self
             )
             
-            // Update local cache
-            if healthEvents[petId] == nil {
-                healthEvents[petId] = []
+            // Update local cache and notify observers
+            await MainActor.run {
+                if healthEvents[petId] == nil {
+                    healthEvents[petId] = []
+                }
+                healthEvents[petId]?.append(createdEvent)
+                healthEvents[petId]?.sort { $0.eventDate > $1.eventDate }
+                
+                // CRITICAL: Force SwiftUI to detect the change
+                // Dictionary mutations don't always trigger @Published updates
+                objectWillChange.send()
+                print("✅ [createHealthEvent] Added event to cache and notified observers")
+                print("   Pet ID: \(petId), Event count: \(healthEvents[petId]?.count ?? 0)")
             }
-            healthEvents[petId]?.append(createdEvent)
-            healthEvents[petId]?.sort { $0.eventDate > $1.eventDate }
             
             isLoading = false
             return createdEvent
@@ -174,10 +182,20 @@ class HealthEventService: ObservableObject {
             )
             
             // Update local cache
-            for (petId, events) in healthEvents {
-                if let index = events.firstIndex(where: { $0.id == eventId }) {
-                    healthEvents[petId]?[index] = updatedEvent
+            // CRITICAL FIX: @Published doesn't detect in-place array element mutations inside dictionaries
+            // Create new dictionary instance to trigger observation
+            await MainActor.run {
+                var updatedHealthEvents = self.healthEvents
+                for (petId, events) in updatedHealthEvents {
+                    if let index = events.firstIndex(where: { $0.id == eventId }) {
+                        var updatedEvents = events
+                        updatedEvents[index] = updatedEvent
+                        updatedHealthEvents[petId] = updatedEvents
+                    }
                 }
+                self.healthEvents = updatedHealthEvents
+                objectWillChange.send()
+                print("✅ [updateHealthEvent] Updated event in cache and notified observers")
             }
             
             isLoading = false
@@ -206,7 +224,18 @@ class HealthEventService: ObservableObject {
             try await apiService.delete(endpoint: "/health-events/\(eventId)")
             
             // Remove from local cache
-            healthEvents[petId]?.removeAll { $0.id == eventId }
+            // CRITICAL FIX: @Published doesn't detect in-place array mutations inside dictionaries
+            // Create new dictionary instance to trigger observation
+            await MainActor.run {
+                var updatedHealthEvents = self.healthEvents
+                if var events = updatedHealthEvents[petId] {
+                    events.removeAll { $0.id == eventId }
+                    updatedHealthEvents[petId] = events
+                    self.healthEvents = updatedHealthEvents
+                    objectWillChange.send()
+                    print("✅ [deleteHealthEvent] Removed event from cache and notified observers")
+                }
+            }
             
             isLoading = false
             

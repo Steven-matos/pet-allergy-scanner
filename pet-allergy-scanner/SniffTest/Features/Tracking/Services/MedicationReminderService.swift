@@ -87,10 +87,17 @@ class MedicationReminderService: NSObject, ObservableObject {
         )
         
         // Add to local storage
-        if medicationReminders[petId] == nil {
-            medicationReminders[petId] = []
+        // CRITICAL FIX: @Published doesn't always detect in-place array mutations inside dictionaries
+        // Create new dictionary instance to trigger observation
+        await MainActor.run {
+            var updatedReminders = self.medicationReminders
+            if updatedReminders[petId] == nil {
+                updatedReminders[petId] = []
+            }
+            updatedReminders[petId]?.append(reminder)
+            self.medicationReminders = updatedReminders
+            objectWillChange.send()
         }
-        medicationReminders[petId]?.append(reminder)
         
         // Schedule notifications
         await scheduleMedicationNotifications(for: reminder)

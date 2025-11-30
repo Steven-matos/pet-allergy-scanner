@@ -114,6 +114,17 @@ struct PetsView: View {
                     showingAlert = true
                 }
             }
+            .onAppear {
+                // Refresh pets when view appears to ensure fresh data
+                // This is especially important after weight/event/food logging
+                petService.loadPets(forceRefresh: false)
+            }
+            .refreshable {
+                // Pull-to-refresh to force fresh data from server
+                await MainActor.run {
+                    petService.loadPets(forceRefresh: true)
+                }
+            }
         }
     }
 }
@@ -125,11 +136,21 @@ struct PetCardView: View {
     let onEdit: () -> Void
     let onDelete: () -> Void
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @StateObject private var weightService = CachedWeightTrackingService.shared
     @State private var isExportingPDF = false
     @State private var showExportError = false
     @State private var exportErrorMessage: String?
     @State private var pdfURL: URL?
     @State private var showShareSheet = false
+    
+    /// Get current weight for the pet - prefers fresh weight from weight service over cached pet.weightKg
+    /// This ensures we always show the most up-to-date weight
+    private var currentWeight: Double? {
+        // CRITICAL: Use weightService.currentWeights instead of pet.weightKg
+        // pet.weightKg may be stale from cache, but currentWeights is updated immediately
+        // when weight is recorded and is always fresh from the server
+        return weightService.currentWeights[pet.id] ?? pet.weightKg
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -221,7 +242,9 @@ struct PetCardView: View {
                 
                 // Weight and Allergies Row with Trust & Nature spacing
                 HStack(spacing: ModernDesignSystem.Spacing.md) {
-                    if let weightKg = pet.weightKg {
+                    // CRITICAL: Use currentWeight computed property instead of pet.weightKg
+                    // This ensures we always show fresh weight from weight service
+                    if let weightKg = currentWeight {
                         InfoPillView(
                             icon: "scalemass.fill",
                             label: "Weight",

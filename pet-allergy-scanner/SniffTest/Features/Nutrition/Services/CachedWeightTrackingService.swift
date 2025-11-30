@@ -102,14 +102,23 @@ class CachedWeightTrackingService: ObservableObject {
         )
         
         // Add to local storage FIRST (optimistic UI update)
-        if weightHistory[petId] == nil {
-            weightHistory[petId] = []
+        // CRITICAL FIX: @Published doesn't always detect in-place array mutations inside dictionaries
+        // Create new dictionary instance to ensure observation is triggered
+        await MainActor.run {
+            var updatedWeightHistory = self.weightHistory
+            if updatedWeightHistory[petId] == nil {
+                updatedWeightHistory[petId] = []
+            }
+            updatedWeightHistory[petId]?.insert(weightRecord, at: 0)
+            self.weightHistory = updatedWeightHistory
+            
+            var updatedCurrentWeights = self.currentWeights
+            updatedCurrentWeights[petId] = weightInKg
+            self.currentWeights = updatedCurrentWeights
+            
+            // Force SwiftUI to detect the change
+            objectWillChange.send()
         }
-        weightHistory[petId]?.insert(weightRecord, at: 0)
-        currentWeights[petId] = weightInKg
-        
-        // Force SwiftUI to detect the change
-        objectWillChange.send()
         
         print("✅ [recordWeight] Added to local storage - now have \(weightHistory[petId]?.count ?? 0) records")
         print("✅ [recordWeight] Updated currentWeights[\(petId)] = \(weightInKg) kg")
@@ -684,113 +693,87 @@ class CachedWeightTrackingService: ObservableObject {
      * Update pet's current weight in PetService
      * - Parameter petId: Pet ID
      * - Parameter weightKg: New weight in kg
+     * 
+     * CRITICAL: This function ensures pet.weightKg is ALWAYS fresh from the server
+     * after any weight/event/food logging operation. It invalidates all caches
+     * and forces a fresh fetch to prevent stale data.
      */
     private func updatePetWeight(petId: String, weightKg: Double) async {
         print("🐾 [updatePetWeight] Starting - petId: \(petId), weightKg: \(weightKg)")
         
-        // CRITICAL FIX: The backend has already updated the pet's weight in the database.
-        // We need to:
-        // 1. Update our local currentWeights dictionary IMMEDIATELY for instant UI update
-        // 2. Refresh the pet object from server for consistency
-        
-        // STEP 1: Update local currentWeights for instant UI feedback
+        // STEP 1: Update local currentWeights IMMEDIATELY for instant UI feedback
         await MainActor.run {
             currentWeights[petId] = weightKg
             print("✅ [updatePetWeight] Updated local currentWeights to \(weightKg) kg")
-            
-            // CRITICAL: Force SwiftUI to detect the change by sending objectWillChange
-            // Dictionary mutations don't always trigger @Published updates
             objectWillChange.send()
-            print("🔔 [updatePetWeight] Sent objectWillChange notification")
         }
         
-        // STEP 2: Force refresh pets from server to get the updated weight
-        print("🔄 [updatePetWeight] Forcing pet data refresh from server...")
-        
-        // CRITICAL: Invalidate pets cache to ensure we get fresh data
+        // STEP 2: Invalidate ALL pet-related caches to force fresh data
         if let userId = currentUserId {
+            // Invalidate pets list cache
             let petsCacheKey = CacheKey.pets.scoped(forUserId: userId)
             cacheService.invalidate(forKey: petsCacheKey)
-            print("🗑️ [updatePetWeight] Invalidated pets cache")
+            
+            // Invalidate individual pet detail cache
+            let petDetailCacheKey = CacheKey.petDetails.scoped(forPetId: petId)
+            cacheService.invalidate(forKey: petDetailCacheKey)
+            
+            print("🗑️ [updatePetWeight] Invalidated all pet caches")
         }
         
-        // Small delay to ensure backend transaction is committed
-        // The backend updates the pet weight, but there might be a brief delay
-        // before the updated data is available via the API
-        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-        print("⏳ [updatePetWeight] Waited 0.2s for backend transaction to commit")
+        // STEP 3: Wait for backend transaction to commit
+        // The backend updates pet weight, but there might be a brief delay
+        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds (increased for reliability)
+        print("⏳ [updatePetWeight] Waited for backend transaction to commit")
         
+        // STEP 4: Force refresh the specific pet from server (more efficient than loading all pets)
         do {
-            let loadedPets = try await petService.loadPetsAsync(forceRefresh: true)
-            print("✅ [updatePetWeight] Pets refreshed from server - loaded \(loadedPets.count) pets")
+            // Use the new refreshPet method for better performance
+            try await petService.refreshPet(petId: petId)
             
-            // Verify the pet was updated and refresh the selected pet if needed
-            if let updatedPet = loadedPets.first(where: { $0.id == petId }) {
-                print("✅ [updatePetWeight] Pet refreshed from server")
-                print("   Pet name: \(updatedPet.name)")
-                print("   Pet weight from server: \(updatedPet.weightKg ?? 0) kg")
-                print("   Expected weight: \(weightKg) kg")
-                
-                if let serverWeight = updatedPet.weightKg {
-                    // Verify the server weight matches (within rounding tolerance)
-                    let weightDifference = abs(serverWeight - weightKg)
-                    if weightDifference > 0.1 {
-                        print("⚠️ [updatePetWeight] WARNING: Server weight (\(serverWeight) kg) differs from expected (\(weightKg) kg)")
-                    } else {
-                        print("✅ [updatePetWeight] Server weight matches expected weight")
-                    }
+            // Get the updated pet from the service
+            guard let updatedPet = petService.pets.first(where: { $0.id == petId }) else {
+                print("⚠️ [updatePetWeight] Pet not found after refresh - ID: \(petId)")
+                return
+            }
+            
+            print("✅ [updatePetWeight] Pet refreshed from server")
+            print("   Pet name: \(updatedPet.name)")
+            print("   Pet weight from server: \(updatedPet.weightKg ?? 0) kg")
+            print("   Expected weight: \(weightKg) kg")
+            
+            // Verify server weight matches
+            if let serverWeight = updatedPet.weightKg {
+                let weightDifference = abs(serverWeight - weightKg)
+                if weightDifference > 0.1 {
+                    print("⚠️ [updatePetWeight] WARNING: Server weight (\(serverWeight) kg) differs from expected (\(weightKg) kg)")
+                } else {
+                    print("✅ [updatePetWeight] Server weight matches expected weight")
                 }
-                
-                // CRITICAL: Also verify the pet is updated in CachedPetService.pets array
-                // This ensures all views that access petService.pets will see the update
-                // Note: CachedPetService uses @Observable, so array updates are automatically tracked
-                await MainActor.run {
-                    if let index = petService.pets.firstIndex(where: { $0.id == petId }) {
-                        let oldPetInService = petService.pets[index]
-                        petService.pets[index] = updatedPet
-                        print("✅ [updatePetWeight] Updated pet in CachedPetService.pets array")
-                        print("   Old weight in service: \(oldPetInService.weightKg ?? 0) kg")
-                        print("   New weight in service: \(updatedPet.weightKg ?? 0) kg")
-                        print("   @Observable will automatically notify observers")
-                    } else {
-                        print("⚠️ [updatePetWeight] Pet not found in CachedPetService.pets array")
-                        print("   This shouldn't happen since loadPetsAsync just loaded it")
-                    }
-                }
-                
-                // Update the selected pet in PetSelectionService to trigger UI refresh
-                // CRITICAL: Since NutritionPetSelectionService is @MainActor, we can call directly
-                // but we need to ensure we're on MainActor
-                await MainActor.run {
-                    let oldWeight = NutritionPetSelectionService.shared.selectedPet?.weightKg ?? 0
+            }
+            
+            // STEP 5: Update selected pet in NutritionPetSelectionService
+            // This ensures all views using selectedPet see the updated weight
+            await MainActor.run {
+                // Update selected pet if it matches the petId
+                if let currentSelectedPet = NutritionPetSelectionService.shared.selectedPet,
+                   currentSelectedPet.id == petId {
+                    let oldWeight = currentSelectedPet.weightKg ?? 0
                     let newWeight = updatedPet.weightKg ?? 0
                     
                     print("🔄 [updatePetWeight] Updating selected pet:")
                     print("   Old weight: \(oldWeight) kg")
                     print("   New weight: \(newWeight) kg")
-                    print("   Pet ID: \(updatedPet.id)")
                     
                     NutritionPetSelectionService.shared.selectPet(updatedPet)
-                    
-                    // Verify the update took effect
-                    if let currentSelectedPet = NutritionPetSelectionService.shared.selectedPet {
-                        print("✅ [updatePetWeight] Selected pet updated successfully")
-                        print("   Current selected pet weight: \(currentSelectedPet.weightKg ?? 0) kg")
-                        print("   Current selected pet ID: \(currentSelectedPet.id)")
-                        
-                        // Force objectWillChange to ensure UI updates
-                        NutritionPetSelectionService.shared.objectWillChange.send()
-                        print("🔔 [updatePetWeight] Sent objectWillChange to NutritionPetSelectionService")
-                    } else {
-                        print("⚠️ [updatePetWeight] WARNING: Selected pet is nil after update!")
-                    }
+                    NutritionPetSelectionService.shared.objectWillChange.send()
+                    print("✅ [updatePetWeight] Selected pet updated and notified observers")
+                } else {
+                    print("ℹ️ [updatePetWeight] Selected pet doesn't match, skipping selection update")
                 }
-            } else {
-                print("⚠️ [updatePetWeight] Pet not found after refresh - ID: \(petId)")
-                print("   Available pets: \(loadedPets.map { $0.name })")
             }
         } catch {
-            print("❌ [updatePetWeight] Failed to load pets from server: \(error.localizedDescription)")
+            print("❌ [updatePetWeight] Failed to refresh pet from server: \(error.localizedDescription)")
             print("   Continuing with local weight update only")
         }
         

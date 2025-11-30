@@ -255,7 +255,12 @@ class CachedNutritionService: ObservableObject {
             responseType: FeedingRecord.self
         )
         
-        feedingRecords.append(record)
+        // CRITICAL FIX: @Published doesn't always detect array mutations
+        // Ensure we're on MainActor and trigger observation
+        await MainActor.run {
+            self.feedingRecords.append(record)
+            objectWillChange.send()
+        }
         
         // Invalidate related caches
         if currentUserId != nil {
@@ -412,18 +417,26 @@ class CachedNutritionService: ObservableObject {
             recommendations: Array(Set(recommendations)) // Remove duplicates
         )
         
-        if dailySummaries[petId] == nil {
-            dailySummaries[petId] = []
+        // CRITICAL FIX: @Published doesn't detect in-place array mutations inside dictionaries
+        // Create new dictionary instance to trigger observation
+        await MainActor.run {
+            var updatedDailySummaries = self.dailySummaries
+            if updatedDailySummaries[petId] == nil {
+                updatedDailySummaries[petId] = []
+            }
+            
+            // Remove existing summary for this date
+            updatedDailySummaries[petId]?.removeAll { calendar.isDate($0.date, inSameDayAs: date) }
+            
+            // Add new summary
+            updatedDailySummaries[petId]?.append(summary)
+            
+            // Sort by date
+            updatedDailySummaries[petId]?.sort { $0.date > $1.date }
+            
+            self.dailySummaries = updatedDailySummaries
+            objectWillChange.send()
         }
-        
-        // Remove existing summary for this date
-        dailySummaries[petId]?.removeAll { calendar.isDate($0.date, inSameDayAs: date) }
-        
-        // Add new summary
-        dailySummaries[petId]?.append(summary)
-        
-        // Sort by date
-        dailySummaries[petId]?.sort { $0.date > $1.date }
         
         // Update cache
         if currentUserId != nil {
