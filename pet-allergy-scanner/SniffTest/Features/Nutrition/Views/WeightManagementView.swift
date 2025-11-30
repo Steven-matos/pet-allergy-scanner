@@ -53,7 +53,12 @@ struct WeightManagementView: View {
     // MARK: - Computed Properties
     
     private var selectedPet: Pet? {
-        petSelectionService.selectedPet
+        let pet = petSelectionService.selectedPet
+        // Log pet weight for debugging
+        if let p = pet {
+            print("🐕 [selectedPet getter] Pet: \(p.name), Weight: \(p.weightKg ?? 0) kg")
+        }
+        return pet
     }
     
     var body: some View {
@@ -128,12 +133,19 @@ struct WeightManagementView: View {
             }
         }
         .onChange(of: selectedPet) { oldPet, newPet in
+            print("🔄 [onChange(selectedPet)] Pet changed")
+            print("   Old pet: \(oldPet?.name ?? "nil"), weight: \(oldPet?.weightKg ?? 0) kg")
+            print("   New pet: \(newPet?.name ?? "nil"), weight: \(newPet?.weightKg ?? 0) kg")
+            
             // Stop syncing old pet, start syncing new pet
             if let oldPet = oldPet {
                 syncService.stopSyncing(forPetId: oldPet.id)
             }
             if let newPet = newPet {
                 syncService.startSyncing(forPetId: newPet.id)
+                // Force UI refresh when pet changes
+                refreshTrigger.toggle()
+                print("🔄 [onChange(selectedPet)] Triggered UI refresh")
             }
         }
         .refreshable {
