@@ -93,6 +93,30 @@ app = FastAPI(
     redirect_slashes=False  # Prevent 307 redirects that can cause Authorization header loss
 )
 
+# Add request logging middleware first to catch all requests
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Log all incoming requests for debugging"""
+    async def dispatch(self, request, call_next):
+        # Log all health-events requests
+        if "health-events" in request.url.path:
+            logger.info(f"🌐 [REQUEST_LOG] {request.method} {request.url.path}")
+            logger.info(f"   Query params: {dict(request.query_params)}")
+            logger.info(f"   Headers: Authorization={'present' if 'authorization' in request.headers else 'missing'}")
+            print(f"🌐 [REQUEST_LOG] {request.method} {request.url.path}")
+            print(f"   Query params: {dict(request.query_params)}")
+        
+        response = await call_next(request)
+        
+        if "health-events" in request.url.path:
+            logger.info(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
+            print(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
+        
+        return response
+
+app.add_middleware(RequestLoggingMiddleware)
 # Add security middleware (order matters!)
 # Note: Audit middleware disabled in production to avoid Railway rate limits
 app.add_middleware(SecurityHeadersMiddleware)
