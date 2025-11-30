@@ -69,8 +69,8 @@ async def get_pet_health_events(
     """
     Get health events for a specific pet with optional filtering
     """
-    import logging
-    logger = logging.getLogger(__name__)
+    from app.utils.logging_config import get_logger
+    logger = get_logger(__name__)
     
     logger.info(f"🔍 [get_pet_health_events] Request received")
     logger.info(f"   pet_id: {pet_id}")
