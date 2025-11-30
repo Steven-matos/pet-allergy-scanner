@@ -72,38 +72,55 @@ async def get_pet_health_events(
     from app.utils.logging_config import get_logger
     logger = get_logger(__name__)
     
+    # Use both logger and print to ensure visibility
     logger.info(f"🔍 [get_pet_health_events] Request received")
     logger.info(f"   pet_id: {pet_id}")
     logger.info(f"   current_user.id: {current_user.id}")
     logger.info(f"   limit: {limit}, offset: {offset}, category: {category}")
+    print(f"🔍 [HEALTH_EVENTS_ROUTER] Request received - pet_id: {pet_id}, user_id: {current_user.id}")
     
-    # Verify pet ownership using centralized service
-    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    try:
+        # Verify pet ownership using centralized service
+        await verify_pet_ownership(pet_id, current_user.id, supabase)
+        logger.info(f"✅ [get_pet_health_events] Pet ownership verified")
+    except Exception as e:
+        logger.error(f"❌ [get_pet_health_events] Pet ownership verification failed: {e}")
+        raise
     
     # Get events using service
-    if category:
-        try:
-            category_enum = HealthEventCategory(category)
-            events = await HealthEventService.get_health_events_by_category(
-                pet_id, category_enum.value, current_user.id, supabase, limit, offset
+    try:
+        if category:
+            try:
+                category_enum = HealthEventCategory(category)
+                events = await HealthEventService.get_health_events_by_category(
+                    pet_id, category_enum.value, current_user.id, supabase, limit, offset
+                )
+            except ValueError:
+                from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
+                raise HTTPException(
+                    status_code=400, 
+                    detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid format")
+                )
+        else:
+            logger.info(f"📞 [get_pet_health_events] Calling service.get_health_events_for_pet()")
+            events = await HealthEventService.get_health_events_for_pet(
+                pet_id, current_user.id, supabase, limit, offset
             )
-        except ValueError:
-            from app.shared.services.user_friendly_error_messages import UserFriendlyErrorMessages
-            raise HTTPException(
-                status_code=400, 
-                detail=UserFriendlyErrorMessages.get_user_friendly_message("invalid format")
-            )
-    else:
-        events = await HealthEventService.get_health_events_for_pet(
-            pet_id, current_user.id, supabase, limit, offset
-        )
+            logger.info(f"📥 [get_pet_health_events] Service returned {len(events)} events")
 
-    # Get total count
-    total = await HealthEventService.get_health_events_count_for_pet(
-        pet_id, current_user.id, supabase
-    )
-    
-    logger.info(f"📊 [get_pet_health_events] Returning {len(events)} events, total: {total}")
+        # Get total count
+        logger.info(f"📞 [get_pet_health_events] Calling service.get_health_events_count_for_pet()")
+        total = await HealthEventService.get_health_events_count_for_pet(
+            pet_id, current_user.id, supabase
+        )
+        logger.info(f"📥 [get_pet_health_events] Service returned total: {total}")
+        
+        logger.info(f"📊 [get_pet_health_events] Returning {len(events)} events, total: {total}")
+        print(f"📊 [HEALTH_EVENTS_ROUTER] Returning {len(events)} events, total: {total}")
+    except Exception as e:
+        logger.error(f"❌ [get_pet_health_events] Error getting events: {e}", exc_info=True)
+        print(f"❌ [HEALTH_EVENTS_ROUTER] Error: {e}")
+        raise
 
     # Convert raw database dictionaries to HealthEventResponse objects
     health_event_responses = [HealthEventResponse(**event) for event in events]
