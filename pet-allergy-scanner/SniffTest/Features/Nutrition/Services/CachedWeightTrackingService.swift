@@ -107,7 +107,13 @@ class CachedWeightTrackingService: ObservableObject {
         }
         weightHistory[petId]?.insert(weightRecord, at: 0)
         currentWeights[petId] = weightInKg
+        
+        // Force SwiftUI to detect the change
+        objectWillChange.send()
+        
         print("✅ [recordWeight] Added to local storage - now have \(weightHistory[petId]?.count ?? 0) records")
+        print("✅ [recordWeight] Updated currentWeights[\(petId)] = \(weightInKg) kg")
+        print("🔔 [recordWeight] Sent objectWillChange notification")
         
         // Send to backend
         do {
@@ -691,6 +697,11 @@ class CachedWeightTrackingService: ObservableObject {
         await MainActor.run {
             currentWeights[petId] = weightKg
             print("✅ [updatePetWeight] Updated local currentWeights to \(weightKg) kg")
+            
+            // CRITICAL: Force SwiftUI to detect the change by sending objectWillChange
+            // Dictionary mutations don't always trigger @Published updates
+            objectWillChange.send()
+            print("🔔 [updatePetWeight] Sent objectWillChange notification")
         }
         
         // STEP 2: Force refresh pets from server to get the updated weight
