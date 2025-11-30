@@ -69,6 +69,13 @@ async def get_pet_health_events(
     """
     Get health events for a specific pet with optional filtering
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"🔍 [get_pet_health_events] Request received")
+    logger.info(f"   pet_id: {pet_id}")
+    logger.info(f"   current_user.id: {current_user.id}")
+    logger.info(f"   limit: {limit}, offset: {offset}, category: {category}")
     
     # Verify pet ownership using centralized service
     await verify_pet_ownership(pet_id, current_user.id, supabase)
@@ -95,6 +102,8 @@ async def get_pet_health_events(
     total = await HealthEventService.get_health_events_count_for_pet(
         pet_id, current_user.id, supabase
     )
+    
+    logger.info(f"📊 [get_pet_health_events] Returning {len(events)} events, total: {total}")
 
     # Convert raw database dictionaries to HealthEventResponse objects
     health_event_responses = [HealthEventResponse(**event) for event in events]

@@ -76,11 +76,31 @@ class HealthEventService:
         """
         Get health events for a specific pet
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"🔍 [get_health_events_for_pet] Querying health events")
+        logger.info(f"   pet_id: {pet_id}")
+        logger.info(f"   user_id: {user_id}")
+        logger.info(f"   limit: {limit}, offset: {offset}")
+        
+        # First, check if there are ANY events for this pet (without user_id filter)
+        all_events_check = supabase.table("health_events").select("id, pet_id, user_id").eq("pet_id", pet_id).execute()
+        logger.info(f"   Events found for pet_id (any user): {len(all_events_check.data) if all_events_check.data else 0}")
+        if all_events_check.data:
+            for event in all_events_check.data[:3]:  # Log first 3
+                logger.info(f"   Sample event: id={event.get('id')}, pet_id={event.get('pet_id')}, user_id={event.get('user_id')}")
+        
+        # Now check with user_id filter
         response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
         
+        logger.info(f"   Events found with user_id filter: {len(response.data) if response.data else 0}")
+        
         if not response.data:
+            logger.warning(f"⚠️ [get_health_events_for_pet] No events found for pet_id={pet_id}, user_id={user_id}")
             return []
         
+        logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")
         return response.data
     
     @staticmethod
@@ -176,6 +196,12 @@ class HealthEventService:
         """
         Get count of health events for a pet
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         response = supabase.table("health_events").select("id", count="exact").eq("pet_id", pet_id).eq("user_id", user_id).execute()
         
-        return response.count or 0
+        count = response.count or 0
+        logger.info(f"📊 [get_health_events_count_for_pet] Count: {count} for pet_id={pet_id}, user_id={user_id}")
+        
+        return count
