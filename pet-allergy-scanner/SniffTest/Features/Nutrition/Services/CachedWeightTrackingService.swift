@@ -708,7 +708,7 @@ class CachedWeightTrackingService: ObservableObject {
         }
         
         if waitCount >= maxWait {
-            print("⚠️ [updatePetWeight] Timeout waiting for pets to load after \(maxWait * 0.1)s")
+            print("⚠️ [updatePetWeight] Timeout waiting for pets to load after \(Double(maxWait) * 0.1)s")
         }
         
         // Verify the pet was updated and refresh the selected pet if needed
