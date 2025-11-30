@@ -288,7 +288,7 @@ struct AdvancedNutritionView: View {
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 
-                if let weight = pet.weightKg {
+                if let weight = cachedWeightService.currentWeights[pet.id] ?? pet.weightKg {
                     Text(unitService.formatWeight(weight))
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -520,7 +520,7 @@ struct AdvancedNutritionPetSelectionCard: View {
                         .font(ModernDesignSystem.Typography.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
-                    if let weight = pet.weightKg {
+                    if let weight = cachedWeightService.currentWeights[pet.id] ?? pet.weightKg {
                         Text(unitService.formatWeight(weight))
                             .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
