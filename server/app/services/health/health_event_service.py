@@ -260,10 +260,16 @@ class HealthEventService:
     ) -> int:
         """
         Get count of health events for a pet
+        Note: RLS policy automatically filters by user_id, so we don't need explicit filter
         """
-        response = supabase.table("health_events").select("id", count="exact").eq("pet_id", pet_id).eq("user_id", user_id).execute()
+        logger.info(f"📊 [get_health_events_count_for_pet] Getting count for pet_id={pet_id}, user_id={user_id}")
+        
+        # Use RLS like the main query - don't add explicit user_id filter
+        # RLS policy automatically filters by auth.uid() = user_id
+        response = supabase.table("health_events").select("id", count="exact").eq("pet_id", pet_id).execute()
         
         count = response.count or 0
         logger.info(f"📊 [get_health_events_count_for_pet] Count: {count} for pet_id={pet_id}, user_id={user_id}")
+        print(f"📊 [COUNT] RLS returned count: {count} for pet_id={pet_id}")
         
         return count
