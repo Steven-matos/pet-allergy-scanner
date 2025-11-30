@@ -84,8 +84,28 @@ class HealthEventService:
         logger.info(f"   user_id: {user_id}")
         logger.info(f"   limit: {limit}, offset: {offset}")
         
-        # First, check if there are ANY events for this pet (without user_id filter)
-        # Use service role client to bypass RLS for diagnostic purposes
+        # First, verify pet ownership (RLS requires this)
+        try:
+            pet_check = supabase.table("pets").select("id, user_id").eq("id", pet_id).execute()
+            if not pet_check.data:
+                logger.error(f"   ❌ Pet {pet_id} not found!")
+                print(f"   ❌ Pet {pet_id} not found!")
+                return []
+            
+            pet_owner_id = pet_check.data[0].get('user_id')
+            logger.info(f"   Pet owner: {pet_owner_id}, Requested user: {user_id}")
+            print(f"   Pet owner: {pet_owner_id}, Requested user: {user_id}")
+            
+            if pet_owner_id != user_id:
+                logger.error(f"   ❌ Pet ownership mismatch! Pet belongs to {pet_owner_id}, but user is {user_id}")
+                print(f"   ❌ Pet ownership mismatch! Pet belongs to {pet_owner_id}, but user is {user_id}")
+                return []
+        except Exception as e:
+            logger.error(f"   ❌ Pet ownership check failed: {e}")
+            print(f"   ❌ Pet ownership check failed: {e}")
+            return []
+        
+        # Check if there are ANY events for this pet (bypassing RLS for diagnostic)
         try:
             from app.shared.services.supabase_auth_service import SupabaseAuthService
             service_client = SupabaseAuthService.create_service_role_client()

@@ -100,19 +100,26 @@ from starlette.types import ASGIApp
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Log all incoming requests for debugging"""
     async def dispatch(self, request, call_next):
-        # Log all health-events requests
-        if "health-events" in request.url.path:
-            logger.info(f"🌐 [REQUEST_LOG] {request.method} {request.url.path}")
+        # Log ALL requests to verify middleware is working
+        import sys
+        path = request.url.path
+        
+        # Always log health-events requests with maximum visibility
+        if "health-events" in path:
+            logger.info(f"🌐 [REQUEST_LOG] {request.method} {path}")
             logger.info(f"   Query params: {dict(request.query_params)}")
             logger.info(f"   Headers: Authorization={'present' if 'authorization' in request.headers else 'missing'}")
-            print(f"🌐 [REQUEST_LOG] {request.method} {request.url.path}")
-            print(f"   Query params: {dict(request.query_params)}")
+            print(f"🌐 [REQUEST_LOG] {request.method} {path}", file=sys.stderr, flush=True)
+            print(f"   Query params: {dict(request.query_params)}", file=sys.stderr, flush=True)
+            print(f"🌐 [REQUEST_LOG] {request.method} {path}", flush=True)
+            print(f"   Query params: {dict(request.query_params)}", flush=True)
         
         response = await call_next(request)
         
-        if "health-events" in request.url.path:
+        if "health-events" in path:
             logger.info(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
-            print(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
+            print(f"🌐 [REQUEST_LOG] Response: {response.status_code}", file=sys.stderr, flush=True)
+            print(f"🌐 [REQUEST_LOG] Response: {response.status_code}", flush=True)
         
         return response
 
