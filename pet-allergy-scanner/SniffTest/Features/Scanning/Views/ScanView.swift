@@ -2307,7 +2307,7 @@ struct EnhancedLoadingView: View {
                     Button("Cancel") {
                         isPreparingScanResult = false
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
             }
             .onAppear {

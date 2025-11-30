@@ -79,7 +79,7 @@ struct HealthEventDetailView: View {
                                 cancelEditing()
                             }
                             .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .foregroundColor(Color.red.opacity(0.8))
                             
                             Button("Save") {
                                 saveChanges()

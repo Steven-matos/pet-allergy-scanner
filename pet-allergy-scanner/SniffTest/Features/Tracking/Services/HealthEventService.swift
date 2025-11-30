@@ -131,18 +131,48 @@ class HealthEventService: ObservableObject {
                 endpoint += "&category=\(category.rawValue)"
             }
             
+            print("🔍 [getHealthEvents] Fetching health events for pet: \(petId)")
+            print("   Endpoint: \(endpoint)")
+            
             let response = try await apiService.get(
                 endpoint: endpoint,
                 responseType: HealthEventListResponse.self
             )
             
-            healthEvents[petId] = response.events
+            print("📦 [getHealthEvents] API Response received:")
+            print("   Total: \(response.total)")
+            print("   Events count: \(response.events.count)")
+            print("   Limit: \(response.limit)")
+            print("   Offset: \(response.offset)")
+            
+            if response.events.isEmpty {
+                print("⚠️ [getHealthEvents] No events in response (but total=\(response.total))")
+            } else {
+                print("✅ [getHealthEvents] First event: \(response.events[0].id) - \(response.events[0].title)")
+            }
+            
+            // Update local cache and notify observers
+            // CRITICAL: @Published doesn't always detect dictionary mutations
+            // Must explicitly notify observers to trigger SwiftUI updates
+            await MainActor.run {
+                healthEvents[petId] = response.events
+                objectWillChange.send()
+                print("✅ [getHealthEvents] Updated cache with \(response.events.count) events for pet: \(petId)")
+                print("   Cache now contains: \(healthEvents[petId]?.count ?? 0) events")
+            }
+            
             isLoading = false
             return response.events
             
         } catch {
             isLoading = false
             self.error = error
+            print("❌ [getHealthEvents] Error loading health events for pet \(petId):")
+            print("   Error type: \(type(of: error))")
+            print("   Error description: \(error.localizedDescription)")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
             throw error
         }
     }

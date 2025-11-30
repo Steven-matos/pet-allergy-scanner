@@ -1157,6 +1157,7 @@ struct FoodSelectorView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {

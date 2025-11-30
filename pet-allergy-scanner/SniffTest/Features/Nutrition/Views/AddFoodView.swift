@@ -89,7 +89,7 @@ struct AddFoodView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
             }
             .alert("Error", isPresented: .constant(errorMessage != nil)) {

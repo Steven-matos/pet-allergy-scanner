@@ -1216,7 +1216,7 @@ struct WeightEntryView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1523,7 +1523,7 @@ struct WeightGoalSettingView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {

@@ -76,7 +76,7 @@ struct AddPetView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {

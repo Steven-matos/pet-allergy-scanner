@@ -35,19 +35,28 @@ struct HealthEventListView: View {
         // Use cached data if recent and category hasn't changed
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastUpdateTime) < 1.0 && !cachedFilteredEvents.isEmpty {
-            print("🔄 Using cached filtered events: \(cachedFilteredEvents.count)")
+            print("🔄 [filteredEvents] Using cached filtered events: \(cachedFilteredEvents.count)")
             return cachedFilteredEvents
         }
         
+        // Debug: Check what's in the service
+        let allPetsEvents = healthEventService.healthEvents
+        print("🔍 [filteredEvents] Service has events for \(allPetsEvents.keys.count) pets")
+        print("🔍 [filteredEvents] Looking for pet: \(pet.id)")
+        print("🔍 [filteredEvents] Service keys: \(Array(allPetsEvents.keys))")
+        
         guard let events = healthEventService.healthEvents[pet.id] else { 
-            print("❌ No events found for pet: \(pet.id)")
+            print("❌ [filteredEvents] No events found for pet: \(pet.id)")
+            print("   Available pet IDs in cache: \(Array(healthEventService.healthEvents.keys))")
             return []
         }
+        
+        print("✅ [filteredEvents] Found \(events.count) events in cache for pet: \(pet.id)")
         
         let filtered = selectedCategory == nil ? events : events.filter { $0.eventCategory == selectedCategory }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
         
-        print("📊 Filtered events - Total: \(events.count), Filtered: \(filtered.count), Category: \(selectedCategory?.displayName ?? "All")")
+        print("📊 [filteredEvents] Filtered events - Total: \(events.count), Filtered: \(filtered.count), Category: \(selectedCategory?.displayName ?? "All")")
         
         return sorted
     }
@@ -152,19 +161,22 @@ struct HealthEventListView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Add Event") {
+                Button(action: {
                     PostHogAnalytics.trackAddHealthEventTapped(petId: pet.id)
                     showingAddEvent = true
+                }) {
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(ModernDesignSystem.Typography.caption)
+                        Text("Add Event")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
                 }
-                .font(ModernDesignSystem.Typography.body)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
-                .padding(.vertical, ModernDesignSystem.Spacing.md)
-                .background(
-                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                        .fill(ModernDesignSystem.Colors.primary)
-                )
+                .buttonStyle(.plain)
             }
         }
         .sheet(isPresented: $showingAddEvent) {
@@ -197,7 +209,14 @@ struct HealthEventListView: View {
         .onChange(of: selectedCategory) { _, _ in
             invalidateCache()
         }
-        .onChange(of: healthEventService.healthEvents[pet.id]) { _, _ in
+        .onChange(of: healthEventService.isLoading) { oldValue, newValue in
+            // When loading completes, invalidate cache to refresh UI
+            if oldValue == true && newValue == false {
+                invalidateCache()
+            }
+        }
+        .onChange(of: healthEventService.healthEvents) { _, _ in
+            // Invalidate cache when health events dictionary changes
             invalidateCache()
         }
     }
@@ -409,21 +428,35 @@ struct HealthEventListView: View {
     // MARK: - Helper Methods
     
     private func loadHealthEvents() async {
+        print("🔄 [HealthEventListView] Starting to load health events for pet: \(pet.id)")
         isLoading = true
         
         do {
             let events = try await healthEventService.getHealthEvents(for: pet.id)
-            print("✅ Loaded \(events.count) health events for pet: \(pet.id)")
+            print("✅ [HealthEventListView] Successfully loaded \(events.count) health events for pet: \(pet.id)")
             
-            // Force UI update after data is loaded
+            // Check what's in the service cache
             await MainActor.run {
+                let cachedEvents = healthEventService.healthEvents[pet.id] ?? []
+                print("📊 [HealthEventListView] Service cache contains \(cachedEvents.count) events")
+                print("📊 [HealthEventListView] filteredEvents will have: \(filteredEvents.count) events")
+                print("📊 [HealthEventListView] medicationEvents will have: \(medicationEvents.count) events")
+                
+                // Force UI update after data is loaded
                 invalidateCache()
             }
         } catch {
-            print("❌ Error loading health events: \(error)")
+            print("❌ [HealthEventListView] Error loading health events for pet \(pet.id):")
+            print("   Error: \(error)")
+            print("   Error type: \(type(of: error))")
+            if let decodingError = error as? DecodingError {
+                print("   Decoding error details: \(decodingError)")
+            }
         }
         
-        isLoading = false
+        await MainActor.run {
+            isLoading = false
+        }
     }
 }
 

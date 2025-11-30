@@ -66,7 +66,7 @@ struct EditProfileView: View {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .foregroundColor(Color.red.opacity(0.8))
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
