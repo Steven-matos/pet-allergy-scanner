@@ -707,6 +707,19 @@ class CachedWeightTrackingService: ObservableObject {
         // STEP 2: Force refresh pets from server to get the updated weight
         print("🔄 [updatePetWeight] Forcing pet data refresh from server...")
         
+        // CRITICAL: Invalidate pets cache to ensure we get fresh data
+        if let userId = currentUserId {
+            let petsCacheKey = CacheKey.pets.scoped(forUserId: userId)
+            cacheService.invalidate(forKey: petsCacheKey)
+            print("🗑️ [updatePetWeight] Invalidated pets cache")
+        }
+        
+        // Small delay to ensure backend transaction is committed
+        // The backend updates the pet weight, but there might be a brief delay
+        // before the updated data is available via the API
+        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+        print("⏳ [updatePetWeight] Waited 0.2s for backend transaction to commit")
+        
         do {
             let loadedPets = try await petService.loadPetsAsync(forceRefresh: true)
             print("✅ [updatePetWeight] Pets refreshed from server - loaded \(loadedPets.count) pets")
@@ -728,10 +741,49 @@ class CachedWeightTrackingService: ObservableObject {
                     }
                 }
                 
-                // Update the selected pet in PetSelectionService to trigger UI refresh
+                // CRITICAL: Also verify the pet is updated in CachedPetService.pets array
+                // This ensures all views that access petService.pets will see the update
+                // Note: CachedPetService uses @Observable, so array updates are automatically tracked
                 await MainActor.run {
+                    if let index = petService.pets.firstIndex(where: { $0.id == petId }) {
+                        let oldPetInService = petService.pets[index]
+                        petService.pets[index] = updatedPet
+                        print("✅ [updatePetWeight] Updated pet in CachedPetService.pets array")
+                        print("   Old weight in service: \(oldPetInService.weightKg ?? 0) kg")
+                        print("   New weight in service: \(updatedPet.weightKg ?? 0) kg")
+                        print("   @Observable will automatically notify observers")
+                    } else {
+                        print("⚠️ [updatePetWeight] Pet not found in CachedPetService.pets array")
+                        print("   This shouldn't happen since loadPetsAsync just loaded it")
+                    }
+                }
+                
+                // Update the selected pet in PetSelectionService to trigger UI refresh
+                // CRITICAL: Since NutritionPetSelectionService is @MainActor, we can call directly
+                // but we need to ensure we're on MainActor
+                await MainActor.run {
+                    let oldWeight = NutritionPetSelectionService.shared.selectedPet?.weightKg ?? 0
+                    let newWeight = updatedPet.weightKg ?? 0
+                    
+                    print("🔄 [updatePetWeight] Updating selected pet:")
+                    print("   Old weight: \(oldWeight) kg")
+                    print("   New weight: \(newWeight) kg")
+                    print("   Pet ID: \(updatedPet.id)")
+                    
                     NutritionPetSelectionService.shared.selectPet(updatedPet)
-                    print("🔄 [updatePetWeight] Updated selected pet to trigger UI refresh")
+                    
+                    // Verify the update took effect
+                    if let currentSelectedPet = NutritionPetSelectionService.shared.selectedPet {
+                        print("✅ [updatePetWeight] Selected pet updated successfully")
+                        print("   Current selected pet weight: \(currentSelectedPet.weightKg ?? 0) kg")
+                        print("   Current selected pet ID: \(currentSelectedPet.id)")
+                        
+                        // Force objectWillChange to ensure UI updates
+                        NutritionPetSelectionService.shared.objectWillChange.send()
+                        print("🔔 [updatePetWeight] Sent objectWillChange to NutritionPetSelectionService")
+                    } else {
+                        print("⚠️ [updatePetWeight] WARNING: Selected pet is nil after update!")
+                    }
                 }
             } else {
                 print("⚠️ [updatePetWeight] Pet not found after refresh - ID: \(petId)")
