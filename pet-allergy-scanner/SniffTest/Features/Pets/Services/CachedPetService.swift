@@ -93,6 +93,87 @@ final class CachedPetService {
         loadPetsFromServer()
     }
     
+    /// Load pets asynchronously - use this when you need to await the result
+    /// - Parameter forceRefresh: Whether to bypass cache and force server refresh
+    /// - Returns: The loaded pets array
+    @discardableResult
+    func loadPetsAsync(forceRefresh: Bool = false) async throws -> [Pet] {
+        guard let userId = currentUserId else {
+            await MainActor.run {
+                self.pets = []
+                self.isLoading = false
+                self.errorMessage = nil
+            }
+            return []
+        }
+        
+        // If not forcing refresh and pets are already loaded, return them
+        if !forceRefresh && !pets.isEmpty {
+            // Still trigger background refresh if cache is stale
+            refreshPetsInBackground()
+            return pets
+        }
+        
+        // Try cache first unless force refresh is requested
+        if !forceRefresh {
+            if let cachedPets = cacheService.retrieveUserData([Pet].self, forKey: .pets, userId: userId) {
+                if !cachedPets.isEmpty {
+                    await MainActor.run {
+                        self.pets = cachedPets
+                        self.isLoading = false
+                        self.errorMessage = nil
+                    }
+                    print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+                    
+                    // Trigger background refresh if cache is stale
+                    refreshPetsInBackground()
+                    return cachedPets
+                }
+            }
+        }
+        
+        // Load from server and wait for completion
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = nil
+        }
+        
+        do {
+            let loadedPets = try await apiService.getPets()
+            
+            await MainActor.run {
+                self.pets = loadedPets
+                self.isLoading = false
+            }
+            
+            // Update cache
+            await updatePetsCache()
+            
+            print("✅ Loaded \(loadedPets.count) pet(s) from server")
+            return loadedPets
+            
+        } catch let apiError as APIError {
+            await MainActor.run {
+                self.isLoading = false
+                
+                // Handle auth errors silently
+                if case .authenticationError = apiError {
+                    self.pets = []
+                    self.errorMessage = nil
+                } else {
+                    self.errorMessage = apiError.localizedDescription
+                }
+            }
+            throw apiError
+        } catch {
+            await MainActor.run {
+                self.isLoading = false
+                self.errorMessage = error.localizedDescription
+            }
+            throw error
+        }
+    }
+    
     /// Create a new pet with cache invalidation
     /// - Parameter pet: Pet creation data
     func createPet(_ pet: PetCreate) {
