@@ -492,8 +492,9 @@ struct AdvancedNutritionView: View {
 struct AdvancedNutritionPetSelectionCard: View {
     let pet: Pet
     let onTap: () -> Void
-    // MEMORY OPTIMIZATION: Use @ObservedObject for observable shared singleton
+    // MEMORY OPTIMIZATION: Use @ObservedObject for observable shared singletons
     @ObservedObject private var unitService = WeightUnitPreferenceService.shared
+    @ObservedObject private var cachedWeightService = CachedWeightTrackingService.shared
     
     var body: some View {
         Button(action: onTap) {
