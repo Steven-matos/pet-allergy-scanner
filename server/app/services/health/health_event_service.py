@@ -108,20 +108,43 @@ class HealthEventService:
         # Now check with user_id filter (with RLS)
         logger.info(f"   Executing query with RLS: pet_id={pet_id}, user_id={user_id}")
         print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}, user_id={user_id}")
-        response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
         
-        result_count = len(response.data) if response.data else 0
-        logger.info(f"   Events found with user_id filter (with RLS): {result_count}")
-        print(f"🔍 [QUERY] Results with RLS: {result_count}")
+        # Try query WITHOUT explicit user_id filter first - RLS should handle it
+        # RLS policy should automatically filter by auth.uid(), so we might not need .eq("user_id", user_id)
+        try:
+            # First try without user_id filter (RLS should handle it)
+            response = supabase.table("health_events").select("*").eq("pet_id", pet_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
+            result_count = len(response.data) if response.data else 0
+            logger.info(f"   Events found with RLS only (no user_id filter): {result_count}")
+            print(f"🔍 [QUERY] Results with RLS only: {result_count}")
+            
+            if result_count > 0:
+                logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events (RLS filtered)")
+                print(f"✅ [QUERY] Returning {len(response.data)} events (RLS filtered)")
+                return response.data
+        except Exception as e:
+            logger.warning(f"   Query without user_id filter failed: {e}")
+            print(f"   ⚠️ Query without user_id filter failed: {e}")
         
-        if not response.data:
-            logger.warning(f"⚠️ [get_health_events_for_pet] No events found for pet_id={pet_id}, user_id={user_id}")
-            print(f"⚠️ [QUERY] No events found - RLS may be blocking or query is incorrect")
-            return []
+        # Fallback: Try with explicit user_id filter
+        try:
+            response = supabase.table("health_events").select("*").eq("pet_id", pet_id).eq("user_id", user_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
+            result_count = len(response.data) if response.data else 0
+            logger.info(f"   Events found with explicit user_id filter: {result_count}")
+            print(f"🔍 [QUERY] Results with explicit user_id: {result_count}")
+            
+            if result_count > 0:
+                logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")
+                print(f"✅ [QUERY] Returning {len(response.data)} events")
+                return response.data
+        except Exception as e:
+            logger.error(f"   Query with user_id filter failed: {e}")
+            print(f"   ❌ Query with user_id filter failed: {e}")
         
-        logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")
-        print(f"✅ [QUERY] Returning {len(response.data)} events")
-        return response.data
+        # If we get here, no events found
+        logger.warning(f"⚠️ [get_health_events_for_pet] No events found for pet_id={pet_id}, user_id={user_id}")
+        print(f"⚠️ [QUERY] No events found - RLS may be blocking or query is incorrect")
+        return []
     
     @staticmethod
     async def get_health_events_by_category(

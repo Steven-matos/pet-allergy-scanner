@@ -69,6 +69,14 @@ async def get_pet_health_events(
     """
     Get health events for a specific pet with optional filtering
     """
+    # CRITICAL: Print immediately to verify route is being hit
+    import sys
+    print("=" * 80, file=sys.stderr)
+    print("🚨 HEALTH EVENTS ENDPOINT HIT!", file=sys.stderr)
+    print(f"   pet_id: {pet_id}", file=sys.stderr)
+    print(f"   user_id: {current_user.id}", file=sys.stderr)
+    print("=" * 80, file=sys.stderr)
+    
     from app.utils.logging_config import get_logger
     logger = get_logger(__name__)
     
