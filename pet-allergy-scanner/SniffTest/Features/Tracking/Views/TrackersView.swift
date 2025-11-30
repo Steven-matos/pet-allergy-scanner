@@ -199,7 +199,7 @@ struct PetHealthEventCard: View {
     @StateObject private var healthEventService = HealthEventService.shared
     
     var recentEvents: [HealthEvent] {
-        healthEventService.healthEvents[pet.id]?.prefix(3).map { $0 } ?? []
+        Array(healthEventService.healthEvents(for: pet.id).prefix(3))
     }
     
     var body: some View {

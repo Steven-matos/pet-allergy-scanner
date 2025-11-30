@@ -39,19 +39,14 @@ struct HealthEventListView: View {
             return cachedFilteredEvents
         }
         
-        // Debug: Check what's in the service
-        let allPetsEvents = healthEventService.healthEvents
-        print("🔍 [filteredEvents] Service has events for \(allPetsEvents.keys.count) pets")
-        print("🔍 [filteredEvents] Looking for pet: \(pet.id)")
-        print("🔍 [filteredEvents] Service keys: \(Array(allPetsEvents.keys))")
+        // Get events from the new cache API
+        let events = healthEventService.healthEvents(for: pet.id)
+        print("🔍 [filteredEvents] Retrieved \(events.count) events for pet: \(pet.id)")
         
-        guard let events = healthEventService.healthEvents[pet.id] else { 
-            print("❌ [filteredEvents] No events found for pet: \(pet.id)")
-            print("   Available pet IDs in cache: \(Array(healthEventService.healthEvents.keys))")
+        if events.isEmpty {
+            print("⚠️ [filteredEvents] No events found for pet: \(pet.id)")
             return []
         }
-        
-        print("✅ [filteredEvents] Found \(events.count) events in cache for pet: \(pet.id)")
         
         let filtered = selectedCategory == nil ? events : events.filter { $0.eventCategory == selectedCategory }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
@@ -68,10 +63,7 @@ struct HealthEventListView: View {
             return cachedMedicationEvents
         }
         
-        guard let events = healthEventService.healthEvents[pet.id] else { 
-            return []
-        }
-        
+        let events = healthEventService.healthEvents(for: pet.id)
         let filtered = events.filter { $0.eventType == .medication }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
         
@@ -215,10 +207,6 @@ struct HealthEventListView: View {
                 invalidateCache()
             }
         }
-        .onChange(of: healthEventService.healthEvents) { _, _ in
-            // Invalidate cache when health events dictionary changes
-            invalidateCache()
-        }
     }
     
     // MARK: - Category Filter Section
@@ -229,14 +217,14 @@ struct HealthEventListView: View {
                 CategoryFilterChip(
                     title: "All",
                     isSelected: selectedCategory == nil,
-                    count: healthEventService.healthEvents[pet.id]?.count ?? 0
+                    count: healthEventService.healthEvents(for: pet.id).count
                 ) {
                     PostHogAnalytics.trackHealthEventFilterChanged(category: nil)
                     selectedCategory = nil
                 }
                 
                 ForEach(HealthEventCategory.allCases, id: \.self) { category in
-                    let count = healthEventService.healthEvents[pet.id]?.filter { $0.eventCategory == category }.count ?? 0
+                    let count = healthEventService.healthEvents(for: pet.id).filter { $0.eventCategory == category }.count
                     
                     CategoryFilterChip(
                         title: category.displayName,
@@ -437,7 +425,7 @@ struct HealthEventListView: View {
             
             // Check what's in the service cache
             await MainActor.run {
-                let cachedEvents = healthEventService.healthEvents[pet.id] ?? []
+                let cachedEvents = healthEventService.healthEvents(for: pet.id)
                 print("📊 [HealthEventListView] Service cache contains \(cachedEvents.count) events")
                 print("📊 [HealthEventListView] filteredEvents will have: \(filteredEvents.count) events")
                 print("📊 [HealthEventListView] medicationEvents will have: \(medicationEvents.count) events")

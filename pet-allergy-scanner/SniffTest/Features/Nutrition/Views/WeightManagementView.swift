@@ -246,14 +246,14 @@ struct WeightManagementView: View {
         ScrollView {
             VStack(spacing: ModernDesignSystem.Spacing.lg) {
                 // Current Weight Card
-                // CRITICAL: Always use weightService.currentWeights instead of pet.weightKg
-                // pet.weightKg may be stale from cache, but currentWeights is always fresh
+                // CRITICAL: Always use weightService.currentWeight(for:) instead of pet.weightKg
+                // pet.weightKg may be stale from cache, but currentWeight is always fresh
                 CurrentWeightCard(
                     pet: pet,
-                    currentWeight: weightService.currentWeights[pet.id] ?? pet.weightKg,
+                    currentWeight: weightService.currentWeight(for: pet.id) ?? pet.weightKg,
                     weightGoal: weightService.activeWeightGoal(for: pet.id)
                 )
-                .id("\(pet.id)-\(weightService.currentWeights[pet.id] ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
+                .id("\(pet.id)-\(weightService.currentWeight(for: pet.id) ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
                 
                 // Weight Trend Chart
                 let weightHistory = weightService.weightHistory(for: pet.id)
@@ -295,10 +295,10 @@ struct WeightManagementView: View {
                 if let goal = weightService.activeWeightGoal(for: pet.id) {
                     GoalProgressCard(
                         goal: goal, 
-                        currentWeight: weightService.currentWeights[pet.id] ?? pet.weightKg, 
+                        currentWeight: weightService.currentWeight(for: pet.id) ?? pet.weightKg, 
                         pet: pet
                     )
-                    .id("\(goal.id)-\(weightService.currentWeights[pet.id] ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
+                    .id("\(goal.id)-\(weightService.currentWeight(for: pet.id) ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
                 } else {
                     // No goal set - show "Set Goal" card
                     SetGoalCard(pet: pet)
@@ -1279,15 +1279,15 @@ struct WeightEntryView: View {
                     .background(ModernDesignSystem.Colors.borderPrimary)
                 
                 // Current Weight (if available)
-                // CRITICAL: Use weightService.currentWeights instead of pet.weightKg
-                // pet.weightKg may be stale from cache, but currentWeights is always fresh
+                // CRITICAL: Use weightService.currentWeight(for:) instead of pet.weightKg
+                // pet.weightKg may be stale from cache, but currentWeight is always fresh
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text("Current Weight")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     HStack {
-                        if let currentWeight = weightService.currentWeights[pet.id] ?? pet.weightKg {
+                        if let currentWeight = weightService.currentWeight(for: pet.id) ?? pet.weightKg {
                             Text(unitService.formatWeight(currentWeight))
                                 .font(ModernDesignSystem.Typography.body)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)

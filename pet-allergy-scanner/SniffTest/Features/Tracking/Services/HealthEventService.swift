@@ -6,11 +6,14 @@
 //
 
 import Foundation
+import Combine
 
 /**
  * Health Event Service
  * 
- * Manages health event data and API communication
+ * Manages health event data and API communication with reliable SwiftUI observation.
+ * Uses ObservableCacheManager for proper cache updates that trigger SwiftUI view refreshes.
+ * 
  * Follows SOLID principles with single responsibility for health event operations
  * Implements DRY by reusing common API patterns
  * Follows KISS by keeping the service simple and focused
@@ -19,13 +22,50 @@ import Foundation
 class HealthEventService: ObservableObject {
     static let shared = HealthEventService()
     
-    @Published var healthEvents: [String: [HealthEvent]] = [:]
+    // MARK: - Published Properties
+    
+    /**
+     * Use ObservableCacheManager for reliable SwiftUI observation
+     * Cache key: petId, Value: [HealthEvent]
+     */
+    private let cache = ObservableCacheManager<String, [HealthEvent]>(
+        defaultTTL: 1800, // 30 minutes default TTL
+        maxCacheSize: 50 // Max 50 pets worth of events
+    )
+    
     @Published var isLoading = false
     @Published var error: Error?
     
+    // MARK: - Computed Properties for Views
+    
+    /**
+     * Get health events for a pet (for SwiftUI views)
+     * This property is observed by SwiftUI and updates automatically
+     */
+    func healthEvents(for petId: String) -> [HealthEvent] {
+        return cache.get(petId) ?? []
+    }
+    
+    /**
+     * Check if we have cached events for a pet
+     */
+    func hasCachedEvents(for petId: String) -> Bool {
+        return cache.contains(petId)
+    }
+    
     private let apiService = APIService.shared
     
-    private init() {}
+    private var cancellables = Set<AnyCancellable>()
+    
+    private init() {
+        // Observe cache changes to trigger view updates
+        // When cache updates, notify SwiftUI observers
+        cache.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
     
     /**
      * Create a new health event for a pet
@@ -81,20 +121,15 @@ class HealthEventService: ObservableObject {
                 responseType: HealthEvent.self
             )
             
-            // Update local cache and notify observers
-            await MainActor.run {
-                if healthEvents[petId] == nil {
-                    healthEvents[petId] = []
-                }
-                healthEvents[petId]?.append(createdEvent)
-                healthEvents[petId]?.sort { $0.eventDate > $1.eventDate }
-                
-                // CRITICAL: Force SwiftUI to detect the change
-                // Dictionary mutations don't always trigger @Published updates
-                objectWillChange.send()
-                print("✅ [createHealthEvent] Added event to cache and notified observers")
-                print("   Pet ID: \(petId), Event count: \(healthEvents[petId]?.count ?? 0)")
-            }
+            // Update cache with new event
+            var currentEvents = healthEvents(for: petId)
+            currentEvents.append(createdEvent)
+            currentEvents.sort { $0.eventDate > $1.eventDate }
+            
+            cache.set(currentEvents, forKey: petId)
+            
+            print("✅ [createHealthEvent] Added event to cache for pet: \(petId)")
+            print("   Event count: \(currentEvents.count)")
             
             isLoading = false
             return createdEvent
@@ -113,14 +148,22 @@ class HealthEventService: ObservableObject {
      *   - petId: ID of the pet
      *   - limit: Maximum number of events to return
      *   - category: Optional category filter
+     *   - forceRefresh: Force refresh from server (default: false)
      * - Returns: Array of health events
      * - Throws: APIError if fetch fails
      */
     func getHealthEvents(
         for petId: String,
         limit: Int = 50,
-        category: HealthEventCategory? = nil
+        category: HealthEventCategory? = nil,
+        forceRefresh: Bool = false
     ) async throws -> [HealthEvent] {
+        
+        // Return cached data if available and not forcing refresh
+        if !forceRefresh, let cachedEvents = cache.get(petId), !cachedEvents.isEmpty {
+            print("📦 [getHealthEvents] Returning \(cachedEvents.count) cached events for pet: \(petId)")
+            return cachedEvents
+        }
         
         isLoading = true
         error = nil
@@ -151,15 +194,10 @@ class HealthEventService: ObservableObject {
                 print("✅ [getHealthEvents] First event: \(response.events[0].id) - \(response.events[0].title)")
             }
             
-            // Update local cache and notify observers
-            // CRITICAL: @Published doesn't always detect dictionary mutations
-            // Must explicitly notify observers to trigger SwiftUI updates
-            await MainActor.run {
-                healthEvents[petId] = response.events
-                objectWillChange.send()
-                print("✅ [getHealthEvents] Updated cache with \(response.events.count) events for pet: \(petId)")
-                print("   Cache now contains: \(healthEvents[petId]?.count ?? 0) events")
-            }
+            // Update cache - this will automatically trigger SwiftUI updates
+            cache.set(response.events, forKey: petId, ttl: 1800) // 30 minutes
+            
+            print("✅ [getHealthEvents] Updated cache with \(response.events.count) events for pet: \(petId)")
             
             isLoading = false
             return response.events
@@ -211,21 +249,16 @@ class HealthEventService: ObservableObject {
                 responseType: HealthEvent.self
             )
             
-            // Update local cache
-            // CRITICAL FIX: @Published doesn't detect in-place array element mutations inside dictionaries
-            // Create new dictionary instance to trigger observation
-            await MainActor.run {
-                var updatedHealthEvents = self.healthEvents
-                for (petId, events) in updatedHealthEvents {
-                    if let index = events.firstIndex(where: { $0.id == eventId }) {
-                        var updatedEvents = events
-                        updatedEvents[index] = updatedEvent
-                        updatedHealthEvents[petId] = updatedEvents
-                    }
+            // Update cache - find which pet this event belongs to
+            for petId in cache.allKeys() {
+                var events = healthEvents(for: petId)
+                if let index = events.firstIndex(where: { $0.id == eventId }) {
+                    events[index] = updatedEvent
+                    events.sort { $0.eventDate > $1.eventDate }
+                    cache.set(events, forKey: petId)
+                    print("✅ [updateHealthEvent] Updated event in cache for pet: \(petId)")
+                    break
                 }
-                self.healthEvents = updatedHealthEvents
-                objectWillChange.send()
-                print("✅ [updateHealthEvent] Updated event in cache and notified observers")
             }
             
             isLoading = false
@@ -253,19 +286,12 @@ class HealthEventService: ObservableObject {
         do {
             try await apiService.delete(endpoint: "/health-events/\(eventId)")
             
-            // Remove from local cache
-            // CRITICAL FIX: @Published doesn't detect in-place array mutations inside dictionaries
-            // Create new dictionary instance to trigger observation
-            await MainActor.run {
-                var updatedHealthEvents = self.healthEvents
-                if var events = updatedHealthEvents[petId] {
-                    events.removeAll { $0.id == eventId }
-                    updatedHealthEvents[petId] = events
-                    self.healthEvents = updatedHealthEvents
-                    objectWillChange.send()
-                    print("✅ [deleteHealthEvent] Removed event from cache and notified observers")
-                }
-            }
+            // Update cache
+            var events = healthEvents(for: petId)
+            events.removeAll { $0.id == eventId }
+            cache.set(events, forKey: petId)
+            
+            print("✅ [deleteHealthEvent] Removed event from cache for pet: \(petId)")
             
             isLoading = false
             
@@ -313,7 +339,7 @@ class HealthEventService: ObservableObject {
      * - Returns: Dictionary of event type counts
      */
     func getHealthEventStats(for petId: String) -> [HealthEventType: Int] {
-        guard let events = healthEvents[petId] else { return [:] }
+        let events = healthEvents(for: petId)
         
         var stats: [HealthEventType: Int] = [:]
         for event in events {
@@ -329,23 +355,35 @@ class HealthEventService: ObservableObject {
      * - Parameter petId: ID of the pet
      */
     func clearHealthEvents(for petId: String) {
-        healthEvents.removeValue(forKey: petId)
+        cache.remove(petId)
+        print("🗑️ [clearHealthEvents] Cleared cache for pet: \(petId)")
     }
     
     /**
      * Clear all cached health events
      */
     func clearAllHealthEvents() {
-        healthEvents.removeAll()
+        cache.clear()
+        print("🗑️ [clearAllHealthEvents] Cleared all health event caches")
     }
     
     /**
-     * Refresh health events for a pet
+     * Refresh health events for a pet (force refresh from server)
      * 
      * - Parameter petId: ID of the pet
      * - Throws: APIError if refresh fails
      */
     func refreshHealthEvents(for petId: String) async throws {
-        _ = try await getHealthEvents(for: petId)
+        _ = try await getHealthEvents(for: petId, forceRefresh: true)
+    }
+    
+    /**
+     * Remove expired cache entries
+     * 
+     * - Returns: Number of expired entries removed
+     */
+    @discardableResult
+    func cleanupExpiredCache() -> Int {
+        return cache.removeExpired()
     }
 }

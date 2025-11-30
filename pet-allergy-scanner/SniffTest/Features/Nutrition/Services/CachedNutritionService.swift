@@ -22,12 +22,49 @@ import Combine
 class CachedNutritionService: ObservableObject {
     static let shared = CachedNutritionService()
     
-    @Published var nutritionalRequirements: [String: PetNutritionalRequirements] = [:]
+    // MARK: - Observable Cache Managers
+    
+    /**
+     * Use ObservableCacheManager for reliable SwiftUI observation
+     * Replaces dictionary-based @Published properties that don't trigger updates reliably
+     */
+    private let nutritionalRequirementsCache = ObservableCacheManager<String, PetNutritionalRequirements>(
+        defaultTTL: 3600, // 1 hour
+        maxCacheSize: 50
+    )
+    
+    private let dailySummariesCache = ObservableCacheManager<String, [DailyNutritionSummary]>(
+        defaultTTL: 1800, // 30 minutes
+        maxCacheSize: 50
+    )
+    
+    // Arrays can stay as @Published but need proper observation
     @Published var foodAnalyses: [FoodNutritionalAnalysis] = []
     @Published var feedingRecords: [FeedingRecord] = []
-    @Published var dailySummaries: [String: [DailyNutritionSummary]] = [:]
+    
     @Published var isLoading = false
     @Published var error: Error?
+    
+    /**
+     * Published property that triggers when any cache updates
+     */
+    @Published private var cacheUpdateTrigger = UUID()
+    
+    // MARK: - Computed Properties for Views
+    
+    /**
+     * Get nutritional requirements for a pet (for SwiftUI views)
+     */
+    func nutritionalRequirements(for petId: String) -> PetNutritionalRequirements? {
+        return nutritionalRequirementsCache.get(petId)
+    }
+    
+    /**
+     * Get daily summaries for a pet (for SwiftUI views)
+     */
+    func dailySummaries(for petId: String) -> [DailyNutritionSummary] {
+        return dailySummariesCache.get(petId) ?? []
+    }
     
     private let apiService: APIService
     private let cacheService = CacheService.shared
@@ -41,7 +78,28 @@ class CachedNutritionService: ObservableObject {
     
     private init() {
         self.apiService = APIService.shared
+        setupCacheObservers()
         observeAuthChanges()
+    }
+    
+    /**
+     * Setup observers for all cache managers to trigger service updates
+     */
+    private func setupCacheObservers() {
+        // Observe all cache changes to trigger SwiftUI updates
+        nutritionalRequirementsCache.objectWillChange
+            .sink { [weak self] _ in
+                self?.cacheUpdateTrigger = UUID()
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+        
+        dailySummariesCache.objectWillChange
+            .sink { [weak self] _ in
+                self?.cacheUpdateTrigger = UUID()
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Authentication Observation
@@ -72,7 +130,7 @@ class CachedNutritionService: ObservableObject {
         if currentUserId != nil {
             let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
             if let cached = cacheService.retrieve(PetNutritionalRequirements.self, forKey: cacheKey) {
-                nutritionalRequirements[petId] = cached
+                nutritionalRequirementsCache.set(cached, forKey: petId)
                 return cached
             }
         }
@@ -87,7 +145,7 @@ class CachedNutritionService: ObservableObject {
                 cacheService.store(requirements, forKey: cacheKey)
             }
             
-            nutritionalRequirements[petId] = requirements
+            nutritionalRequirementsCache.set(requirements, forKey: petId)
             return requirements
         } catch {
             // If server fails (404/500 error), try to calculate requirements locally
@@ -100,7 +158,7 @@ class CachedNutritionService: ObservableObject {
             
             // Calculate requirements locally
             let requirements = PetNutritionalRequirements.calculate(for: pet)
-            nutritionalRequirements[petId] = requirements
+            nutritionalRequirementsCache.set(requirements, forKey: petId)
             
             // Cache the calculated requirements
             if currentUserId != nil {
@@ -119,7 +177,7 @@ class CachedNutritionService: ObservableObject {
      */
     func calculateNutritionalRequirements(for pet: Pet) async throws -> PetNutritionalRequirements {
         let requirements = PetNutritionalRequirements.calculate(for: pet)
-        nutritionalRequirements[pet.id] = requirements
+        nutritionalRequirementsCache.set(requirements, forKey: pet.id)
         
         // Cache the calculated requirements
         if currentUserId != nil {
@@ -178,7 +236,7 @@ class CachedNutritionService: ObservableObject {
             foodAnalyses.append(analysis)
             
             // Check compatibility with pet's requirements
-            if let requirements = nutritionalRequirements[request.petId] {
+            if let requirements = nutritionalRequirementsCache.get(request.petId) {
                 let compatibility = analysis.assessCompatibility(with: requirements)
                 print("Food compatibility: \(compatibility.compatibility.rawValue) (\(compatibility.score))")
             }
@@ -255,8 +313,7 @@ class CachedNutritionService: ObservableObject {
             responseType: FeedingRecord.self
         )
         
-        // CRITICAL FIX: @Published doesn't always detect array mutations
-        // Ensure we're on MainActor and trigger observation
+        // Use ObservableCacheManager pattern - arrays need explicit observation
         await MainActor.run {
             self.feedingRecords.append(record)
             objectWillChange.send()
@@ -339,7 +396,7 @@ class CachedNutritionService: ObservableObject {
         if currentUserId != nil {
             let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
             if let cached = cacheService.retrieve([DailyNutritionSummary].self, forKey: cacheKey) {
-                dailySummaries[petId] = cached
+                dailySummariesCache.set(cached, forKey: petId)
                 return
             }
         }
@@ -350,7 +407,7 @@ class CachedNutritionService: ObservableObject {
             responseType: [DailyNutritionSummary].self
         )
         
-        dailySummaries[petId] = summaries
+        dailySummariesCache.set(summaries, forKey: petId)
         
         // Cache the result
         if currentUserId != nil {
@@ -367,7 +424,7 @@ class CachedNutritionService: ObservableObject {
      */
     func getDailySummary(for petId: String, on date: Date) -> DailyNutritionSummary? {
         let calendar = Calendar.current
-        return dailySummaries[petId]?.first { calendar.isDate($0.date, inSameDayAs: date) }
+        return dailySummariesCache.get(petId)?.first { calendar.isDate($0.date, inSameDayAs: date) }
     }
     
     /**
@@ -417,31 +474,28 @@ class CachedNutritionService: ObservableObject {
             recommendations: Array(Set(recommendations)) // Remove duplicates
         )
         
-        // CRITICAL FIX: @Published doesn't detect in-place array mutations inside dictionaries
-        // Create new dictionary instance to trigger observation
+        // Use ObservableCacheManager for reliable updates
         await MainActor.run {
-            var updatedDailySummaries = self.dailySummaries
-            if updatedDailySummaries[petId] == nil {
-                updatedDailySummaries[petId] = []
-            }
+            var currentSummaries = self.dailySummariesCache.get(petId) ?? []
             
             // Remove existing summary for this date
-            updatedDailySummaries[petId]?.removeAll { calendar.isDate($0.date, inSameDayAs: date) }
+            currentSummaries.removeAll { calendar.isDate($0.date, inSameDayAs: date) }
             
             // Add new summary
-            updatedDailySummaries[petId]?.append(summary)
+            currentSummaries.append(summary)
             
             // Sort by date
-            updatedDailySummaries[petId]?.sort { $0.date > $1.date }
+            currentSummaries.sort { $0.date > $1.date }
             
-            self.dailySummaries = updatedDailySummaries
-            objectWillChange.send()
+            // Update cache (triggers automatic observation)
+            self.dailySummariesCache.set(currentSummaries, forKey: petId)
         }
         
-        // Update cache
+        // Update persistent cache
         if currentUserId != nil {
             let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
-            cacheService.store(dailySummaries[petId] ?? [], forKey: cacheKey)
+            let summaries = dailySummariesCache.get(petId) ?? []
+            cacheService.store(summaries, forKey: cacheKey)
         }
     }
     
@@ -469,11 +523,11 @@ class CachedNutritionService: ObservableObject {
         var insights = MultiPetNutritionInsights(pets: pets, generatedAt: Date())
         
         for pet in pets {
-            if let requirements = nutritionalRequirements[pet.id] {
+            if let requirements = nutritionalRequirementsCache.get(pet.id) {
                 insights.requirements[pet.id] = requirements
             }
             
-            if let summaries = dailySummaries[pet.id] {
+            if let summaries = dailySummariesCache.get(pet.id) {
                 insights.recentSummaries[pet.id] = Array(summaries.prefix(7)) // Last 7 days
             }
         }
@@ -527,10 +581,10 @@ class CachedNutritionService: ObservableObject {
      * Clear all cached data
      */
     func clearCache() {
-        nutritionalRequirements.removeAll()
+        nutritionalRequirementsCache.clear()
+        dailySummariesCache.clear()
         foodAnalyses.removeAll()
         feedingRecords.removeAll()
-        dailySummaries.removeAll()
     }
     
     /**
@@ -561,9 +615,9 @@ class CachedNutritionService: ObservableObject {
      * - Returns: True if we have any cached nutrition data
      */
     func hasCachedNutritionData(for petId: String) -> Bool {
-        let hasRequirements = nutritionalRequirements[petId] != nil
+        let hasRequirements = nutritionalRequirementsCache.get(petId) != nil
         let hasFeedingRecords = !feedingRecords.isEmpty
-        let hasDailySummaries = !(dailySummaries[petId] ?? []).isEmpty
+        let hasDailySummaries = !(dailySummariesCache.get(petId) ?? []).isEmpty
         let hasFoodAnalyses = !foodAnalyses.isEmpty
         
         return hasRequirements || hasFeedingRecords || hasDailySummaries || hasFoodAnalyses
