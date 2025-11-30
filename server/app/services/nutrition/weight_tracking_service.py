@@ -336,8 +336,7 @@ class WeightTrackingService:
                 # No previous weights - clear the pet's weight
                 logger.info(f"[delete_weight_record] No previous weights found, clearing pet weight")
                 
-                db_service = DatabaseOperationService(self.supabase)
-                await db_service.update_with_timestamp("pets", pet_id, {"weight_kg": None})
+                await self._update_pet_weight(pet_id, None)
                 
                 return {
                     "success": True,
@@ -493,7 +492,7 @@ class WeightTrackingService:
             .eq("is_active", True)\
             .execute()
     
-    async def _update_pet_weight(self, pet_id: str, weight_kg: float) -> None:
+    async def _update_pet_weight(self, pet_id: str, weight_kg: Optional[float]) -> None:
         """
         Update pet's current weight in the pets table
         
@@ -503,32 +502,46 @@ class WeightTrackingService:
         
         Args:
             pet_id: Pet ID
-            weight_kg: Weight in kg to set as current weight (from the newly recorded weight)
+            weight_kg: Weight in kg to set as current weight (from the newly recorded weight), or None to clear
         """
         try:
-            logger.info(f"[_update_pet_weight] Starting - pet_id: {pet_id}, weight_kg: {weight_kg}")
+            logger.info(f"[_update_pet_weight] ========== UPDATE PET WEIGHT START ==========")
+            logger.info(f"[_update_pet_weight] pet_id: {pet_id}")
+            logger.info(f"[_update_pet_weight] weight_kg: {weight_kg}")
+            logger.info(f"[_update_pet_weight] Supabase client auth: {hasattr(self.supabase, 'auth')}")
             
-            # First, verify the pet exists before updating
-            check_response = self.supabase.table("pets").select("id, weight_kg").eq("id", pet_id).execute()
+            # First, verify the pet exists and check current weight
+            check_response = self.supabase.table("pets").select("id, weight_kg, user_id").eq("id", pet_id).execute()
+            logger.info(f"[_update_pet_weight] Check query response: {check_response}")
+            logger.info(f"[_update_pet_weight] Check query data: {check_response.data}")
+            
             if not check_response.data:
                 logger.error(f"[_update_pet_weight] Pet {pet_id} not found in database")
                 return
             
-            existing_weight = check_response.data[0].get("weight_kg")
-            logger.info(f"[_update_pet_weight] Current pet weight in DB: {existing_weight} kg")
+            pet_data = check_response.data[0]
+            existing_weight = pet_data.get("weight_kg")
+            pet_user_id = pet_data.get("user_id")
+            logger.info(f"[_update_pet_weight] Pet found - user_id: {pet_user_id}, current weight: {existing_weight} kg")
             
             # Update pet's weight in the pets table
-            update_data = {"weight_kg": float(weight_kg)}
+            update_data = {"weight_kg": float(weight_kg) if weight_kg is not None else None}
+            logger.info(f"[_update_pet_weight] Calling DatabaseOperationService.update_with_timestamp with data: {update_data}")
+            
             db_service = DatabaseOperationService(self.supabase)
             updated_pet = await db_service.update_with_timestamp("pets", pet_id, update_data)
             
-            logger.info(f"[_update_pet_weight] Update successful")
-            logger.info(f"[_update_pet_weight] Updated pet data: {updated_pet}")
+            logger.info(f"[_update_pet_weight] ✅ Update completed successfully")
+            logger.info(f"[_update_pet_weight] Full updated pet data: {updated_pet}")
             logger.info(f"[_update_pet_weight] New weight from update: {updated_pet.get('weight_kg')} kg")
+            logger.info(f"[_update_pet_weight] Weight changed from {existing_weight} to {updated_pet.get('weight_kg')}")
+            logger.info(f"[_update_pet_weight] ========== UPDATE PET WEIGHT END ==========")
             
         except Exception as e:
             # Log error but don't fail the weight recording
-            logger.error(f"[_update_pet_weight] Failed to update pet weight: {e}", exc_info=True)
+            logger.error(f"[_update_pet_weight] ❌ Failed to update pet weight: {e}", exc_info=True)
+            logger.error(f"[_update_pet_weight] Exception type: {type(e).__name__}")
+            logger.error(f"[_update_pet_weight] Exception args: {e.args}")
     
     async def _update_nutritional_trends(self, pet_id: str, trend_date: date) -> None:
         """Update nutritional trends for a specific date"""
