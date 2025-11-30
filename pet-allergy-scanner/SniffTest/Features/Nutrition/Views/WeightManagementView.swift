@@ -44,6 +44,7 @@ struct WeightManagementView: View {
     
     @State private var showingWeightEntry = false
     @State private var showingGoalSetting = false
+    @State private var showingAllWeightEntries = false
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var refreshTrigger = false
@@ -53,12 +54,7 @@ struct WeightManagementView: View {
     // MARK: - Computed Properties
     
     private var selectedPet: Pet? {
-        let pet = petSelectionService.selectedPet
-        // Log pet weight for debugging
-        if let p = pet {
-            print("🐕 [selectedPet getter] Pet: \(p.name), Weight: \(p.weightKg ?? 0) kg")
-        }
-        return pet
+        petSelectionService.selectedPet
     }
     
     var body: some View {
@@ -83,23 +79,12 @@ struct WeightManagementView: View {
                         syncService.enableFastPolling()
                         // Force UI refresh
                         refreshTrigger.toggle()
-                        
-                        // Show undo toast if a weight was recorded
-                        if lastRecordedWeightId != nil {
-                            showingUndoToast = true
-                            
-                            // Auto-hide undo toast after 5 seconds
-                            Task {
-                                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-                                await MainActor.run {
-                                    if showingUndoToast {
-                                        showingUndoToast = false
-                                        lastRecordedWeightId = nil
-                                    }
-                                }
-                            }
-                        }
                     }
+            }
+        }
+        .sheet(isPresented: $showingAllWeightEntries) {
+            if let pet = selectedPet {
+                AllWeightEntriesView(pet: pet)
             }
         }
         .sheet(isPresented: $showingGoalSetting) {
@@ -133,10 +118,6 @@ struct WeightManagementView: View {
             }
         }
         .onChange(of: selectedPet) { oldPet, newPet in
-            print("🔄 [onChange(selectedPet)] Pet changed")
-            print("   Old pet: \(oldPet?.name ?? "nil"), weight: \(oldPet?.weightKg ?? 0) kg")
-            print("   New pet: \(newPet?.name ?? "nil"), weight: \(newPet?.weightKg ?? 0) kg")
-            
             // Stop syncing old pet, start syncing new pet
             if let oldPet = oldPet {
                 syncService.stopSyncing(forPetId: oldPet.id)
@@ -145,19 +126,40 @@ struct WeightManagementView: View {
                 syncService.startSyncing(forPetId: newPet.id)
                 // Force UI refresh when pet changes
                 refreshTrigger.toggle()
-                print("🔄 [onChange(selectedPet)] Triggered UI refresh")
             }
         }
         .refreshable {
             // Pull to refresh weight data
             await refreshWeightData()
         }
+        .onChange(of: lastRecordedWeightId) { oldValue, newValue in
+            // Show undo toast when a weight is recorded
+            if newValue != nil {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showingUndoToast = true
+                }
+                
+                // Auto-hide undo toast after 5 seconds
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                    
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showingUndoToast = false
+                        lastRecordedWeightId = nil
+                    }
+                }
+            }
+        }
         .overlay(alignment: .bottom) {
             // Undo toast for recently recorded weight
             if showingUndoToast {
                 undoToastView
                     .padding(.bottom, 100)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1000) // Ensure toast appears above all other content
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    ))
             }
         }
     }
@@ -255,29 +257,9 @@ struct WeightManagementView: View {
                 
                 // Weight Trend Chart
                 let weightHistory = weightService.weightHistory(for: pet.id)
-                let _ = print("📊 [UI RENDER] Weight history count for \(pet.name): \(weightHistory.count)")
                 
                 if !weightHistory.isEmpty {
-                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                        // Debug info banner (temporary for troubleshooting)
-                        HStack {
-                            Text("📊 \(weightHistory.count) record(s) loaded")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                            Button("Force Refresh") {
-                                Task {
-                                    print("🔄 Manual force refresh triggered")
-                                    await refreshWeightData()
-                                }
-                            }
-                            .font(.caption)
-                        }
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(8)
-                        
+                    VStack(spacing: ModernDesignSystem.Spacing.sm) {                        
                         WeightTrendChart(
                             weightHistory: weightHistory,
                             petName: pet.name,
@@ -295,7 +277,6 @@ struct WeightManagementView: View {
                             Spacer()
                             Button("Force Refresh") {
                                 Task {
-                                    print("🔄 Manual force refresh triggered (empty state)")
                                     await refreshWeightData()
                                 }
                             }
@@ -326,7 +307,10 @@ struct WeightManagementView: View {
                 // Recent Weight Entries
                 RecentWeightEntriesCard(
                     pet: pet,
-                    weightHistory: weightService.weightHistory(for: pet.id)
+                    weightHistory: weightService.weightHistory(for: pet.id),
+                    onViewAll: {
+                        showingAllWeightEntries = true
+                    }
                 )
                 
                 // Recommendations
@@ -354,17 +338,9 @@ struct WeightManagementView: View {
     private func loadWeightDataIfNeeded() {
         guard let pet = selectedPet else { return }
         
-        print("📊 [loadWeightDataIfNeeded] Checking if need to load for \(pet.name)")
-        
-        // Check if we have data in memory
-        let hasData = weightService.hasCachedWeightData(for: pet.id)
-        let hasGoal = weightService.activeWeightGoal(for: pet.id) != nil
-        print("📊 [loadWeightDataIfNeeded] Has cached data: \(hasData), Has goal: \(hasGoal)")
-        
         // Always load on first appearance to ensure fresh data including goals
         // Even if we have cached data, we need to check for goals from server
         Task {
-            print("📊 [loadWeightDataIfNeeded] Starting load task with force refresh...")
             // Force refresh to ensure we get goals from server
             // The service will still use cache if available, but will fetch goals
             try? await weightService.loadWeightData(for: pet.id, forceRefresh: true)
@@ -387,19 +363,10 @@ struct WeightManagementView: View {
     }
     
     private func loadWeightDataAsync(showLoadingIfNeeded: Bool = false) async {
-        guard let pet = selectedPet else {
-            print("⚠️ [loadWeightDataAsync] No selected pet, cannot load weight data")
-            return
-        }
-        
-        print("📊 === Starting weight data load for \(pet.name) (ID: \(pet.id)) ===")
-        print("📊 [loadWeightDataAsync] showLoadingIfNeeded: \(showLoadingIfNeeded)")
+        guard let pet = selectedPet else { return }
         
         // Check if we already have data in memory (from cache or previous load)
         let hadDataBefore = weightService.hasCachedWeightData(for: pet.id)
-        let recordsBeforeCount = weightService.weightHistory(for: pet.id).count
-        let goalBeforeCount = weightService.activeWeightGoal(for: pet.id) != nil ? 1 : 0
-        print("📊 [loadWeightDataAsync] Before load - hadData: \(hadDataBefore), records: \(recordsBeforeCount), goal: \(goalBeforeCount)")
         
         // Only show loading if explicitly requested and we don't have data
         if showLoadingIfNeeded && !hadDataBefore {
@@ -407,52 +374,22 @@ struct WeightManagementView: View {
                 isLoading = true
                 errorMessage = nil
             }
-            print("⏳ [loadWeightDataAsync] Showing loading indicator")
         }
         
         do {
             // Force refresh from server to ensure we have the latest data including goals
-            print("📊 [loadWeightDataAsync] Calling loadWeightData with forceRefresh=true")
             try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
-            
-            // Check if we have data now
-            let hasDataAfter = weightService.hasCachedWeightData(for: pet.id)
-            let weightHistoryCount = weightService.weightHistory(for: pet.id).count
-            let weightHistory = weightService.weightHistory(for: pet.id)
-            let hasGoal = weightService.activeWeightGoal(for: pet.id) != nil
-            
-            print("✅ [loadWeightDataAsync] Weight data loaded successfully")
-            print("   - Has data after: \(hasDataAfter)")
-            print("   - Records count: \(weightHistoryCount)")
-            print("   - Has goal: \(hasGoal)")
-            print("   - Actual records: \(weightHistory.map { "\($0.weightKg)kg on \($0.recordedAt)" })")
-            
-            // If we still don't have data, log warning
-            if !hasDataAfter {
-                print("⚠️ [loadWeightDataAsync] WARNING: Load completed but still no data!")
-                print("   This might indicate:")
-                print("   1. No data exists in database for this pet")
-                print("   2. API call failed silently")
-                print("   3. Data not being stored in @Published properties")
-            }
             
             await MainActor.run {
                 isLoading = false
                 refreshTrigger.toggle()
-                print("🔄 [loadWeightDataAsync] Toggled refreshTrigger to force UI update")
             }
         } catch {
-            print("❌ [loadWeightDataAsync] Failed to load weight data: \(error)")
-            print("   Error type: \(type(of: error))")
-            print("   Error details: \(error.localizedDescription)")
-            
             await MainActor.run {
                 isLoading = false
                 errorMessage = error.localizedDescription
             }
         }
-        
-        print("📊 === Finished weight data load ===")
     }
     
     /**
@@ -462,18 +399,14 @@ struct WeightManagementView: View {
     private func refreshWeightData() async {
         guard let pet = selectedPet else { return }
         
-        print("🔄 Force refreshing weight data for pet: \(pet.name)")
-        
         do {
             // Force refresh from server
             try await weightService.refreshWeightData(petId: pet.id)
             
             await MainActor.run {
                 refreshTrigger.toggle() // Force UI refresh
-                print("✅ Weight data refreshed successfully")
             }
         } catch {
-            print("❌ Failed to refresh weight data: \(error.localizedDescription)")
             await MainActor.run {
                 errorMessage = "Failed to refresh weight data: \(error.localizedDescription)"
             }
@@ -522,10 +455,7 @@ struct WeightManagementView: View {
                     refreshTrigger.toggle()
                     lastRecordedWeightId = nil
                 }
-                
-                print("✅ Weight record undone successfully")
             } catch {
-                print("❌ Failed to undo weight: \(error.localizedDescription)")
                 // Show error to user
                 await MainActor.run {
                     errorMessage = "Failed to undo: \(error.localizedDescription)"
@@ -860,10 +790,7 @@ struct GoalProgressCard: View {
         } else {
             // If no starting weight, use current weight as starting point
             startingWeight = current
-            print("⚠️ Warning: No starting weight found for goal, using current weight: \(startingWeight)")
         }
-        
-        print("📊 Progress calculation - Current: \(current), Target: \(target), Starting: \(startingWeight), GoalType: \(goalType)")
         
         switch goalType {
         case .weightLoss:
@@ -871,18 +798,15 @@ struct GoalProgressCard: View {
             let totalWeightToLose = startingWeight - target
             let weightLost = startingWeight - current
             guard totalWeightToLose > 0 else { 
-                print("📊 Weight loss: Invalid target (target >= starting weight)")
                 return 0.0 
             }
             
             // If no weight has been lost yet (current weight >= starting weight), show 0% progress
             if weightLost <= 0 {
-                print("📊 Weight loss: No progress yet (current: \(current), starting: \(startingWeight))")
                 return 0.0
             }
             
             let progress = min(1.0, max(0.0, weightLost / totalWeightToLose))
-            print("📊 Weight loss progress: \(progress * 100)% (lost: \(weightLost), total to lose: \(totalWeightToLose))")
             return progress
             
         case .weightGain:
@@ -890,18 +814,15 @@ struct GoalProgressCard: View {
             let totalWeightToGain = target - startingWeight
             let weightGained = current - startingWeight
             guard totalWeightToGain > 0 else { 
-                print("📊 Weight gain: Invalid target (target <= starting weight)")
                 return 0.0 
             }
             
             // If no weight has been gained yet (current weight <= starting weight), show 0% progress
             if weightGained <= 0 {
-                print("📊 Weight gain: No progress yet (current: \(current), starting: \(startingWeight))")
                 return 0.0
             }
             
             let progress = min(1.0, max(0.0, weightGained / totalWeightToGain))
-            print("📊 Weight gain progress: \(progress * 100)% (gained: \(weightGained), total to gain: \(totalWeightToGain))")
             return progress
             
         case .maintenance, .healthImprovement:
@@ -909,7 +830,6 @@ struct GoalProgressCard: View {
             let distanceFromTarget = abs(current - target)
             let maxDistance = max(abs(startingWeight - target), 1.0) // Avoid division by zero
             let progress = min(1.0, max(0.0, 1.0 - (distanceFromTarget / maxDistance)))
-            print("📊 Maintenance progress: \(progress * 100)% (distance: \(distanceFromTarget), max distance: \(maxDistance))")
             return progress
         }
     }
@@ -928,6 +848,7 @@ struct GoalProgressCard: View {
 struct RecentWeightEntriesCard: View {
     let pet: Pet
     let weightHistory: [WeightRecord]
+    let onViewAll: () -> Void
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -939,9 +860,11 @@ struct RecentWeightEntriesCard: View {
                 Spacer()
                 
                 if weightHistory.count > 5 {
-                    Text("View All")
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    Button(action: onViewAll) {
+                        Text("View All")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.buttonPrimary)
+                    }
                 }
             }
             
@@ -954,7 +877,7 @@ struct RecentWeightEntriesCard: View {
             } else {
                 LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
                     ForEach(weightHistory.prefix(5)) { record in
-                        WeightEntryRow(record: record)
+                        WeightEntryRow(record: record, pet: pet)
                     }
                 }
             }
@@ -977,7 +900,15 @@ struct RecentWeightEntriesCard: View {
 
 struct WeightEntryRow: View {
     let record: WeightRecord
+    let pet: Pet?
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @StateObject private var weightService = CachedWeightTrackingService.shared
+    @State private var showingDeleteAlert = false
+    
+    init(record: WeightRecord, pet: Pet? = nil) {
+        self.record = record
+        self.pet = pet
+    }
     
     var body: some View {
         HStack {
@@ -1000,8 +931,51 @@ struct WeightEntryRow: View {
             Text(record.recordedAt, style: .relative)
                 .font(ModernDesignSystem.Typography.caption)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            // Delete button (only show if pet is provided for context)
+            if pet != nil {
+                Button {
+                    showingDeleteAlert = true
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.error)
+                }
+                .buttonStyle(.plain)
+            }
         }
         .padding(.vertical, ModernDesignSystem.Spacing.xs)
+        .alert("Delete Weight Entry", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteWeightRecord()
+            }
+        } message: {
+            Text("Are you sure you want to delete this weight entry? This action cannot be undone.")
+        }
+    }
+    
+    /**
+     * Delete the weight record
+     */
+    private func deleteWeightRecord() {
+        guard let pet = pet else { return }
+        
+        Task {
+            do {
+                try await weightService.deleteWeightRecord(recordId: record.id)
+                
+                // Refresh weight data
+                try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+                
+                // Refresh pet data to get updated weight
+                await MainActor.run {
+                    CachedPetService.shared.loadPets(forceRefresh: true)
+                }
+            } catch {
+                print("❌ Failed to delete weight record: \(error.localizedDescription)")
+            }
+        }
     }
 }
 
@@ -1305,13 +1279,15 @@ struct WeightEntryView: View {
                     .background(ModernDesignSystem.Colors.borderPrimary)
                 
                 // Current Weight (if available)
+                // CRITICAL: Use weightService.currentWeights instead of pet.weightKg
+                // pet.weightKg may be stale from cache, but currentWeights is always fresh
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text("Current Weight")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
                     HStack {
-                        if let currentWeight = pet.weightKg {
+                        if let currentWeight = weightService.currentWeights[pet.id] ?? pet.weightKg {
                             Text(unitService.formatWeight(currentWeight))
                                 .font(ModernDesignSystem.Typography.body)
                                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -1461,8 +1437,14 @@ struct WeightEntryView: View {
                 
                 await MainActor.run {
                     // Store the record ID for undo functionality
+                    // Set this before dismissing to ensure binding propagates
                     lastRecordedWeightId = recordId
-                    dismiss()
+                    
+                    // Small delay to ensure binding update propagates before dismiss
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05 seconds
+                        dismiss()
+                    }
                 }
             } catch {
                 await MainActor.run {
@@ -1848,6 +1830,167 @@ struct WeightGoalSettingView: View {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isCreating = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - All Weight Entries View
+
+/**
+ * View showing all weight entries for a pet with delete functionality
+ * 
+ * Features:
+ * - Lists all weight entries in chronological order
+ * - Delete functionality for each entry
+ * - Swipe-to-delete support
+ * - Pull-to-refresh support
+ * 
+ * Follows SOLID principles with single responsibility for displaying all weight entries
+ * Implements DRY by reusing WeightEntryRow component
+ * Follows KISS by keeping the interface simple and focused
+ */
+struct AllWeightEntriesView: View {
+    let pet: Pet
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var weightService = CachedWeightTrackingService.shared
+    @State private var weightHistory: [WeightRecord] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ModernLoadingView(message: "Loading weight entries...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if weightHistory.isEmpty {
+                    emptyStateView
+                } else {
+                    weightEntriesList
+                }
+            }
+            .background(ModernDesignSystem.Colors.background)
+            .navigationTitle("Weight History")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
+            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .refreshable {
+                await loadWeightHistory()
+            }
+            .task {
+                await loadWeightHistory()
+            }
+            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+                Button("OK") {
+                    errorMessage = nil
+                }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+    
+    /**
+     * Empty state view when no weight entries exist
+     */
+    private var emptyStateView: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            Image(systemName: "scalemass")
+                .font(.system(size: 60))
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            Text("No Weight Entries")
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            Text("Start tracking your pet's weight to see entries here")
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    /**
+     * List of all weight entries with delete functionality
+     */
+    private var weightEntriesList: some View {
+        List {
+            ForEach(weightHistory) { record in
+                WeightEntryRow(record: record, pet: pet)
+                    .listRowBackground(ModernDesignSystem.Colors.softCream)
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            deleteWeightRecord(recordId: record.id)
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+    
+    /**
+     * Load weight history for the pet
+     */
+    private func loadWeightHistory() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // Ensure we have fresh data
+            try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+            
+            await MainActor.run {
+                weightHistory = weightService.weightHistory(for: pet.id)
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = "Failed to load weight entries: \(error.localizedDescription)"
+                isLoading = false
+            }
+        }
+    }
+    
+    /**
+     * Delete a weight record
+     * - Parameter recordId: The ID of the weight record to delete
+     */
+    private func deleteWeightRecord(recordId: String) {
+        Task {
+            do {
+                try await weightService.deleteWeightRecord(recordId: recordId)
+                
+                // Refresh weight data
+                try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+                
+                // Update local history
+                await MainActor.run {
+                    weightHistory = weightService.weightHistory(for: pet.id)
+                }
+                
+                // Refresh pet data to get updated weight
+                await MainActor.run {
+                    CachedPetService.shared.loadPets(forceRefresh: true)
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to delete weight entry: \(error.localizedDescription)"
                 }
             }
         }

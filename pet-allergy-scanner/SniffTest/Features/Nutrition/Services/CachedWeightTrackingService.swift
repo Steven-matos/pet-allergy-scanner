@@ -116,6 +116,16 @@ class CachedWeightTrackingService: ObservableObject {
             updatedCurrentWeights[petId] = weightInKg
             self.currentWeights = updatedCurrentWeights
             
+            // IMMEDIATELY update selected pet's weight if it matches
+            // This ensures pet object stays in sync with current weight
+            if let selectedPet = NutritionPetSelectionService.shared.selectedPet,
+               selectedPet.id == petId {
+                // Create updated pet with new weight (struct copy with updated property)
+                var updatedPet = selectedPet
+                updatedPet.weightKg = weightInKg
+                NutritionPetSelectionService.shared.selectPet(updatedPet)
+            }
+            
             // Force SwiftUI to detect the change
             objectWillChange.send()
         }
