@@ -644,7 +644,7 @@ struct AdvancedAnalyticsView: View {
             let weightTrend = cachedWeightService.analyzeWeightTrend(for: petId)
             let recommendations = cachedWeightService.recommendations(for: petId)
             let feedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
-            let dailySummaries = cachedNutritionService.dailySummaries[petId] ?? []
+            let dailySummaries = cachedNutritionService.dailySummaries(for: petId)
             
             // Convert recommendations to API format
             let recommendationObjects = recommendations.map { rec in

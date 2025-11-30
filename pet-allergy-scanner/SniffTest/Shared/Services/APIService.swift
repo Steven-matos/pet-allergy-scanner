@@ -617,12 +617,53 @@ class APIService: ObservableObject, @unchecked Sendable {
      * - Returns: Decoded response of type T
      */
     func get<T: Codable>(endpoint: String, responseType: T.Type, bypassCache: Bool = false) async throws -> T {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        let fullURLString = "\(baseURL)\(endpoint)"
+        guard let url = URL(string: fullURLString) else {
+            print("❌ [APIService.get] Invalid URL: \(fullURLString)")
             throw APIError.invalidURL
         }
         
+        // Log health events requests for debugging
+        if endpoint.contains("health-events") {
+            print("🌐 [APIService.get] Making GET request:")
+            print("   Full URL: \(fullURLString)")
+            print("   Endpoint: \(endpoint)")
+            print("   Base URL: \(baseURL)")
+        }
+        
         let request = await createRequest(url: url, bypassCache: bypassCache)
-        return try await performRequest(request, responseType: T.self)
+        
+        // Log request details for health events
+        if endpoint.contains("health-events") {
+            if let httpMethod = request.httpMethod {
+                print("   HTTP Method: \(httpMethod)")
+            }
+            if let headers = request.allHTTPHeaderFields {
+                print("   Headers: \(headers.keys.joined(separator: ", "))")
+                if let authHeader = headers["Authorization"] {
+                    print("   Authorization: \(authHeader.prefix(20))...")
+                } else {
+                    print("   ⚠️ WARNING: No Authorization header found!")
+                }
+            }
+            print("   Request URL: \(request.url?.absoluteString ?? "nil")")
+        }
+        
+        do {
+            return try await performRequest(request, responseType: T.self)
+        } catch {
+            // Enhanced error logging for health events
+            if endpoint.contains("health-events") {
+                print("❌ [APIService.get] Health events request failed:")
+                print("   URL: \(fullURLString)")
+                print("   Error: \(error)")
+                if let urlError = error as? URLError {
+                    print("   URLError code: \(urlError.code.rawValue)")
+                    print("   URLError description: \(urlError.localizedDescription)")
+                }
+            }
+            throw error
+        }
     }
     
     /**
@@ -781,12 +822,19 @@ class APIService: ObservableObject, @unchecked Sendable {
         request.setValue("en-US", forHTTPHeaderField: "Accept-Language")
         request.setValue("gzip, deflate", forHTTPHeaderField: "Accept-Encoding")
         
-        // CRITICAL: Bypass cache for dynamic data endpoints (weight, goals, etc.)
-        if bypassCache {
+        // CRITICAL: Bypass cache for dynamic data endpoints (weight, goals, health events, etc.)
+        // Health events are always dynamic and should never be cached
+        if bypassCache || url.absoluteString.contains("health-events") {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+            request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+            request.setValue("must-revalidate", forHTTPHeaderField: "Cache-Control")
             #if DEBUG
-            print("🚫 APIService: Cache bypassed for fresh data")
+            if url.absoluteString.contains("health-events") {
+                print("🚫 APIService: Cache bypassed for health-events endpoint (always fresh)")
+            } else {
+                print("🚫 APIService: Cache bypassed for fresh data")
+            }
             #endif
         }
         

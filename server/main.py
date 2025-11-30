@@ -106,26 +106,36 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         
         # Always log health-events requests with maximum visibility
         if "health-events" in path or "health_events" in path:
-            logger.info(f"🌐 [REQUEST_LOG] {request.method} {path}")
-            logger.info(f"   Full URL: {request.url}")
-            logger.info(f"   Query params: {dict(request.query_params)}")
-            logger.info(f"   Headers: Authorization={'present' if 'authorization' in request.headers else 'missing'}")
+            # Use multiple logging methods to ensure visibility
+            logger.error(f"🚨🚨🚨 HEALTH-EVENTS REQUEST 🚨🚨🚨")
+            logger.error(f"🌐 [REQUEST_LOG] {request.method} {path}")
+            logger.error(f"   Full URL: {request.url}")
+            logger.error(f"   Query params: {dict(request.query_params)}")
+            logger.error(f"   Headers: Authorization={'present' if 'authorization' in request.headers else 'missing'}")
             if 'authorization' in request.headers:
                 auth_header = request.headers.get('authorization', '')
-                logger.info(f"   Auth token: {auth_header[:20]}..." if len(auth_header) > 20 else "   Auth token: present")
+                logger.error(f"   Auth token: {auth_header[:20]}..." if len(auth_header) > 20 else "   Auth token: present")
+            
+            # Also use print with stderr for maximum visibility
             print("=" * 80, file=sys.stderr, flush=True)
+            print("🚨🚨🚨 HEALTH-EVENTS REQUEST 🚨🚨🚨", file=sys.stderr, flush=True)
             print(f"🌐 [REQUEST_LOG] {request.method} {path}", file=sys.stderr, flush=True)
             print(f"   Full URL: {request.url}", file=sys.stderr, flush=True)
             print(f"   Query params: {dict(request.query_params)}", file=sys.stderr, flush=True)
             print("=" * 80, file=sys.stderr, flush=True)
+            
+            # Also log to stdout
+            print("=" * 80, flush=True)
+            print("🚨🚨🚨 HEALTH-EVENTS REQUEST 🚨🚨🚨", flush=True)
             print(f"🌐 [REQUEST_LOG] {request.method} {path}", flush=True)
             print(f"   Full URL: {request.url}", flush=True)
             print(f"   Query params: {dict(request.query_params)}", flush=True)
+            print("=" * 80, flush=True)
         
         response = await call_next(request)
         
         if "health-events" in path or "health_events" in path:
-            logger.info(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
+            logger.error(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
             print(f"🌐 [REQUEST_LOG] Response: {response.status_code}", file=sys.stderr, flush=True)
             print(f"🌐 [REQUEST_LOG] Response: {response.status_code}", flush=True)
         

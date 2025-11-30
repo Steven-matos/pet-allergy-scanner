@@ -89,10 +89,11 @@ struct PaywallView: View {
     
     private var heroSection: some View {
         VStack(spacing: ModernDesignSystem.Spacing.md) {
-            // Crown Icon
-            Image(systemName: "crown.fill")
-                .font(.system(size: 60))
-                .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+            // Premium Feature Image
+            Image("Illustrations/premium-feature")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: 200)
             
             // Title
             Text("Unlock Premium")

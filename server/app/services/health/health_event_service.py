@@ -132,17 +132,26 @@ class HealthEventService:
         # Query with RLS - DO NOT add explicit user_id filter
         # RLS policy automatically filters by auth.uid() = user_id AND verifies pet ownership
         # Adding .eq("user_id", user_id) might conflict with RLS or cause issues
-        logger.info(f"   Executing query with RLS: pet_id={pet_id}")
-        print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}")
+        logger.info(f"   Executing query with RLS: pet_id={pet_id}, user_id={user_id}")
+        print(f"🔍 [QUERY] Executing with RLS: pet_id={pet_id}, user_id={user_id}")
         
         try:
             # Query WITHOUT explicit user_id filter - let RLS handle it
             # The RLS policy checks: auth.uid() = user_id AND pet belongs to user
+            logger.info(f"   Building query: table('health_events').select('*').eq('pet_id', '{pet_id}').order('event_date', desc=True).range({offset}, {offset + limit - 1})")
+            print(f"🔍 [QUERY] Building query for pet_id={pet_id}, offset={offset}, limit={limit}")
+            
             response = supabase.table("health_events").select("*").eq("pet_id", pet_id).order("event_date", desc=True).range(offset, offset + limit - 1).execute()
             
             result_count = len(response.data) if response.data else 0
             logger.info(f"   Events found with RLS: {result_count}")
+            logger.info(f"   Response data type: {type(response.data)}")
+            logger.info(f"   Response data: {response.data if result_count <= 3 else 'too many to log'}")
             print(f"🔍 [QUERY] Results with RLS: {result_count}")
+            if result_count > 0:
+                print(f"   First event: {response.data[0] if response.data else 'none'}")
+            else:
+                print(f"   ⚠️ No events returned - checking if this is an RLS issue")
             
             if result_count > 0:
                 logger.info(f"✅ [get_health_events_for_pet] Returning {len(response.data)} events")

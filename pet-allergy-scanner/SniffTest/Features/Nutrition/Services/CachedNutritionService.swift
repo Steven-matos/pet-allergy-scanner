@@ -452,7 +452,7 @@ class CachedNutritionService: ObservableObject {
                 totalFat += (analysis.fatPercentage / 100.0) * record.amountGrams
                 totalFiber += (analysis.fiberPercentage / 100.0) * record.amountGrams
                 
-                if let requirements = nutritionalRequirements[petId] {
+                if let requirements = nutritionalRequirementsCache.get(petId) {
                     let compatibility = analysis.assessCompatibility(with: requirements)
                     compatibilityScores.append(compatibility.score)
                     recommendations.append(contentsOf: compatibility.recommendations)

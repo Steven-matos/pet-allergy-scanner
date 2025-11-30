@@ -35,23 +35,18 @@ struct HealthEventListView: View {
         // Use cached data if recent and category hasn't changed
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastUpdateTime) < 1.0 && !cachedFilteredEvents.isEmpty {
-            print("🔄 [filteredEvents] Using cached filtered events: \(cachedFilteredEvents.count)")
             return cachedFilteredEvents
         }
         
         // Get events from the new cache API
         let events = healthEventService.healthEvents(for: pet.id)
-        print("🔍 [filteredEvents] Retrieved \(events.count) events for pet: \(pet.id)")
         
         if events.isEmpty {
-            print("⚠️ [filteredEvents] No events found for pet: \(pet.id)")
             return []
         }
         
         let filtered = selectedCategory == nil ? events : events.filter { $0.eventCategory == selectedCategory }
         let sorted = filtered.sorted { $0.eventDate > $1.eventDate }
-        
-        print("📊 [filteredEvents] Filtered events - Total: \(events.count), Filtered: \(filtered.count), Category: \(selectedCategory?.displayName ?? "All")")
         
         return sorted
     }
@@ -74,7 +69,6 @@ struct HealthEventListView: View {
         // Use cached data if recent and events haven't changed
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastUpdateTime) < 1.0 && !cachedGroupedEvents.isEmpty {
-            print("🔄 Using cached grouped events: \(cachedGroupedEvents.count) groups")
             return cachedGroupedEvents
         }
         
@@ -88,7 +82,6 @@ struct HealthEventListView: View {
         var earlierEvents: [HealthEvent] = []
         
         let eventsToGroup = filteredEvents
-        print("📅 Grouping \(eventsToGroup.count) events")
         
         for event in eventsToGroup {
             let daysBetween = calendar.dateComponents([.day], from: event.eventDate, to: now).day ?? 0
@@ -116,8 +109,6 @@ struct HealthEventListView: View {
         if !earlierEvents.isEmpty {
             groups.append(("Earlier", earlierEvents))
         }
-        
-        print("📊 Grouped events - Today: \(todayEvents.count), Yesterday: \(yesterdayEvents.count), This Week: \(thisWeekEvents.count), Earlier: \(earlierEvents.count)")
         
         return groups
     }
@@ -405,10 +396,11 @@ struct HealthEventListView: View {
         
         // Verify image exists in bundle
         if UIImage(named: imageName) != nil {
-            print("✅ Found tracking image: \(imageName) for species: \(pet.species)")
+            // Removed verbose logging - only log if image not found (error case)
             return imageName
         }
         
+        // Only log when image is actually missing (error case)
         print("⚠️ Tracking image not found: \(imageName) for species: \(pet.species)")
         return nil
     }
@@ -420,15 +412,22 @@ struct HealthEventListView: View {
         isLoading = true
         
         do {
-            let events = try await healthEventService.getHealthEvents(for: pet.id)
+            // Force refresh to ensure we get latest data from server
+            let events = try await healthEventService.getHealthEvents(for: pet.id, forceRefresh: true)
             print("✅ [HealthEventListView] Successfully loaded \(events.count) health events for pet: \(pet.id)")
             
-            // Check what's in the service cache
+            if events.isEmpty {
+                print("⚠️ [HealthEventListView] API returned 0 events for pet: \(pet.id)")
+                print("   This could mean:")
+                print("   - No events exist in database for this pet")
+                print("   - API endpoint is not returning data correctly")
+                print("   - Authentication/permissions issue")
+            }
+            
+            // Check what's in the service cache after loading
             await MainActor.run {
                 let cachedEvents = healthEventService.healthEvents(for: pet.id)
-                print("📊 [HealthEventListView] Service cache contains \(cachedEvents.count) events")
-                print("📊 [HealthEventListView] filteredEvents will have: \(filteredEvents.count) events")
-                print("📊 [HealthEventListView] medicationEvents will have: \(medicationEvents.count) events")
+                print("📊 [HealthEventListView] Service cache now contains \(cachedEvents.count) events")
                 
                 // Force UI update after data is loaded
                 invalidateCache()
@@ -439,6 +438,9 @@ struct HealthEventListView: View {
             print("   Error type: \(type(of: error))")
             if let decodingError = error as? DecodingError {
                 print("   Decoding error details: \(decodingError)")
+            }
+            if let apiError = error as? APIError {
+                print("   API Error details: \(apiError)")
             }
         }
         

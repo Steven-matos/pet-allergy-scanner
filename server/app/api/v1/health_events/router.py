@@ -71,11 +71,17 @@ async def get_pet_health_events(
     """
     # CRITICAL: Print immediately to verify route is being hit
     import sys
-    print("=" * 80, file=sys.stderr)
-    print("🚨 HEALTH EVENTS ENDPOINT HIT!", file=sys.stderr)
-    print(f"   pet_id: {pet_id}", file=sys.stderr)
-    print(f"   user_id: {current_user.id}", file=sys.stderr)
-    print("=" * 80, file=sys.stderr)
+    import logging
+    # Force immediate flush to ensure logs appear
+    print("=" * 80, file=sys.stderr, flush=True)
+    print("🚨 HEALTH EVENTS ENDPOINT HIT!", file=sys.stderr, flush=True)
+    print(f"   pet_id: {pet_id}", file=sys.stderr, flush=True)
+    print(f"   user_id: {current_user.id}", file=sys.stderr, flush=True)
+    print(f"   limit: {limit}, offset: {offset}, category: {category}", file=sys.stderr, flush=True)
+    print("=" * 80, file=sys.stderr, flush=True)
+    
+    # Also log to standard logger with immediate flush
+    logging.getLogger().handlers[0].flush() if logging.getLogger().handlers else None
     
     from app.utils.logging_config import get_logger
     logger = get_logger(__name__)

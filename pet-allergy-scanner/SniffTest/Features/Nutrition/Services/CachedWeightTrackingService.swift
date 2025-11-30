@@ -622,8 +622,8 @@ class CachedWeightTrackingService: ObservableObject {
      */
     func weightHistory(for petId: String) -> [WeightRecord] {
         let records = weightHistoryCache.get(petId) ?? []
-        print("🔍 [weightHistory] Returning \(records.count) records for pet: \(petId)")
-        print("   Current weightHistoryCache keys: \(weightHistoryCache.allKeys())")
+        // Only log when cache is accessed (not on every view update)
+        // Removed verbose logging to prevent console spam during view rendering
         return records
     }
     

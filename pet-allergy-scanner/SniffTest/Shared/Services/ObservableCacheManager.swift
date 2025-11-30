@@ -105,13 +105,20 @@ class ObservableCacheManager<Key: Hashable, Value>: ObservableObject {
         
         // Check expiration
         if entry.isExpired {
-            remove(key)
+            // Defer removal to avoid publishing during view updates
+            Task { @MainActor in
+                self.remove(key)
+            }
             return nil
         }
         
         // Update access time
         entry.touch()
-        updateStats()
+        
+        // Defer stats update to avoid publishing during view updates
+        Task { @MainActor in
+            self.updateStats()
+        }
         
         return entry.value
     }
@@ -225,8 +232,11 @@ class ObservableCacheManager<Key: Hashable, Value>: ObservableObject {
      * - Returns: Array of all non-expired keys
      */
     func allKeys() -> [Key] {
-        removeExpired()
-        return _entries.map { $0.key }
+        // Don't modify cache during read - defer expiration cleanup
+        Task { @MainActor in
+            self.removeExpired()
+        }
+        return _entries.filter { !$0.isExpired }.map { $0.key }
     }
     
     /**
@@ -235,8 +245,11 @@ class ObservableCacheManager<Key: Hashable, Value>: ObservableObject {
      * - Returns: Array of all non-expired values
      */
     func allValues() -> [Value] {
-        removeExpired()
-        return _entries.map { $0.value }
+        // Don't modify cache during read - defer expiration cleanup
+        Task { @MainActor in
+            self.removeExpired()
+        }
+        return _entries.filter { !$0.isExpired }.map { $0.value }
     }
     
     /**
@@ -245,16 +258,22 @@ class ObservableCacheManager<Key: Hashable, Value>: ObservableObject {
      * - Returns: Number of entries in cache
      */
     var count: Int {
-        removeExpired()
-        return _entries.count
+        // Don't modify cache during read - defer expiration cleanup
+        Task { @MainActor in
+            self.removeExpired()
+        }
+        return _entries.filter { !$0.isExpired }.count
     }
     
     /**
      * Check if cache is empty
      */
     var isEmpty: Bool {
-        removeExpired()
-        return _entries.isEmpty
+        // Don't modify cache during read - defer expiration cleanup
+        Task { @MainActor in
+            self.removeExpired()
+        }
+        return _entries.allSatisfy { $0.isExpired }
     }
     
     // MARK: - Private Methods

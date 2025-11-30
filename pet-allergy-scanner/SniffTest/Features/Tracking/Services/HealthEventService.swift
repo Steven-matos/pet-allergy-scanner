@@ -160,9 +160,18 @@ class HealthEventService: ObservableObject {
     ) async throws -> [HealthEvent] {
         
         // Return cached data if available and not forcing refresh
-        if !forceRefresh, let cachedEvents = cache.get(petId), !cachedEvents.isEmpty {
-            print("📦 [getHealthEvents] Returning \(cachedEvents.count) cached events for pet: \(petId)")
-            return cachedEvents
+        // Only use cache if it has actual data (not empty array)
+        if !forceRefresh {
+            if let cachedEvents = cache.get(petId) {
+                if !cachedEvents.isEmpty {
+                    print("📦 [getHealthEvents] Returning \(cachedEvents.count) cached events for pet: \(petId)")
+                    return cachedEvents
+                } else {
+                    // Cache has empty array, clear it to force fresh fetch
+                    print("🔄 [getHealthEvents] Cache has empty array, clearing to force fresh fetch for pet: \(petId)")
+                    cache.remove(petId)
+                }
+            }
         }
         
         isLoading = true
@@ -174,12 +183,29 @@ class HealthEventService: ObservableObject {
                 endpoint += "&category=\(category.rawValue)"
             }
             
+            // Log full request details
             print("🔍 [getHealthEvents] Fetching health events for pet: \(petId)")
             print("   Endpoint: \(endpoint)")
+            print("   Base URL: \(Configuration.apiBaseURL)")
+            print("   Full URL: \(Configuration.apiBaseURL)\(endpoint)")
+            print("   Limit: \(limit)")
+            if let category = category {
+                print("   Category filter: \(category.rawValue)")
+            }
             
+            // Check authentication before making request
+            let hasToken = await apiService.hasAuthToken
+            print("   Has auth token: \(hasToken)")
+            if !hasToken {
+                print("   ⚠️ WARNING: No auth token - request will likely fail")
+            }
+            
+            // CRITICAL: Always bypass cache for health events to ensure fresh data
+            // Health events are dynamic and should always fetch from server
             let response = try await apiService.get(
                 endpoint: endpoint,
-                responseType: HealthEventListResponse.self
+                responseType: HealthEventListResponse.self,
+                bypassCache: true  // Force fresh data from server
             )
             
             print("📦 [getHealthEvents] API Response received:")
@@ -206,11 +232,42 @@ class HealthEventService: ObservableObject {
             isLoading = false
             self.error = error
             print("❌ [getHealthEvents] Error loading health events for pet \(petId):")
+            print("   Error: \(error)")
             print("   Error type: \(type(of: error))")
             print("   Error description: \(error.localizedDescription)")
+            
             if let decodingError = error as? DecodingError {
                 print("   Decoding error details: \(decodingError)")
+                switch decodingError {
+                case .dataCorrupted(let context):
+                    print("     Data corrupted: \(context.debugDescription)")
+                case .keyNotFound(let key, let context):
+                    print("     Key not found: \(key.stringValue) in \(context.debugDescription)")
+                case .typeMismatch(let type, let context):
+                    print("     Type mismatch: \(type) in \(context.debugDescription)")
+                case .valueNotFound(let type, let context):
+                    print("     Value not found: \(type) in \(context.debugDescription)")
+                @unknown default:
+                    print("     Unknown decoding error")
+                }
             }
+            if let apiError = error as? APIError {
+                print("   API Error details: \(apiError)")
+            }
+            
+            // Check if it's a network error
+            if let urlError = error as? URLError {
+                print("   URL Error code: \(urlError.code.rawValue)")
+                print("   URL Error description: \(urlError.localizedDescription)")
+                if urlError.code == .notConnectedToInternet {
+                    print("   ⚠️ Network connection issue - check internet connection")
+                } else if urlError.code == .timedOut {
+                    print("   ⚠️ Request timed out - server may be slow or unreachable")
+                } else if urlError.code == .cannotFindHost {
+                    print("   ⚠️ Cannot find host - check API base URL: \(Configuration.apiBaseURL)")
+                }
+            }
+            
             throw error
         }
     }

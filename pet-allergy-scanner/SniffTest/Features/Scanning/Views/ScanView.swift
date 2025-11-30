@@ -741,10 +741,7 @@ struct ScanView: View {
             // MEMORY OPTIMIZATION: Clear scan results when view disappears to prevent memory leaks
             // But only if we're not about to show results
             if !showingResults {
-                print("🔍 [ON_DISAPPEAR] View disappearing and not showing results - clearing state")
                 clearScanState()
-            } else {
-                print("🔍 [ON_DISAPPEAR] View disappearing but showing results - preserving state")
             }
         }
     }
@@ -770,54 +767,30 @@ struct ScanView: View {
      * SAFETY: Never clears scanResult if it's needed for results presentation
      */
     private func clearScanState() {
-        print("🔍 [CLEAR_SCAN_STATE] clearScanState called")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - detectedBarcode: \(detectedBarcode?.value ?? "NIL")")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - showingNutritionalLabelScan: \(showingNutritionalLabelScan)")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductNotFound: \(showingProductNotFound)")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - showingProductFound: \(showingProductFound)")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - showingOCRResults: \(showingOCRResults)")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - showingResults: \(showingResults)")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - foundProduct: \(foundProduct?.name ?? "NIL")")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - hybridScanResult: \(hybridScanResult != nil ? "SET" : "NIL")")
-        print("🔍 [CLEAR_SCAN_STATE] Current state - scanResult: \(scanResult?.id ?? "NIL")")
-        
         // Don't clear scanResult if we're about to show results or if scanResult exists
-        if showingResults || scanResult != nil {
-            print("🔍 [CLEAR_SCAN_STATE] Preserving scanResult because showingResults: \(showingResults) or scanResult exists: \(scanResult?.id ?? "nil")")
-        } else {
-            print("🔍 [CLEAR_SCAN_STATE] Clearing scanResult because showingResults is false and scanResult is nil")
-            print("🔍 [CLEAR_SCAN_STATE] ⚠️ CLEARING scanResult = nil")
+        if !showingResults && scanResult == nil {
             scanResult = nil
         }
         
         // Clear other scan results
-        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanResult")
         hybridScanResult = nil
         
         // Don't clear detectedBarcode if we're in nutritional label flow OR product not found flow
         // This preserves the barcode for nutritional label processing and retry functionality
         if !showingNutritionalLabelScan && !showingProductNotFound {
-            print("🔍 [CLEAR_SCAN_STATE] Clearing detectedBarcode because not in nutritional label or product not found flow")
             detectedBarcode = nil
-        } else {
-            print("🔍 [CLEAR_SCAN_STATE] Preserving detectedBarcode because in nutritional label flow: \(showingNutritionalLabelScan) or product not found flow: \(showingProductNotFound)")
         }
         
-        print("🔍 [CLEAR_SCAN_STATE] Clearing foundProduct")
         foundProduct = nil
         
         // Clear service states
-        print("🔍 [CLEAR_SCAN_STATE] Clearing hybridScanService results")
         hybridScanService.clearResults()
         
         // Reset UI states
-        print("🔍 [CLEAR_SCAN_STATE] Resetting UI states")
         showingProductFound = false
         showingProductNotFound = false
         showingNutritionalLabelScan = false
         showingBarcodeOverlay = false
-        
-        print("🔍 [CLEAR_SCAN_STATE] clearScanState completed")
     }
     
     // MARK: - Image Processing

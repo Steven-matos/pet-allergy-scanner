@@ -157,7 +157,7 @@ class PetDataAggregator {
     private func loadDailySummaries(for petId: String, days: Int) async throws -> [DailyNutritionSummary] {
         do {
             try await nutritionService.loadDailySummaries(for: petId, days: days)
-            return nutritionService.dailySummaries[petId] ?? []
+            return nutritionService.dailySummaries(for: petId)
         } catch {
             print("Failed to load daily summaries: \(error)")
             // Return empty array instead of throwing to allow PDF generation with partial data

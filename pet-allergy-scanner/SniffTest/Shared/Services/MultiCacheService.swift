@@ -100,9 +100,11 @@ class MultiCacheService: ObservableObject {
 /**
  * Protocol for cache types that can be cleared
  */
+@MainActor
 private protocol Clearable {
     func clear()
 }
 
+@MainActor
 extension ObservableCacheManager: Clearable {}
 
