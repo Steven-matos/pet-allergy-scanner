@@ -73,6 +73,7 @@
    </AnalyzeAction>
    <ArchiveAction
       buildConfiguration = "Release"
+      customArchiveName = "Pet Food Scanner - SniffTest&#10;Pet Food Scanner - SniffTest&#10;Pet Food Scanner - SniffTest&#10;"
       revealArchiveInOrganizer = "YES">
    </ArchiveAction>
 </Scheme>
