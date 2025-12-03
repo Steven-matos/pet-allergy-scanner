@@ -252,3 +252,52 @@ async def get_daily_summary(
     summary = None  # Placeholder for actual summary generation
     
     return summary
+
+
+@router.delete("/{feeding_record_id}", status_code=204)
+@handle_errors("delete_feeding_record")
+async def delete_feeding_record(
+    feeding_record_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Delete a feeding record
+    
+    Args:
+        feeding_record_id: Feeding record ID to delete
+        supabase: Authenticated Supabase client
+        current_user: Current authenticated user
+        
+    Returns:
+        No content (204)
+        
+    Raises:
+        HTTPException: If record not found or user not authorized
+    """
+    # First, get the feeding record to verify ownership
+    query_builder = QueryBuilderService(supabase, "feeding_records")
+    record_result = await query_builder.with_filters({
+        "id": feeding_record_id
+    }).with_limit(1).execute()
+    
+    if not record_result.get("data"):
+        raise HTTPException(
+            status_code=404,
+            detail="Feeding record not found"
+        )
+    
+    record_data = record_result["data"][0]
+    pet_id = record_data["pet_id"]
+    
+    # Verify pet ownership
+    from app.shared.services.pet_authorization import verify_pet_ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Delete the feeding record
+    db_service = DatabaseOperationService(supabase)
+    await db_service.delete_record("feeding_records", feeding_record_id)
+    
+    logger.info(f"Deleted feeding record {feeding_record_id} for pet {pet_id}")
+    
+    return None
