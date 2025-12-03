@@ -407,16 +407,38 @@ async def delete_feeding_record(
     
     # Delete the feeding record
     # RLS will ensure only records for user's pets can be deleted
+    logger.info(
+        f"Attempting to delete feeding record {feeding_record_id} for pet {pet_id} "
+        f"(user: {current_user.id})"
+    )
+    
     db_service = DatabaseOperationService(supabase)
-    deleted = await db_service.delete_record("feeding_records", feeding_record_id)
+    
+    try:
+        deleted = await db_service.delete_record("feeding_records", feeding_record_id)
+    except Exception as delete_error:
+        logger.error(
+            f"Error during delete operation for feeding record {feeding_record_id}: {delete_error}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete feeding record: {str(delete_error)}"
+        )
     
     if not deleted:
         # Delete returned False - record might have been deleted already or RLS blocked it
+        logger.warning(
+            f"Delete operation returned False for feeding record {feeding_record_id}. "
+            f"Record exists (we queried it), but delete failed. "
+            f"This suggests RLS might be blocking the delete operation. "
+            f"User: {current_user.id}, Pet: {pet_id}"
+        )
         raise HTTPException(
             status_code=404,
             detail="Feeding record not found or already deleted"
         )
     
-    logger.info(f"Deleted feeding record {feeding_record_id} for pet {pet_id}")
+    logger.info(f"Successfully deleted feeding record {feeding_record_id} for pet {pet_id}")
     
     return None

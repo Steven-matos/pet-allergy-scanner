@@ -273,17 +273,28 @@ class DatabaseOperationService:
             Exception: If delete fails
         """
         try:
+            # Use .select() to ensure we get the deleted record back
+            # This helps verify the delete operation succeeded and RLS allowed it
             response = await execute_async(
-                lambda: self.supabase.table(table_name).delete().eq(
-                    id_column, record_id
-                ).execute()
+                lambda: self.supabase.table(table_name)
+                    .delete()
+                    .eq(id_column, record_id)
+                    .select()  # Request the deleted record back
+                    .execute()
             )
             
-            deleted = bool(response.data)
+            # Check if we got data back (means delete succeeded and RLS allowed it)
+            deleted = bool(response.data and len(response.data) > 0)
+            
             if deleted:
                 logger.debug(f"✅ Deleted {table_name} record {record_id}")
             else:
-                logger.warning(f"⚠️ No record found to delete: {table_name} {record_id}")
+                # Could be: record doesn't exist, RLS blocked it, or already deleted
+                logger.warning(
+                    f"⚠️ No record found to delete: {table_name} {record_id}. "
+                    f"Response data: {response.data}. "
+                    f"This could mean the record doesn't exist or RLS blocked the delete."
+                )
             
             return deleted
         
