@@ -69,6 +69,22 @@ async def record_feeding_with_slash(
     from app.shared.services.pet_authorization import verify_pet_ownership
     await verify_pet_ownership(feeding_record.pet_id, current_user.id, supabase)
     
+    # Verify food_analysis exists and belongs to the correct pet
+    query_builder = QueryBuilderService(supabase, "food_analyses")
+    food_analysis_result = await query_builder.with_filters({
+        "id": feeding_record.food_analysis_id,
+        "pet_id": feeding_record.pet_id
+    }).with_limit(1).execute()
+    
+    if not food_analysis_result.get("data"):
+        logger.warning(
+            f"Food analysis {feeding_record.food_analysis_id} not found or doesn't belong to pet {feeding_record.pet_id}"
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=f"Food analysis not found or doesn't belong to this pet. Please ensure the food analysis exists for pet {feeding_record.pet_id}."
+        )
+    
     # Create feeding record using data transformation service
     # Note: feeding_records table only has pet_id, not user_id
     # Authorization is handled via RLS policies checking pet ownership
