@@ -113,6 +113,23 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         """Check if the endpoint is the logout endpoint"""
         return path.startswith("/api/v1/auth/logout")
     
+    def _is_login_endpoint(self, path: str) -> bool:
+        """Check if the endpoint is the login endpoint"""
+        return path.startswith("/api/v1/auth/login")
+    
+    def _should_skip_rate_limit(self, path: str) -> bool:
+        """
+        Check if rate limiting should be skipped for this endpoint.
+        Login and logout are essential operations and should not be rate limited.
+        
+        Args:
+            path: Request path
+            
+        Returns:
+            True if rate limiting should be skipped
+        """
+        return self._is_login_endpoint(path) or self._is_logout_endpoint(path)
+    
     async def _clear_auth_rate_limit(self, client_ip: str):
         """Clear auth rate limit entries for a specific IP (used after successful logout)"""
         if self.use_redis and self.redis_client:
@@ -189,15 +206,26 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
         return True, remaining, int(current_time + 60)
     
     async def dispatch(self, request: Request, call_next):
-        """Apply rate limiting"""
+        """
+        Apply rate limiting
+        
+        Login and logout endpoints are excluded from rate limiting as they are
+        essential operations that users should be able to perform without restrictions.
+        """
         client_ip = self._get_client_ip(request)
         current_time = time.time()
         
-        # Clear auth rate limit on successful logout
-        if self._is_logout_endpoint(request.url.path):
+        # Skip rate limiting for login and logout endpoints (essential operations)
+        if self._should_skip_rate_limit(request.url.path):
+            # Clear auth rate limit on successful logout
+            if self._is_logout_endpoint(request.url.path):
+                response = await call_next(request)
+                if response.status_code == 200:
+                    await self._clear_auth_rate_limit(client_ip)
+                return response
+            
+            # For login, just process the request without rate limiting
             response = await call_next(request)
-            if response.status_code == 200:
-                await self._clear_auth_rate_limit(client_ip)
             return response
         
         # Determine rate limit based on endpoint
