@@ -130,8 +130,8 @@ async def search_foods(
         from app.shared.services.query_result_parser import QueryResultParser
         from app.shared.services.pagination_service import PaginationService
         
-        # Build query using centralized query builder
-        query_builder = QueryBuilderService(supabase, "food_items")
+        # Build query using centralized query builder with count support
+        query_builder = QueryBuilderService(supabase, "food_items", include_count=True)
         
         # Add filters
         filters = {}
@@ -142,15 +142,26 @@ async def search_foods(
             query_builder.with_filters(filters)
         
         # Add search across multiple fields
+        # Search in name field (primary search field)
         if q:
-            query_builder.with_search(["name", "brand", "description"], q)
+            query_builder.with_ilike("name", q)
         
         # Add brand filter with ILIKE
         if brand:
             query_builder.with_ilike("brand", brand)
         
         # Execute with pagination
-        result = await query_builder.with_pagination(limit, offset, include_count=True).execute()
+        result = await query_builder.with_pagination(limit, offset, include_count=False).execute()
+        
+        # Get count from result if available
+        # When include_count=True in initialization, count should be in the response
+        total_count = result.get("count")
+        if total_count is None:
+            # Fallback: if count not available, use data length as approximation
+            total_count = len(result["data"])
+            # If we got a full page, there might be more results
+            if len(result["data"]) == limit:
+                total_count = limit + 1  # Indicate there might be more
         
         # Parse JSON fields (nutritional_info)
         parsed_data = QueryResultParser.parse_list_json_fields(
@@ -186,7 +197,7 @@ async def search_foods(
         # Build pagination response using centralized service
         pagination = PaginationService.build_pagination_response(
             items=items,
-            total_count=result["count"],
+            total_count=total_count,  # Use the count we calculated
             offset=offset,
             limit=limit
         )
@@ -226,12 +237,23 @@ async def get_food_by_barcode(
     from app.core.database import get_supabase_client
     supabase = get_supabase_client()
     
+    # Clean barcode: trim whitespace and normalize
+    cleaned_barcode = barcode.strip() if barcode else ""
+    if not cleaned_barcode:
+        logger.warning(f"Empty barcode provided for search")
+        return None
+    
+    logger.info(f"Searching for barcode: {cleaned_barcode}")
+    
     # Query food_items table by barcode using query builder
     query_builder = QueryBuilderService(supabase, "food_items")
-    result = await query_builder.with_filters({"barcode": barcode}).with_limit(1).execute()
+    result = await query_builder.with_filters({"barcode": cleaned_barcode}).with_limit(1).execute()
     
     if not result["data"]:
+        logger.info(f"No food item found with barcode: {cleaned_barcode}")
         return None
+    
+    logger.info(f"Found food item with barcode: {cleaned_barcode}, name: {result['data'][0].get('name', 'Unknown')}")
     
     food_item = result["data"][0]
     

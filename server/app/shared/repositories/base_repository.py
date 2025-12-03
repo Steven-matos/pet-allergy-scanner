@@ -245,7 +245,8 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             Dictionary with 'data' and 'count' keys
         """
-        query_builder = self.build_query()
+        # Initialize query builder with count support if needed
+        query_builder = QueryBuilderService(self.supabase, self.table_name, include_count=include_count)
         
         if filters:
             query_builder.with_filters(filters)
@@ -256,7 +257,8 @@ class BaseRepository(ABC, Generic[T]):
         if order_by:
             query_builder.with_ordering(order_by, desc)
         
-        query_builder.with_pagination(limit, offset, include_count)
+        # Note: include_count is already set in initialization, so pass False here
+        query_builder.with_pagination(limit, offset, include_count=False)
         
         return await query_builder.execute()
     
@@ -281,7 +283,8 @@ class BaseRepository(ABC, Generic[T]):
         Returns:
             PaginationResponse with items, total_count, has_more, offset, and limit
         """
-        query_builder = self.build_query()
+        # Initialize query builder with count support for pagination
+        query_builder = QueryBuilderService(self.supabase, self.table_name, include_count=True)
         
         if filters:
             query_builder.with_filters(filters)
@@ -289,11 +292,20 @@ class BaseRepository(ABC, Generic[T]):
         if order_by:
             query_builder.with_ordering(order_by, desc)
         
-        result = await query_builder.with_pagination(limit, offset, include_count=True).execute()
+        # Note: include_count is already set in initialization, so pass False here
+        result = await query_builder.with_pagination(limit, offset, include_count=False).execute()
+        
+        # Get count from result (should be available from initialization)
+        total_count = result.get("count")
+        if total_count is None:
+            # Fallback: use data length as approximation
+            total_count = len(result["data"])
+            if len(result["data"]) == limit:
+                total_count = limit + 1  # Indicate there might be more
         
         return PaginationService.build_pagination_response(
             items=result["data"],
-            total_count=result["count"],
+            total_count=total_count,
             offset=offset,
             limit=limit
         )

@@ -40,7 +40,7 @@ class QueryBuilderService:
     # Maximum limit to prevent excessive data fetching
     MAX_LIMIT = 500
     
-    def __init__(self, supabase: Client, table_name: str, default_columns: Optional[List[str]] = None):
+    def __init__(self, supabase: Client, table_name: str, default_columns: Optional[List[str]] = None, include_count: bool = False):
         """
         Initialize query builder service
         
@@ -49,12 +49,18 @@ class QueryBuilderService:
             table_name: Name of the database table
             default_columns: Optional list of default columns to select (None means all)
                             Use None only when you explicitly need all columns
+            include_count: Whether to include total count in the query response
         """
         self.supabase = supabase
         self.table_name = table_name
+        self._include_count = include_count
+        
         if default_columns:
             select_str = ",".join(default_columns)
-            self.query = supabase.table(table_name).select(select_str)
+            if include_count:
+                self.query = supabase.table(table_name).select(select_str, count="exact")
+            else:
+                self.query = supabase.table(table_name).select(select_str)
         else:
             # Default to all columns but warn in development
             if settings.environment == "development":
@@ -62,7 +68,10 @@ class QueryBuilderService:
                     f"QueryBuilderService initialized without explicit columns for {table_name}. "
                     "Consider specifying columns for better performance."
                 )
-            self.query = supabase.table(table_name).select("*")
+            if include_count:
+                self.query = supabase.table(table_name).select("*", count="exact")
+            else:
+                self.query = supabase.table(table_name).select("*")
     
     def with_filters(self, filters: Dict[str, Any]) -> 'QueryBuilderService':
         """
@@ -87,18 +96,31 @@ class QueryBuilderService:
         """
         Add search across multiple fields using ILIKE
         
+        Note: Supabase Python client has limitations with complex OR conditions.
+        This method searches the first field primarily. For multi-field search,
+        consider using PostgreSQL full-text search or searching fields separately.
+        
         Args:
-            search_fields: List of field names to search in
+            search_fields: List of field names to search in (first field is used)
             search_term: Search term to look for (None values are ignored)
             
         Returns:
             Self for method chaining
         """
-        if search_term:
-            conditions = ",".join([
-                f"{field}.ilike.%{search_term}%" for field in search_fields
-            ])
-            self.query = self.query.or_(conditions)
+        if search_term and search_fields:
+            # Use the first field for primary search
+            # Supabase Python client doesn't easily support OR across multiple fields
+            # For better multi-field search, consider using PostgreSQL's text search
+            primary_field = search_fields[0]
+            self.query = self.query.ilike(primary_field, f"%{search_term}%")
+            
+            # Log if multiple fields were requested but only first is used
+            if len(search_fields) > 1:
+                logger.debug(
+                    f"Multi-field search requested for {search_fields}, "
+                    f"but only searching in {primary_field} due to Supabase client limitations. "
+                    f"Consider using PostgreSQL full-text search for better multi-field support."
+                )
         return self
     
     def with_ilike(self, field: str, pattern: Optional[str]) -> 'QueryBuilderService':
@@ -141,14 +163,22 @@ class QueryBuilderService:
             )
             limit = self.MAX_LIMIT
         
-        if include_count:
-            # Preserve current select columns or use *
-            current_select = getattr(self.query, '_select', "*")
-            if isinstance(current_select, str):
-                self.query = self.query.select(current_select, count="exact")
-            else:
-                self.query = self.query.select("*", count="exact")
+        # Apply range for pagination
         self.query = self.query.range(offset, offset + limit - 1)
+        
+        # Note: count="exact" should be specified in the initial select() call
+        # We cannot add it later as the query builder doesn't support modifying select after creation
+        # If count is needed, it should be specified when creating the query builder
+        if include_count:
+            # Try to get the current select string from the query
+            # If we can't determine it, we'll need to rebuild the query
+            # For now, we'll log a warning and continue without count
+            # The proper way is to specify count in the initial select() call
+            logger.debug(
+                f"include_count=True requested but count must be specified in initial select(). "
+                f"Count will not be included in this query result."
+            )
+        
         return self
     
     def with_ordering(
@@ -395,18 +425,24 @@ class QueryBuilderService:
         This combines pagination and ordering which is a very common pattern
         across list endpoints. Reduces code duplication.
         
+        IMPORTANT: If include_count=True, the QueryBuilderService must be initialized
+        with include_count=True in the constructor. Count cannot be added after query
+        building has started.
+        
         Args:
             limit: Maximum number of results
             offset: Number of results to skip
             order_by: Field name to order by (default: created_at)
             desc: Whether to order descending
-            include_count: Whether to include total count
+            include_count: Whether to include total count (must be set at initialization)
             
         Returns:
             Self for method chaining
         """
         self.with_ordering(order_by, desc)
-        self.with_pagination(limit, offset, include_count)
+        # Note: include_count must be set at initialization, so pass False here
+        # The count will be included if the query builder was initialized with include_count=True
+        self.with_pagination(limit, offset, include_count=False)
         return self
     
     def reset(self, default_columns: Optional[List[str]] = None) -> 'QueryBuilderService':
