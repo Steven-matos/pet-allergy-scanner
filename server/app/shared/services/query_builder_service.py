@@ -127,14 +127,22 @@ class QueryBuilderService:
         """
         Add ILIKE filter for case-insensitive pattern matching
         
+        Uses PostgreSQL's ILIKE operator which performs case-insensitive matching.
+        This ensures that searches match regardless of case variations in the database.
+        For example: "Weruva", "WERUVA", "weruva" all match the same records.
+        
         Args:
             field: Field name to search in
             pattern: Pattern to match (None values are ignored)
+                    The pattern is wrapped with % wildcards for partial matching
+                    Example: "weruva" becomes "%weruva%" to match "Weruva Classic"
             
         Returns:
             Self for method chaining
         """
         if pattern:
+            # PostgreSQL ILIKE is case-insensitive by default
+            # Pattern is wrapped with % for partial matching
             self.query = self.query.ilike(field, f"%{pattern}%")
         return self
     

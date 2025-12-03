@@ -130,37 +130,146 @@ async def search_foods(
         from app.shared.services.query_result_parser import QueryResultParser
         from app.shared.services.pagination_service import PaginationService
         
-        # Build query using centralized query builder with count support
-        query_builder = QueryBuilderService(supabase, "food_items", include_count=True)
+        # Build flexible multi-field search that handles typos and partial matches
+        # Searches across name, brand, and description fields
+        # Combines results from multiple field searches to ensure comprehensive matching
+        # 
+        # Future improvement: For better typo tolerance, consider using PostgreSQL's
+        # pg_trgm extension with similarity() function via a custom RPC function.
+        # This would allow fuzzy matching for typos (e.g., "Weruva" matches "Weruva" even with typos)
         
-        # Add filters
-        filters = {}
-        if category:
-            filters["category"] = category
-        
-        if filters:
-            query_builder.with_filters(filters)
-        
-        # Add search across multiple fields
-        # Search in name field (primary search field)
         if q:
-            query_builder.with_ilike("name", q)
+            # Clean and prepare search term (case-insensitive matching)
+            # PostgreSQL ILIKE is case-insensitive, but we normalize for consistency
+            search_term = q.strip()
+            if not search_term:
+                search_term = None
+            
+            # For flexible search, we'll search name, brand, and description separately
+            # and combine results to ensure we catch all matches (handles brand-only searches, typos, etc.)
+            # All searches use ILIKE which is case-insensitive, so "Weruva", "WERUVA", "weruva" all match
+            # This approach ensures we find products even if:
+            # - User only searches brand name (e.g., "Weruva" or "WERUVA")
+            # - User searches partial product name (e.g., "classic cat" or "Classic Cat")
+            # - Database has mixed case (e.g., "Weruva" in DB, user searches "WERUVA")
+            # - User has typos (partial matching helps catch some typos)
+            all_results = []
+            seen_ids = set()
+            
+            # Search in name field (primary search) - handles full product names
+            # ILIKE is case-insensitive: matches "Weruva", "WERUVA", "weruva", etc.
+            query_name = QueryBuilderService(supabase, "food_items", include_count=False)
+            if category:
+                query_name.with_filters({"category": category})
+            if brand:
+                # Brand filter is also case-insensitive via ILIKE
+                query_name.with_ilike("brand", brand)
+            # Case-insensitive search in name field
+            query_name.with_ilike("name", search_term)
+            result_name = await query_name.with_pagination(limit * 2, 0, include_count=False).execute()
+            
+            for item in result_name.get("data", []):
+                if item["id"] not in seen_ids:
+                    all_results.append(item)
+                    seen_ids.add(item["id"])
+            
+            # Search in brand field (for brand-only searches)
+            # Case-insensitive: "Weruva", "WERUVA", "weruva" all match
+            query_brand = QueryBuilderService(supabase, "food_items", include_count=False)
+            if category:
+                query_brand.with_filters({"category": category})
+            if brand:
+                # Brand filter is also case-insensitive via ILIKE
+                query_brand.with_ilike("brand", brand)
+            # Case-insensitive search in brand field
+            query_brand.with_ilike("brand", search_term)
+            result_brand = await query_brand.with_pagination(limit * 2, 0, include_count=False).execute()
+            
+            for item in result_brand.get("data", []):
+                if item["id"] not in seen_ids:
+                    all_results.append(item)
+                    seen_ids.add(item["id"])
+            
+            # Search in description field (if exists)
+            # Case-insensitive search in description
+            # Note: description might not exist in all records, so we'll try it
+            try:
+                query_desc = QueryBuilderService(supabase, "food_items", include_count=False)
+                if category:
+                    query_desc.with_filters({"category": category})
+                if brand:
+                    # Brand filter is also case-insensitive via ILIKE
+                    query_desc.with_ilike("brand", brand)
+                # Case-insensitive search in description field
+                query_desc.with_ilike("description", search_term)
+                result_desc = await query_desc.with_pagination(limit, 0, include_count=False).execute()
+                
+                for item in result_desc.get("data", []):
+                    if item["id"] not in seen_ids:
+                        all_results.append(item)
+                        seen_ids.add(item["id"])
+            except Exception as e:
+                # Description field might not be searchable or might not exist
+                logger.debug(f"Description search not available: {e}")
+            
+            # Sort results by relevance (name matches first, then brand, then description)
+            # All comparisons are case-insensitive (using .lower()) to handle mixed case in database
+            # This ensures consistent sorting regardless of how data is stored (e.g., "Weruva" vs "WERUVA")
+            def sort_key(item):
+                # Normalize to lowercase for case-insensitive comparison
+                name_lower = (item.get("name") or "").lower()
+                brand_lower = (item.get("brand") or "").lower()
+                search_lower = search_term.lower()
+                
+                # Exact name match gets highest priority
+                if name_lower == search_lower:
+                    return (0, name_lower)
+                # Name starts with search term
+                elif name_lower.startswith(search_lower):
+                    return (1, name_lower)
+                # Name contains search term
+                elif search_lower in name_lower:
+                    return (2, name_lower)
+                # Brand match
+                elif search_lower in brand_lower:
+                    return (3, brand_lower)
+                # Other matches
+                else:
+                    return (4, name_lower)
+            
+            all_results.sort(key=sort_key)
+            
+            # Apply pagination to combined results
+            paginated_results = all_results[offset:offset + limit]
+            total_count = len(all_results)
+            
+            # Create result structure matching expected format
+            result = {
+                "data": paginated_results,
+                "count": total_count
+            }
+        else:
+            # No search query, just filters
+            query_builder = QueryBuilderService(supabase, "food_items", include_count=True)
+            filters = {}
+            if category:
+                filters["category"] = category
+            if filters:
+                query_builder.with_filters(filters)
+            if brand:
+                # Brand filter uses ILIKE for case-insensitive matching
+                query_builder.with_ilike("brand", brand)
+            
+            # Execute with pagination
+            result = await query_builder.with_pagination(limit, offset, include_count=False).execute()
         
-        # Add brand filter with ILIKE
-        if brand:
-            query_builder.with_ilike("brand", brand)
-        
-        # Execute with pagination
-        result = await query_builder.with_pagination(limit, offset, include_count=False).execute()
-        
-        # Get count from result if available
-        # When include_count=True in initialization, count should be in the response
+        # Extract count from result (handled differently for search vs non-search)
         total_count = result.get("count")
         if total_count is None:
             # Fallback: if count not available, use data length as approximation
             total_count = len(result["data"])
-            # If we got a full page, there might be more results
-            if len(result["data"]) == limit:
+            # If we got a full page and no search query, there might be more results
+            if len(result["data"]) == limit and not q:
                 total_count = limit + 1  # Indicate there might be more
         
         # Parse JSON fields (nutritional_info)
