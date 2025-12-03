@@ -65,13 +65,13 @@ class KeyboardAvoidanceManager: ObservableObject {
                       let animationCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else {
                     return nil
                 }
-                
                 return KeyboardEvent(
                     height: keyboardFrame.height,
                     duration: animationDuration,
                     curve: UIView.AnimationCurve(rawValue: Int(animationCurve)) ?? .easeInOut
                 )
             }
+            .debounce(for: .milliseconds(1), scheduler: RunLoop.main)
             .sink { [weak self] event in
                 self?.handleKeyboardShow(event: event)
             }
@@ -86,13 +86,13 @@ class KeyboardAvoidanceManager: ObservableObject {
                       let animationCurve = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt else {
                     return nil
                 }
-                
                 return KeyboardEvent(
                     height: 0,
                     duration: animationDuration,
                     curve: UIView.AnimationCurve(rawValue: Int(animationCurve)) ?? .easeInOut
                 )
             }
+            .debounce(for: .milliseconds(1), scheduler: RunLoop.main)
             .sink { [weak self] event in
                 self?.handleKeyboardHide(event: event)
             }
@@ -101,21 +101,26 @@ class KeyboardAvoidanceManager: ObservableObject {
     
     /**
      * Handle keyboard show event with smooth animation
+     * Updates are deferred to next run loop to avoid publishing changes from within view updates
      */
     private func handleKeyboardShow(event: KeyboardEvent) {
-        withAnimation(.easeInOut(duration: event.duration)) {
-            keyboardHeight = event.height
-            isKeyboardVisible = true
-        }
+        applyKeyboard(show: true, height: event.height)
     }
     
     /**
      * Handle keyboard hide event with smooth animation
+     * Updates are deferred to avoid publishing changes from within view updates
      */
     private func handleKeyboardHide(event: KeyboardEvent) {
-        withAnimation(.easeInOut(duration: event.duration)) {
-            keyboardHeight = 0
-            isKeyboardVisible = false
+        applyKeyboard(show: false, height: 0)
+    }
+    
+    /// Applies keyboard state changes safely on the next run loop to avoid publishing during view updates
+    private func applyKeyboard(show: Bool, height: CGFloat) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.keyboardHeight = height
+            self.isKeyboardVisible = show
         }
     }
 }

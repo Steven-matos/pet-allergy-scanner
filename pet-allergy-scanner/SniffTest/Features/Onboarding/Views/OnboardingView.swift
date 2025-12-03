@@ -38,6 +38,13 @@ struct OnboardingView: View {
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
+    // Computed property to check if user should skip paywall
+    private var shouldSkipPaywall: Bool {
+        guard let user = authService.currentUser else { return false }
+        // Skip paywall if user has premium role or bypass subscription flag
+        return user.role == .premium || user.bypassSubscription
+    }
+    
     private let totalSteps = 5
     
     var body: some View {
@@ -70,22 +77,21 @@ struct OnboardingView: View {
                             allergiesAndVetStep
                                 .tag(3)
                             
-                            // Step 5: Premium Subscription
+                        // Step 5: Premium Subscription (skip if user is premium)
+                        if shouldSkipPaywall {
+                            // Show a completion step instead of paywall for premium users
+                            completionStep
+                                .tag(4)
+                        } else {
                             paywallStep
                                 .tag(4)
+                        }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
                         .animation(.easeInOut, value: currentStep)
                         .frame(height: UIScreen.main.bounds.height * 0.7) // Fixed height for TabView
-                        .simultaneousGesture(
-                            DragGesture().onChanged { _ in
-                                // Block swipe if on step 1 and validation fails
-                                if currentStep == 1 && !canProceed {
-                                    showNameValidationError = true
-                                    isNameFieldFocused = true
-                                }
-                            }
-                        )
+                        // iOS 18 compatible: Use onChange to detect step changes instead of gesture
+                        // Removed simultaneousGesture which can interfere with button taps
                         .onChange(of: currentStep) { oldValue, newValue in
                             // Prevent swiping forward if validation fails
                             if newValue > oldValue {
@@ -94,7 +100,7 @@ struct OnboardingView: View {
                                     // Show validation error and reset
                                     withAnimation {
                                         if oldValue == 1 {
-                                            // Pet name validation failed
+                                            // Pet name validation failed (applies to both dog and cat routes)
                                             showNameValidationError = true
                                             isNameFieldFocused = true
                                         }
@@ -113,6 +119,7 @@ struct OnboardingView: View {
                                 }
                             }
                         }
+                        .disabled(currentStep == 1 && !canProceed) // Disable swiping on step 1 if validation fails
                     }
             }
             .scrollDismissesKeyboard(.interactively)
@@ -170,10 +177,11 @@ struct OnboardingView: View {
                     
                     // Skip button (only show on first step or paywall step) - 1/3 width
                     if currentStep == 0 {
+                        // iOS 18 compatible: Button action properly isolated
                         Button("Skip for now") {
-                            // Skip onboarding for this session only
-                            // User will see onboarding again next time until they add a pet
-                            onSkip()
+                            Task { @MainActor in
+                                onSkip()
+                            }
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -183,11 +191,13 @@ struct OnboardingView: View {
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                                 .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
                         )
-                    } else if currentStep == 4 {
-                        // Skip paywall button
+                    } else if currentStep == 4 && !shouldSkipPaywall {
+                        // Skip paywall button (only show if not premium user)
+                        // iOS 18 compatible: Button action properly isolated
                         Button("Skip for now") {
-                            // Skip paywall and proceed to create pet, then dismiss onboarding
-                            createPet(shouldDismissOnboarding: true)
+                            Task { @MainActor in
+                                createPet(shouldDismissOnboarding: true)
+                            }
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -201,28 +211,38 @@ struct OnboardingView: View {
                     }
                     
                     // Next/Complete/Subscribe button - 2/3 width
+                    // iOS 18 compatible: Button action properly isolated to MainActor
                     Button(action: {
-                        if currentStep == totalSteps - 1 {
-                            // On paywall step, try to subscribe then create pet
-                            handlePaywallAction()
-                        } else {
-                            // Validate before moving forward
-                            if canProceed {
-                                withAnimation {
-                                    currentStep += 1
-                                    showNameValidationError = false
+                        Task { @MainActor in
+                            if currentStep == totalSteps - 1 {
+                                // On paywall step (or completion step for premium users)
+                                if shouldSkipPaywall {
+                                    // Premium user - just create pet and complete onboarding
+                                    createPet(shouldDismissOnboarding: false)
+                                } else {
+                                    // Regular user - try to subscribe then create pet
+                                    handlePaywallAction()
                                 }
-                            } else if currentStep == 1 {
-                                // Show validation error for pet name
-                                withAnimation {
-                                    showNameValidationError = true
-                                    isNameFieldFocused = true
-                                }
-                                
-                                // Auto-hide after 2 seconds
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            } else {
+                                // Validate before moving forward
+                                if canProceed {
                                     withAnimation {
+                                        currentStep += 1
                                         showNameValidationError = false
+                                    }
+                                } else if currentStep == 1 {
+                                    // Show validation error for pet name
+                                    withAnimation {
+                                        showNameValidationError = true
+                                        isNameFieldFocused = true
+                                    }
+                                    
+                                    // Auto-hide after 2 seconds
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        withAnimation {
+                                            showNameValidationError = false
+                                        }
                                     }
                                 }
                             }
@@ -502,6 +522,14 @@ struct OnboardingView: View {
                         .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
+                    // Weight unit selection
+                    Picker("Weight Unit", selection: $unitService.selectedUnit) {
+                        Text("Kilograms (kg)").tag(WeightUnit.kg)
+                        Text("Pounds (lb)").tag(WeightUnit.lb)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.bottom, ModernDesignSystem.Spacing.xs)
+                    
                     HStack(spacing: ModernDesignSystem.Spacing.sm) {
                         TextField("Weight (\(unitService.getUnitSymbol()))", value: $weightKg, format: .number)
                             .keyboardType(.decimalPad)
@@ -622,6 +650,31 @@ struct OnboardingView: View {
         }
     }
     
+    /// Completion step for premium users (skips paywall)
+    private var completionStep: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Success illustration
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("You're All Set!")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text("As a premium member, you have access to all features. Let's create your pet profile!")
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, ModernDesignSystem.Spacing.xxl)
+            
+            Spacer()
+        }
+        .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+    }
+    
     /// Paywall step for premium subscription
     private var paywallStep: some View {
         VStack(spacing: ModernDesignSystem.Spacing.xl) {
@@ -720,13 +773,14 @@ struct OnboardingView: View {
         case 0:
             return true // Welcome step
         case 1:
-            return !name.isEmpty && name.count >= 2 // Basic info step
+            // For cat route, ensure name is valid before proceeding
+            return !name.isEmpty && name.count >= 2 // Basic info step - pet name required
         case 2:
             return true // Physical info step (all optional)
         case 3:
             return true // Allergies and vet step (all optional)
         case 4:
-            return true // Paywall step (always proceed)
+            return true // Paywall/completion step (always proceed)
         default:
             return false
         }

@@ -56,6 +56,10 @@ class FeedingLogService: ObservableObject {
             // Add to local cache
             recentFeedingRecords.insert(response, at: 0)
             
+            // Invalidate trends cache so trends update with new feeding data
+            let trendsService = CachedNutritionalTrendsService.shared
+            trendsService.invalidateTrendsCache(for: feedingRecord.petId)
+            
         } catch {
             self.error = error
             throw error
@@ -168,10 +172,24 @@ class FeedingLogService: ObservableObject {
         error = nil
         
         do {
+            // Get the record before deleting to get petId for cache invalidation
+            guard let record = recentFeedingRecords.first(where: { $0.id == recordId }) else {
+                throw NSError(domain: "FeedingLogService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Feeding record not found"])
+            }
+            
+            let petId = record.petId
+            
             try await apiService.delete(endpoint: "/nutrition/feeding/\(recordId)")
             
             // Remove from local cache
             recentFeedingRecords.removeAll { $0.id == recordId }
+            
+            // Also remove from cached nutrition service
+            cachedNutritionService.feedingRecords.removeAll { $0.id == recordId }
+            
+            // Invalidate trends cache so trends update after deletion
+            let trendsService = CachedNutritionalTrendsService.shared
+            trendsService.invalidateTrendsCache(for: petId)
             
         } catch {
             self.error = error

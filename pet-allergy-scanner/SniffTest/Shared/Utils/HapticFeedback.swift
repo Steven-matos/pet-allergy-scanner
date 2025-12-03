@@ -68,6 +68,7 @@ struct HapticFeedback {
 }
 
 /// View modifier for adding haptic feedback to buttons
+/// iOS 18 compatible - uses button action instead of onTapGesture to avoid conflicts
 struct HapticButton: ViewModifier {
     let hapticType: HapticType
     let action: () -> Void
@@ -82,9 +83,11 @@ struct HapticButton: ViewModifier {
         case selection
     }
     
+    @MainActor
     func body(content: Content) -> some View {
         content
             .onTapGesture {
+                // Trigger haptic feedback
                 switch hapticType {
                 case .success:
                     HapticFeedback.success()
@@ -101,8 +104,54 @@ struct HapticButton: ViewModifier {
                 case .selection:
                     HapticFeedback.selection()
                 }
+                // Execute action
                 action()
             }
+    }
+}
+
+/// iOS 18 compatible button wrapper with haptic feedback
+/// Use this instead of HapticButton modifier for Button views
+struct HapticButtonView<Label: View>: View {
+    let hapticType: HapticButton.HapticType
+    let label: Label
+    let action: () -> Void
+    
+    init(
+        hapticType: HapticButton.HapticType = .selection,
+        @ViewBuilder label: () -> Label,
+        action: @escaping () -> Void
+    ) {
+        self.hapticType = hapticType
+        self.label = label()
+        self.action = action
+    }
+    
+    @MainActor
+    var body: some View {
+        Button(action: {
+            // Trigger haptic feedback before action
+            switch hapticType {
+            case .success:
+                HapticFeedback.success()
+            case .error:
+                HapticFeedback.error()
+            case .warning:
+                HapticFeedback.warning()
+            case .light:
+                HapticFeedback.light()
+            case .medium:
+                HapticFeedback.medium()
+            case .heavy:
+                HapticFeedback.heavy()
+            case .selection:
+                HapticFeedback.selection()
+            }
+            // Execute action
+            action()
+        }) {
+            label
+        }
     }
 }
 

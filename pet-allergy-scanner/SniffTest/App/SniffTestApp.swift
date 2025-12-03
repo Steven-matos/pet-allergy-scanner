@@ -29,6 +29,10 @@ struct SniffTestApp: App {
             ContentView()
                 .environmentObject(authService)
                 .environmentObject(notificationManager)
+                .onOpenURL { url in
+                    // Handle deep links from email confirmation and password reset
+                    _ = URLHandler.shared.handleURL(url)
+                }
                 .task {
                     // Warm cache on app launch
                     await cacheManager.warmCache()
@@ -65,6 +69,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Clear badge when app becomes active
         PushNotificationService.shared.clearBadge()
+    }
+    
+    /// Handle URL opening (fallback for deep links)
+    /// This is called when the app is opened via a URL scheme or universal link
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        print("AppDelegate: Received URL - \(url)")
+        // Handle the URL through the shared URL handler
+        return URLHandler.shared.handleURL(url)
     }
     
     /// Handle successful device token registration

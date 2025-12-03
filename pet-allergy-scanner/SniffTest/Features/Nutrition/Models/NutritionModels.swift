@@ -377,6 +377,8 @@ struct FeedingRecord: Codable, Identifiable {
     let feedingTime: Date
     let notes: String?
     let createdAt: Date
+    let foodName: String?  // Optional: food name from food_analysis
+    let foodBrand: String?  // Optional: food brand from food_analysis
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -386,6 +388,8 @@ struct FeedingRecord: Codable, Identifiable {
         case feedingTime = "feeding_time"
         case notes
         case createdAt = "created_at"
+        case foodName = "food_name"
+        case foodBrand = "food_brand"
     }
     
     /**

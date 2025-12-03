@@ -254,6 +254,17 @@ class NotificationSettingsManager: NSObject, ObservableObject {
     /// Only shows once per day when app opens if user hasn't been active for a while
     /// - Returns: Boolean indicating if engagement reminder should be shown
     func shouldShowEngagementReminder() -> Bool {
+        // TEMPORARILY DISABLED: Don't show for first-time users
+        // This prevents showing the reminder to users who haven't used the app yet
+        // TODO: Re-enable after user has completed at least one scan
+        
+        // Check if user has ever completed a scan
+        // If no scan history exists, don't show the reminder (first-time user)
+        guard let lastScan = lastScanDate else {
+            // No scan history - this is a first-time user, don't show reminder
+            return false
+        }
+        
         // Check if we've already shown the reminder today
         let lastShownDate = userDefaults.object(forKey: UserDefaultsKeys.lastEngagementReminderShownDate) as? Date
         let calendar = Calendar.current
@@ -266,11 +277,6 @@ class NotificationSettingsManager: NSObject, ObservableObject {
         }
         
         // Check if user hasn't been active for a while (14 days since last scan)
-        guard let lastScan = lastScanDate else {
-            // No scan history, show reminder
-            return true
-        }
-        
         let daysSinceLastScan = calendar.dateComponents([.day], from: lastScan, to: today).day ?? 0
         return daysSinceLastScan >= 14 // 2 weeks
     }

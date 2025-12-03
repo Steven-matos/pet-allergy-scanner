@@ -108,26 +108,20 @@ struct NutritionalLabelResultView: View {
                 EditableIngredientsCard(ingredients: $editableIngredients)
                     .padding(.horizontal, ModernDesignSystem.Spacing.md)
                 
-                // Guaranteed Analysis (Macronutrients)
-                if parsedNutrition.hasMacronutrients {
-                    GuaranteedAnalysisCard(nutrition: parsedNutrition)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                }
-                
-                // Calorie information
-                if parsedNutrition.calories != nil || parsedNutrition.caloriesPerTreat != nil {
-                    ParsedCalorieInfoCard(
-                        calories: parsedNutrition.calories,
-                        caloriesPerTreat: parsedNutrition.caloriesPerTreat
-                    )
+                // Guaranteed Analysis (Macronutrients) - Editable
+                EditableGuaranteedAnalysisCard(nutrition: $parsedNutrition)
                     .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                }
                 
-                // Additional nutritional values
-                if parsedNutrition.hasAdditionalNutrients {
-                    AdditionalNutrientsCard(nutrition: parsedNutrition)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                }
+                // Calorie information - Editable (always show so users can add values)
+                EditableCalorieInfoCard(
+                    calories: $parsedNutrition.calories,
+                    caloriesPerTreat: $parsedNutrition.caloriesPerTreat
+                )
+                .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                
+                // Additional nutritional values - Editable (always show so users can add values)
+                EditableAdditionalNutrientsCard(nutrition: $parsedNutrition)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
                 
                 Spacer()
                 
@@ -901,7 +895,103 @@ struct AddIngredientRow: View {
 }
 
 /**
- * Guaranteed Analysis card (Macronutrients)
+ * Guaranteed Analysis card (Macronutrients) - Editable version
+ * Allows users to edit all guaranteed analysis percentages
+ */
+struct EditableGuaranteedAnalysisCard: View {
+    @Binding var nutrition: ParsedNutrition
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                Text("Guaranteed Analysis")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Image(systemName: "pencil")
+                    .font(.caption2)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Tap to edit")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Protein
+                EditableNutrientRow(
+                    name: "Crude Protein",
+                    value: Binding(
+                        get: { nutrition.protein ?? 0 },
+                        set: { nutrition.protein = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.primary
+                )
+                
+                // Fat
+                EditableNutrientRow(
+                    name: "Crude Fat",
+                    value: Binding(
+                        get: { nutrition.fat ?? 0 },
+                        set: { nutrition.fat = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.secondary
+                )
+                
+                // Fiber
+                EditableNutrientRow(
+                    name: "Crude Fiber",
+                    value: Binding(
+                        get: { nutrition.fiber ?? 0 },
+                        set: { nutrition.fiber = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.safe
+                )
+                
+                // Moisture
+                EditableNutrientRow(
+                    name: "Moisture",
+                    value: Binding(
+                        get: { nutrition.moisture ?? 0 },
+                        set: { nutrition.moisture = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.goldenYellow
+                )
+                
+                // Ash
+                EditableNutrientRow(
+                    name: "Ash",
+                    value: Binding(
+                        get: { nutrition.ash ?? 0 },
+                        set: { nutrition.ash = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.textSecondary
+                )
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium))
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+    }
+}
+
+/**
+ * Guaranteed Analysis card (Macronutrients) - Read-only version (kept for compatibility)
  */
 struct GuaranteedAnalysisCard: View {
     let nutrition: ParsedNutrition
@@ -947,7 +1037,201 @@ struct GuaranteedAnalysisCard: View {
 }
 
 /**
- * Parsed calorie information card
+ * Editable calorie information card
+ * Allows users to edit both metabolizable energy (kcal/kg) and per-treat values
+ */
+struct EditableCalorieInfoCard: View {
+    @Binding var calories: Double?  // kcal/kg (metabolizable energy)
+    @Binding var caloriesPerTreat: Double?  // kcal per treat/serving
+    @State private var editingCalories = false
+    @State private var editingCaloriesPerTreat = false
+    @State private var tempCalories: String = ""
+    @State private var tempCaloriesPerTreat: String = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            HStack {
+                Image(systemName: "flame.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                Text("Calorie Information")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Image(systemName: "pencil")
+                    .font(.caption2)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Tap to edit")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                // Metabolizable Energy (kcal/kg) - Editable
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    if editingCalories {
+                        HStack {
+                            TextField("kcal/kg", text: $tempCalories)
+                                .keyboardType(.decimalPad)
+                                .font(ModernDesignSystem.Typography.title2)
+                                .padding(ModernDesignSystem.Spacing.sm)
+                                .background(ModernDesignSystem.Colors.softCream)
+                                .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small))
+                            
+                            Text("kcal/kg")
+                                .font(ModernDesignSystem.Typography.title3)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Button(action: {
+                                if let value = Double(tempCalories), value > 0 {
+                                    calories = value
+                                } else {
+                                    calories = nil
+                                }
+                                editingCalories = false
+                            }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(ModernDesignSystem.Colors.safe)
+                            }
+                            
+                            Button(action: {
+                                tempCalories = calories != nil ? String(format: "%.0f", calories!) : ""
+                                editingCalories = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(ModernDesignSystem.Colors.error)
+                            }
+                        }
+                    } else {
+                        Button(action: {
+                            tempCalories = calories != nil ? String(format: "%.0f", calories!) : ""
+                            editingCalories = true
+                        }) {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                if let calories = calories {
+                                    Text("\(formattedNumber(calories))")
+                                        .font(ModernDesignSystem.Typography.largeTitle)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                    
+                                    Text("kcal/kg")
+                                        .font(ModernDesignSystem.Typography.title3)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                } else {
+                                    Text("Tap to add")
+                                        .font(ModernDesignSystem.Typography.body)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        .italic()
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "pencil.circle")
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                            }
+                        }
+                    }
+                    
+                    Text("Metabolizable Energy (ME)")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                // Per-treat value - Editable
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    if editingCaloriesPerTreat {
+                        HStack {
+                            TextField("kcal per treat", text: $tempCaloriesPerTreat)
+                                .keyboardType(.decimalPad)
+                                .font(ModernDesignSystem.Typography.title3)
+                                .padding(ModernDesignSystem.Spacing.sm)
+                                .background(ModernDesignSystem.Colors.softCream)
+                                .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small))
+                            
+                            Text("kcal per treat")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Button(action: {
+                                if let value = Double(tempCaloriesPerTreat), value > 0 {
+                                    caloriesPerTreat = value
+                                } else {
+                                    caloriesPerTreat = nil
+                                }
+                                editingCaloriesPerTreat = false
+                            }) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(ModernDesignSystem.Colors.safe)
+                            }
+                            
+                            Button(action: {
+                                tempCaloriesPerTreat = caloriesPerTreat != nil ? String(format: "%.0f", caloriesPerTreat!) : ""
+                                editingCaloriesPerTreat = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(ModernDesignSystem.Colors.error)
+                            }
+                        }
+                    } else {
+                        Button(action: {
+                            tempCaloriesPerTreat = caloriesPerTreat != nil ? String(format: "%.0f", caloriesPerTreat!) : ""
+                            editingCaloriesPerTreat = true
+                        }) {
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                if let caloriesPerTreat = caloriesPerTreat {
+                                    Text("\(formattedNumber(caloriesPerTreat))")
+                                        .font(ModernDesignSystem.Typography.title2)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(ModernDesignSystem.Colors.secondary)
+                                    
+                                    Text("kcal per treat")
+                                        .font(ModernDesignSystem.Typography.body)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                } else {
+                                    Text("Tap to add")
+                                        .font(ModernDesignSystem.Typography.body)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        .italic()
+                                }
+                                
+                                Spacer()
+                                
+                                Image(systemName: "pencil.circle")
+                                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                            }
+                        }
+                    }
+                    
+                    Text("Practical feeding reference")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium))
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+    }
+    
+    /// Format numbers with comma for thousands separator
+    private func formattedNumber(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: value)) ?? "\(Int(value))"
+    }
+}
+
+/**
+ * Parsed calorie information card - Read-only version (kept for compatibility)
  * Displays both metabolizable energy (kcal/kg) and per-treat values
  */
 struct ParsedCalorieInfoCard: View {
@@ -1042,7 +1326,92 @@ struct ParsedCalorieInfoCard: View {
 }
 
 /**
- * Additional nutrients card
+ * Editable additional nutrients card
+ * Allows users to edit additional nutritional values
+ */
+struct EditableAdditionalNutrientsCard: View {
+    @Binding var nutrition: ParsedNutrition
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            HStack {
+                Image(systemName: "pills.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                Text("Additional Nutrients")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Image(systemName: "pencil")
+                    .font(.caption2)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                
+                Text("Tap to edit")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            
+            VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                // Carbohydrates
+                EditableNutrientRow(
+                    name: "Carbohydrates",
+                    value: Binding(
+                        get: { nutrition.carbohydrates ?? 0 },
+                        set: { nutrition.carbohydrates = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.primary
+                )
+                
+                // Sodium
+                EditableNutrientRow(
+                    name: "Sodium",
+                    value: Binding(
+                        get: { nutrition.sodium ?? 0 },
+                        set: { nutrition.sodium = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.secondary
+                )
+                
+                // Calcium
+                EditableNutrientRow(
+                    name: "Calcium",
+                    value: Binding(
+                        get: { nutrition.calcium ?? 0 },
+                        set: { nutrition.calcium = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.safe
+                )
+                
+                // Phosphorus
+                EditableNutrientRow(
+                    name: "Phosphorus",
+                    value: Binding(
+                        get: { nutrition.phosphorus ?? 0 },
+                        set: { nutrition.phosphorus = $0 > 0 ? $0 : nil }
+                    ),
+                    unit: "%",
+                    color: ModernDesignSystem.Colors.goldenYellow
+                )
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium))
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+    }
+}
+
+/**
+ * Additional nutrients card - Read-only version (kept for compatibility)
  */
 struct AdditionalNutrientsCard: View {
     let nutrition: ParsedNutrition
@@ -1085,7 +1454,112 @@ struct AdditionalNutrientsCard: View {
 }
 
 /**
- * Nutrient row component with color indicator
+ * Editable nutrient row component with color indicator
+ * Allows users to tap and edit the percentage value
+ */
+struct EditableNutrientRow: View {
+    let name: String
+    @Binding var value: Double
+    let unit: String
+    let color: Color
+    @State private var isEditing = false
+    @State private var tempValue: String = ""
+    
+    var body: some View {
+        if isEditing {
+            HStack {
+                Circle()
+                    .fill(color)
+                    .frame(width: 8, height: 8)
+                
+                Text(name)
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                    TextField("0.0", text: $tempValue)
+                        .keyboardType(.decimalPad)
+                        .font(ModernDesignSystem.Typography.body)
+                        .fontWeight(.semibold)
+                        .frame(width: 60)
+                        .multilineTextAlignment(.trailing)
+                        .padding(.horizontal, ModernDesignSystem.Spacing.xs)
+                        .padding(.vertical, 4)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                    
+                    Text(unit)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    Button(action: {
+                        let trimmed = tempValue.trimmingCharacters(in: .whitespaces)
+                        if trimmed.isEmpty {
+                            // Clear the value if empty
+                            value = 0
+                        } else if let newValue = Double(trimmed), newValue >= 0 && newValue <= 100 {
+                            value = newValue
+                        }
+                        isEditing = false
+                    }) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.safe)
+                    }
+                    
+                    Button(action: {
+                        tempValue = String(format: "%.1f", value)
+                        isEditing = false
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(ModernDesignSystem.Colors.error)
+                    }
+                }
+            }
+            .padding(.vertical, ModernDesignSystem.Spacing.xs)
+        } else {
+            Button(action: {
+                tempValue = value > 0 ? String(format: "%.1f", value) : ""
+                isEditing = true
+            }) {
+                HStack {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(name)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Spacer()
+                    
+                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        if value > 0 {
+                            Text(String(format: "%.1f%@", value, unit))
+                                .font(ModernDesignSystem.Typography.body)
+                                .fontWeight(.semibold)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        } else {
+                            Text("Tap to add")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .italic()
+                        }
+                        
+                        Image(systemName: "pencil.circle")
+                            .font(.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.xs)
+            }
+        }
+    }
+}
+
+/**
+ * Nutrient row component with color indicator - Read-only version (kept for compatibility)
  */
 struct ColoredNutrientRow: View {
     let name: String

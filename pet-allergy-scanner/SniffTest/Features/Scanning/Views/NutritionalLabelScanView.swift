@@ -23,6 +23,10 @@ struct NutritionalLabelScanView: View {
     @State private var showingImagePicker = false
     @State private var cameraService = CameraService()
     @State private var showingTips = true
+    @State private var isCameraReady = false
+    @State private var isCapturing = false
+    @State private var showingError = false
+    @State private var errorMessage = ""
     
     var body: some View {
         ZStack {
@@ -77,9 +81,15 @@ struct NutritionalLabelScanView: View {
                 VStack(spacing: ModernDesignSystem.Spacing.md) {
                     Button(action: capturePhoto) {
                         HStack(spacing: ModernDesignSystem.Spacing.sm) {
-                            Image(systemName: "camera.fill")
-                                .font(ModernDesignSystem.Typography.title2)
-                            Text("Capture Label")
+                            if isCapturing {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "camera.fill")
+                                    .font(ModernDesignSystem.Typography.title2)
+                            }
+                            Text(isCapturing ? "Capturing..." : "Capture Label")
                                 .font(ModernDesignSystem.Typography.title3)
                                 .fontWeight(.semibold)
                         }
@@ -99,6 +109,8 @@ struct NutritionalLabelScanView: View {
                         .clipShape(RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium))
                         .shadow(color: ModernDesignSystem.Colors.primary.opacity(0.4), radius: 12, x: 0, y: 4)
                     }
+                    .disabled(!isCameraReady || isCapturing)
+                    .opacity((!isCameraReady || isCapturing) ? 0.6 : 1.0)
                     
                     // Alternative: Choose from library
                     Button(action: { showingImagePicker = true }) {
@@ -127,29 +139,99 @@ struct NutritionalLabelScanView: View {
         }
         .task {
             // Wait for camera to be ready
-            while cameraService.captureSession == nil {
+            print("📷 Waiting for camera to initialize...")
+            var setupAttempts = 0
+            while cameraService.captureSession == nil && setupAttempts < 100 {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                setupAttempts += 1
             }
+            
+            guard let session = cameraService.captureSession else {
+                print("❌ Camera session failed to initialize after \(Double(setupAttempts) * 0.1) seconds")
+                errorMessage = "Camera failed to initialize. Please try again."
+                showingError = true
+                return
+            }
+            
+            print("📷 Camera session created, starting...")
+            
+            // Start the session
             cameraService.startSession()
+            
+            // Wait for session to actually start running with periodic checks
+            var runningAttempts = 0
+            while session.isRunning != true && runningAttempts < 50 {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                runningAttempts += 1
+                
+                // Check session state
+                if session.isRunning {
+                    break
+                }
+            }
+            
+            if session.isRunning {
+                print("✅ Camera is ready for capture")
+                isCameraReady = true
+            } else {
+                print("⚠️ Camera session failed to start after \(Double(runningAttempts) * 0.1) seconds")
+                errorMessage = "Camera session failed to start. Please check camera permissions and try again."
+                showingError = true
+            }
+        }
+        .onChange(of: cameraService.captureSession?.isRunning) { oldValue, newValue in
+            // Update camera ready state when session running state changes
+            if newValue == true && !isCameraReady {
+                print("✅ Camera session started (detected via onChange)")
+                isCameraReady = true
+            }
         }
         .onDisappear {
             cameraService.stopSession()
+        }
+        .alert("Capture Error", isPresented: $showingError) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
         }
     }
     
     /**
      * Capture photo from camera
+     * Validates camera is ready before attempting capture
      */
     private func capturePhoto() {
-        cameraService.capturePhoto { result in
+        // Ensure camera is ready before capturing
+        guard isCameraReady,
+              cameraService.captureSession != nil,
+              cameraService.captureSession?.isRunning == true else {
+            print("⚠️ Camera not ready for capture - session: \(cameraService.captureSession != nil), running: \(cameraService.captureSession?.isRunning ?? false)")
+            return
+        }
+        
+        // Prevent multiple simultaneous captures
+        guard !isCapturing else {
+            print("⚠️ Capture already in progress")
+            return
+        }
+        
+        isCapturing = true
+        print("📸 Capturing photo from camera...")
+        
+        cameraService.capturePhoto { [self] result in
+            isCapturing = false
+            
             switch result {
             case .success(let image):
+                print("✅ Photo captured successfully, size: \(image.size)")
                 // Process the image to extract barcode information before passing to callback
                 Task {
                     await processImageWithBarcodeDetection(image)
                 }
-            case .failure(_):
-                break
+            case .failure(let error):
+                print("❌ Photo capture failed: \(error.localizedDescription)")
+                errorMessage = error.localizedDescription
+                showingError = true
             }
         }
     }
@@ -326,11 +408,33 @@ class CameraService: NSObject {
     
     /**
      * Start camera session
+     * Ensures session starts properly and notifies when ready
      */
     func startSession() {
-        guard let session = captureSession, !session.isRunning else { return }
+        guard let session = captureSession else {
+            print("⚠️ CameraService: Cannot start - session is nil")
+            return
+        }
+        
+        guard !session.isRunning else {
+            print("📷 CameraService: Session already running")
+            return
+        }
+        
+        print("📷 CameraService: Starting capture session...")
+        // Start session on background queue (required by AVFoundation)
         DispatchQueue.global(qos: .userInitiated).async {
             session.startRunning()
+            print("📷 CameraService: Session startRunning() called")
+            
+            // Check if session actually started after a brief delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if session.isRunning {
+                    print("✅ CameraService: Session is now running")
+                } else {
+                    print("⚠️ CameraService: Session failed to start")
+                }
+            }
         }
     }
     
@@ -346,44 +450,89 @@ class CameraService: NSObject {
     
     /**
      * Capture photo
+     * Validates photo output is available before capturing
      */
     func capturePhoto(completion: @escaping (Result<UIImage, Error>) -> Void) {
+        // Validate photo output is available
+        guard let output = photoOutput else {
+            print("❌ CameraService: Photo output not available")
+            completion(.failure(NSError(domain: "CameraService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Camera not ready. Please wait for camera to initialize."])))
+            return
+        }
+        
+        // Validate capture session is running
+        guard let session = captureSession, session.isRunning else {
+            print("❌ CameraService: Capture session not running")
+            completion(.failure(NSError(domain: "CameraService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Camera session not running. Please try again."])))
+            return
+        }
+        
+        print("📸 CameraService: Starting photo capture...")
         completionHandler = completion
         
+        // Create photo settings with high quality
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
+        // Use maxPhotoDimensions instead of deprecated isHighResolutionPhotoEnabled
+        if #available(iOS 16.0, *) {
+            settings.maxPhotoDimensions = CMVideoDimensions(width: 4096, height: 4096)
+        } else {
+            settings.isHighResolutionPhotoEnabled = true
+        }
         
-        photoOutput?.capturePhoto(with: settings, delegate: self)
+        // Capture photo with delegate
+        output.capturePhoto(with: settings, delegate: self)
     }
 }
 
 // MARK: - AVCapturePhotoCaptureDelegate
 
 extension CameraService: AVCapturePhotoCaptureDelegate {
+    /**
+     * Handle photo capture completion
+     * This delegate method is called when photo capture finishes
+     */
     nonisolated func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+        print("📸 CameraService: Photo capture delegate called")
+        
         if let error = error {
+            print("❌ CameraService: Photo capture error: \(error.localizedDescription)")
             Task { @MainActor in
-                completionHandler?(.failure(error))
+                self.completionHandler?(.failure(error))
+                self.completionHandler = nil
             }
             return
         }
         
-        guard let imageData = photo.fileDataRepresentation(),
-              let image = UIImage(data: imageData) else {
+        guard let imageData = photo.fileDataRepresentation() else {
+            print("❌ CameraService: Failed to get image data from photo")
             Task { @MainActor in
-                completionHandler?(.failure(NSError(domain: "CameraService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process image"])))
+                self.completionHandler?(.failure(NSError(domain: "CameraService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get image data from captured photo"])))
+                self.completionHandler = nil
             }
             return
         }
         
+        guard let image = UIImage(data: imageData) else {
+            print("❌ CameraService: Failed to create UIImage from image data")
+            Task { @MainActor in
+                self.completionHandler?(.failure(NSError(domain: "CameraService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to process image data"])))
+                self.completionHandler = nil
+            }
+            return
+        }
+        
+        print("✅ CameraService: Photo processed successfully, size: \(image.size)")
         Task { @MainActor in
-            completionHandler?(.success(image))
+            self.completionHandler?(.success(image))
+            self.completionHandler = nil
         }
     }
 }
 
 /**
  * Camera preview view
+ * Properly connects camera session to preview layer
  */
 struct CameraPreviewView: UIViewRepresentable {
     var cameraService: CameraService
@@ -394,16 +543,29 @@ struct CameraPreviewView: UIViewRepresentable {
         // Set session if available
         if let session = cameraService.captureSession {
             view.videoPreviewLayer.session = session
+            view.videoPreviewLayer.videoGravity = .resizeAspectFill
         }
         
         return view
     }
     
     func updateUIView(_ uiView: PreviewView, context: Context) {
-        // Update session if it changed
+        // Update session if it changed or is nil
         if let session = cameraService.captureSession {
             if uiView.videoPreviewLayer.session !== session {
                 uiView.videoPreviewLayer.session = session
+                print("📷 Camera preview: Session updated")
+            }
+            
+            // Ensure preview layer is properly configured
+            if uiView.videoPreviewLayer.videoGravity != .resizeAspectFill {
+                uiView.videoPreviewLayer.videoGravity = .resizeAspectFill
+            }
+        } else {
+            // Clear session if it becomes nil
+            if uiView.videoPreviewLayer.session != nil {
+                uiView.videoPreviewLayer.session = nil
+                print("📷 Camera preview: Session cleared")
             }
         }
     }

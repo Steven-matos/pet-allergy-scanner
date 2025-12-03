@@ -204,9 +204,10 @@ struct ModernAsyncButton<Label: View>: View {
         self.action = action
     }
     
+    @MainActor
     var body: some View {
         Button(action: {
-            Task {
+            Task { @MainActor in
                 await action()
             }
         }) {
@@ -223,9 +224,22 @@ struct ModernAsyncButton<Label: View>: View {
         .disabled(isLoading)
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.1), value: isPressed)
-        .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity, pressing: { pressing in
-            isPressed = pressing
-        }, perform: {})
+        // iOS 18 compatible: Use buttonStyle for press feedback instead of gesture
+        .buttonStyle(PressableButtonStyle(isPressed: $isPressed))
+    }
+}
+
+/// iOS 18 compatible button style for press feedback
+/// Replaces onLongPressGesture which can interfere with button taps
+struct PressableButtonStyle: SwiftUI.ButtonStyle {
+    @Binding var isPressed: Bool
+    
+    func makeBody(configuration: SwiftUI.ButtonStyle.Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .onChange(of: configuration.isPressed) { oldValue, newValue in
+                isPressed = newValue
+            }
     }
 }
 

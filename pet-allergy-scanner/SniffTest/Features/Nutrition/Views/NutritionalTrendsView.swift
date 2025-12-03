@@ -30,6 +30,7 @@ struct NutritionalTrendsView: View {
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var calorieGoalsService = CalorieGoalsService.shared
     @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
+    @StateObject private var feedingLogService = FeedingLogService.shared
     @Binding var selectedPeriod: TrendPeriod
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -37,6 +38,7 @@ struct NutritionalTrendsView: View {
     @State private var showingFeedingLog = false
     @State private var showingCalorieGoalSheet: Pet?
     @State private var showingPaywall = false
+    @State private var recentMeals: [FeedingRecord] = []
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
@@ -93,6 +95,14 @@ struct NutritionalTrendsView: View {
         .onAppear {
             loadTrendsDataIfNeeded()
             loadCalorieGoalsIfNeeded()
+            loadRecentMeals()
+        }
+        .onChange(of: showingFeedingLog) { _, isShowing in
+            if !isShowing {
+                // Refresh trends and meals when feeding log is dismissed
+                loadTrendsData()
+                loadRecentMeals()
+            }
         }
     }
     
@@ -141,8 +151,8 @@ struct NutritionalTrendsView: View {
                 // Summary Cards
                 summaryCardsSection(for: pet)
                 
-                // Quick Action Card - Log Feeding
-                quickActionCard
+                // Log Meal Section - Button and Recent Meals List
+                logMealSection
                 
                 // Calorie Trends Chart
                 if !trendsService.calorieTrends(for: pet.id).isEmpty {
@@ -243,37 +253,38 @@ struct NutritionalTrendsView: View {
         }
     }
     
-    // MARK: - Quick Action Card
+    // MARK: - Log Meal Section
     
-    private var quickActionCard: some View {
+    private var logMealSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             HStack {
-                Image(systemName: "plus.circle.fill")
+                Image(systemName: "fork.knife.circle.fill")
                     .foregroundColor(ModernDesignSystem.Colors.primary)
                     .font(.title2)
                 
-                Text("Quick Actions")
+                Text("Log Meal")
                     .font(ModernDesignSystem.Typography.title3)
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 
                 Spacer()
             }
             
+            // Log Meal Button
             Button(action: {
                 showingFeedingLog = true
             }) {
                 HStack {
-                    Image(systemName: "fork.knife")
+                    Image(systemName: "plus.circle.fill")
                         .font(.title3)
                         .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                     
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                        Text("Log Feeding Session")
+                        Text("Log New Meal")
                             .font(ModernDesignSystem.Typography.subheadline)
                             .fontWeight(.semibold)
                             .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                         
-                        Text("Record what your pet ate today")
+                        Text("Record what your pet ate")
                             .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textOnPrimary.opacity(0.8))
                     }
@@ -295,6 +306,33 @@ struct NutritionalTrendsView: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
+            
+            // Recent Meals List
+            if !recentMeals.isEmpty {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    Text("Recent Meals")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .padding(.top, ModernDesignSystem.Spacing.xs)
+                    
+                    ForEach(recentMeals.prefix(5)) { meal in
+                        MealRow(meal: meal, onDelete: {
+                            // Refresh the meals list after deletion
+                            loadRecentMeals()
+                            // Refresh trends after deletion
+                            loadTrendsData()
+                        })
+                    }
+                }
+            } else {
+                VStack(spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("No meals logged yet")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .padding(.top, ModernDesignSystem.Spacing.xs)
+                }
+            }
         }
         .padding(ModernDesignSystem.Spacing.md)
         .background(ModernDesignSystem.Colors.softCream)
@@ -309,6 +347,27 @@ struct NutritionalTrendsView: View {
             x: ModernDesignSystem.Shadows.small.x,
             y: ModernDesignSystem.Shadows.small.y
         )
+    }
+    
+    /**
+     * Load recent meals for the selected pet
+     */
+    private func loadRecentMeals() {
+        guard let pet = selectedPet else {
+            recentMeals = []
+            return
+        }
+        
+        Task {
+            do {
+                let meals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 7)
+                await MainActor.run {
+                    recentMeals = meals
+                }
+            } catch {
+                print("Failed to load recent meals: \(error.localizedDescription)")
+            }
+        }
     }
     
     // MARK: - Helper Methods
@@ -1278,9 +1337,139 @@ struct CalorieGoalEntrySheet: View {
     }
 }
 
+// MARK: - Meal Row Component
+
+/**
+ * Meal Row
+ * Displays a single meal in the recent meals list with delete functionality
+ */
+struct MealRow: View {
+    let meal: FeedingRecord
+    let onDelete: () -> Void
+    @StateObject private var feedingLogService = FeedingLogService.shared
+    @StateObject private var trendsService = CachedNutritionalTrendsService.shared
+    @State private var showingDeleteAlert = false
+    @State private var isDeleting = false
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+    
+    private var relativeDateFormatter: RelativeDateTimeFormatter {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }
+    
+    var body: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            // Meal Icon
+            Image(systemName: "fork.knife")
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+                .font(.system(size: 16))
+                .frame(width: 24)
+            
+            // Meal Details
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                // Food Name (primary info)
+                if let foodName = meal.foodName, !foodName.isEmpty {
+                    Text(foodName)
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .lineLimit(1)
+                } else {
+                    Text("Meal")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                // Amount and brand
+                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("\(meal.amountGrams, specifier: "%.0f")g")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    
+                    if let brand = meal.foodBrand, !brand.isEmpty {
+                        Text("• \(brand)")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .lineLimit(1)
+                    }
+                    
+                    if let notes = meal.notes, !notes.isEmpty {
+                        Text("• \(notes)")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                Text(relativeDateFormatter.localizedString(for: meal.feedingTime, relativeTo: Date()))
+                    .font(ModernDesignSystem.Typography.caption2)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            Spacer()
+            
+            // Delete Button
+            if isDeleting {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else {
+                Button(action: {
+                    showingDeleteAlert = true
+                }) {
+                    Image(systemName: "trash")
+                        .foregroundColor(ModernDesignSystem.Colors.error)
+                        .font(.system(size: 14))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.sm)
+        .background(ModernDesignSystem.Colors.surface)
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+        .alert("Delete Meal", isPresented: $showingDeleteAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteMeal()
+            }
+        } message: {
+            Text("Are you sure you want to delete this meal? This action cannot be undone.")
+        }
+    }
+    
+    /**
+     * Delete the meal
+     */
+    private func deleteMeal() {
+        isDeleting = true
+        
+        Task {
+            do {
+                try await feedingLogService.deleteFeedingRecord(meal.id)
+                
+                await MainActor.run {
+                    isDeleting = false
+                    // Call the onDelete callback to refresh the parent view
+                    onDelete()
+                }
+            } catch {
+                await MainActor.run {
+                    isDeleting = false
+                    print("Failed to delete meal: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Data Models
-
-
 
 
 #Preview {
