@@ -165,6 +165,8 @@ class FeedingRecordResponse(FeedingRecordBase):
     """Feeding record response model"""
     id: str
     created_at: datetime
+    food_name: Optional[str] = None  # Optional: populated when joining food_analysis
+    food_brand: Optional[str] = None  # Optional: populated when joining food_analysis
     
     class Config:
         from_attributes = True

@@ -30,6 +30,7 @@ from app.shared.services.query_builder_service import QueryBuilderService
 from app.shared.services.data_transformation_service import DataTransformationService
 from app.shared.services.id_generation_service import IDGenerationService
 from app.shared.services.datetime_service import DateTimeService
+from app.shared.services.query_result_parser import QueryResultParser
 from app.shared.decorators.error_handler import handle_errors
 
 logger = get_logger(__name__)
@@ -79,28 +80,94 @@ async def record_feeding_with_slash(
     }).with_limit(1).execute()
     
     if not food_analysis_result.get("data"):
-        # Food analysis doesn't exist - create a minimal one automatically
+        # Food analysis doesn't exist - check if the ID is actually a food_item ID
         # This allows users to log feedings with any product without requiring
         # them to create a food analysis first
         logger.info(
             f"Food analysis {feeding_record.food_analysis_id} not found for pet {feeding_record.pet_id}. "
-            f"Creating minimal food analysis automatically."
+            f"Checking if it's a food_item ID and creating food analysis automatically."
         )
         
-        # Create minimal food analysis with default values
-        # All nutritional values default to 0, which is valid per schema
+        # Check if this ID exists in food_items table
+        food_item_query = QueryBuilderService(supabase, "food_items")
+        food_item_result = await food_item_query.with_filters({
+            "id": feeding_record.food_analysis_id
+        }).with_limit(1).execute()
+        
+        food_name = "Manual Feeding Entry"
+        brand = None
+        calories_per_100g = 0.0
+        protein_percentage = 0.0
+        fat_percentage = 0.0
+        fiber_percentage = 0.0
+        moisture_percentage = 0.0
+        ingredients = []
+        allergens = []
+        
+        if food_item_result.get("data"):
+            # Found a food_item - use its data to create a proper food_analysis
+            food_item = food_item_result["data"][0]
+            
+            # Parse nutritional_info JSONB field using QueryResultParser
+            parsed_item = QueryResultParser.parse_json_fields(
+                food_item,
+                ["nutritional_info"],
+                defaults={"nutritional_info": {}}
+            )
+            
+            # Extract food item basic info
+            food_name = parsed_item.get("name", "Manual Feeding Entry")
+            brand = parsed_item.get("brand")
+            
+            # Extract nutritional info from food_item if available
+            nutritional_info = parsed_item.get("nutritional_info", {})
+            if isinstance(nutritional_info, dict) and nutritional_info:
+                # Extract all nutritional values, handling None values properly
+                calories_per_100g = float(nutritional_info.get("calories_per_100g") or 0.0)
+                protein_percentage = float(nutritional_info.get("protein_percentage") or 0.0)
+                fat_percentage = float(nutritional_info.get("fat_percentage") or 0.0)
+                fiber_percentage = float(nutritional_info.get("fiber_percentage") or 0.0)
+                moisture_percentage = float(nutritional_info.get("moisture_percentage") or 0.0)
+                
+                # Extract arrays, ensuring they're lists
+                ingredients = nutritional_info.get("ingredients", [])
+                if not isinstance(ingredients, list):
+                    ingredients = []
+                
+                allergens = nutritional_info.get("allergens", [])
+                if not isinstance(allergens, list):
+                    allergens = []
+            else:
+                # No nutritional info available - use defaults
+                logger.warning(
+                    f"Food item {feeding_record.food_analysis_id} has no nutritional_info. "
+                    f"Using default values for food analysis."
+                )
+            
+            logger.info(
+                f"Found food_item {feeding_record.food_analysis_id} with name '{food_name}', "
+                f"brand '{brand}', calories: {calories_per_100g} kcal/100g. "
+                f"Creating food analysis with food item data."
+            )
+        else:
+            logger.info(
+                f"ID {feeding_record.food_analysis_id} not found in food_items. "
+                f"Creating minimal food analysis with default values."
+            )
+        
+        # Create food analysis with food_item data or defaults
         minimal_analysis_data = {
             "id": feeding_record.food_analysis_id,  # Use the provided ID
             "pet_id": feeding_record.pet_id,
-            "food_name": "Manual Feeding Entry",  # Generic name for manually logged feedings
-            "brand": None,
-            "calories_per_100g": 0.0,  # Default to 0 - user can update later if needed
-            "protein_percentage": 0.0,
-            "fat_percentage": 0.0,
-            "fiber_percentage": 0.0,
-            "moisture_percentage": 0.0,
-            "ingredients": [],
-            "allergens": [],
+            "food_name": food_name,
+            "brand": brand,
+            "calories_per_100g": calories_per_100g,
+            "protein_percentage": protein_percentage,
+            "fat_percentage": fat_percentage,
+            "fiber_percentage": fiber_percentage,
+            "moisture_percentage": moisture_percentage,
+            "ingredients": ingredients,
+            "allergens": allergens,
             "analyzed_at": DateTimeService.now()
         }
         
@@ -177,7 +244,7 @@ async def get_feeding_records(
     from app.shared.services.pet_authorization import verify_pet_ownership
     await verify_pet_ownership(pet_id, current_user.id, supabase)
     
-    # Get feeding records using query builder
+    # Get feeding records with joined food_analysis data
     # Note: feeding_records table only has pet_id, not user_id
     # Authorization is handled via RLS policies checking pet ownership
     query_builder = QueryBuilderService(supabase, "feeding_records")
@@ -188,8 +255,36 @@ async def get_feeding_records(
     # Handle empty response
     records_data = handle_empty_response(result["data"])
     
+    # Join food_analysis data for each feeding record
+    # Get all unique food_analysis_ids
+    food_analysis_ids = list(set([record.get("food_analysis_id") for record in records_data if record.get("food_analysis_id")]))
+    
+    # Fetch all food_analyses in one query
+    food_analyses_map = {}
+    if food_analysis_ids:
+        food_analysis_query = QueryBuilderService(supabase, "food_analyses")
+        # Query for all food_analyses for this pet (RLS will filter by pet_id)
+        analysis_result = await food_analysis_query.with_filters({
+            "pet_id": pet_id
+        }).execute()
+        
+        # Create a map of food_analysis_id -> food_analysis data
+        for analysis in analysis_result.get("data", []):
+            food_analyses_map[analysis.get("id")] = analysis
+    
+    # Enrich records with food_analysis data
+    enriched_records = []
+    for record in records_data:
+        food_analysis_id = record.get("food_analysis_id")
+        if food_analysis_id and food_analysis_id in food_analyses_map:
+            analysis = food_analyses_map[food_analysis_id]
+            record["food_name"] = analysis.get("food_name")
+            record["food_brand"] = analysis.get("brand")
+        
+        enriched_records.append(record)
+    
     # Convert to response models
-    return ResponseModelService.convert_list_to_models(records_data, FeedingRecordResponse)
+    return ResponseModelService.convert_list_to_models(enriched_records, FeedingRecordResponse)
 
 
 @router.get("/summaries/{pet_id}", response_model=List[DailyNutritionSummaryResponse])
