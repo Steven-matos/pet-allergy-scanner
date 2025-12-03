@@ -158,6 +158,7 @@ async def login_user(login_data: UserLogin):
         supabase = get_supabase_client()
         
         # Authenticate with Supabase
+        auth_response = None
         try:
             auth_response = supabase.auth.sign_in_with_password({
                 "email": login_data.email_or_username,
@@ -217,25 +218,105 @@ async def login_user(login_data: UserLogin):
                     )
                     
                     if existing_check.data:
-                        # User exists in public.users - this might be a different issue (constraint violation, etc.)
-                        logger.warning(f"User with email {login_data.email_or_username} already exists in public.users - may be constraint violation")
-                        logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                        # User exists in public.users - try to auto-fix using RPC function
+                        logger.info(f"User exists in public.users, attempting auto-fix via RPC function...")
+                        try:
+                            from app.shared.utils.async_supabase import execute_async
+                            
+                            # Call the auto-fix RPC function
+                            fix_result = await execute_async(
+                                lambda: service_supabase.rpc(
+                                    'fix_auth_user_login',
+                                    {'user_email': login_data.email_or_username}
+                                ).execute(),
+                                table_name="rpc.fix_auth_user_login"
+                            )
+                            
+                            if fix_result.data and fix_result.data.get('success'):
+                                logger.info(f"Auto-fix successful: {fix_result.data.get('action')} for {login_data.email_or_username}")
+                                # Retry login after fix
+                                logger.info("Retrying login after auto-fix...")
+                                try:
+                                    auth_response = supabase.auth.sign_in_with_password({
+                                        "email": login_data.email_or_username,
+                                        "password": login_data.password
+                                    })
+                                    # If we get here, login succeeded - auth_response is set, continue with normal flow
+                                except Exception as retry_error:
+                                    logger.error(f"Login retry after auto-fix failed: {retry_error}")
+                                    raise HTTPException(
+                                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                        detail="Database error during authentication. Auto-fix completed but login still failed. Please contact support."
+                                    )
+                            else:
+                                logger.warning(f"Auto-fix returned: {fix_result.data}")
+                                logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                                raise HTTPException(
+                                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                    detail="Database error during authentication. Please contact support if this persists."
+                                )
+                        except HTTPException:
+                            raise
+                        except Exception as rpc_error:
+                            logger.error(f"RPC auto-fix failed: {rpc_error}", exc_info=True)
+                            # If RPC function doesn't exist, log helpful message
+                            if "function" in str(rpc_error).lower() and "does not exist" in str(rpc_error).lower():
+                                logger.error("fix_auth_user_login RPC function not found. Please run fix_auth_user_auto.sql in Supabase SQL Editor.")
+                            logger.error("Run the fix_auth_user_grant_error.sql script in Supabase SQL Editor to diagnose and fix.")
+                            raise HTTPException(
+                                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail="Database error during authentication. Please contact support if this persists."
+                            )
+                    
+                    # User doesn't exist in public.users - try to auto-fix using RPC function
+                    logger.info("User not found in public.users, attempting auto-fix via RPC function...")
+                    try:
+                        from app.shared.utils.async_supabase import execute_async
+                        
+                        # Call the auto-fix RPC function
+                        fix_result = await execute_async(
+                            lambda: service_supabase.rpc(
+                                'fix_auth_user_login',
+                                {'user_email': login_data.email_or_username}
+                            ).execute(),
+                            table_name="rpc.fix_auth_user_login"
+                        )
+                        
+                        if fix_result.data and fix_result.data.get('success'):
+                            logger.info(f"Auto-fix successful: {fix_result.data.get('action')} for {login_data.email_or_username}")
+                            # Retry login after fix
+                            logger.info("Retrying login after auto-fix...")
+                            try:
+                                auth_response = supabase.auth.sign_in_with_password({
+                                    "email": login_data.email_or_username,
+                                    "password": login_data.password
+                                })
+                                # If we get here, login succeeded - auth_response is set, continue with normal flow
+                            except Exception as retry_error:
+                                logger.error(f"Login retry after auto-fix failed: {retry_error}")
+                                raise HTTPException(
+                                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                    detail="Database error during authentication. Auto-fix completed but login still failed. Please contact support."
+                                )
+                        else:
+                            logger.warning(f"Auto-fix returned: {fix_result.data}")
+                            logger.error("Please run the fix_auth_user_grant_error.sql script in Supabase SQL Editor.")
+                            raise HTTPException(
+                                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                detail="Database error during authentication. This usually means your user record is missing. Please contact support or try again in a few moments after the database is fixed."
+                            )
+                    except HTTPException:
+                        raise
+                    except Exception as rpc_error:
+                        logger.error(f"RPC auto-fix failed: {rpc_error}", exc_info=True)
+                        # If RPC function doesn't exist, log helpful message
+                        if "function" in str(rpc_error).lower() and "does not exist" in str(rpc_error).lower():
+                            logger.error("fix_auth_user_login RPC function not found. Please run fix_auth_user_auto.sql in Supabase SQL Editor.")
+                        logger.error("Please run the fix_auth_user_grant_error.sql script in Supabase SQL Editor.")
                         raise HTTPException(
                             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                            detail="Database error during authentication. Please contact support if this persists."
+                            detail="Database error during authentication. This usually means your user record is missing. Please contact support or try again in a few moments after the database is fixed."
                         )
-                    
-                    # User doesn't exist in public.users - try to find them in auth.users via SQL
-                    # Note: We can't directly query auth.users from Python easily, so we'll use a workaround
-                    # The best approach is to run the SQL fix script, but we can provide a helpful message
-                    logger.error("Cannot auto-fix: Need to query auth.users which requires SQL access.")
-                    logger.error("Please run the fix_auth_user_grant_error.sql script in Supabase SQL Editor.")
-                    logger.error("The script will create missing public.users records automatically.")
-                    
-                    raise HTTPException(
-                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail="Database error during authentication. This usually means your user record is missing. Please contact support or try again in a few moments after the database is fixed."
-                    )
                         
                 except HTTPException:
                     raise
@@ -276,11 +357,13 @@ async def login_user(login_data: UserLogin):
                     detail="Invalid email or password"
                 )
             # Re-raise other auth errors with more context
-            logger.error(f"Supabase auth error: {auth_error} (type: {error_type})")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication failed. Please check your credentials."
-            )
+            # But only if auth_response wasn't set by auto-fix retry
+            if auth_response is None:
+                logger.error(f"Supabase auth error: {auth_error} (type: {error_type})")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication failed. Please check your credentials."
+                )
         
         # Check if user exists but no session (email not verified)
         if auth_response.user and not auth_response.session:
