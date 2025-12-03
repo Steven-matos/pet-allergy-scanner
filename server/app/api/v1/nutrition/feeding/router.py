@@ -76,8 +76,14 @@ async def record_feeding_with_slash(
     record_data['id'] = IDGenerationService.generate_uuid()
     
     # Insert into database using centralized service
+    # Note: feeding_records table only has created_at, not updated_at
     db_service = DatabaseOperationService(supabase)
-    created_record = await db_service.insert_with_timestamps("feeding_records", record_data)
+    created_record = await db_service.insert_with_timestamps(
+        "feeding_records", 
+        record_data,
+        include_created_at=True,
+        include_updated_at=False  # feeding_records table doesn't have updated_at column
+    )
     
     # Convert to response model
     return ResponseModelService.convert_to_model(created_record, FeedingRecordResponse)
