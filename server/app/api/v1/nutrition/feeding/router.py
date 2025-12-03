@@ -29,6 +29,7 @@ from app.shared.services.response_utils import handle_empty_response
 from app.shared.services.query_builder_service import QueryBuilderService
 from app.shared.services.data_transformation_service import DataTransformationService
 from app.shared.services.id_generation_service import IDGenerationService
+from app.shared.services.datetime_service import DateTimeService
 from app.shared.decorators.error_handler import handle_errors
 
 logger = get_logger(__name__)
@@ -70,6 +71,7 @@ async def record_feeding_with_slash(
     await verify_pet_ownership(feeding_record.pet_id, current_user.id, supabase)
     
     # Verify food_analysis exists and belongs to the correct pet
+    # If it doesn't exist, create a minimal food_analysis automatically
     query_builder = QueryBuilderService(supabase, "food_analyses")
     food_analysis_result = await query_builder.with_filters({
         "id": feeding_record.food_analysis_id,
@@ -77,13 +79,58 @@ async def record_feeding_with_slash(
     }).with_limit(1).execute()
     
     if not food_analysis_result.get("data"):
-        logger.warning(
-            f"Food analysis {feeding_record.food_analysis_id} not found or doesn't belong to pet {feeding_record.pet_id}"
+        # Food analysis doesn't exist - create a minimal one automatically
+        # This allows users to log feedings with any product without requiring
+        # them to create a food analysis first
+        logger.info(
+            f"Food analysis {feeding_record.food_analysis_id} not found for pet {feeding_record.pet_id}. "
+            f"Creating minimal food analysis automatically."
         )
-        raise HTTPException(
-            status_code=404,
-            detail=f"Food analysis not found or doesn't belong to this pet. Please ensure the food analysis exists for pet {feeding_record.pet_id}."
-        )
+        
+        # Create minimal food analysis with default values
+        # All nutritional values default to 0, which is valid per schema
+        minimal_analysis_data = {
+            "id": feeding_record.food_analysis_id,  # Use the provided ID
+            "pet_id": feeding_record.pet_id,
+            "food_name": "Manual Feeding Entry",  # Generic name for manually logged feedings
+            "brand": None,
+            "calories_per_100g": 0.0,  # Default to 0 - user can update later if needed
+            "protein_percentage": 0.0,
+            "fat_percentage": 0.0,
+            "fiber_percentage": 0.0,
+            "moisture_percentage": 0.0,
+            "ingredients": [],
+            "allergens": [],
+            "analyzed_at": DateTimeService.now()
+        }
+        
+        # Insert the minimal food analysis
+        db_service = DatabaseOperationService(supabase)
+        try:
+            await db_service.insert_with_timestamps(
+                "food_analyses",
+                minimal_analysis_data,
+                include_created_at=True,
+                include_updated_at=True
+            )
+            logger.info(
+                f"Successfully created minimal food analysis {feeding_record.food_analysis_id} for pet {feeding_record.pet_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to create minimal food analysis {feeding_record.food_analysis_id}: {e}"
+            )
+            # If creation fails, still allow the feeding to proceed if the ID exists
+            # (might be a race condition where it was created between checks)
+            food_analysis_check = await query_builder.with_filters({
+                "id": feeding_record.food_analysis_id
+            }).with_limit(1).execute()
+            
+            if not food_analysis_check.get("data"):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to create food analysis and analysis does not exist. Please try again."
+                )
     
     # Create feeding record using data transformation service
     # Note: feeding_records table only has pet_id, not user_id
