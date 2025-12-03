@@ -370,28 +370,52 @@ async def delete_feeding_record(
     Raises:
         HTTPException: If record not found or user not authorized
     """
-    # First, get the feeding record to verify ownership
+    # Try to get the feeding record to verify ownership
+    # RLS will automatically filter to only records for pets owned by the user
     query_builder = QueryBuilderService(supabase, "feeding_records")
-    record_result = await query_builder.with_filters({
-        "id": feeding_record_id
-    }).with_limit(1).execute()
-    
-    if not record_result.get("data"):
+    try:
+        record_result = await query_builder.with_filters({
+            "id": feeding_record_id
+        }).with_limit(1).execute()
+    except Exception as e:
+        logger.error(f"Error querying feeding record {feeding_record_id}: {e}")
         raise HTTPException(
             status_code=404,
             detail="Feeding record not found"
         )
     
+    if not record_result.get("data"):
+        # Record not found - could be:
+        # 1. Record doesn't exist
+        # 2. User doesn't have access (RLS blocked it)
+        # 3. Record was already deleted
+        logger.warning(
+            f"Feeding record {feeding_record_id} not found for user {current_user.id}. "
+            f"This could be due to RLS filtering or the record not existing."
+        )
+        raise HTTPException(
+            status_code=404,
+            detail="Feeding record not found or you don't have permission to delete it"
+        )
+    
     record_data = record_result["data"][0]
     pet_id = record_data["pet_id"]
     
-    # Verify pet ownership
+    # Verify pet ownership (double-check, though RLS should have already filtered)
     from app.shared.services.pet_authorization import verify_pet_ownership
     await verify_pet_ownership(pet_id, current_user.id, supabase)
     
     # Delete the feeding record
+    # RLS will ensure only records for user's pets can be deleted
     db_service = DatabaseOperationService(supabase)
-    await db_service.delete_record("feeding_records", feeding_record_id)
+    deleted = await db_service.delete_record("feeding_records", feeding_record_id)
+    
+    if not deleted:
+        # Delete returned False - record might have been deleted already or RLS blocked it
+        raise HTTPException(
+            status_code=404,
+            detail="Feeding record not found or already deleted"
+        )
     
     logger.info(f"Deleted feeding record {feeding_record_id} for pet {pet_id}")
     
