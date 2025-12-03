@@ -334,7 +334,18 @@ async def get_food_by_barcode(
     Get food item by barcode
     
     Searches the food_items database for a product with the given barcode.
-    Returns product details with nutritional information if found.
+    Handles various barcode formats (with/without spaces, dashes, leading zeros).
+    Tries multiple search strategies to match barcodes stored in different formats.
+    
+    Search strategies tried (in order):
+    1. Exact match with original barcode format
+    2. Normalized barcode (digits only)
+    3. Common formatted variations (EAN-13, UPC-A)
+    4. Case-insensitive partial match
+    5. Normalized case-insensitive partial match
+    
+    Note: For best results, consider normalizing barcodes when storing them
+    in the database (store both original and normalized versions).
     
     Args:
         barcode: Barcode/UPC code (e.g., EAN-13, UPC-A)
@@ -344,25 +355,96 @@ async def get_food_by_barcode(
         Food item with full details or None if not found
     """
     from app.core.database import get_supabase_client
+    import re
     supabase = get_supabase_client()
     
-    # Clean barcode: trim whitespace and normalize
+    # Clean barcode: trim whitespace
     cleaned_barcode = barcode.strip() if barcode else ""
     if not cleaned_barcode:
         logger.warning(f"Empty barcode provided for search")
         return None
     
-    logger.info(f"Searching for barcode: {cleaned_barcode}")
+    logger.info(f"Searching for barcode (original): '{cleaned_barcode}'")
     
-    # Query food_items table by barcode using query builder
-    query_builder = QueryBuilderService(supabase, "food_items")
-    result = await query_builder.with_filters({"barcode": cleaned_barcode}).with_limit(1).execute()
+    # Normalize barcode: extract only digits (removes spaces, dashes, etc.)
+    # This helps match barcodes stored in different formats
+    normalized_barcode = re.sub(r'[^\d]', '', cleaned_barcode)
     
-    if not result["data"]:
-        logger.info(f"No food item found with barcode: {cleaned_barcode}")
+    # Build list of search strategies to try
+    # We try multiple formats because barcodes can be stored with/without formatting
+    search_strategies = []
+    
+    # Strategy 1: Exact match with original barcode (preserves formatting)
+    search_strategies.append(cleaned_barcode)
+    
+    # Strategy 2: Normalized barcode (digits only) - only if different from original
+    if normalized_barcode and normalized_barcode != cleaned_barcode:
+        search_strategies.append(normalized_barcode)
+    
+    # Strategy 3: Try variations with common formatting (if normalized is different)
+    if normalized_barcode and normalized_barcode != cleaned_barcode:
+        # Try with dashes (EAN-13 format: 1234567890123 -> 123-456-789-012-3)
+        if len(normalized_barcode) == 13:
+            # EAN-13 format
+            formatted = f"{normalized_barcode[:1]}-{normalized_barcode[1:4]}-{normalized_barcode[4:7]}-{normalized_barcode[7:10]}-{normalized_barcode[10:]}"
+            if formatted not in search_strategies:
+                search_strategies.append(formatted)
+        elif len(normalized_barcode) == 12:
+            # UPC-A format: 123456789012 -> 1-23456-78901-2
+            formatted = f"{normalized_barcode[:1]}-{normalized_barcode[1:6]}-{normalized_barcode[6:11]}-{normalized_barcode[11:]}"
+            if formatted not in search_strategies:
+                search_strategies.append(formatted)
+    
+    result = None
+    matched_barcode = None
+    
+    # Try each search strategy until we find a match
+    for search_barcode in search_strategies:
+        if not search_barcode:
+            continue
+            
+        logger.debug(f"Trying barcode search strategy: '{search_barcode}'")
+        
+        # Query food_items table by barcode using query builder
+        query_builder = QueryBuilderService(supabase, "food_items")
+        query_result = await query_builder.with_filters({"barcode": search_barcode}).with_limit(1).execute()
+        
+        if query_result.get("data"):
+            result = query_result
+            matched_barcode = search_barcode
+            logger.info(f"Found food item with barcode: '{matched_barcode}' (matched from original: '{cleaned_barcode}')")
+            break
+    
+    # If still not found, try case-insensitive partial search using ILIKE
+    # This helps catch barcodes stored with different formatting
+    if not result:
+        logger.debug(f"Trying case-insensitive partial barcode search for: '{cleaned_barcode}'")
+        query_builder = QueryBuilderService(supabase, "food_items")
+        query_builder.with_ilike("barcode", cleaned_barcode)
+        query_result = await query_builder.with_limit(1).execute()
+        
+        if query_result.get("data"):
+            result = query_result
+            matched_barcode = cleaned_barcode
+            logger.info(f"Found food item with case-insensitive barcode match: '{matched_barcode}'")
+        
+        # Also try with normalized barcode if different
+        if not result and normalized_barcode and normalized_barcode != cleaned_barcode:
+            logger.debug(f"Trying case-insensitive partial search with normalized barcode: '{normalized_barcode}'")
+            query_builder = QueryBuilderService(supabase, "food_items")
+            query_builder.with_ilike("barcode", normalized_barcode)
+            query_result = await query_builder.with_limit(1).execute()
+            
+            if query_result.get("data"):
+                result = query_result
+                matched_barcode = normalized_barcode
+                logger.info(f"Found food item with normalized case-insensitive barcode match: '{matched_barcode}'")
+    
+    if not result or not result.get("data"):
+        logger.info(f"No food item found with barcode: '{cleaned_barcode}' (tried: {search_strategies})")
         return None
     
-    logger.info(f"Found food item with barcode: {cleaned_barcode}, name: {result['data'][0].get('name', 'Unknown')}")
+    logger.info(f"Successfully found food item with barcode: '{matched_barcode}', name: {result['data'][0].get('name', 'Unknown')}")
     
     food_item = result["data"][0]
     

@@ -14,6 +14,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from supabase import Client
 import asyncio
+from datetime import datetime, date
 
 from app.shared.services.datetime_service import DateTimeService
 from app.shared.utils.async_supabase import execute_async
@@ -65,14 +66,17 @@ class DatabaseOperationService:
             Exception: If insert fails
         """
         try:
+            # Serialize datetime objects to ISO strings for JSON compatibility
+            serialized_data = self._serialize_datetime_objects(data)
+            
             # Add timestamps if not already present
-            if include_created_at and "created_at" not in data:
-                data["created_at"] = DateTimeService.now_iso()
-            if include_updated_at and "updated_at" not in data:
-                data["updated_at"] = DateTimeService.now_iso()
+            if include_created_at and "created_at" not in serialized_data:
+                serialized_data["created_at"] = DateTimeService.now_iso()
+            if include_updated_at and "updated_at" not in serialized_data:
+                serialized_data["updated_at"] = DateTimeService.now_iso()
             
             response = await execute_async(
-                lambda: self.supabase.table(table_name).insert(data).execute()
+                lambda: self.supabase.table(table_name).insert(serialized_data).execute()
             )
             
             if not response.data:
@@ -84,6 +88,39 @@ class DatabaseOperationService:
         except Exception as e:
             logger.error(f"❌ Error inserting into {table_name}: {str(e)}", exc_info=True)
             raise
+    
+    def _serialize_datetime_objects(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Recursively serialize datetime and date objects to ISO strings
+        
+        Args:
+            data: Dictionary that may contain datetime/date objects
+            
+        Returns:
+            Dictionary with datetime/date objects converted to ISO strings
+        """
+        serialized = {}
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                # Convert datetime to ISO format string
+                serialized[key] = value.isoformat()
+            elif isinstance(value, date):
+                # Convert date to ISO format string
+                serialized[key] = value.isoformat()
+            elif isinstance(value, dict):
+                # Recursively serialize nested dictionaries
+                serialized[key] = self._serialize_datetime_objects(value)
+            elif isinstance(value, list):
+                # Serialize datetime objects in lists
+                serialized[key] = [
+                    item.isoformat() if isinstance(item, (datetime, date))
+                    else self._serialize_datetime_objects(item) if isinstance(item, dict)
+                    else item
+                    for item in value
+                ]
+            else:
+                serialized[key] = value
+        return serialized
     
     async def update_with_timestamp(
         self,
@@ -125,14 +162,17 @@ class DatabaseOperationService:
                     "This ensures bypass_subscription flag is always respected."
                 )
             
+            # Serialize datetime objects to ISO strings for JSON compatibility
+            serialized_data = self._serialize_datetime_objects(data)
+            
             # Add updated_at if not already present
-            if include_updated_at and "updated_at" not in data:
-                data["updated_at"] = DateTimeService.now_iso()
+            if include_updated_at and "updated_at" not in serialized_data:
+                serialized_data["updated_at"] = DateTimeService.now_iso()
             
             # Perform the update
             update_response = await execute_async(
                 lambda: self.supabase.table(table_name)
-                    .update(data)
+                    .update(serialized_data)
                     .eq(id_column, record_id)
                     .execute()
             )
