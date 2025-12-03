@@ -113,13 +113,29 @@ BEGIN
         );
     END IF;
     
-    -- Case 4: User exists and looks correct - might be a different issue
+    -- Case 4: User exists and looks correct - try to force refresh
+    -- First, try to update the record to trigger any necessary triggers
+    UPDATE public.users
+    SET updated_at = NOW()
+    WHERE id = auth_user_id;
+    
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    
+    -- Ensure email matches exactly
+    UPDATE public.users pu
+    SET email = au.email
+    FROM auth.users au
+    WHERE pu.id = au.id 
+      AND au.id = auth_user_id
+      AND pu.email IS DISTINCT FROM au.email;
+    
+    -- If we got here, the update succeeded - return success
     RETURN jsonb_build_object(
-        'success', false,
-        'action', 'no_fix_needed',
+        'success', true,
+        'action', 'refreshed',
         'user_id', auth_user_id,
         'email', user_email,
-        'message', 'User record appears correct. Issue may be with triggers or constraints.'
+        'message', 'User record refreshed. Try logging in again.'
     );
     
 EXCEPTION
