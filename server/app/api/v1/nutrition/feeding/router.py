@@ -370,73 +370,98 @@ async def delete_feeding_record(
     Raises:
         HTTPException: If record not found or user not authorized
     """
+    # Log the delete attempt with full context
+    logger.info(
+        f"[DELETE_FEEDING] Attempting to delete feeding record {feeding_record_id} "
+        f"for user {current_user.id}"
+    )
+    
     # Try to get the feeding record to verify ownership
     # RLS will automatically filter to only records for pets owned by the user
+    # We query first to get pet_id for logging, but if query fails, we'll try delete anyway
     query_builder = QueryBuilderService(supabase, "feeding_records")
+    pet_id = None
     try:
+        logger.debug(
+            f"[DELETE_FEEDING] Querying feeding_records table for id={feeding_record_id}"
+        )
         record_result = await query_builder.with_filters({
             "id": feeding_record_id
         }).with_limit(1).execute()
+        
+        logger.debug(
+            f"[DELETE_FEEDING] Query result: data={record_result.get('data')}, "
+            f"count={record_result.get('count', 0)}"
+        )
+        
+        if record_result.get("data"):
+            record_data = record_result["data"][0]
+            pet_id = record_data.get("pet_id")
+            logger.info(
+                f"[DELETE_FEEDING] Found feeding record {feeding_record_id} for pet {pet_id} "
+                f"(user: {current_user.id})"
+            )
+        else:
+            logger.warning(
+                f"[DELETE_FEEDING] Feeding record {feeding_record_id} not found in query "
+                f"for user {current_user.id}. Query returned empty data. "
+                f"This could be due to: RLS filtering, record not existing, or record already deleted. "
+                f"Will attempt delete anyway - RLS will block if unauthorized."
+            )
     except Exception as e:
-        logger.error(f"Error querying feeding record {feeding_record_id}: {e}")
-        raise HTTPException(
-            status_code=404,
-            detail="Feeding record not found"
-        )
-    
-    if not record_result.get("data"):
-        # Record not found - could be:
-        # 1. Record doesn't exist
-        # 2. User doesn't have access (RLS blocked it)
-        # 3. Record was already deleted
         logger.warning(
-            f"Feeding record {feeding_record_id} not found for user {current_user.id}. "
-            f"This could be due to RLS filtering or the record not existing."
-        )
-        raise HTTPException(
-            status_code=404,
-            detail="Feeding record not found or you don't have permission to delete it"
+            f"[DELETE_FEEDING] Error querying feeding record {feeding_record_id}: {e}. "
+            f"Will attempt delete anyway - RLS will block if unauthorized."
         )
     
-    record_data = record_result["data"][0]
-    pet_id = record_data["pet_id"]
-    
-    # Verify pet ownership (double-check, though RLS should have already filtered)
-    from app.shared.services.pet_authorization import verify_pet_ownership
-    await verify_pet_ownership(pet_id, current_user.id, supabase)
-    
-    # Delete the feeding record
+    # Attempt to delete the feeding record
     # RLS will ensure only records for user's pets can be deleted
+    # If RLS blocks it, the delete will return False or raise an error
     logger.info(
-        f"Attempting to delete feeding record {feeding_record_id} for pet {pet_id} "
-        f"(user: {current_user.id})"
+        f"Attempting to delete feeding record {feeding_record_id} "
+        f"(user: {current_user.id}, pet: {pet_id or 'unknown'})"
     )
     
     db_service = DatabaseOperationService(supabase)
     
     try:
         deleted = await db_service.delete_record("feeding_records", feeding_record_id)
+        
+        if deleted:
+            logger.info(
+                f"Successfully deleted feeding record {feeding_record_id} "
+                f"for pet {pet_id or 'unknown'} (user: {current_user.id})"
+            )
+        else:
+            # Delete returned False - record might not exist or RLS blocked it
+            logger.warning(
+                f"Delete operation returned False for feeding record {feeding_record_id}. "
+                f"This could mean: record doesn't exist, RLS blocked it, or record was already deleted. "
+                f"User: {current_user.id}, Pet: {pet_id or 'unknown'}"
+            )
+            raise HTTPException(
+                status_code=404,
+                detail="Feeding record not found or you don't have permission to delete it"
+            )
+            
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404)
+        raise
     except Exception as delete_error:
         logger.error(
             f"Error during delete operation for feeding record {feeding_record_id}: {delete_error}",
             exc_info=True
         )
+        # Check if it's a permission/RLS error
+        error_str = str(delete_error).lower()
+        if "permission" in error_str or "policy" in error_str or "rls" in error_str:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to delete this feeding record"
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to delete feeding record: {str(delete_error)}"
-        )
-    
-    if not deleted:
-        # Delete returned False - record might have been deleted already or RLS blocked it
-        logger.warning(
-            f"Delete operation returned False for feeding record {feeding_record_id}. "
-            f"Record exists (we queried it), but delete failed. "
-            f"This suggests RLS might be blocking the delete operation. "
-            f"User: {current_user.id}, Pet: {pet_id}"
-        )
-        raise HTTPException(
-            status_code=404,
-            detail="Feeding record not found or already deleted"
         )
     
     logger.info(f"Successfully deleted feeding record {feeding_record_id} for pet {pet_id}")
