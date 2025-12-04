@@ -219,6 +219,10 @@ async def record_feeding_with_slash(
     return ResponseModelService.convert_to_model(created_record, FeedingRecordResponse)
 
 
+# IMPORTANT: DELETE route must come BEFORE GET route to avoid route conflicts
+# FastAPI matches routes in order, and both use /{id} pattern
+
+
 @router.get("/{pet_id}", response_model=List[FeedingRecordResponse])
 @handle_errors("get_feeding_records")
 async def get_feeding_records(
@@ -370,6 +374,12 @@ async def delete_feeding_record(
     Raises:
         HTTPException: If record not found or user not authorized
     """
+    # Log immediately at function entry - this should always appear
+    import sys
+    print(f"[DELETE_FEEDING] ===== DELETE ENDPOINT CALLED =====", file=sys.stderr, flush=True)
+    print(f"[DELETE_FEEDING] feeding_record_id: {feeding_record_id}", file=sys.stderr, flush=True)
+    print(f"[DELETE_FEEDING] user_id: {current_user.id}", file=sys.stderr, flush=True)
+    
     # Log the delete attempt with full context
     logger.info(
         f"[DELETE_FEEDING] Attempting to delete feeding record {feeding_record_id} "
