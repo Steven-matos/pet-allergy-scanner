@@ -221,138 +221,6 @@ async def record_feeding_with_slash(
 
 # IMPORTANT: DELETE route must come BEFORE GET route to avoid route conflicts
 # FastAPI matches routes in order, and both use /{id} pattern
-
-
-@router.get("/{pet_id}", response_model=List[FeedingRecordResponse])
-@handle_errors("get_feeding_records")
-async def get_feeding_records(
-    pet_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase: Client = Depends(get_authenticated_supabase_client)
-):
-    """
-    Get feeding records for a pet
-    
-    Args:
-        pet_id: Pet ID
-        supabase: Authenticated Supabase client
-        current_user: Current authenticated user
-        
-    Returns:
-        List of feeding records for the pet
-        
-    Raises:
-        HTTPException: If pet not found or user not authorized
-    """
-    # Verify pet ownership
-    from app.shared.services.pet_authorization import verify_pet_ownership
-    await verify_pet_ownership(pet_id, current_user.id, supabase)
-    
-    # Get feeding records with joined food_analysis data
-    # Note: feeding_records table only has pet_id, not user_id
-    # Authorization is handled via RLS policies checking pet ownership
-    query_builder = QueryBuilderService(supabase, "feeding_records")
-    result = await query_builder.with_filters({"pet_id": pet_id})\
-        .with_ordering("created_at", desc=True)\
-        .execute()
-    
-    # Handle empty response
-    records_data = handle_empty_response(result["data"])
-    
-    # Join food_analysis data for each feeding record
-    # Get all unique food_analysis_ids
-    food_analysis_ids = list(set([record.get("food_analysis_id") for record in records_data if record.get("food_analysis_id")]))
-    
-    # Fetch all food_analyses in one query
-    food_analyses_map = {}
-    if food_analysis_ids:
-        food_analysis_query = QueryBuilderService(supabase, "food_analyses")
-        # Query for all food_analyses for this pet (RLS will filter by pet_id)
-        analysis_result = await food_analysis_query.with_filters({
-            "pet_id": pet_id
-        }).execute()
-        
-        # Create a map of food_analysis_id -> food_analysis data
-        for analysis in analysis_result.get("data", []):
-            food_analyses_map[analysis.get("id")] = analysis
-    
-    # Enrich records with food_analysis data
-    enriched_records = []
-    for record in records_data:
-        food_analysis_id = record.get("food_analysis_id")
-        if food_analysis_id and food_analysis_id in food_analyses_map:
-            analysis = food_analyses_map[food_analysis_id]
-            record["food_name"] = analysis.get("food_name")
-            record["food_brand"] = analysis.get("brand")
-        
-        enriched_records.append(record)
-    
-    # Convert to response models
-    return ResponseModelService.convert_list_to_models(enriched_records, FeedingRecordResponse)
-
-
-@router.get("/summaries/{pet_id}", response_model=List[DailyNutritionSummaryResponse])
-@handle_errors("get_daily_summaries")
-async def get_daily_summaries(
-    pet_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase: Client = Depends(get_authenticated_supabase_client)
-):
-    """
-    Get daily nutrition summaries for a pet
-    
-    Args:
-        pet_id: Pet ID
-        supabase: Authenticated Supabase client
-        current_user: Current authenticated user
-        
-    Returns:
-        List of daily nutrition summaries
-        
-    Raises:
-        HTTPException: If pet not found or user not authorized
-    """
-    # Verify pet ownership
-    from app.shared.services.pet_authorization import verify_pet_ownership
-    await verify_pet_ownership(pet_id, current_user.id, supabase)
-    
-    # Get daily summaries (this would contain the actual summary logic)
-    summaries = []  # Placeholder for actual summary generation
-    
-    return summaries
-
-
-@router.get("/daily-summary/{pet_id}", response_model=Optional[DailyNutritionSummaryResponse])
-@handle_errors("get_daily_summary")
-async def get_daily_summary(
-    pet_id: str,
-    current_user: UserResponse = Depends(get_current_user),
-    supabase: Client = Depends(get_authenticated_supabase_client)
-):
-    """
-    Get today's nutrition summary for a pet
-    
-    Args:
-        pet_id: Pet ID
-        supabase: Authenticated Supabase client
-        current_user: Current authenticated user
-        
-    Returns:
-        Today's nutrition summary
-        
-    Raises:
-        HTTPException: If pet not found or user not authorized
-    """
-    # Verify pet ownership
-    from app.shared.services.pet_authorization import verify_pet_ownership
-    await verify_pet_ownership(pet_id, current_user.id, supabase)
-    
-    # Get today's summary (this would contain the actual summary logic)
-    summary = None  # Placeholder for actual summary generation
-    
-    return summary
-
-
 @router.delete("/{feeding_record_id}", status_code=204)
 @handle_errors("delete_feeding_record")
 async def delete_feeding_record(
@@ -571,6 +439,134 @@ async def delete_feeding_record(
             detail=f"Failed to delete feeding record: {str(delete_error)}"
         )
     
-    logger.info(f"Successfully deleted feeding record {feeding_record_id} for pet {pet_id}")
-    
     return None
+
+
+@router.get("/{pet_id}", response_model=List[FeedingRecordResponse])
+@handle_errors("get_feeding_records")
+async def get_feeding_records(
+    pet_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get feeding records for a pet
+    
+    Args:
+        pet_id: Pet ID
+        supabase: Authenticated Supabase client
+        current_user: Current authenticated user
+        
+    Returns:
+        List of feeding records for the pet
+        
+    Raises:
+        HTTPException: If pet not found or user not authorized
+    """
+    # Verify pet ownership
+    from app.shared.services.pet_authorization import verify_pet_ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Get feeding records with joined food_analysis data
+    # Note: feeding_records table only has pet_id, not user_id
+    # Authorization is handled via RLS policies checking pet ownership
+    query_builder = QueryBuilderService(supabase, "feeding_records")
+    result = await query_builder.with_filters({"pet_id": pet_id})\
+        .with_ordering("created_at", desc=True)\
+        .execute()
+    
+    # Handle empty response
+    records_data = handle_empty_response(result["data"])
+    
+    # Join food_analysis data for each feeding record
+    # Get all unique food_analysis_ids
+    food_analysis_ids = list(set([record.get("food_analysis_id") for record in records_data if record.get("food_analysis_id")]))
+    
+    # Fetch all food_analyses in one query
+    food_analyses_map = {}
+    if food_analysis_ids:
+        food_analysis_query = QueryBuilderService(supabase, "food_analyses")
+        # Query for all food_analyses for this pet (RLS will filter by pet_id)
+        analysis_result = await food_analysis_query.with_filters({
+            "pet_id": pet_id
+        }).execute()
+        
+        # Create a map of food_analysis_id -> food_analysis data
+        for analysis in analysis_result.get("data", []):
+            food_analyses_map[analysis.get("id")] = analysis
+    
+    # Enrich records with food_analysis data
+    enriched_records = []
+    for record in records_data:
+        food_analysis_id = record.get("food_analysis_id")
+        if food_analysis_id and food_analysis_id in food_analyses_map:
+            analysis = food_analyses_map[food_analysis_id]
+            record["food_name"] = analysis.get("food_name")
+            record["food_brand"] = analysis.get("brand")
+        
+        enriched_records.append(record)
+    
+    # Convert to response models
+    return ResponseModelService.convert_list_to_models(enriched_records, FeedingRecordResponse)
+
+
+@router.get("/summaries/{pet_id}", response_model=List[DailyNutritionSummaryResponse])
+@handle_errors("get_daily_summaries")
+async def get_daily_summaries(
+    pet_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get daily nutrition summaries for a pet
+    
+    Args:
+        pet_id: Pet ID
+        supabase: Authenticated Supabase client
+        current_user: Current authenticated user
+        
+    Returns:
+        List of daily nutrition summaries
+        
+    Raises:
+        HTTPException: If pet not found or user not authorized
+    """
+    # Verify pet ownership
+    from app.shared.services.pet_authorization import verify_pet_ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Get daily summaries (this would contain the actual summary logic)
+    summaries = []  # Placeholder for actual summary generation
+    
+    return summaries
+
+
+@router.get("/daily-summary/{pet_id}", response_model=Optional[DailyNutritionSummaryResponse])
+@handle_errors("get_daily_summary")
+async def get_daily_summary(
+    pet_id: str,
+    current_user: UserResponse = Depends(get_current_user),
+    supabase: Client = Depends(get_authenticated_supabase_client)
+):
+    """
+    Get today's nutrition summary for a pet
+    
+    Args:
+        pet_id: Pet ID
+        supabase: Authenticated Supabase client
+        current_user: Current authenticated user
+        
+    Returns:
+        Today's nutrition summary
+        
+    Raises:
+        HTTPException: If pet not found or user not authorized
+    """
+    # Verify pet ownership
+    from app.shared.services.pet_authorization import verify_pet_ownership
+    await verify_pet_ownership(pet_id, current_user.id, supabase)
+    
+    # Get today's summary (this would contain the actual summary logic)
+    summary = None  # Placeholder for actual summary generation
+    
+    return summary

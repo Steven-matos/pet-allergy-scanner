@@ -103,6 +103,27 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         # Log ALL requests to verify middleware is working
         import sys
         path = request.url.path
+        method = request.method
+        
+        # Always log DELETE requests to nutrition/feeding with maximum visibility
+        if method == "DELETE" and ("nutrition/feeding" in path or "feeding" in path):
+            # Use multiple logging methods to ensure visibility
+            logger.error(f"🗑️🗑️🗑️ DELETE FEEDING REQUEST 🗑️🗑️🗑️")
+            logger.error(f"🌐 [DELETE_REQUEST] {method} {path}")
+            logger.error(f"   Full URL: {request.url}")
+            logger.error(f"   Query params: {dict(request.query_params)}")
+            logger.error(f"   Headers: Authorization={'present' if 'authorization' in request.headers else 'missing'}")
+            if 'authorization' in request.headers:
+                auth_header = request.headers.get('authorization', '')
+                logger.error(f"   Auth token: {auth_header[:20]}..." if len(auth_header) > 20 else "   Auth token: present")
+            
+            # Also use print with stderr for maximum visibility
+            print("=" * 80, file=sys.stderr, flush=True)
+            print("🗑️🗑️🗑️ DELETE FEEDING REQUEST 🗑️🗑️🗑️", file=sys.stderr, flush=True)
+            print(f"🌐 [DELETE_REQUEST] {method} {path}", file=sys.stderr, flush=True)
+            print(f"   Full URL: {request.url}", file=sys.stderr, flush=True)
+            print(f"   Query params: {dict(request.query_params)}", file=sys.stderr, flush=True)
+            print("=" * 80, file=sys.stderr, flush=True)
         
         # Always log health-events requests with maximum visibility
         if "health-events" in path or "health_events" in path:
@@ -133,6 +154,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             print("=" * 80, flush=True)
         
         response = await call_next(request)
+        
+        # Log DELETE feeding responses
+        if method == "DELETE" and ("nutrition/feeding" in path or "feeding" in path):
+            logger.error(f"🌐 [DELETE_REQUEST] Response: {response.status_code}")
+            print(f"🌐 [DELETE_REQUEST] Response: {response.status_code}", file=sys.stderr, flush=True)
+            print(f"🌐 [DELETE_REQUEST] Response: {response.status_code}", flush=True)
         
         if "health-events" in path or "health_events" in path:
             logger.error(f"🌐 [REQUEST_LOG] Response: {response.status_code}")
