@@ -376,6 +376,44 @@ async def delete_feeding_record(
         f"for user {current_user.id}"
     )
     
+    # First, verify the session is set correctly and RLS is working
+    try:
+        session = supabase.auth.get_session()
+        if session and hasattr(session, 'user') and session.user:
+            session_user_id = session.user.id
+            logger.info(
+                f"[DELETE_FEEDING] Session verified. auth.uid() should be: {session_user_id}, "
+                f"expected user_id: {current_user.id}"
+            )
+            if session_user_id != current_user.id:
+                logger.warning(
+                    f"[DELETE_FEEDING] Session user_id mismatch! Session: {session_user_id}, "
+                    f"Expected: {current_user.id}. RLS may not work correctly."
+                )
+            
+            # Test RLS by querying pets - this should work if RLS is functioning
+            try:
+                test_pets = await QueryBuilderService(supabase, "pets").with_limit(1).execute()
+                logger.info(
+                    f"[DELETE_FEEDING] RLS test query on pets table returned {len(test_pets.get('data', []))} records. "
+                    f"This confirms RLS is working (or would return 0 if no pets)."
+                )
+            except Exception as rls_test_error:
+                logger.error(
+                    f"[DELETE_FEEDING] RLS test query failed: {rls_test_error}. "
+                    f"This suggests RLS may not be working correctly."
+                )
+        else:
+            logger.error(
+                f"[DELETE_FEEDING] No session found! RLS will not work. "
+                f"auth.uid() will be NULL."
+            )
+    except Exception as session_error:
+        logger.error(
+            f"[DELETE_FEEDING] Error checking session: {session_error}. "
+            f"RLS may not work correctly."
+        )
+    
     # Try to get the feeding record to verify ownership
     # RLS will automatically filter to only records for pets owned by the user
     # We query first to get pet_id for logging, but if query fails, we'll try delete anyway
@@ -401,13 +439,72 @@ async def delete_feeding_record(
                 f"[DELETE_FEEDING] Found feeding record {feeding_record_id} for pet {pet_id} "
                 f"(user: {current_user.id})"
             )
+            
+            # Verify pet ownership explicitly to help debug RLS issues
+            from app.shared.services.pet_authorization import verify_pet_ownership
+            try:
+                await verify_pet_ownership(pet_id, current_user.id, supabase)
+                logger.info(
+                    f"[DELETE_FEEDING] Pet ownership verified for pet {pet_id}"
+                )
+            except Exception as ownership_error:
+                logger.error(
+                    f"[DELETE_FEEDING] Pet ownership verification failed: {ownership_error}"
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have permission to delete this feeding record"
+                )
         else:
             logger.warning(
                 f"[DELETE_FEEDING] Feeding record {feeding_record_id} not found in query "
                 f"for user {current_user.id}. Query returned empty data. "
-                f"This could be due to: RLS filtering, record not existing, or record already deleted. "
-                f"Will attempt delete anyway - RLS will block if unauthorized."
+                f"This could be due to: RLS filtering, record not existing, or record already deleted."
             )
+            
+            # If RLS is blocking, try to get pet_id using service role client
+            # This is a workaround to verify ownership when RLS blocks the query
+            try:
+                from app.core.database import get_supabase_service_role_client
+                service_client = get_supabase_service_role_client()
+                service_query = QueryBuilderService(service_client, "feeding_records")
+                service_result = await service_query.with_filters({
+                    "id": feeding_record_id
+                }).with_limit(1).execute()
+                
+                if service_result.get("data"):
+                    record_data = service_result["data"][0]
+                    pet_id = record_data.get("pet_id")
+                    logger.info(
+                        f"[DELETE_FEEDING] Found record using service role. pet_id: {pet_id}"
+                    )
+                    
+                    # Verify pet ownership explicitly
+                    from app.shared.services.pet_authorization import verify_pet_ownership
+                    await verify_pet_ownership(pet_id, current_user.id, supabase)
+                    logger.info(
+                        f"[DELETE_FEEDING] Pet ownership verified for pet {pet_id}. "
+                        f"RLS was blocking query, but ownership is confirmed. Proceeding with delete."
+                    )
+                else:
+                    logger.warning(
+                        f"[DELETE_FEEDING] Record {feeding_record_id} not found even with service role. "
+                        f"Record likely doesn't exist."
+                    )
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Feeding record not found"
+                    )
+            except HTTPException:
+                raise
+            except Exception as service_error:
+                logger.error(
+                    f"[DELETE_FEEDING] Error using service role to verify record: {service_error}"
+                )
+                # Will attempt delete anyway - RLS will block if unauthorized
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         logger.warning(
             f"[DELETE_FEEDING] Error querying feeding record {feeding_record_id}: {e}. "
