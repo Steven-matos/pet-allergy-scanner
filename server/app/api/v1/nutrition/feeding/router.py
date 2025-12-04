@@ -221,7 +221,8 @@ async def record_feeding_with_slash(
 
 # IMPORTANT: DELETE route must come BEFORE GET route to avoid route conflicts
 # FastAPI matches routes in order, and both use /{id} pattern
-@router.delete("/{feeding_record_id}", status_code=204)
+# Using explicit path segment to avoid conflicts with GET /{pet_id}
+@router.delete("/record/{feeding_record_id}", status_code=204)
 @handle_errors("delete_feeding_record")
 async def delete_feeding_record(
     feeding_record_id: str,
