@@ -75,8 +75,10 @@ class SimpleCameraViewController: UIViewController {
     private var capturePhotoOutput: AVCapturePhotoOutput?
     private var videoDataOutput: AVCaptureVideoDataOutput?
     private var videoDataOutputQueue: DispatchQueue?
+    private var captureDevice: AVCaptureDevice?
     
     private var isSessionRunning = false
+    private var isFlashOn = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -103,6 +105,9 @@ class SimpleCameraViewController: UIViewController {
             delegate?.cameraViewController(self, didFailWithError: CameraError.deviceNotFound)
             return
         }
+        
+        // Store device reference for flash control
+        self.captureDevice = backCamera
         
         do {
             let input = try AVCaptureDeviceInput(device: backCamera)
@@ -184,6 +189,60 @@ class SimpleCameraViewController: UIViewController {
     
     func pauseCameraSession() {
         stopSession()
+    }
+    
+    /**
+     * Toggle camera flash on/off
+     * - Returns: True if flash is now on, false if off
+     */
+    func toggleFlash() -> Bool {
+        guard let device = captureDevice, device.hasTorch else {
+            return false
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            
+            if isFlashOn {
+                device.torchMode = .off
+                isFlashOn = false
+            } else {
+                try device.setTorchModeOn(level: 1.0)
+                isFlashOn = true
+            }
+        } catch {
+            print("⚠️ Failed to toggle flash: \(error.localizedDescription)")
+            return false
+        }
+        
+        return isFlashOn
+    }
+    
+    /**
+     * Turn off camera flash
+     */
+    func turnOffFlash() {
+        guard let device = captureDevice, device.hasTorch, isFlashOn else {
+            return
+        }
+        
+        do {
+            try device.lockForConfiguration()
+            device.torchMode = .off
+            device.unlockForConfiguration()
+            isFlashOn = false
+        } catch {
+            print("⚠️ Failed to turn off flash: \(error.localizedDescription)")
+        }
+    }
+    
+    /**
+     * Check if flash is currently on
+     * - Returns: True if flash is on, false otherwise
+     */
+    func isFlashEnabled() -> Bool {
+        return isFlashOn
     }
 }
 

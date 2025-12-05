@@ -53,6 +53,7 @@ struct ScanView: View {
     // Camera control state
     @State private var cameraController: SimpleCameraViewController?
     @State private var isCameraPaused = false
+    @State private var isFlashOn = false
     
     // MARK: - Presentation State Management
     
@@ -238,10 +239,25 @@ struct ScanView: View {
                             .foregroundColor(.white)
                             .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
                         
-                        // History button positioned on the right
+                        // Top controls: Flash button on left, History button on right
                         HStack {
+                            // Flash toggle button on the left
+                            Button(action: {
+                                if let controller = cameraController {
+                                    isFlashOn = controller.toggleFlash()
+                                }
+                            }) {
+                                Image(systemName: isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                    .font(ModernDesignSystem.Typography.title3)
+                                    .foregroundColor(isFlashOn ? .yellow : .white)
+                                    .padding(ModernDesignSystem.Spacing.md)
+                                    .background(Color.black.opacity(0.3))
+                                    .clipShape(Circle())
+                            }
+                            
                             Spacer()
                             
+                            // History button positioned on the right
                             Button(action: {
                                 PostHogAnalytics.trackScanHistoryViewed()
                                 // Ensure no other sheet is presented before showing history
@@ -826,6 +842,10 @@ struct ScanView: View {
         if showingProductFound || showingProductNotFound || showingOCRResults || showingNutritionalLabelScan {
             return
         }
+        
+        // Turn off flash after barcode is detected
+        cameraController?.turnOffFlash()
+        isFlashOn = false
         
         PostHogAnalytics.trackBarcodeDetected(barcodeType: barcode.type)
         
