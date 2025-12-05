@@ -326,10 +326,11 @@ class CachedNutritionalTrendsService: ObservableObject {
     
     /**
      * Invalidate trends cache for a pet
-     * Call this when feeding records are added/updated/deleted
+     * Call this when new feeding records or weight data is added
      * - Parameter petId: The pet's ID
+     * - Parameter autoReload: If true, automatically reload trends after invalidation (default: false)
      */
-    func invalidateTrendsCache(for petId: String) {
+    func invalidateTrendsCache(for petId: String, autoReload: Bool = false) {
         guard let userId = currentUserId else { return }
         
         // Invalidate all period caches for this pet
@@ -349,6 +350,16 @@ class CachedNutritionalTrendsService: ObservableObject {
         nutritionalBalanceScoresCache.removeValue(forKey: petId)
         totalWeightChangesCache.removeValue(forKey: petId)
         objectWillChange.send()
+        
+        // Auto-reload trends if requested
+        if autoReload {
+            Task {
+                // Wait a brief moment for data to be saved
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                // Reload with default period (30 days)
+                try? await loadTrendsData(for: petId, period: .thirtyDays, forceRefresh: true)
+            }
+        }
     }
     
     /**
@@ -412,7 +423,8 @@ class CachedNutritionalTrendsService: ObservableObject {
             self.insightsCache[petId] = insights
             self.objectWillChange.send()
             
-            // Calculate derived metrics
+            // Calculate derived metrics from loaded trends
+            // This will use fallback calculation from raw data if trends are empty
             calculateDerivedMetrics(for: petId)
             
             // Cache the data
@@ -494,7 +506,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     private func loadCalorieTrends(petId: String, period: TrendPeriod) async throws -> [CalorieTrend] {
         let response = try await apiService.get(
-            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            endpoint: "/advanced-nutrition/trends/\(petId)?days=\(period.days)",
             responseType: [NutritionalTrendResponse].self
         )
         
@@ -516,7 +528,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     private func loadMacronutrientTrends(petId: String, period: TrendPeriod) async throws -> [MacronutrientTrend] {
         let response = try await apiService.get(
-            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            endpoint: "/advanced-nutrition/trends/\(petId)?days=\(period.days)",
             responseType: [NutritionalTrendResponse].self
         )
         
@@ -539,7 +551,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     private func loadFeedingPatterns(petId: String, period: TrendPeriod) async throws -> [FeedingPattern] {
         let response = try await apiService.get(
-            endpoint: "/advanced-nutrition/trends/\(petId)?days_back=\(period.days)",
+            endpoint: "/advanced-nutrition/trends/\(petId)?days=\(period.days)",
             responseType: [NutritionalTrendResponse].self
         )
         
@@ -562,7 +574,7 @@ class CachedNutritionalTrendsService: ObservableObject {
     private func loadWeightCorrelation(petId: String, period: TrendPeriod) async throws -> WeightCorrelation? {
         do {
             let response = try await apiService.get(
-                endpoint: "/advanced-nutrition/trends/dashboard/\(petId)?days_back=\(period.days)",
+                endpoint: "/advanced-nutrition/trends/dashboard/\(petId)?days=\(period.days)",
                 responseType: NutritionalTrendsDashboard.self
             )
             
@@ -617,6 +629,38 @@ class CachedNutritionalTrendsService: ObservableObject {
         if !calories.isEmpty {
             let total = calories.reduce(0) { $0 + $1.calories }
             averageDailyCaloriesCache[petId] = total / Double(calories.count)
+        } else {
+            // If no trends data, try to calculate from feeding records directly
+            // This ensures we show data even if trends haven't been generated yet
+            let nutritionService = CachedNutritionService.shared
+            let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
+            
+            if !feedingRecords.isEmpty {
+                // Calculate average calories from feeding records
+                var totalCalories: Double = 0
+                var recordCount = 0
+                
+                for record in feedingRecords {
+                    // Try to get food analysis to calculate calories
+                    if let analysis = nutritionService.getFoodAnalysis(by: record.foodAnalysisId) {
+                        let calories = record.calculateCaloriesConsumed(from: analysis)
+                        totalCalories += calories
+                        recordCount += 1
+                    }
+                }
+                
+                if recordCount > 0 {
+                    // Calculate average per day (group by date)
+                    let calendar = Calendar.current
+                    let groupedByDate = Dictionary(grouping: feedingRecords) { record in
+                        calendar.startOfDay(for: record.feedingTime)
+                    }
+                    let daysCount = Double(groupedByDate.keys.count)
+                    averageDailyCaloriesCache[petId] = daysCount > 0 ? totalCalories / daysCount : 0
+                }
+            } else {
+                averageDailyCaloriesCache[petId] = 0.0
+            }
         }
         
         // Calculate average feeding frequency
@@ -624,17 +668,46 @@ class CachedNutritionalTrendsService: ObservableObject {
         if !patterns.isEmpty {
             let total = patterns.reduce(0) { $0 + $1.feedingCount }
             averageFeedingFrequencyCache[petId] = Double(total) / Double(patterns.count)
+        } else {
+            // Calculate from feeding records if no patterns
+            let nutritionService = CachedNutritionService.shared
+            let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
+            if !feedingRecords.isEmpty {
+                let calendar = Calendar.current
+                let groupedByDate = Dictionary(grouping: feedingRecords) { record in
+                    calendar.startOfDay(for: record.feedingTime)
+                }
+                let daysCount = Double(groupedByDate.keys.count)
+                let totalFeedings = Double(feedingRecords.count)
+                averageFeedingFrequencyCache[petId] = daysCount > 0 ? totalFeedings / daysCount : 0
+            } else {
+                averageFeedingFrequencyCache[petId] = 0.0
+            }
         }
         
         // Calculate nutritional balance score
         if !patterns.isEmpty {
             let total = patterns.reduce(0) { $0 + $1.compatibilityScore }
             nutritionalBalanceScoresCache[petId] = total / Double(patterns.count)
+        } else {
+            nutritionalBalanceScoresCache[petId] = 0.0
         }
         
         // Calculate total weight change
         if let correlation = weightCorrelationsCache[petId] {
             totalWeightChangesCache[petId] = correlation.correlation * 2.0
+        } else {
+            // Try to calculate from weight records if no correlation data
+            let weightService = CachedWeightTrackingService.shared
+            let weightHistory = weightService.weightHistory(for: petId)
+            if weightHistory.count >= 2 {
+                let sortedHistory = weightHistory.sorted { $0.recordedAt < $1.recordedAt }
+                let firstWeight = sortedHistory.first!.weightKg
+                let lastWeight = sortedHistory.last!.weightKg
+                totalWeightChangesCache[petId] = lastWeight - firstWeight
+            } else {
+                totalWeightChangesCache[petId] = 0.0
+            }
         }
     }
 }

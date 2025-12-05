@@ -612,117 +612,103 @@ struct EditPetView: View {
     /// Update the pet with the new data
     private func updatePet() {
         Task {
-            do {
-                var newImageUrl: String? = nil
-                
-                // Handle image changes
-                if let selectedImage = selectedImage {
-                    // User selected a new image - upload it
-                    guard let userId = AuthService.shared.currentUser?.id else {
-                        await MainActor.run {
-                            petService.errorMessage = "User not authenticated. Please sign in and try again."
-                        }
-                        return
-                    }
-                    
-                    // Validate image before upload
-                    guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
-                        await MainActor.run {
-                            petService.errorMessage = "Invalid image selected. Please choose a different image."
-                        }
-                        return
-                    }
-                    
-                    // Show upload progress
+            var newImageUrl: String? = nil
+            
+            // Handle image changes
+            if let selectedImage = selectedImage {
+                // User selected a new image - upload it
+                guard let userId = AuthService.shared.currentUser?.id else {
                     await MainActor.run {
-                        isUploadingImage = true
+                        petService.errorMessage = "User not authenticated. Please sign in and try again."
+                    }
+                    return
+                }
+                
+                // Validate image before upload
+                guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
+                    await MainActor.run {
+                        petService.errorMessage = "Invalid image selected. Please choose a different image."
+                    }
+                    return
+                }
+                
+                // Show upload progress
+                await MainActor.run {
+                    isUploadingImage = true
+                }
+                
+                // Replace old image with new one (deletes old, uploads new)
+                do {
+                    newImageUrl = try await StorageService.shared.replacePetImage(
+                        oldImageUrl: pet.imageUrl,
+                        newImage: selectedImage,
+                        userId: userId,
+                        petId: pet.id
+                    )
+                    
+                    print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
+                    
+                    await MainActor.run {
+                        isUploadingImage = false
+                    }
+                } catch {
+                    // Provide user-friendly error message
+                    let errorMessage: String
+                    if let storageError = error as? StorageError {
+                        errorMessage = storageError.localizedDescription
+                    } else {
+                        errorMessage = "Failed to upload image: \(error.localizedDescription)"
                     }
                     
-                    // Replace old image with new one (deletes old, uploads new)
+                    await MainActor.run {
+                        isUploadingImage = false
+                        petService.errorMessage = errorMessage
+                    }
+                    return // Stop update if image upload fails
+                }
+            } else if imageRemoved {
+                // User explicitly removed the image - delete old image and set to empty
+                if let oldUrl = pet.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
                     do {
-                        newImageUrl = try await StorageService.shared.replacePetImage(
-                            oldImageUrl: pet.imageUrl,
-                            newImage: selectedImage,
-                            userId: userId,
-                            petId: pet.id
-                        )
-                        
-                        print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
-                        
-                        await MainActor.run {
-                            isUploadingImage = false
-                        }
+                        try await StorageService.shared.deletePetImage(path: oldUrl)
+                        print("🗑️ Pet image removed from Supabase: \(oldUrl)")
                     } catch {
-                        // Provide user-friendly error message
-                        let errorMessage: String
-                        if let storageError = error as? StorageError {
-                            errorMessage = storageError.localizedDescription
-                        } else {
-                            errorMessage = "Failed to upload image: \(error.localizedDescription)"
-                        }
-                        
-                        await MainActor.run {
-                            isUploadingImage = false
-                            petService.errorMessage = errorMessage
-                        }
-                        return // Stop update if image upload fails
-                    }
-                } else if imageRemoved {
-                    // User explicitly removed the image - delete old image and set to empty
-                    if let oldUrl = pet.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
-                        do {
-                            try await StorageService.shared.deletePetImage(path: oldUrl)
-                            print("🗑️ Pet image removed from Supabase: \(oldUrl)")
-                        } catch {
-                            print("⚠️ Failed to delete old image: \(error)")
-                        }
-                    }
-                    newImageUrl = ""
-                } else {
-                    // No image change - keep existing image (don't include imageUrl in update)
-                    newImageUrl = nil
-                }
-                
-                // Convert weight to kg for storage (backend expects kg)
-                let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
-                let originalWeightInKg = pet.weightKg
-                
-                // Create PetUpdate - imageUrl will be nil if no image change, which is correct
-                let petUpdate = PetUpdate(
-                    name: name != pet.name ? name : nil,
-                    breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
-                    birthday: createBirthday(year: birthYear, month: birthMonth),
-                    weightKg: weightInKg != originalWeightInKg ? weightInKg : nil,
-                    activityLevel: activityLevel != pet.effectiveActivityLevel ? activityLevel : nil,
-                    imageUrl: newImageUrl, // This will be nil if no image change, which is correct
-                    knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
-                    vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
-                    vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
-                )
-                
-                petService.updatePet(id: pet.id, petUpdate: petUpdate)
-                
-                // Reset image flags after successful update
-                imageRemoved = false
-                selectedImage = nil
-                
-                // Dismiss after successful update
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    if petService.errorMessage == nil {
-                        dismiss()
+                        print("⚠️ Failed to delete old image: \(error)")
                     }
                 }
-            } catch {
-                // Handle any other errors during pet update
-                let errorMessage: String
-                if let storageError = error as? StorageError {
-                    errorMessage = storageError.localizedDescription
-                } else {
-                    errorMessage = "Failed to update pet: \(error.localizedDescription)"
-                }
-                
-                await MainActor.run {
-                    petService.errorMessage = errorMessage
+                newImageUrl = ""
+            } else {
+                // No image change - keep existing image (don't include imageUrl in update)
+                newImageUrl = nil
+            }
+            
+            // Convert weight to kg for storage (backend expects kg)
+            let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+            let originalWeightInKg = pet.weightKg
+            
+            // Create PetUpdate - imageUrl will be nil if no image change, which is correct
+            let petUpdate = PetUpdate(
+                name: name != pet.name ? name : nil,
+                breed: breed != (pet.breed ?? "") ? (breed.isEmpty ? nil : breed) : nil,
+                birthday: createBirthday(year: birthYear, month: birthMonth),
+                weightKg: weightInKg != originalWeightInKg ? weightInKg : nil,
+                activityLevel: activityLevel != pet.effectiveActivityLevel ? activityLevel : nil,
+                imageUrl: newImageUrl, // This will be nil if no image change, which is correct
+                knownSensitivities: knownSensitivities != pet.knownSensitivities ? knownSensitivities : nil,
+                vetName: vetName != (pet.vetName ?? "") ? (vetName.isEmpty ? nil : vetName) : nil,
+                vetPhone: vetPhone != (pet.vetPhone ?? "") ? (vetPhone.isEmpty ? nil : vetPhone) : nil
+            )
+            
+            petService.updatePet(id: pet.id, petUpdate: petUpdate)
+            
+            // Reset image flags after successful update
+            imageRemoved = false
+            selectedImage = nil
+            
+            // Dismiss after successful update
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                if petService.errorMessage == nil {
+                    dismiss()
                 }
             }
         }

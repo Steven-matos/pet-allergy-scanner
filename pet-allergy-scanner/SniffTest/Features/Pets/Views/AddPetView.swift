@@ -590,111 +590,96 @@ struct AddPetView: View {
     
     private func savePet() {
         Task {
-            do {
-                var imageUrl: String? = nil
-                
-                // Upload image to Supabase Storage if selected
-                if let selectedImage = selectedImage {
-                    // Get current user ID for folder organization
-                    guard let userId = AuthService.shared.currentUser?.id else {
-                        await MainActor.run {
-                            CachedPetService.shared.errorMessage = "User not authenticated. Please sign in and try again."
-                            showingAlert = true
-                        }
-                        return
-                    }
-                    
-                    // Validate image before upload
-                    guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
-                        await MainActor.run {
-                            CachedPetService.shared.errorMessage = "Invalid image selected. Please choose a different image."
-                            showingAlert = true
-                        }
-                        return
-                    }
-                    
-                    // Show upload progress
+            var imageUrl: String? = nil
+            
+            // Upload image to Supabase Storage if selected
+            if let selectedImage = selectedImage {
+                // Get current user ID for folder organization
+                guard let userId = AuthService.shared.currentUser?.id else {
                     await MainActor.run {
-                        isUploadingImage = true
+                        CachedPetService.shared.errorMessage = "User not authenticated. Please sign in and try again."
+                        showingAlert = true
                     }
-                    
-                    // Generate a temporary pet ID for folder organization
-                    let tempPetId = UUID().uuidString
-                    
-                    // Upload image to Supabase Storage with error handling
-                    do {
-                        imageUrl = try await StorageService.shared.uploadPetImage(
-                            image: selectedImage,
-                            userId: userId,
-                            petId: tempPetId
-                        )
-                        
-                        print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
-                        
-                        await MainActor.run {
-                            isUploadingImage = false
-                        }
-                    } catch {
-                        // Provide user-friendly error message
-                        let errorMessage: String
-                        if let storageError = error as? StorageError {
-                            errorMessage = storageError.localizedDescription
-                        } else {
-                            errorMessage = "Failed to upload image: \(error.localizedDescription)"
-                        }
-                        
-                        await MainActor.run {
-                            isUploadingImage = false
-                            CachedPetService.shared.errorMessage = errorMessage
-                            showingAlert = true
-                        }
-                        return // Stop pet creation if image upload fails
-                    }
-                }
-                
-                // Convert weight to kg for storage (backend expects kg)
-                let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
-                
-                let petCreate = PetCreate(
-                    name: name,
-                    species: species,
-                    breed: breed.isEmpty ? nil : breed,
-                    birthday: createBirthday(year: birthYear, month: birthMonth),
-                    weightKg: weightInKg,
-                    activityLevel: activityLevel,
-                    imageUrl: imageUrl,
-                    knownSensitivities: knownSensitivities,
-                    vetName: vetName.isEmpty ? nil : vetName,
-                    vetPhone: vetPhone.isEmpty ? nil : vetPhone
-                )
-                
-                // Check subscription limit before creating pet
-                let currentPetCount = CachedPetService.shared.pets.count
-                if !gatekeeper.canAddPet(currentPetCount: currentPetCount) {
-                    gatekeeper.showPetLimitPrompt()
                     return
                 }
                 
-                CachedPetService.shared.createPet(petCreate)
-                
-                // Dismiss after successful creation
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                    if CachedPetService.shared.errorMessage == nil {
-                        dismiss()
+                // Validate image before upload
+                guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
+                    await MainActor.run {
+                        CachedPetService.shared.errorMessage = "Invalid image selected. Please choose a different image."
+                        showingAlert = true
                     }
-                }
-            } catch {
-                // Handle any other errors during pet creation
-                let errorMessage: String
-                if let storageError = error as? StorageError {
-                    errorMessage = storageError.localizedDescription
-                } else {
-                    errorMessage = "Failed to create pet: \(error.localizedDescription)"
+                    return
                 }
                 
+                // Show upload progress
                 await MainActor.run {
-                    CachedPetService.shared.errorMessage = errorMessage
-                    showingAlert = true
+                    isUploadingImage = true
+                }
+                
+                // Generate a temporary pet ID for folder organization
+                let tempPetId = UUID().uuidString
+                
+                // Upload image to Supabase Storage with error handling
+                do {
+                    imageUrl = try await StorageService.shared.uploadPetImage(
+                        image: selectedImage,
+                        userId: userId,
+                        petId: tempPetId
+                    )
+                    
+                    print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
+                    
+                    await MainActor.run {
+                        isUploadingImage = false
+                    }
+                } catch {
+                    // Provide user-friendly error message
+                    let errorMessage: String
+                    if let storageError = error as? StorageError {
+                        errorMessage = storageError.localizedDescription
+                    } else {
+                        errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                    }
+                    
+                    await MainActor.run {
+                        isUploadingImage = false
+                        CachedPetService.shared.errorMessage = errorMessage
+                        showingAlert = true
+                    }
+                    return // Stop pet creation if image upload fails
+                }
+            }
+            
+            // Convert weight to kg for storage (backend expects kg)
+            let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+            
+            let petCreate = PetCreate(
+                name: name,
+                species: species,
+                breed: breed.isEmpty ? nil : breed,
+                birthday: createBirthday(year: birthYear, month: birthMonth),
+                weightKg: weightInKg,
+                activityLevel: activityLevel,
+                imageUrl: imageUrl,
+                knownSensitivities: knownSensitivities,
+                vetName: vetName.isEmpty ? nil : vetName,
+                vetPhone: vetPhone.isEmpty ? nil : vetPhone
+            )
+            
+            // Check subscription limit before creating pet
+            let currentPetCount = CachedPetService.shared.pets.count
+            if !gatekeeper.canAddPet(currentPetCount: currentPetCount) {
+                gatekeeper.showPetLimitPrompt()
+                return
+            }
+            
+            CachedPetService.shared.createPet(petCreate)
+            
+            // Dismiss after successful creation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                if CachedPetService.shared.errorMessage == nil {
+                    dismiss()
                 }
             }
         }

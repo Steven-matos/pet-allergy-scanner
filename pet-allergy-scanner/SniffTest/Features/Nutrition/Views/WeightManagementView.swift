@@ -76,6 +76,10 @@ struct WeightManagementView: View {
                         // Weight was added - refresh data from server to get latest
                         // This is the only time we need to fetch from server (after user action)
                         loadWeightData(forceRefresh: true)
+                        
+                        // Trends will be automatically refreshed via invalidateTrendsCache with autoReload
+                        // (handled in CachedWeightTrackingService.recordWeight)
+                        
                         // Force UI refresh
                         refreshTrigger.toggle()
                     }

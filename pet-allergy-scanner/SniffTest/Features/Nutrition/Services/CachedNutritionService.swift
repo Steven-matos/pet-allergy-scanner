@@ -362,8 +362,9 @@ class CachedNutritionService: ObservableObject {
         }
         
         // Invalidate trends cache so trends update with new feeding data
+        // Auto-reload trends after a brief delay to ensure data is saved
         let trendsService = CachedNutritionalTrendsService.shared
-        trendsService.invalidateTrendsCache(for: request.petId)
+        trendsService.invalidateTrendsCache(for: request.petId, autoReload: true)
         
         // Update daily summary
         await updateDailySummary(for: request.petId, date: request.feedingTime)

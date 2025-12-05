@@ -58,8 +58,9 @@ class FeedingLogService: ObservableObject {
             recentFeedingRecords = try await getFeedingRecords(for: feedingRecord.petId, days: 7, forceRefresh: true)
             
             // Invalidate trends cache so trends update with new feeding data
+            // Auto-reload trends after a brief delay to ensure data is saved
             let trendsService = CachedNutritionalTrendsService.shared
-            trendsService.invalidateTrendsCache(for: feedingRecord.petId)
+            trendsService.invalidateTrendsCache(for: feedingRecord.petId, autoReload: true)
             
         } catch {
             self.error = error
@@ -201,8 +202,9 @@ class FeedingLogService: ObservableObject {
                 cacheCoordinator.invalidate(forKey: dailySummariesKey)
                 
                 // Invalidate trends cache so trends update with deleted feeding data
+                // Auto-reload trends after a brief delay
                 let trendsService = CachedNutritionalTrendsService.shared
-                trendsService.invalidateTrendsCache(for: petId)
+                trendsService.invalidateTrendsCache(for: petId, autoReload: true)
                 
                 // Force refresh feeding records to ensure UI updates
                 recentFeedingRecords = try await getFeedingRecords(for: petId, days: 7, forceRefresh: true)

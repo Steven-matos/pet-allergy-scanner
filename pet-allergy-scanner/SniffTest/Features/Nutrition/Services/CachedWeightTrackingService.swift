@@ -197,6 +197,12 @@ class CachedWeightTrackingService: ObservableObject {
         print("🐾 [recordWeight] Updating pet's current weight...")
         await updatePetWeight(petId: petId, weightKg: weightInKg)
         
+        // Invalidate trends cache so trends update with new weight data
+        // Auto-reload trends after a brief delay to ensure data is saved
+        let trendsService = CachedNutritionalTrendsService.shared
+        trendsService.invalidateTrendsCache(for: petId, autoReload: true)
+        print("📊 [recordWeight] Invalidated trends cache for pet \(petId) (auto-reload enabled)")
+        
         // Generate recommendations
         print("💡 [recordWeight] Generating recommendations...")
         await generateRecommendations(for: petId)

@@ -112,9 +112,16 @@ struct NutritionalTrendsView: View {
         }
         .onChange(of: showingFeedingLog) { _, isShowing in
             if !isShowing {
-                // Refresh trends and meals when feeding log is dismissed (force refresh to get latest data)
+                // Refresh trends and meals when feeding log is dismissed (user just logged a meal)
                 loadTrendsData()
                 loadRecentMeals(forceRefresh: true)
+            }
+        }
+        .onChange(of: selectedPet) { oldPet, newPet in
+            // When pet changes, load trends for the new pet (cache-first, no refresh)
+            if newPet != nil {
+                loadTrendsDataIfNeeded()
+                loadRecentMeals(forceRefresh: false)
             }
         }
     }
@@ -507,6 +514,7 @@ struct NutritionalTrendsView: View {
      * Load trends data with cache-first pattern
      * Checks cache synchronously first to avoid flashing
      * Only shows loading spinner if no cache exists
+     * Does NOT automatically refresh - only loads when explicitly called
      */
     private func loadTrendsDataIfNeeded() {
         guard let pet = selectedPet ?? petService.pets.first else { return }
@@ -521,12 +529,9 @@ struct NutritionalTrendsView: View {
             Task {
                 await loadTrendsDataAsync(showLoadingIfNeeded: true, forceRefresh: false)
             }
-        } else {
-            // Cache exists - refresh in background silently (no loading spinner)
-            Task {
-                await loadTrendsDataAsync(showLoadingIfNeeded: false, forceRefresh: false)
-            }
         }
+        // If cache exists, use it - no background refresh unless explicitly requested
+        // Trends only refresh when user logs meal or weight (handled by invalidateTrendsCache with autoReload)
     }
     
     /**

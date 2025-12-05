@@ -1029,29 +1029,83 @@ struct AdvancedAnalyticsView: View {
     /**
      * Extract preferred foods from feeding records
      * Analyzes actual feeding data to determine most frequently fed foods
+     * Uses food names directly from feeding records (which include food_name from API)
      */
     private func extractPreferredFoods(feedingRecords: [FeedingRecord]) -> [String] {
         guard !feedingRecords.isEmpty else { return [] }
         
-        // Count food occurrences by food analysis ID
-        var foodCounts: [String: Int] = [:]
+        // Group records by food name (use foodName from record, fallback to foodAnalysisId lookup)
+        // This ensures we count by actual food name, not just ID
+        var foodCounts: [String: (count: Int, foodName: String, foodBrand: String?)] = [:]
+        
         for record in feedingRecords {
-            let foodAnalysisId = record.foodAnalysisId
-            foodCounts[foodAnalysisId, default: 0] += 1
+            // Get food name from record if available
+            let foodName: String
+            let foodBrand: String?
+            
+            if let recordFoodName = record.foodName, !recordFoodName.isEmpty {
+                // Use food name from record (already populated by API)
+                foodName = recordFoodName
+                foodBrand = record.foodBrand
+            } else {
+                // Fallback: try to get name from cached service
+                if let foodAnalysis = cachedNutritionService.foodAnalyses.first(where: { $0.id == record.foodAnalysisId }) {
+                    foodName = foodAnalysis.foodName
+                    foodBrand = foodAnalysis.brand
+                } else {
+                    // Last resort: use foodAnalysisId (shouldn't happen if API is working correctly)
+                    foodName = record.foodAnalysisId
+                    foodBrand = nil
+                }
+            }
+            
+            // Use lowercase food name as key for grouping (case-insensitive)
+            let foodKey = foodName.lowercased()
+            
+            // Update count and store display name
+            if let existing = foodCounts[foodKey] {
+                foodCounts[foodKey] = (
+                    count: existing.count + 1,
+                    foodName: foodName, // Keep original casing
+                    foodBrand: foodBrand ?? existing.foodBrand
+                )
+            } else {
+                foodCounts[foodKey] = (
+                    count: 1,
+                    foodName: foodName,
+                    foodBrand: foodBrand
+                )
+            }
         }
         
         // Sort by frequency and get top 3
-        let topFoods = foodCounts.sorted { $0.value > $1.value }.prefix(3)
+        let topFoods = foodCounts.sorted { $0.value.count > $1.value.count }.prefix(3)
         
-        // Try to get food names from cached service
+        // Build preferred foods list with proper names
         var preferredFoods: [String] = []
-        for (foodAnalysisId, _) in topFoods {
-            // Look up food name in cached service if available
-            if let foodAnalysis = cachedNutritionService.foodAnalyses.first(where: { $0.id == foodAnalysisId }) {
-                preferredFoods.append(foodAnalysis.foodName)
+        for (_, foodData) in topFoods {
+            // Skip if we only have an ID (shouldn't happen, but safety check)
+            if foodData.foodName.count == 36 && foodData.foodName.contains("-") {
+                // Looks like a UUID - try one more time to get name from cache
+                if let record = feedingRecords.first(where: { $0.foodAnalysisId == foodData.foodName }),
+                   let recordFoodName = record.foodName, !recordFoodName.isEmpty {
+                    // Use food name from the record
+                    if let brand = record.foodBrand, !brand.isEmpty {
+                        preferredFoods.append("\(recordFoodName) (\(brand))")
+                    } else {
+                        preferredFoods.append(recordFoodName)
+                    }
+                    continue
+                }
+                // Skip IDs - don't show them to users
+                continue
+            }
+            
+            // Add brand if available for better context
+            if let brand = foodData.foodBrand, !brand.isEmpty {
+                preferredFoods.append("\(foodData.foodName) (\(brand))")
             } else {
-                // Fallback to food analysis ID if name not available
-                preferredFoods.append("Food \(foodAnalysisId.prefix(8))")
+                preferredFoods.append(foodData.foodName)
             }
         }
         
