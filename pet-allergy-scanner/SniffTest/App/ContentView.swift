@@ -29,8 +29,10 @@ struct ContentView: View {
                 if user.onboarded || hasSkippedOnboarding {
                     MainTabView()
                         .onAppear {
-                            // Track analytics
-                            PostHogAnalytics.trackScreenViewed(screenName: "main_tab_view")
+                            // Track analytics (safe - onAppear is on MainActor)
+                            Task { @MainActor in
+                                PostHogAnalytics.trackScreenViewed(screenName: "main_tab_view")
+                            }
                             
                             // CRITICAL: Load all critical cached data synchronously on app launch
                             // This ensures no data flashing - data appears instantly if cached
@@ -68,16 +70,18 @@ struct ContentView: View {
           .onChange(of: scenePhase) { _, newPhase in
               SessionLifecycleManager.shared.handleScenePhase(newPhase)
               
-              // Track app lifecycle events
-              switch newPhase {
-              case .active:
-                  PostHogAnalytics.trackScreenViewed(screenName: "app_became_active")
-              case .background:
-                  PostHogAnalytics.trackScreenViewed(screenName: "app_entered_background")
-              case .inactive:
-                  PostHogAnalytics.trackScreenViewed(screenName: "app_became_inactive")
-              @unknown default:
-                  break
+              // Track app lifecycle events (safe - onChange is on MainActor)
+              Task { @MainActor in
+                  switch newPhase {
+                  case .active:
+                      PostHogAnalytics.trackScreenViewed(screenName: "app_became_active")
+                  case .background:
+                      PostHogAnalytics.trackScreenViewed(screenName: "app_entered_background")
+                  case .inactive:
+                      PostHogAnalytics.trackScreenViewed(screenName: "app_became_inactive")
+                  @unknown default:
+                      break
+                  }
               }
               
               if newPhase == .active {
