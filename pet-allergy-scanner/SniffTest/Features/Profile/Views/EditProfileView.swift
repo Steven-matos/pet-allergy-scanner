@@ -34,6 +34,7 @@ struct EditProfileView: View {
     @State private var lastName: String = ""
     @State private var selectedImage: UIImage?
     @State private var isSaving = false
+    @State private var isUploadingImage = false
     @State private var showingSuccessAlert = false
     @State private var showingErrorAlert = false
     
@@ -70,11 +71,16 @@ struct EditProfileView: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        saveProfile()
+                    if isUploadingImage {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Button("Save") {
+                            saveProfile()
+                        }
+                        .disabled(isSaving || isUploadingImage || !hasChanges())
+                        .foregroundColor((isSaving || isUploadingImage || !hasChanges()) ? ModernDesignSystem.Colors.textSecondary : ModernDesignSystem.Colors.primary)
                     }
-                    .disabled(isSaving || !hasChanges())
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
             .onAppear {
@@ -370,19 +376,60 @@ struct EditProfileView: View {
             // Handle image upload if changed
             if let selectedImage = selectedImage {
                 print("🔍 EditProfileView: Image selected for upload")
+                
+                // Validate image before upload
+                guard let userId = authService.currentUser?.id, !userId.isEmpty else {
+                    await MainActor.run {
+                        authService.errorMessage = "User not authenticated. Please sign in and try again."
+                        showingErrorAlert = true
+                        isSaving = false
+                    }
+                    return
+                }
+                
+                guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
+                    await MainActor.run {
+                        authService.errorMessage = "Invalid image selected. Please choose a different image."
+                        showingErrorAlert = true
+                        isSaving = false
+                    }
+                    return
+                }
+                
+                // Show upload progress
+                await MainActor.run {
+                    isUploadingImage = true
+                }
+                
                 do {
                     // Replace old image with new one (deletes old, uploads new)
                     let storageService = StorageService.shared
                     newImageUrl = try await storageService.replaceUserImage(
                         oldImageUrl: authService.currentUser?.imageUrl,
                         newImage: selectedImage,
-                        userId: authService.currentUser?.id ?? ""
+                        userId: userId
                     )
                     print("📸 User image replaced in Supabase: \(newImageUrl ?? "nil")")
+                    
+                    await MainActor.run {
+                        isUploadingImage = false
+                    }
                 } catch {
-                    print("Failed to replace user image: \(error)")
-                    authService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
-                    return
+                    // Provide user-friendly error message
+                    let errorMessage: String
+                    if let storageError = error as? StorageError {
+                        errorMessage = storageError.localizedDescription
+                    } else {
+                        errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                    }
+                    
+                    await MainActor.run {
+                        isUploadingImage = false
+                        authService.errorMessage = errorMessage
+                        showingErrorAlert = true
+                        isSaving = false
+                    }
+                    return // Stop profile update if image upload fails
                 }
             } else {
                 newImageUrl = nil // No change

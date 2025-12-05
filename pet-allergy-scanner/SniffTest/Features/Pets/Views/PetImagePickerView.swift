@@ -91,14 +91,22 @@ struct PetImagePickerView: View {
             }
         }
         .confirmationDialog("Choose Photo Source", isPresented: $showingActionSheet) {
-            Button("Camera") {
-                sourceType = .camera
-                showingImagePicker = true
+            // Only show Camera option if available
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Camera") {
+                    sourceType = .camera
+                    showingImagePicker = true
+                }
             }
-            Button("Photo Library") {
-                sourceType = .photoLibrary
-                showingImagePicker = true
+            
+            // Only show Photo Library option if available
+            if UIImagePickerController.isSourceTypeAvailable(.photoLibrary) {
+                Button("Photo Library") {
+                    sourceType = .photoLibrary
+                    showingImagePicker = true
+                }
             }
+            
             if selectedImage != nil {
                 Button("Remove Photo", role: .destructive) {
                     selectedImage = nil

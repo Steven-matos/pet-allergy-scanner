@@ -64,14 +64,22 @@ struct ImagePickerView: View {
             }
         }
         .confirmationDialog("Choose Photo Source", isPresented: $showingActionSheet) {
-            Button("Camera") {
-                sourceType = .camera
-                showingImagePicker = true
+            // Only show Camera option if available
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Camera") {
+                    sourceType = .camera
+                    showingImagePicker = true
+                }
             }
-            Button("Photo Library") {
-                sourceType = .photoLibrary
-                showingImagePicker = true
+            
+            // Only show Photo Library option if available
+            if UIImagePickerController.isSourceTypeAvailable(.photoLibrary) {
+                Button("Photo Library") {
+                    sourceType = .photoLibrary
+                    showingImagePicker = true
+                }
             }
+            
             if selectedImage != nil {
                 Button("Remove Photo", role: .destructive) {
                     selectedImage = nil
@@ -87,6 +95,7 @@ struct ImagePickerView: View {
 }
 
 /// UIKit image picker wrapper for SwiftUI
+/// Handles source type availability and error handling
 struct ImagePicker: UIViewControllerRepresentable {
     @Binding var image: UIImage?
     @Environment(\.presentationMode) var presentationMode
@@ -94,9 +103,21 @@ struct ImagePicker: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
+        
+        // Check if source type is available before setting it
+        guard UIImagePickerController.isSourceTypeAvailable(sourceType) else {
+            // Source type not available - dismiss immediately
+            DispatchQueue.main.async {
+                self.presentationMode.wrappedValue.dismiss()
+            }
+            return picker
+        }
+        
         picker.sourceType = sourceType
         picker.delegate = context.coordinator
         picker.allowsEditing = true
+        picker.mediaTypes = ["public.image"] // Only allow images
+        
         return picker
     }
     
@@ -114,12 +135,25 @@ struct ImagePicker: UIViewControllerRepresentable {
         }
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            // Extract image from picker result
+            var selectedImage: UIImage?
+            
             if let editedImage = info[.editedImage] as? UIImage {
-                parent.image = editedImage
+                selectedImage = editedImage
             } else if let originalImage = info[.originalImage] as? UIImage {
-                parent.image = originalImage
+                selectedImage = originalImage
             }
             
+            // Validate image was selected and is valid
+            guard let image = selectedImage,
+                  image.size.width > 0 && image.size.height > 0 else {
+                // Invalid image - dismiss without setting
+                print("⚠️ Invalid image selected - dismissing picker")
+                parent.presentationMode.wrappedValue.dismiss()
+                return
+            }
+            
+            parent.image = image
             HapticFeedback.success()
             parent.presentationMode.wrappedValue.dismiss()
         }
@@ -259,14 +293,22 @@ struct ProfileImagePickerView: View {
             }
         }
         .confirmationDialog("Choose Photo Source", isPresented: $showingActionSheet) {
-            Button("Camera") {
-                sourceType = .camera
-                showingImagePicker = true
+            // Only show Camera option if available
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Camera") {
+                    sourceType = .camera
+                    showingImagePicker = true
+                }
             }
-            Button("Photo Library") {
-                sourceType = .photoLibrary
-                showingImagePicker = true
+            
+            // Only show Photo Library option if available
+            if UIImagePickerController.isSourceTypeAvailable(.photoLibrary) {
+                Button("Photo Library") {
+                    sourceType = .photoLibrary
+                    showingImagePicker = true
+                }
             }
+            
             if selectedImage != nil || existingImage != nil {
                 Button("Remove Photo", role: .destructive) {
                     selectedImage = nil
@@ -401,14 +443,22 @@ struct PetProfileImagePickerView: View {
             }
         }
         .confirmationDialog("Choose Photo Source", isPresented: $showingActionSheet) {
-            Button("Camera") {
-                sourceType = .camera
-                showingImagePicker = true
+            // Only show Camera option if available
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button("Camera") {
+                    sourceType = .camera
+                    showingImagePicker = true
+                }
             }
-            Button("Photo Library") {
-                sourceType = .photoLibrary
-                showingImagePicker = true
+            
+            // Only show Photo Library option if available
+            if UIImagePickerController.isSourceTypeAvailable(.photoLibrary) {
+                Button("Photo Library") {
+                    sourceType = .photoLibrary
+                    showingImagePicker = true
+                }
             }
+            
             if selectedImage != nil || existingImage != nil {
                 Button("Remove Photo", role: .destructive) {
                     selectedImage = nil

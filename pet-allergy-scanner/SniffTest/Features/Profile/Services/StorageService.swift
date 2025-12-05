@@ -129,6 +129,23 @@ class StorageService: ObservableObject {
             throw StorageError.invalidConfiguration
         }
         
+        // Get auth token - required for Supabase Storage uploads
+        guard let authToken = await apiService.getAuthToken(), !authToken.isEmpty else {
+            throw StorageError.uploadFailed("Authentication required. Please sign in and try again.")
+        }
+        
+        // Validate data is not empty
+        guard !data.isEmpty else {
+            throw StorageError.uploadFailed("Image data is empty. Please select a valid image.")
+        }
+        
+        // Validate data size (max 10MB for images)
+        let maxSize = 10 * 1024 * 1024 // 10MB
+        guard data.count <= maxSize else {
+            throw StorageError.uploadFailed("Image is too large. Please choose an image smaller than 10MB.")
+        }
+        
+        // Build upload URL - Supabase Storage API format
         let uploadURL = baseURL
             .appendingPathComponent("storage")
             .appendingPathComponent("v1")
@@ -136,11 +153,22 @@ class StorageService: ObservableObject {
             .appendingPathComponent(bucket)
             .appendingPathComponent(path)
         
+        // Get Supabase anon key for API authentication
+        let anonKey = Configuration.supabaseAnonKey
+        guard !anonKey.isEmpty else {
+            throw StorageError.invalidConfiguration
+        }
+        
         var request = URLRequest(url: uploadURL)
         request.httpMethod = "POST"
         request.setValue(contentType, forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(await apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey") // Required by Supabase Storage API
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("true", forHTTPHeaderField: "x-upsert") // Allow overwriting existing files
         request.httpBody = data
+        
+        print("📤 Uploading image to: \(uploadURL.absoluteString)")
+        print("📊 Image size: \(data.count / 1024)KB")
         
         let (responseData, response) = try await URLSession.shared.data(for: request)
         
@@ -148,11 +176,32 @@ class StorageService: ObservableObject {
             throw StorageError.invalidResponse
         }
         
+        // Handle different error status codes with user-friendly messages
         guard (200...299).contains(httpResponse.statusCode) else {
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Upload failed"
+            let errorMessage: String
+            if let responseString = String(data: responseData, encoding: .utf8), !responseString.isEmpty {
+                errorMessage = responseString
+            } else {
+                // Provide user-friendly error messages based on status code
+                switch httpResponse.statusCode {
+                case 401:
+                    errorMessage = "Authentication failed. Please sign in and try again."
+                case 403:
+                    errorMessage = "Permission denied. Please check your account settings."
+                case 413:
+                    errorMessage = "Image is too large. Please choose a smaller image."
+                case 500...599:
+                    errorMessage = "Server error. Please try again later."
+                default:
+                    errorMessage = "Upload failed. Please check your connection and try again."
+                }
+            }
+            
+            print("❌ Upload failed with status \(httpResponse.statusCode): \(errorMessage)")
             throw StorageError.uploadFailed(errorMessage)
         }
         
+        print("✅ Image uploaded successfully")
         return path
     }
     
@@ -186,9 +235,20 @@ class StorageService: ObservableObject {
             .appendingPathComponent(bucket)
             .appendingPathComponent(storagePath)
         
+        // Get auth token and anon key for API authentication
+        guard let authToken = await apiService.getAuthToken(), !authToken.isEmpty else {
+            throw StorageError.deleteFailed
+        }
+        
+        let anonKey = Configuration.supabaseAnonKey
+        guard !anonKey.isEmpty else {
+            throw StorageError.invalidConfiguration
+        }
+        
         var request = URLRequest(url: deleteURL)
         request.httpMethod = "DELETE"
-        request.setValue("Bearer \(await apiService.getAuthToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue(anonKey, forHTTPHeaderField: "apikey") // Required by Supabase Storage API
+        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         
         let (_, response) = try await URLSession.shared.data(for: request)
         

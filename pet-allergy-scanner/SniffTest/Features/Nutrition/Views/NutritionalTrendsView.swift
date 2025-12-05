@@ -379,12 +379,21 @@ struct NutritionalTrendsView: View {
         if !forceRefresh {
             // Try cache first (synchronous)
             if let cachedMeals = cacheCoordinator.get([FeedingRecord].self, forKey: cacheKey) {
-                // Filter to last 7 days
+                // Filter to last 7 days for display
                 let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
                 let recentCached = cachedMeals.filter { $0.feedingTime >= sevenDaysAgo }
                 if !recentCached.isEmpty {
                     recentMeals = recentCached.sorted { $0.feedingTime > $1.feedingTime }
-                    // Refresh in background
+                    // Refresh in background to ensure we have latest data
+                    Task {
+                        await refreshRecentMealsInBackground(for: pet.id)
+                    }
+                    return
+                } else if !cachedMeals.isEmpty {
+                    // We have cached meals but they're older than 7 days - still show them
+                    // This handles the case where user has meals but they're slightly older
+                    recentMeals = cachedMeals.sorted { $0.feedingTime > $1.feedingTime }
+                    // Refresh in background to get latest data
                     Task {
                         await refreshRecentMealsInBackground(for: pet.id)
                     }
@@ -399,19 +408,49 @@ struct NutritionalTrendsView: View {
         // Cache miss or force refresh - load from server
         Task {
             do {
-                let meals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 7, forceRefresh: forceRefresh)
+                // Load all records (days parameter is handled client-side for filtering)
+                let allMeals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 30, forceRefresh: forceRefresh)
+                
+                // Filter to last 7 days for display
+                let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+                let recentMealsFiltered = allMeals.filter { $0.feedingTime >= sevenDaysAgo }
+                
                 await MainActor.run {
-                    recentMeals = meals
+                    // If we have recent meals, show those; otherwise show all meals (even if older)
+                    // This ensures user always sees their meals if they exist
+                    if !recentMealsFiltered.isEmpty {
+                        recentMeals = recentMealsFiltered.sorted { $0.feedingTime > $1.feedingTime }
+                    } else if !allMeals.isEmpty {
+                        // Show all meals even if older than 7 days (better UX)
+                        recentMeals = allMeals.sorted { $0.feedingTime > $1.feedingTime }
+                    } else {
+                        recentMeals = []
+                    }
+                    
+                    print("📊 Loaded \(recentMeals.count) meals for pet \(pet.id)")
                 }
             } catch {
-                // Handle 404 errors gracefully
+                // Handle errors gracefully
                 if let apiError = error as? APIError,
-                   case .serverError(let statusCode) = apiError,
-                   statusCode == 404 {
-                    // Resource deleted - cache already invalidated by service
-                    print("⚠️ Recent meals resource deleted (404) - cache invalidated")
+                   case .serverError(let statusCode) = apiError {
+                    if statusCode == 404 {
+                        // Resource deleted - cache already invalidated by service
+                        print("⚠️ Recent meals resource deleted (404) - cache invalidated")
+                    } else {
+                        print("❌ Failed to load recent meals: HTTP \(statusCode)")
+                    }
                 } else {
-                    print("Failed to load recent meals: \(error.localizedDescription)")
+                    print("❌ Failed to load recent meals: \(error.localizedDescription)")
+                }
+                
+                // On error, try to show cached data if available
+                if let cachedMeals = cacheCoordinator.get([FeedingRecord].self, forKey: cacheKey), !cachedMeals.isEmpty {
+                    await MainActor.run {
+                        let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+                        let recentCached = cachedMeals.filter { $0.feedingTime >= sevenDaysAgo }
+                        recentMeals = recentCached.isEmpty ? cachedMeals.sorted { $0.feedingTime > $1.feedingTime } : recentCached.sorted { $0.feedingTime > $1.feedingTime }
+                        print("📊 Using cached meals (\(recentMeals.count)) due to error")
+                    }
                 }
             }
         }
@@ -422,9 +461,22 @@ struct NutritionalTrendsView: View {
      */
     private func refreshRecentMealsInBackground(for petId: String) async {
         do {
-            let meals = try await feedingLogService.getFeedingRecords(for: petId, days: 7, forceRefresh: false)
+            // Load all records and filter client-side
+            let allMeals = try await feedingLogService.getFeedingRecords(for: petId, days: 30, forceRefresh: false)
+            
+            // Filter to last 7 days for display
+            let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            let recentMealsFiltered = allMeals.filter { $0.feedingTime >= sevenDaysAgo }
+            
             await MainActor.run {
-                recentMeals = meals
+                // If we have recent meals, show those; otherwise show all meals
+                if !recentMealsFiltered.isEmpty {
+                    recentMeals = recentMealsFiltered.sorted { $0.feedingTime > $1.feedingTime }
+                } else if !allMeals.isEmpty {
+                    // Show all meals even if older than 7 days
+                    recentMeals = allMeals.sorted { $0.feedingTime > $1.feedingTime }
+                }
+                print("📊 Background refresh: Loaded \(recentMeals.count) meals for pet \(petId)")
             }
         } catch {
             // Silent failure for background refresh

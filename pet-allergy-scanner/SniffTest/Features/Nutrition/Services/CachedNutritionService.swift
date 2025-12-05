@@ -409,10 +409,20 @@ class CachedNutritionService: ObservableObject {
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
                     do {
-                        let fresh = try await self.apiService.get(
-                            endpoint: "/nutrition/feeding/\(petId)?days=\(days)",
+                        // Server endpoint doesn't support days parameter - returns all records
+                        let allFresh = try await self.apiService.get(
+                            endpoint: "/nutrition/feeding/\(petId)",
                             responseType: [FeedingRecord].self
                         )
+                        
+                        // Filter by days client-side
+                        let fresh: [FeedingRecord]
+                        if days > 0 {
+                            let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+                            fresh = allFresh.filter { $0.feedingTime >= cutoffDate }
+                        } else {
+                            fresh = allFresh
+                        }
                         self.cacheCoordinator.set(fresh, forKey: cacheKey)
                         self.feedingRecords.removeAll { $0.petId == petId }
                         self.feedingRecords.append(contentsOf: fresh)
@@ -431,11 +441,22 @@ class CachedNutritionService: ObservableObject {
         }
         
         // Cache miss or force refresh - fetch from server
+        // Note: Server endpoint doesn't support days parameter - it returns all records
+        // We filter client-side based on the days parameter
         do {
-            let records: [FeedingRecord] = try await apiService.get(
-                endpoint: "/nutrition/feeding/\(petId)?days=\(days)",
+            let allRecords: [FeedingRecord] = try await apiService.get(
+                endpoint: "/nutrition/feeding/\(petId)",
                 responseType: [FeedingRecord].self
             )
+            
+            // Filter records by days client-side
+            let records: [FeedingRecord]
+            if days > 0 {
+                let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+                records = allRecords.filter { $0.feedingTime >= cutoffDate }
+            } else {
+                records = allRecords
+            }
             
             // Replace all records for this pet (not append) to ensure consistency
             await MainActor.run {

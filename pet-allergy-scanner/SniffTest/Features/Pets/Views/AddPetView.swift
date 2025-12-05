@@ -41,6 +41,7 @@ struct AddPetView: View {
     @State private var newSensitivity = ""
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
+    @State private var isUploadingImage = false
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var gatekeeper = SubscriptionGatekeeper.shared
     @State private var showingPaywall = false
@@ -80,14 +81,19 @@ struct AddPetView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        savePet()
+                    if isUploadingImage {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Button("Save") {
+                            savePet()
+                        }
+                        .disabled(!isFormValid || isUploadingImage)
+                        .foregroundColor(isFormValid && !isUploadingImage ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
+                        .accessibilityIdentifier("savePetButton")
+                        .accessibilityLabel("Save pet profile")
+                        .accessibilityHint("Saves the pet information to your profile")
                     }
-                    .disabled(!isFormValid)
-                    .foregroundColor(isFormValid ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
-                    .accessibilityIdentifier("savePetButton")
-                    .accessibilityLabel("Save pet profile")
-                    .accessibilityHint("Saves the pet information to your profile")
                 }
             }
             .alert("Error", isPresented: $showingAlert) {
@@ -591,21 +597,59 @@ struct AddPetView: View {
                 if let selectedImage = selectedImage {
                     // Get current user ID for folder organization
                     guard let userId = AuthService.shared.currentUser?.id else {
-                        CachedPetService.shared.errorMessage = "User not authenticated"
+                        await MainActor.run {
+                            CachedPetService.shared.errorMessage = "User not authenticated. Please sign in and try again."
+                            showingAlert = true
+                        }
                         return
+                    }
+                    
+                    // Validate image before upload
+                    guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
+                        await MainActor.run {
+                            CachedPetService.shared.errorMessage = "Invalid image selected. Please choose a different image."
+                            showingAlert = true
+                        }
+                        return
+                    }
+                    
+                    // Show upload progress
+                    await MainActor.run {
+                        isUploadingImage = true
                     }
                     
                     // Generate a temporary pet ID for folder organization
                     let tempPetId = UUID().uuidString
                     
-                    // Upload image to Supabase Storage
-                    imageUrl = try await StorageService.shared.uploadPetImage(
-                        image: selectedImage,
-                        userId: userId,
-                        petId: tempPetId
-                    )
-                    
-                    print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
+                    // Upload image to Supabase Storage with error handling
+                    do {
+                        imageUrl = try await StorageService.shared.uploadPetImage(
+                            image: selectedImage,
+                            userId: userId,
+                            petId: tempPetId
+                        )
+                        
+                        print("📸 Pet image uploaded to Supabase: \(imageUrl ?? "nil")")
+                        
+                        await MainActor.run {
+                            isUploadingImage = false
+                        }
+                    } catch {
+                        // Provide user-friendly error message
+                        let errorMessage: String
+                        if let storageError = error as? StorageError {
+                            errorMessage = storageError.localizedDescription
+                        } else {
+                            errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                        }
+                        
+                        await MainActor.run {
+                            isUploadingImage = false
+                            CachedPetService.shared.errorMessage = errorMessage
+                            showingAlert = true
+                        }
+                        return // Stop pet creation if image upload fails
+                    }
                 }
                 
                 // Convert weight to kg for storage (backend expects kg)
@@ -640,7 +684,18 @@ struct AddPetView: View {
                     }
                 }
             } catch {
-                CachedPetService.shared.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                // Handle any other errors during pet creation
+                let errorMessage: String
+                if let storageError = error as? StorageError {
+                    errorMessage = storageError.localizedDescription
+                } else {
+                    errorMessage = "Failed to create pet: \(error.localizedDescription)"
+                }
+                
+                await MainActor.run {
+                    CachedPetService.shared.errorMessage = errorMessage
+                    showingAlert = true
+                }
             }
         }
     }

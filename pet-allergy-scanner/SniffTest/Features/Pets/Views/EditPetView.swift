@@ -44,6 +44,7 @@ struct EditPetView: View {
     @State private var newSensitivity = ""
     @State private var showingAlert = false
     @State private var validationErrors: [String] = []
+    @State private var isUploadingImage = false
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     
     var body: some View {
@@ -81,14 +82,19 @@ struct EditPetView: View {
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        updatePet()
+                    if isUploadingImage {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Button("Save") {
+                            updatePet()
+                        }
+                        .disabled(!isFormValid || isUploadingImage)
+                        .foregroundColor(isFormValid && !isUploadingImage ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
+                        .accessibilityIdentifier("savePetButton")
+                        .accessibilityLabel("Save pet changes")
+                        .accessibilityHint("Updates the pet information")
                     }
-                    .disabled(!isFormValid)
-                    .foregroundColor(isFormValid ? ModernDesignSystem.Colors.primary : ModernDesignSystem.Colors.textSecondary)
-                    .accessibilityIdentifier("savePetButton")
-                    .accessibilityLabel("Save pet changes")
-                    .accessibilityHint("Updates the pet information")
                 }
             }
             .alert("Error", isPresented: $showingAlert) {
@@ -613,19 +619,54 @@ struct EditPetView: View {
                 if let selectedImage = selectedImage {
                     // User selected a new image - upload it
                     guard let userId = AuthService.shared.currentUser?.id else {
-                        petService.errorMessage = "User not authenticated"
+                        await MainActor.run {
+                            petService.errorMessage = "User not authenticated. Please sign in and try again."
+                        }
                         return
                     }
                     
-                    // Replace old image with new one (deletes old, uploads new)
-                    newImageUrl = try await StorageService.shared.replacePetImage(
-                        oldImageUrl: pet.imageUrl,
-                        newImage: selectedImage,
-                        userId: userId,
-                        petId: pet.id
-                    )
+                    // Validate image before upload
+                    guard selectedImage.size.width > 0 && selectedImage.size.height > 0 else {
+                        await MainActor.run {
+                            petService.errorMessage = "Invalid image selected. Please choose a different image."
+                        }
+                        return
+                    }
                     
-                    print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
+                    // Show upload progress
+                    await MainActor.run {
+                        isUploadingImage = true
+                    }
+                    
+                    // Replace old image with new one (deletes old, uploads new)
+                    do {
+                        newImageUrl = try await StorageService.shared.replacePetImage(
+                            oldImageUrl: pet.imageUrl,
+                            newImage: selectedImage,
+                            userId: userId,
+                            petId: pet.id
+                        )
+                        
+                        print("📸 Pet image replaced in Supabase: \(newImageUrl ?? "nil")")
+                        
+                        await MainActor.run {
+                            isUploadingImage = false
+                        }
+                    } catch {
+                        // Provide user-friendly error message
+                        let errorMessage: String
+                        if let storageError = error as? StorageError {
+                            errorMessage = storageError.localizedDescription
+                        } else {
+                            errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                        }
+                        
+                        await MainActor.run {
+                            isUploadingImage = false
+                            petService.errorMessage = errorMessage
+                        }
+                        return // Stop update if image upload fails
+                    }
                 } else if imageRemoved {
                     // User explicitly removed the image - delete old image and set to empty
                     if let oldUrl = pet.imageUrl, oldUrl.contains(Configuration.supabaseURL) {
@@ -672,7 +713,17 @@ struct EditPetView: View {
                     }
                 }
             } catch {
-                petService.errorMessage = "Failed to upload image: \(error.localizedDescription)"
+                // Handle any other errors during pet update
+                let errorMessage: String
+                if let storageError = error as? StorageError {
+                    errorMessage = storageError.localizedDescription
+                } else {
+                    errorMessage = "Failed to update pet: \(error.localizedDescription)"
+                }
+                
+                await MainActor.run {
+                    petService.errorMessage = errorMessage
+                }
             }
         }
     }
