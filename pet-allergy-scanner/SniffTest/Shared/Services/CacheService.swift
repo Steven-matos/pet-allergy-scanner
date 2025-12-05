@@ -83,6 +83,9 @@ enum CacheKey: String, CaseIterable {
     case weightGoals = "weight_goals"
     case nutritionalTrends = "nutritional_trends"
     
+    // Health data
+    case healthEvents = "health_events"
+    
     /// Generate a scoped key for user-specific data
     func scoped(forUserId userId: String) -> String {
         return "\(rawValue)_user_\(userId)"
@@ -96,6 +99,9 @@ enum CacheKey: String, CaseIterable {
 
 /// Comprehensive caching service with memory and disk persistence
 /// Implements SOLID principles: Single responsibility for caching, Open for extension
+/// 
+/// @deprecated Use UnifiedCacheCoordinator instead. This service is being phased out.
+@available(*, deprecated, message: "Use UnifiedCacheCoordinator.shared instead")
 @MainActor
 class CacheService: ObservableObject {
     static let shared = CacheService()
@@ -518,14 +524,18 @@ extension CachePolicy {
 
 // MARK: - Convenience Extensions
 
+/// @deprecated Use UnifiedCacheCoordinator.shared.storeUserData() instead
+@available(*, deprecated, message: "Use UnifiedCacheCoordinator.shared.storeUserData() instead")
 extension CacheService {
     /// Store user data with automatic scoping
+    /// @deprecated Use UnifiedCacheCoordinator.shared.storeUserData() instead
     func storeUserData<T: Codable>(_ data: T, forKey key: CacheKey, userId: String) {
         let scopedKey = key.scoped(forUserId: userId)
         store(data, forKey: scopedKey)
     }
     
     /// Retrieve user data with automatic scoping
+    /// @deprecated Use UnifiedCacheCoordinator.shared.retrieveUserData() instead
     func retrieveUserData<T: Codable>(_ type: T.Type, forKey key: CacheKey, userId: String) -> T? {
         let scopedKey = key.scoped(forUserId: userId)
         return retrieve(type, forKey: scopedKey)

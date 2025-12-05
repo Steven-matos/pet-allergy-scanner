@@ -73,10 +73,9 @@ struct WeightManagementView: View {
             if let pet = selectedPet {
                 WeightEntryView(pet: pet, lastRecordedWeightId: $lastRecordedWeightId)
                     .onDisappear {
-                        // Refresh weight data when the entry sheet is dismissed
-                        loadWeightData()
-                        // Enable fast polling to quickly pick up changes
-                        syncService.enableFastPolling()
+                        // Weight was added - refresh data from server to get latest
+                        // This is the only time we need to fetch from server (after user action)
+                        loadWeightData(forceRefresh: true)
                         // Force UI refresh
                         refreshTrigger.toggle()
                     }
@@ -91,40 +90,67 @@ struct WeightManagementView: View {
             if let pet = selectedPet {
                 WeightGoalSettingView(pet: pet, existingGoal: nil)
                     .onDisappear {
-                        // After creating a goal, the goal is already stored locally in weightService
-                        // Force UI refresh immediately to show the locally stored goal
+                        // Goal was set/updated - refresh data from server to get latest
+                        // This is the only time we need to fetch from server (after user action)
+                        loadWeightData(forceRefresh: true)
+                        // Force UI refresh
                         refreshTrigger.toggle()
-                        
-                        // Refresh from server in background to ensure consistency
-                        Task {
-                            await loadWeightDataAsync(showLoadingIfNeeded: false)
-                        }
-                        // Enable fast polling to quickly pick up changes
-                        syncService.enableFastPolling()
                     }
             }
         }
         .onAppear {
-            loadWeightDataIfNeeded()
-            // Start auto-syncing when view appears
-            if let pet = selectedPet {
-                syncService.startSyncing(forPetId: pet.id)
+            // Load pets synchronously from cache first (immediate UI rendering)
+            petService.loadPets()
+            
+            // Auto-select pet if needed
+            if selectedPet == nil, !petService.pets.isEmpty {
+                petSelectionService.selectPet(petService.pets.first!)
             }
+            
+            // Weight data is static - use cached data exclusively
+            // No server calls on view appearance since data only changes when:
+            // 1. User adds/deletes weight entry (handled by sheet onDisappear)
+            // 2. User sets/updates goal (handled by sheet onDisappear)
+            // 3. User pulls to refresh (explicit user action)
+            guard let pet = selectedPet ?? petService.pets.first else { return }
+            
+            // Check if we have cached data - if not, load it (cache-first, no server call if cached)
+            // loadWeightData with forceRefresh: false will use cache if available
+            if !weightService.hasCachedWeightData(for: pet.id) {
+                // First time - load data (will use cache if available, only calls server if no cache)
+                Task { @MainActor in
+                    await Task.yield() // Yield to allow view to render first
+                    guard !Task.isCancelled else { return }
+                    isLoading = true
+                    do {
+                        // forceRefresh: false means it will use cache if available
+                        try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
+                        isLoading = false
+                        refreshTrigger.toggle()
+                    } catch {
+                        isLoading = false
+                        print("⚠️ Failed to load weight data: \(error.localizedDescription)")
+                    }
+                }
+            }
+            // If we have cached data, it's already in memory - no action needed
+            
+            // Note: Sync service is disabled since weight data is static
+            // We don't need periodic syncing - data only changes on user actions
         }
         .onDisappear {
-            // Stop syncing when view disappears
+            // Sync service is disabled, but clean up just in case
             if let pet = selectedPet {
                 syncService.stopSyncing(forPetId: pet.id)
             }
         }
         .onChange(of: selectedPet) { oldPet, newPet in
-            // Stop syncing old pet, start syncing new pet
+            // Sync service is disabled, but clean up just in case
             if let oldPet = oldPet {
                 syncService.stopSyncing(forPetId: oldPet.id)
             }
-            if let newPet = newPet {
-                syncService.startSyncing(forPetId: newPet.id)
-                // Force UI refresh when pet changes
+            // Force UI refresh when pet changes (uses cached data)
+            if newPet != nil {
                 refreshTrigger.toggle()
             }
         }
@@ -225,7 +251,8 @@ struct WeightManagementView: View {
                     ForEach(petService.pets) { pet in
                         PetSelectionCard(pet: pet, onTap: {
                             petSelectionService.selectPet(pet)
-                            loadWeightData()
+                            // Load weight data with cache-first pattern when pet is selected
+                            loadWeightDataIfNeeded()
                         })
                     }
                 }
@@ -329,47 +356,71 @@ struct WeightManagementView: View {
     // MARK: - Helper Methods
     
     /**
-     * Load weight data only if not already cached
-     * This prevents unnecessary server calls when data is already available
+     * Load weight data only when needed
      * 
-     * IMPORTANT: Always force refresh to ensure goals are fetched from server
-     * Goals might exist in database but not be in cache
+     * Weight data is static and only changes when:
+     * - User adds/deletes a weight entry
+     * - User sets/updates a goal
+     * - User explicitly refreshes (pull to refresh)
+     * 
+     * This method should only be called:
+     * - First time viewing (no cached data)
+     * - After adding/deleting weight entry
+     * - After setting/updating goal
+     * - On explicit user refresh
      */
     private func loadWeightDataIfNeeded() {
-        guard let pet = selectedPet else { return }
+        guard isLoading == false else {
+            print("⏭️ Weight data load already in progress, skipping")
+            return
+        }
         
-        // Always load on first appearance to ensure fresh data including goals
-        // Even if we have cached data, we need to check for goals from server
-        Task {
-            // Force refresh to ensure we get goals from server
-            // The service will still use cache if available, but will fetch goals
-            try? await weightService.loadWeightData(for: pet.id, forceRefresh: true)
-            await MainActor.run {
-                refreshTrigger.toggle() // Force UI refresh
+        guard let pet = selectedPet ?? petService.pets.first else { return }
+        
+        // Check if we have cached data
+        let hasCachedData = weightService.hasCachedWeightData(for: pet.id)
+        
+        if !hasCachedData {
+            // No cache - load from server
+            isLoading = true
+            Task { @MainActor in
+                do {
+                    try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
+                    isLoading = false
+                    refreshTrigger.toggle()
+                } catch {
+                    isLoading = false
+                    print("⚠️ Failed to load weight data: \(error.localizedDescription)")
+                }
             }
         }
+        // If we have cached data, it's already in memory - no action needed
     }
+    
     
     /**
      * Force load weight data from server
-     * Used when new data is added (weight entry, goal setting)
+     * Only called when data actually changes:
+     * - After adding/deleting weight entry
+     * - After setting/updating goal
+     * - On explicit user refresh (pull to refresh)
      */
-    private func loadWeightData() {
-        guard selectedPet != nil else { return }
+    private func loadWeightData(forceRefresh: Bool = true) {
+        guard selectedPet != nil || !petService.pets.isEmpty else { return }
         
         Task {
-            await loadWeightDataAsync(showLoadingIfNeeded: true)
+            await loadWeightDataAsync(showLoadingIfNeeded: true, forceRefresh: forceRefresh)
         }
     }
     
-    private func loadWeightDataAsync(showLoadingIfNeeded: Bool = false) async {
-        guard let pet = selectedPet else { return }
+    private func loadWeightDataAsync(showLoadingIfNeeded: Bool = false, forceRefresh: Bool = false) async {
+        guard let pet = selectedPet ?? petService.pets.first else { return }
         
-        // Check if we already have data in memory (from cache or previous load)
+        // Check if we already have data in memory (from cache or previous load) - synchronous
         let hadDataBefore = weightService.hasCachedWeightData(for: pet.id)
         
-        // Only show loading if explicitly requested and we don't have data
-        if showLoadingIfNeeded && !hadDataBefore {
+        // Only show loading if explicitly requested and we don't have data (or force refresh)
+        if showLoadingIfNeeded && (!hadDataBefore || forceRefresh) {
             await MainActor.run {
                 isLoading = true
                 errorMessage = nil
@@ -377,14 +428,23 @@ struct WeightManagementView: View {
         }
         
         do {
-            // Force refresh from server to ensure we have the latest data including goals
-            try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+            // Load data (cache-first, but refresh goals from server if needed)
+            // Use forceRefresh when explicitly requested (e.g., after adding new data)
+            try await weightService.loadWeightData(for: pet.id, forceRefresh: forceRefresh)
             
             await MainActor.run {
                 isLoading = false
                 refreshTrigger.toggle()
             }
         } catch {
+            // Handle 404 errors gracefully
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode) = apiError,
+               statusCode == 404 {
+                // Resource deleted - cache already invalidated by service
+                print("⚠️ Weight data resource deleted (404) - cache invalidated")
+            }
+            
             await MainActor.run {
                 isLoading = false
                 errorMessage = error.localizedDescription

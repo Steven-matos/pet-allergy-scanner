@@ -24,47 +24,70 @@ class HealthEventService: ObservableObject {
     
     // MARK: - Published Properties
     
-    /**
-     * Use ObservableCacheManager for reliable SwiftUI observation
-     * Cache key: petId, Value: [HealthEvent]
-     */
-    private let cache = ObservableCacheManager<String, [HealthEvent]>(
-        defaultTTL: 1800, // 30 minutes default TTL
-        maxCacheSize: 50 // Max 50 pets worth of events
-    )
+    // In-memory cache for SwiftUI observation (synced with UnifiedCacheCoordinator)
+    @Published private var healthEventsCache: [String: [HealthEvent]] = [:]
     
     @Published var isLoading = false
     @Published var error: Error?
+    
+    // MARK: - Services
+    
+    private let apiService = APIService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
+    private var cancellables = Set<AnyCancellable>()
+    
+    private init() {
+        loadCachedDataOnInit()
+    }
+    
+    /**
+     * Load cached data synchronously on init for immediate UI rendering
+     */
+    private func loadCachedDataOnInit() {
+        // Load cached health events from UnifiedCacheCoordinator synchronously
+        let pets = CachedPetService.shared.pets
+        for pet in pets {
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: pet.id)
+            if let cached = cacheCoordinator.get([HealthEvent].self, forKey: cacheKey) {
+                healthEventsCache[pet.id] = cached
+            }
+        }
+    }
     
     // MARK: - Computed Properties for Views
     
     /**
      * Get health events for a pet (for SwiftUI views)
-     * This property is observed by SwiftUI and updates automatically
+     * Returns from in-memory cache (synced with UnifiedCacheCoordinator)
      */
     func healthEvents(for petId: String) -> [HealthEvent] {
-        return cache.get(petId) ?? []
+        // First check in-memory cache
+        if let cached = healthEventsCache[petId] {
+            return cached
+        }
+        
+        // Try UnifiedCacheCoordinator (synchronous)
+        let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+        if let cached = cacheCoordinator.get([HealthEvent].self, forKey: cacheKey) {
+            healthEventsCache[petId] = cached
+            return cached
+        }
+        
+        return []
     }
     
     /**
      * Check if we have cached events for a pet
      */
     func hasCachedEvents(for petId: String) -> Bool {
-        return cache.contains(petId)
-    }
-    
-    private let apiService = APIService.shared
-    
-    private var cancellables = Set<AnyCancellable>()
-    
-    private init() {
-        // Observe cache changes to trigger view updates
-        // When cache updates, notify SwiftUI observers
-        cache.objectWillChange
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+        // Check in-memory cache first
+        if healthEventsCache[petId] != nil {
+            return true
+        }
+        
+        // Check UnifiedCacheCoordinator
+        let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+        return cacheCoordinator.exists(forKey: cacheKey)
     }
     
     /**
@@ -121,12 +144,15 @@ class HealthEventService: ObservableObject {
                 responseType: HealthEvent.self
             )
             
-            // Update cache with new event
+            // Update cache with new event using UnifiedCacheCoordinator
             var currentEvents = healthEvents(for: petId)
             currentEvents.append(createdEvent)
             currentEvents.sort { $0.eventDate > $1.eventDate }
             
-            cache.set(currentEvents, forKey: petId)
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+            cacheCoordinator.set(currentEvents, forKey: cacheKey)
+            healthEventsCache[petId] = currentEvents
+            objectWillChange.send()
             
             print("✅ [createHealthEvent] Added event to cache for pet: \(petId)")
             print("   Event count: \(currentEvents.count)")
@@ -159,17 +185,31 @@ class HealthEventService: ObservableObject {
         forceRefresh: Bool = false
     ) async throws -> [HealthEvent] {
         
-        // Return cached data if available and not forcing refresh
+        // Return cached data if available and not forcing refresh (synchronous for immediate UI)
         // Only use cache if it has actual data (not empty array)
         if !forceRefresh {
-            if let cachedEvents = cache.get(petId) {
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+            
+            // Check in-memory cache first
+            if let cachedEvents = healthEventsCache[petId] {
                 if !cachedEvents.isEmpty {
                     print("📦 [getHealthEvents] Returning \(cachedEvents.count) cached events for pet: \(petId)")
                     return cachedEvents
                 } else {
                     // Cache has empty array, clear it to force fresh fetch
                     print("🔄 [getHealthEvents] Cache has empty array, clearing to force fresh fetch for pet: \(petId)")
-                    cache.remove(petId)
+                    healthEventsCache.removeValue(forKey: petId)
+                    cacheCoordinator.invalidate(forKey: cacheKey)
+                }
+            } else if let cachedEvents = cacheCoordinator.get([HealthEvent].self, forKey: cacheKey) {
+                // Check UnifiedCacheCoordinator
+                if !cachedEvents.isEmpty {
+                    healthEventsCache[petId] = cachedEvents
+                    print("📦 [getHealthEvents] Returning \(cachedEvents.count) cached events from UnifiedCacheCoordinator for pet: \(petId)")
+                    return cachedEvents
+                } else {
+                    // Cache has empty array, clear it
+                    cacheCoordinator.invalidate(forKey: cacheKey)
                 }
             }
         }
@@ -220,8 +260,11 @@ class HealthEventService: ObservableObject {
                 print("✅ [getHealthEvents] First event: \(response.events[0].id) - \(response.events[0].title)")
             }
             
-            // Update cache - this will automatically trigger SwiftUI updates
-            cache.set(response.events, forKey: petId, ttl: 1800) // 30 minutes
+            // Update cache using UnifiedCacheCoordinator
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+            cacheCoordinator.set(response.events, forKey: cacheKey)
+            healthEventsCache[petId] = response.events
+            objectWillChange.send()
             
             print("✅ [getHealthEvents] Updated cache with \(response.events.count) events for pet: \(petId)")
             
@@ -307,12 +350,16 @@ class HealthEventService: ObservableObject {
             )
             
             // Update cache - find which pet this event belongs to
-            for petId in cache.allKeys() {
-                var events = healthEvents(for: petId)
+            for (petId, events) in healthEventsCache {
                 if let index = events.firstIndex(where: { $0.id == eventId }) {
-                    events[index] = updatedEvent
-                    events.sort { $0.eventDate > $1.eventDate }
-                    cache.set(events, forKey: petId)
+                    var updatedEvents = events
+                    updatedEvents[index] = updatedEvent
+                    updatedEvents.sort { $0.eventDate > $1.eventDate }
+                    
+                    let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+                    cacheCoordinator.set(updatedEvents, forKey: cacheKey)
+                    healthEventsCache[petId] = updatedEvents
+                    objectWillChange.send()
                     print("✅ [updateHealthEvent] Updated event in cache for pet: \(petId)")
                     break
                 }
@@ -343,10 +390,14 @@ class HealthEventService: ObservableObject {
         do {
             try await apiService.delete(endpoint: "/health-events/\(eventId)")
             
-            // Update cache
+            // Update cache using UnifiedCacheCoordinator
             var events = healthEvents(for: petId)
             events.removeAll { $0.id == eventId }
-            cache.set(events, forKey: petId)
+            
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+            cacheCoordinator.set(events, forKey: cacheKey)
+            healthEventsCache[petId] = events
+            objectWillChange.send()
             
             print("✅ [deleteHealthEvent] Removed event from cache for pet: \(petId)")
             
@@ -407,20 +458,28 @@ class HealthEventService: ObservableObject {
     }
     
     /**
-     * Clear cached health events for a pet
+     * Clear cached health events for a pet using UnifiedCacheCoordinator
      * 
      * - Parameter petId: ID of the pet
      */
     func clearHealthEvents(for petId: String) {
-        cache.remove(petId)
+        let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+        cacheCoordinator.invalidate(forKey: cacheKey)
+        healthEventsCache.removeValue(forKey: petId)
+        objectWillChange.send()
         print("🗑️ [clearHealthEvents] Cleared cache for pet: \(petId)")
     }
     
     /**
-     * Clear all cached health events
+     * Clear all cached health events using UnifiedCacheCoordinator
      */
     func clearAllHealthEvents() {
-        cache.clear()
+        for petId in healthEventsCache.keys {
+            let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
+            cacheCoordinator.invalidate(forKey: cacheKey)
+        }
+        healthEventsCache.removeAll()
+        objectWillChange.send()
         print("🗑️ [clearAllHealthEvents] Cleared all health event caches")
     }
     
@@ -436,11 +495,14 @@ class HealthEventService: ObservableObject {
     
     /**
      * Remove expired cache entries
+     * UnifiedCacheCoordinator handles expiration automatically
      * 
-     * - Returns: Number of expired entries removed
+     * - Returns: Number of expired entries removed (always 0, handled by coordinator)
      */
     @discardableResult
     func cleanupExpiredCache() -> Int {
-        return cache.removeExpired()
+        // UnifiedCacheCoordinator handles expiration automatically
+        // This method is kept for API compatibility
+        return 0
     }
 }

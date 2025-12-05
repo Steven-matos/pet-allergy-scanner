@@ -31,7 +31,7 @@ final class CachedPetService {
     var isRefreshing = false
     
     private let apiService = APIService.shared
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     
     /// Current user ID for cache scoping
     private var currentUserId: String? {
@@ -47,9 +47,24 @@ final class CachedPetService {
     // MARK: - Initialization
     
     private init() {
+        loadCachedPetsOnInit()
         setupCacheRefreshTimer()
         observeAuthChanges()
         observeAppLifecycle()
+    }
+    
+    /**
+     * Load cached pets synchronously on init for immediate UI rendering
+     */
+    private func loadCachedPetsOnInit() {
+        guard let userId = currentUserId else { return }
+        
+        // Load from UnifiedCacheCoordinator synchronously
+        let cacheKey = CacheKey.pets.scoped(forUserId: userId)
+        if let cachedPets = cacheCoordinator.get([Pet].self, forKey: cacheKey) {
+            self.pets = cachedPets
+            print("✅ Loaded \(cachedPets.count) pet(s) from cache on init")
+        }
     }
     
     // MARK: - Public Interface
@@ -71,9 +86,10 @@ final class CachedPetService {
             return
         }
         
-        // Try cache first unless force refresh is requested
+        // Try cache first unless force refresh is requested (synchronous for immediate UI)
         if !forceRefresh {
-            if let cachedPets = cacheService.retrieveUserData([Pet].self, forKey: .pets, userId: userId) {
+            let cacheKey = CacheKey.pets.scoped(forUserId: userId)
+            if let cachedPets = cacheCoordinator.get([Pet].self, forKey: cacheKey) {
                 // Only update if we got pets from cache
                 if !cachedPets.isEmpty {
                     self.pets = cachedPets
@@ -114,9 +130,10 @@ final class CachedPetService {
             return pets
         }
         
-        // Try cache first unless force refresh is requested
+        // Try cache first unless force refresh is requested (synchronous for immediate UI)
         if !forceRefresh {
-            if let cachedPets = cacheService.retrieveUserData([Pet].self, forKey: .pets, userId: userId) {
+            let cacheKey = CacheKey.pets.scoped(forUserId: userId)
+            if let cachedPets = cacheCoordinator.get([Pet].self, forKey: cacheKey) {
                 if !cachedPets.isEmpty {
                     await MainActor.run {
                         self.pets = cachedPets
@@ -254,9 +271,9 @@ final class CachedPetService {
     /// Refresh a specific pet from server (useful after weight/event updates)
     /// - Parameter petId: The pet ID to refresh
     func refreshPet(petId: String) async throws {
-        // Invalidate pet cache
+        // Invalidate pet cache using UnifiedCacheCoordinator
         let petDetailCacheKey = CacheKey.petDetails.scoped(forPetId: petId)
-        cacheService.invalidate(forKey: petDetailCacheKey)
+        cacheCoordinator.invalidate(forKey: petDetailCacheKey)
         
         // Fetch fresh pet data from server
         let updatedPet = try await apiService.getPet(id: petId)
@@ -344,10 +361,12 @@ final class CachedPetService {
             return pet
         }
         
-        // Try cache
-        if let _ = currentUserId,
-           let cachedPet = cacheService.retrievePetData(Pet.self, forKey: .petDetails, petId: id) {
-            return cachedPet
+        // Try cache using UnifiedCacheCoordinator
+        if currentUserId != nil {
+            let petCacheKey = CacheKey.petDetails.scoped(forPetId: id)
+            if let cachedPet = cacheCoordinator.get(Pet.self, forKey: petCacheKey) {
+                return cachedPet
+            }
         }
         
         return nil
@@ -362,23 +381,33 @@ final class CachedPetService {
             return pet
         }
         
-        // Try cache
-        if let _ = currentUserId,
-           let cachedPet = cacheService.retrievePetData(Pet.self, forKey: .petDetails, petId: id) {
-            return cachedPet
+        // Try cache using UnifiedCacheCoordinator
+        if currentUserId != nil {
+            let petCacheKey = CacheKey.petDetails.scoped(forPetId: id)
+            if let cachedPet = cacheCoordinator.get(Pet.self, forKey: petCacheKey) {
+                return cachedPet
+            }
         }
         
         // Fallback to server
         do {
             let pet = try await apiService.getPet(id: id)
             
-            // Cache the result
+            // Cache the result using UnifiedCacheCoordinator
             if currentUserId != nil {
-                cacheService.storePetData(pet, forKey: .petDetails, petId: id)
+                let petCacheKey = CacheKey.petDetails.scoped(forPetId: id)
+                cacheCoordinator.set(pet, forKey: petCacheKey)
             }
             
             return pet
         } catch {
+            // Handle 404 - pet deleted
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode) = apiError,
+               statusCode == 404 {
+                let cacheKey = CacheKey.petDetails.scoped(forPetId: id)
+                cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+            }
             print("❌ Failed to fetch pet from server: \(error)")
             return nil
         }
@@ -475,9 +504,9 @@ final class CachedPetService {
         isLoading = false
         isRefreshing = false
         
-        // Clear user-specific cache
+        // Clear user-specific cache using UnifiedCacheCoordinator
         if let userId = currentUserId {
-            cacheService.clearUserCache(userId: userId)
+            cacheCoordinator.clearUserCache(userId: userId)
         }
         
         // Stop refresh timer
@@ -520,16 +549,18 @@ final class CachedPetService {
         }
     }
     
-    /// Update pets cache
+    /// Update pets cache using UnifiedCacheCoordinator
     private func updatePetsCache() async {
         guard let userId = currentUserId else { return }
         
-        // Cache the pets list
-        cacheService.storeUserData(pets, forKey: .pets, userId: userId)
+        // Cache the pets list using UnifiedCacheCoordinator
+        let cacheKey = CacheKey.pets.scoped(forUserId: userId)
+        cacheCoordinator.set(pets, forKey: cacheKey)
         
-        // Cache individual pet details
+        // Cache individual pet details using UnifiedCacheCoordinator
         for pet in pets {
-            cacheService.storePetData(pet, forKey: .petDetails, petId: pet.id)
+            let petCacheKey = CacheKey.petDetails.scoped(forPetId: pet.id)
+            cacheCoordinator.set(pet, forKey: petCacheKey)
         }
     }
     
@@ -537,9 +568,9 @@ final class CachedPetService {
     private func refreshPetsInBackground() {
         guard let userId = currentUserId else { return }
         
-        // Check if cache is stale
+        // Check if cache is stale using UnifiedCacheCoordinator
         let cacheKey = CacheKey.pets.scoped(forUserId: userId)
-        if !cacheService.exists(forKey: cacheKey) {
+        if !cacheCoordinator.exists(forKey: cacheKey) {
             isRefreshing = true
             
             Task {
@@ -612,33 +643,33 @@ final class CachedPetService {
             .store(in: &cancellables)
     }
     
-    /// Invalidate related caches when pets change
+    /// Invalidate related caches when pets change using UnifiedCacheCoordinator
     private func invalidateRelatedCaches() {
         guard currentUserId != nil else { return }
         
         // Invalidate scan-related caches since they depend on pets
-        cacheService.invalidateMatching(pattern: ".*scans.*")
-        cacheService.invalidateMatching(pattern: ".*scan_history.*")
+        cacheCoordinator.invalidateMatching(pattern: ".*scans.*")
+        cacheCoordinator.invalidateMatching(pattern: ".*scan_history.*")
     }
     
-    /// Invalidate pet-specific caches
+    /// Invalidate pet-specific caches using UnifiedCacheCoordinator
     private func invalidatePetSpecificCaches(petId: String) {
         // Invalidate pet details cache
-        cacheService.invalidate(forKey: CacheKey.petDetails.scoped(forPetId: petId))
+        cacheCoordinator.invalidate(forKey: CacheKey.petDetails.scoped(forPetId: petId))
         
         // Invalidate pet-specific scan caches
-        cacheService.invalidateMatching(pattern: ".*scans.*\(petId).*")
+        cacheCoordinator.invalidateMatching(pattern: ".*scans.*\(petId).*")
     }
     
-    /// Invalidate user-related caches
+    /// Invalidate user-related caches using UnifiedCacheCoordinator
     private func invalidateUserCaches() {
         guard let userId = currentUserId else { return }
         
         // Invalidate user profile cache
-        cacheService.invalidate(forKey: CacheKey.userProfile.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.userProfile.scoped(forUserId: userId))
         
         // Invalidate current user cache
-        cacheService.invalidate(forKey: CacheKey.currentUser.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.currentUser.scoped(forUserId: userId))
     }
 }
 
@@ -647,7 +678,17 @@ final class CachedPetService {
 extension CachedPetService {
     /// Get cache statistics for pets
     func getCacheStats() -> [String: Any] {
-        var stats = cacheService.getCacheStats()
+        let cacheStats = cacheCoordinator.cacheStats
+        
+        var stats: [String: Any] = [
+            "memory_entries": cacheStats.memoryEntries,
+            "disk_entries": cacheStats.diskEntries,
+            "memory_size_mb": cacheStats.memorySizeMB,
+            "total_size_mb": cacheStats.totalSizeMB,
+            "hits": cacheStats.hits,
+            "misses": cacheStats.misses,
+            "hit_rate": cacheStats.hitRate
+        ]
         
         // Add pet-specific stats
         stats["pets_count"] = pets.count

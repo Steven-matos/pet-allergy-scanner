@@ -39,9 +39,9 @@ class APIService: ObservableObject, @unchecked Sendable {
     private var isRefreshing = false
     private var refreshTask: Task<Void, Error>?
     
-    /// Use cached URLSession from EnhancedCacheManager for HTTP-level caching
+    /// Use cached URLSession from UnifiedCacheCoordinator for HTTP-level caching
     private var urlSession: URLSession {
-        return EnhancedCacheManager.shared.cachedURLSession
+        return UnifiedCacheCoordinator.shared.cachedURLSession
     }
     
     /// Get authentication token asynchronously
@@ -729,32 +729,75 @@ class APIService: ObservableObject, @unchecked Sendable {
      * - Parameter endpoint: The API endpoint to call
      */
     func delete(endpoint: String) async throws {
-        guard let url = URL(string: "\(baseURL)\(endpoint)") else {
+        // Ensure endpoint starts with / if baseURL doesn't end with /
+        let normalizedEndpoint = endpoint.hasPrefix("/") ? endpoint : "/\(endpoint)"
+        let fullURLString = baseURL.hasSuffix("/") ? "\(baseURL.dropLast())\(normalizedEndpoint)" : "\(baseURL)\(normalizedEndpoint)"
+        
+        guard let url = URL(string: fullURLString) else {
+            print("❌ [APIService] Invalid URL: baseURL=\(baseURL), endpoint=\(endpoint), fullURL=\(fullURLString)")
             throw APIError.invalidURL
         }
         
+        // Log the delete request for debugging
+        print("🗑️ [APIService] DELETE request to: \(baseURL)\(normalizedEndpoint)")
+        print("🗑️ [APIService] Full URL: \(url.absoluteString)")
+        
         let request = await createRequest(url: url, method: "DELETE")
         
+        // Log request details
+        print("🗑️ [APIService] Request method: \(request.httpMethod ?? "unknown")")
+        print("🗑️ [APIService] Request URL: \(request.url?.absoluteString ?? "unknown")")
+        print("🗑️ [APIService] Has Authorization header: \(request.value(forHTTPHeaderField: "Authorization") != nil)")
+        
         do {
-            let (_, response) = try await urlSession.data(for: request)
+            let (data, response) = try await urlSession.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
+                print("🗑️ [APIService] Response status: \(httpResponse.statusCode)")
+                
+                // Log response body for 404 errors to help debug
+                if httpResponse.statusCode == 404 {
+                    if let responseBody = String(data: data, encoding: .utf8) {
+                        print("🗑️ [APIService] 404 Response body: \(responseBody)")
+                    }
+                }
+                
                 switch httpResponse.statusCode {
                 case 200...299:
+                    print("🗑️ [APIService] DELETE successful")
                     return // Success
                 case 401:
+                    print("🗑️ [APIService] DELETE failed: Authentication error")
                     throw APIError.authenticationError
+                case 404:
+                    // Try to parse error message from response
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        print("🗑️ [APIService] DELETE 404 error: \(errorResponse.detail)")
+                        throw APIError.serverMessage("Server error: \(errorResponse.detail)")
+                    } else if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                              let detail = errorDict["detail"] as? String {
+                        print("🗑️ [APIService] DELETE 404 error: \(detail)")
+                        throw APIError.serverMessage("Server error: \(detail)")
+                    } else {
+                        print("🗑️ [APIService] DELETE failed: Not found (404)")
+                        throw APIError.serverMessage("Server error: 404")
+                    }
                 case 400...499:
+                    print("🗑️ [APIService] DELETE failed: Client error \(httpResponse.statusCode)")
                     throw APIError.serverError(httpResponse.statusCode)
                 case 500...599:
+                    print("🗑️ [APIService] DELETE failed: Server error \(httpResponse.statusCode)")
                     throw APIError.serverError(httpResponse.statusCode)
                 default:
+                    print("🗑️ [APIService] DELETE failed: Unknown error")
                     throw APIError.unknownError
                 }
             }
         } catch let error as APIError {
+            print("🗑️ [APIService] DELETE failed with APIError: \(error)")
             throw error
         } catch {
+            print("🗑️ [APIService] DELETE failed with error: \(error.localizedDescription)")
             throw APIError.networkError(error.localizedDescription)
         }
     }
@@ -980,6 +1023,19 @@ class APIService: ObservableObject, @unchecked Sendable {
                 case 429:
                     // Rate limit exceeded
                     throw APIError.rateLimitExceeded
+                case 404:
+                    // Resource deleted - invalidate cache for this endpoint
+                    await handle404Response(request: request)
+                    // Try to decode error response
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        throw APIError.serverMessage(errorResponse.message)
+                    }
+                    // Try to decode as generic error response
+                    if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorMessage = (errorDict["error"] as? String) ?? (errorDict["detail"] as? String) {
+                        throw APIError.serverMessage(errorMessage)
+                    }
+                    throw APIError.serverError(httpResponse.statusCode)
                 case 400...499:
                     // Try to decode error response
                     if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
@@ -1048,6 +1104,76 @@ class APIService: ObservableObject, @unchecked Sendable {
                 throw APIError.networkError(error.localizedDescription)
             }
         }
+    }
+    
+    // MARK: - 404 Cache Invalidation Helpers
+    
+    /**
+     * Handle 404 response by invalidating cache for deleted resource
+     * - Parameter request: The request that returned 404
+     */
+    private func handle404Response(request: URLRequest) async {
+        guard let url = request.url else { return }
+        
+        let cacheCoordinator = UnifiedCacheCoordinator.shared
+        let path = url.path
+        
+        // Extract resource ID and infer cache key from URL pattern
+        if let resourceId = extractResourceId(from: path) {
+            let cacheKey = inferCacheKey(from: path, resourceId: resourceId)
+            await MainActor.run {
+                cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                print("🗑️ [APIService] 404 detected - invalidated cache for key: \(cacheKey)")
+            }
+        }
+    }
+    
+    /**
+     * Extract resource ID from URL path
+     * - Parameter path: URL path (e.g., "/pets/123", "/nutrition/feeding/456")
+     * - Returns: Resource ID if found
+     */
+    private func extractResourceId(from path: String) -> String? {
+        // Common patterns: /pets/{id}, /nutrition/feeding/{id}, /pets/{id}/weight, etc.
+        let components = path.split(separator: "/")
+        
+        // Look for UUID-like strings or numeric IDs
+        for component in components.reversed() {
+            let componentStr = String(component)
+            // Check if it looks like a UUID or ID
+            if componentStr.count >= 8 && (componentStr.contains("-") || componentStr.allSatisfy { $0.isNumber || $0.isLetter }) {
+                return componentStr
+            }
+        }
+        
+        return nil
+    }
+    
+    /**
+     * Infer cache key from URL path and resource ID
+     * - Parameters:
+     *   - path: URL path
+     *   - resourceId: Extracted resource ID
+     * - Returns: Cache key for the resource
+     */
+    private func inferCacheKey(from path: String, resourceId: String) -> String {
+        // Map URL patterns to cache keys
+        if path.contains("/pets/") && !path.contains("/nutrition") && !path.contains("/weight") {
+            return CacheKey.petDetails.scoped(forPetId: resourceId)
+        } else if path.contains("/nutrition/feeding/") || path.contains("/nutrition/feeding/record/") {
+            return CacheKey.feedingRecords.scoped(forPetId: resourceId)
+        } else if path.contains("/nutrition/requirements/") {
+            return CacheKey.nutritionRequirements.scoped(forPetId: resourceId)
+        } else if path.contains("/nutrition/summaries/") {
+            return CacheKey.dailySummaries.scoped(forPetId: resourceId)
+        } else if path.contains("/weight/") || path.contains("/weight-records/") {
+            return CacheKey.weightRecords.scoped(forPetId: resourceId)
+        } else if path.contains("/weight-goals/") {
+            return CacheKey.weightGoals.scoped(forPetId: resourceId)
+        }
+        
+        // Fallback: use path as cache key
+        return path.replacingOccurrences(of: "/", with: "_")
     }
 }
 

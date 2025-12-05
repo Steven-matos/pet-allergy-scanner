@@ -29,13 +29,21 @@ struct ContentView: View {
                 if user.onboarded || hasSkippedOnboarding {
                     MainTabView()
                         .onAppear {
-                            // Load pets when entering main view
-                            petService.loadPets()
+                            // CRITICAL: Load all critical cached data synchronously on app launch
+                            // This ensures no data flashing - data appears instantly if cached
+                            loadCriticalCachedDataSynchronously()
+                            
                             // Initialize notifications
                             notificationManager.initializeNotifications()
-                            // Initialize push notifications
+                            
+                            // Initialize push notifications (non-blocking)
                             Task {
                                 await PushNotificationService.shared.requestPushNotificationPermission()
+                            }
+                            
+                            // Background cache sync to refresh stale data (non-blocking)
+                            Task.detached(priority: .background) {
+                                await CacheServerSyncService.shared.syncOnAppLaunch()
                             }
                         }
                 } else {
@@ -59,7 +67,8 @@ struct ContentView: View {
               
               if newPhase == .active {
                   notificationManager.handleAppBecameActive()
-                  petService.loadPets()
+                  // Load critical cached data synchronously when app becomes active
+                  loadCriticalCachedDataSynchronously()
               }
           }
         .onChange(of: authService.authState) { _, newState in
@@ -82,6 +91,52 @@ struct ContentView: View {
                         CacheHydrationProgressView()
                             .frame(maxWidth: orientationManager.isLandscape ? 400 : 300)
                     }
+            }
+        }
+    }
+    
+    // MARK: - Cache Loading Methods
+    
+    /**
+     * Load all critical cached data synchronously on app launch
+     * This ensures no data flashing - data appears instantly if cached
+     * 
+     * Critical data includes:
+     * - User profile
+     * - Pets (foundation for all other data)
+     * - First pet's weight, nutrition, and trends data (if available)
+     * 
+     * Follows cache-first pattern:
+     * 1. Loads from cache synchronously (immediate UI)
+     * 2. Triggers background refresh for stale data (non-blocking)
+     */
+    private func loadCriticalCachedDataSynchronously() {
+        guard authService.currentUser != nil else { return }
+        
+        // 1. Load pets synchronously from cache (foundation for all other data)
+        petService.loadPets(forceRefresh: false)
+        
+        // 2. Load user profile synchronously from cache
+        Task { @MainActor in
+            _ = try? await CachedProfileService.shared.getCurrentUser()
+            _ = try? await CachedProfileService.shared.getUserProfile()
+        }
+        
+        // 3. If we have pets, load critical data for the first pet synchronously
+        if let firstPet = petService.pets.first {
+            // Load cached data synchronously (checks cache, doesn't block)
+            let weightService = CachedWeightTrackingService.shared
+            let nutritionService = CachedNutritionService.shared
+            let trendsService = CachedNutritionalTrendsService.shared
+            
+            // These calls check cache synchronously and return immediately if cached
+            _ = weightService.hasCachedWeightData(for: firstPet.id)
+            _ = nutritionService.hasCachedNutritionData(for: firstPet.id)
+            _ = trendsService.hasCachedTrendsData(for: firstPet.id)
+            
+            // Trigger background warming for all pets (non-blocking)
+            Task.detached(priority: .background) {
+                await CacheHydrationService.shared.warmCachesInBackground()
             }
         }
     }

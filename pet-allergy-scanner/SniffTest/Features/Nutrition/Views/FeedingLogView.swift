@@ -94,6 +94,15 @@ struct FeedingLogView: View {
                 Text(errorMessage)
             }
         }
+        .onAppear {
+            // Load pets synchronously from cache first (immediate UI rendering)
+            petService.loadPets()
+            
+            // Auto-select pet if needed
+            if selectedPet == nil, !petService.pets.isEmpty {
+                petSelectionService.selectPet(petService.pets.first!)
+            }
+        }
     }
     
     // MARK: - Feeding Log Content

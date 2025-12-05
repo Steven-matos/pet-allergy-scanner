@@ -15,7 +15,9 @@ extension AuthService {
     /// Store the authenticated user in cache and persist the identifier for offline usage.
     /// - Parameter user: The authenticated user to cache.
     func cacheAuthenticatedUser(_ user: User) {
-        CacheService.shared.storeUserData(user, forKey: .currentUser, userId: user.id)
+        let cacheCoordinator = UnifiedCacheCoordinator.shared
+        let userCacheKey = CacheKey.currentUser.scoped(forUserId: user.id)
+        cacheCoordinator.set(user, forKey: userCacheKey)
         
         let userProfile = UserProfile(
             id: user.id,
@@ -29,7 +31,8 @@ extension AuthService {
             createdAt: user.createdAt,
             updatedAt: user.updatedAt
         )
-        CacheService.shared.storeUserData(userProfile, forKey: .userProfile, userId: user.id)
+        let profileCacheKey = CacheKey.userProfile.scoped(forUserId: user.id)
+        cacheCoordinator.set(userProfile, forKey: profileCacheKey)
         persistAuthenticatedUserId(user.id)
         SessionLifecycleManager.shared.recordSessionValidation()
     }
@@ -100,6 +103,8 @@ extension AuthService {
         guard let userId = UserDefaults.standard.string(forKey: Self.lastAuthenticatedUserDefaultsKey) else {
             return nil
         }
-        return CacheService.shared.retrieveUserData(User.self, forKey: .currentUser, userId: userId)
+        let cacheCoordinator = UnifiedCacheCoordinator.shared
+        let cacheKey = CacheKey.currentUser.scoped(forUserId: userId)
+        return cacheCoordinator.get(User.self, forKey: cacheKey)
     }
 }

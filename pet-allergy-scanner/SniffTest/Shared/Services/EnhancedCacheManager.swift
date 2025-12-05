@@ -26,7 +26,10 @@ import UIKit
  * Follows SOLID principles: Single responsibility for cache coordination
  * Implements DRY by reusing existing cache infrastructure
  * Follows KISS by keeping cache policies simple and transparent
+ * 
+ * @deprecated Use UnifiedCacheCoordinator instead. This service is being phased out.
  */
+@available(*, deprecated, message: "Use UnifiedCacheCoordinator.shared instead")
 @MainActor
 @Observable
 final class EnhancedCacheManager {

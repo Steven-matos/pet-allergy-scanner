@@ -33,6 +33,7 @@ class FeedingLogService: ObservableObject {
     
     private let apiService: APIService
     private let cachedNutritionService = CachedNutritionService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -51,10 +52,10 @@ class FeedingLogService: ObservableObject {
         
         do {
             // Use cached nutrition service for better performance
-            let response = try await cachedNutritionService.recordFeeding(feedingRecord)
+            _ = try await cachedNutritionService.recordFeeding(feedingRecord)
             
-            // Add to local cache
-            recentFeedingRecords.insert(response, at: 0)
+            // Refresh local cache with latest data (force refresh to get all records)
+            recentFeedingRecords = try await getFeedingRecords(for: feedingRecord.petId, days: 7, forceRefresh: true)
             
             // Invalidate trends cache so trends update with new feeding data
             let trendsService = CachedNutritionalTrendsService.shared
@@ -72,15 +73,17 @@ class FeedingLogService: ObservableObject {
      * Get feeding records for a pet using cached service
      * - Parameter petId: The pet's ID
      * - Parameter days: Number of days to fetch (default: 30)
+     * - Parameter forceRefresh: If true, bypasses cache and fetches fresh data from server
      */
-    func getFeedingRecords(for petId: String, days: Int = 30) async throws -> [FeedingRecord] {
+    func getFeedingRecords(for petId: String, days: Int = 30, forceRefresh: Bool = false) async throws -> [FeedingRecord] {
         isLoading = true
         error = nil
         
         do {
             // Use cached nutrition service for better performance
-            try await cachedNutritionService.loadFeedingRecords(for: petId, days: days)
-            recentFeedingRecords = cachedNutritionService.feedingRecords
+            try await cachedNutritionService.loadFeedingRecords(for: petId, days: days, forceRefresh: forceRefresh)
+            // Filter to only records for this pet and update local cache
+            recentFeedingRecords = cachedNutritionService.feedingRecords.filter { $0.petId == petId }
             
         } catch {
             self.error = error
@@ -172,24 +175,38 @@ class FeedingLogService: ObservableObject {
         error = nil
         
         do {
-            // Get the record before deleting to get petId for cache invalidation
-            guard let record = recentFeedingRecords.first(where: { $0.id == recordId }) else {
-                throw NSError(domain: "FeedingLogService", code: 404, userInfo: [NSLocalizedDescriptionKey: "Feeding record not found"])
+            // Get petId before deletion for cache invalidation
+            var petId: String? = nil
+            if let record = recentFeedingRecords.first(where: { $0.id == recordId }) {
+                petId = record.petId
             }
             
-            let petId = record.petId
+            // Attempt to delete from server
+            // The server will validate ownership and return appropriate errors
+            try await apiService.delete(endpoint: "/nutrition/feeding/record/\(recordId)")
             
-            try await apiService.delete(endpoint: "/nutrition/feeding/\(recordId)")
-            
-            // Remove from local cache
+            // Remove from local cache if it exists there
             recentFeedingRecords.removeAll { $0.id == recordId }
             
             // Also remove from cached nutrition service
             cachedNutritionService.feedingRecords.removeAll { $0.id == recordId }
             
-            // Invalidate trends cache so trends update after deletion
-            let trendsService = CachedNutritionalTrendsService.shared
-            trendsService.invalidateTrendsCache(for: petId)
+            // Invalidate persistent cache so next load fetches fresh data using UnifiedCacheCoordinator
+            if let petId = petId {
+                let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
+                cacheCoordinator.invalidate(forKey: cacheKey)
+                
+                // Also invalidate daily summaries cache
+                let dailySummariesKey = CacheKey.dailySummaries.scoped(forPetId: petId)
+                cacheCoordinator.invalidate(forKey: dailySummariesKey)
+                
+                // Invalidate trends cache so trends update with deleted feeding data
+                let trendsService = CachedNutritionalTrendsService.shared
+                trendsService.invalidateTrendsCache(for: petId)
+                
+                // Force refresh feeding records to ensure UI updates
+                recentFeedingRecords = try await getFeedingRecords(for: petId, days: 7, forceRefresh: true)
+            }
             
         } catch {
             self.error = error

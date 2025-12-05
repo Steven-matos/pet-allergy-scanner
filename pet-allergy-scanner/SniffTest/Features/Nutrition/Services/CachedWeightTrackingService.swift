@@ -22,59 +22,22 @@ import Combine
 class CachedWeightTrackingService: ObservableObject {
     static let shared = CachedWeightTrackingService()
     
-    // MARK: - Observable Cache Managers
+    // MARK: - Published Properties
     
-    /**
-     * Use ObservableCacheManager for reliable SwiftUI observation
-     * Replaces dictionary-based @Published properties that don't trigger updates reliably
-     */
-    private let weightHistoryCache = ObservableCacheManager<String, [WeightRecord]>(
-        defaultTTL: 3600, // 1 hour
-        maxCacheSize: 50 // Max 50 pets
-    )
-    
-    private let weightGoalsCache = ObservableCacheManager<String, WeightGoal>(
-        defaultTTL: 7200, // 2 hours
-        maxCacheSize: 50
-    )
-    
-    private let currentWeightsCache = ObservableCacheManager<String, Double>(
-        defaultTTL: 3600, // 1 hour
-        maxCacheSize: 50
-    )
-    
-    private let recommendationsCache = ObservableCacheManager<String, [String]>(
-        defaultTTL: 1800, // 30 minutes
-        maxCacheSize: 50
-    )
+    // In-memory caches for SwiftUI observation (synced with UnifiedCacheCoordinator)
+    @Published private var weightHistoryCache: [String: [WeightRecord]] = [:]
+    @Published private var weightGoalsCache: [String: WeightGoal] = [:]
+    @Published private var currentWeightsCache: [String: Double] = [:]
+    @Published private var recommendationsCache: [String: [String]] = [:]
     
     @Published var isLoading = false
     @Published var error: Error?
     
-    // MARK: - Computed Properties for Views
-    
-    /**
-     * Published property that triggers when any cache updates
-     * This ensures SwiftUI views observe changes properly
-     */
-    @Published private var cacheUpdateTrigger = UUID()
-    
-    /**
-     * Get current weights dictionary (for backward compatibility)
-     * This is a computed property that reads from cache
-     */
-    var currentWeights: [String: Double] {
-        var dict: [String: Double] = [:]
-        for key in currentWeightsCache.allKeys() {
-            if let value = currentWeightsCache.get(key) {
-                dict[key] = value
-            }
-        }
-        return dict
-    }
+    // MARK: - Services
     
     private let apiService: APIService
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
+    private let cacheLoader = CacheFirstDataLoader.shared
     private let authService = AuthService.shared
     private let unitService = WeightUnitPreferenceService.shared
     private let petService = CachedPetService.shared
@@ -90,42 +53,38 @@ class CachedWeightTrackingService: ObservableObject {
     
     private init() {
         self.apiService = APIService.shared
-        setupCacheObservers()
+        loadCachedDataOnInit()
         observeAuthChanges()
     }
     
     /**
-     * Setup observers for all cache managers to trigger service updates
+     * Load cached data synchronously on init for immediate UI rendering
      */
-    private func setupCacheObservers() {
-        // Observe all cache changes to trigger SwiftUI updates
-        weightHistoryCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+    private func loadCachedDataOnInit() {
+        guard currentUserId != nil else { return }
         
-        weightGoalsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
+        // Load cached data from UnifiedCacheCoordinator synchronously
+        // This ensures UI has data immediately without flashing
+        let pets = CachedPetService.shared.pets
+        for pet in pets {
+            let historyKey = CacheKey.weightRecords.scoped(forPetId: pet.id)
+            if let cached = cacheCoordinator.get([WeightRecord].self, forKey: historyKey) {
+                weightHistoryCache[pet.id] = cached
             }
-            .store(in: &cancellables)
-        
-        currentWeightsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
+            
+            let goalKey = CacheKey.weightGoals.scoped(forPetId: pet.id)
+            if let cached = cacheCoordinator.get(WeightGoal.self, forKey: goalKey) {
+                weightGoalsCache[pet.id] = cached
             }
-            .store(in: &cancellables)
-        
-        recommendationsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+        }
+    }
+    
+    /**
+     * Get current weights dictionary (for backward compatibility)
+     * This is a computed property that reads from in-memory cache
+     */
+    var currentWeights: [String: Double] {
+        return currentWeightsCache
     }
     
     // MARK: - Authentication Observation
@@ -152,8 +111,19 @@ class CachedWeightTrackingService: ObservableObject {
      * - Returns: True if we have any cached weight data
      */
     func hasCachedWeightData(for petId: String) -> Bool {
-        let hasHistory = !weightHistory(for: petId).isEmpty
-        let hasGoal = activeWeightGoal(for: petId) != nil
+        // Check in-memory cache first
+        let hasHistory = !(weightHistoryCache[petId] ?? []).isEmpty
+        let hasGoal = weightGoalsCache[petId] != nil
+        
+        // Also check UnifiedCacheCoordinator
+        if currentUserId != nil {
+            let historyKey = CacheKey.weightRecords.scoped(forPetId: petId)
+            let goalKey = CacheKey.weightGoals.scoped(forPetId: petId)
+            let hasCachedHistory = cacheCoordinator.exists(forKey: historyKey)
+            let hasCachedGoal = cacheCoordinator.exists(forKey: goalKey)
+            return hasHistory || hasCachedHistory || hasGoal || hasCachedGoal
+        }
+        
         return hasHistory || hasGoal
     }
     
@@ -181,13 +151,12 @@ class CachedWeightTrackingService: ObservableObject {
         )
         
         // Add to local storage FIRST (optimistic UI update)
-        // Use ObservableCacheManager for reliable SwiftUI observation
         await MainActor.run {
-            var currentHistory = self.weightHistoryCache.get(petId) ?? []
+            var currentHistory = self.weightHistoryCache[petId] ?? []
             currentHistory.insert(weightRecord, at: 0)
-            self.weightHistoryCache.set(currentHistory, forKey: petId)
+            self.weightHistoryCache[petId] = currentHistory
             
-            self.currentWeightsCache.set(weightInKg, forKey: petId)
+            self.currentWeightsCache[petId] = weightInKg
             
             // IMMEDIATELY update selected pet's weight if it matches
             // This ensures pet object stays in sync with current weight
@@ -203,7 +172,7 @@ class CachedWeightTrackingService: ObservableObject {
             objectWillChange.send()
         }
         
-        print("✅ [recordWeight] Added to local storage - now have \(weightHistoryCache.get(petId)?.count ?? 0) records")
+        print("✅ [recordWeight] Added to local storage - now have \(weightHistoryCache[petId]?.count ?? 0) records")
         print("✅ [recordWeight] Updated currentWeights[\(petId)] = \(weightInKg) kg")
         print("🔔 [recordWeight] Sent objectWillChange notification")
         
@@ -216,11 +185,12 @@ class CachedWeightTrackingService: ObservableObject {
             throw error
         }
         
-        // Invalidate weight history cache to force fresh fetch next time
+        // Update cache using UnifiedCacheCoordinator
         if currentUserId != nil {
             let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
-            cacheService.invalidate(forKey: cacheKey)
-            print("💾 [recordWeight] Invalidated cache")
+            let history = weightHistoryCache[petId] ?? []
+            cacheCoordinator.set(history, forKey: cacheKey)
+            print("💾 [recordWeight] Updated cache")
         }
         
         // Update pet's current weight in PetService
@@ -269,9 +239,9 @@ class CachedWeightTrackingService: ObservableObject {
         
         // Get current weight from pet or weight history - this will be the starting weight for the goal
         let currentWeightKg: Double?
-        if let currentWeight = currentWeightsCache.get(petId) {
+        if let currentWeight = currentWeightsCache[petId] {
             currentWeightKg = currentWeight
-        } else if let latestRecord = weightHistoryCache.get(petId)?.first {
+        } else if let latestRecord = weightHistoryCache[petId]?.first {
             currentWeightKg = latestRecord.weightKg
         } else if let pet = petService.pets.first(where: { $0.id == petId }) {
             // Get weight from pet's profile as fallback
@@ -283,7 +253,7 @@ class CachedWeightTrackingService: ObservableObject {
         }
         
         // Check if pet already has a goal
-        let existingGoal = weightGoalsCache.get(petId)
+        let existingGoal = weightGoalsCache[petId]
         let isUpdating = existingGoal != nil
         
         print("🎯 \(isUpdating ? "Updating" : "Creating") weight goal - Starting weight: \(currentWeightKg ?? 0), Target: \(targetWeightInKg), Goal type: \(goalType)")
@@ -301,8 +271,11 @@ class CachedWeightTrackingService: ObservableObject {
             updatedAt: Date()
         )
         
-            // Update local storage using cache
-            weightGoalsCache.set(weightGoal, forKey: petId)
+            // Update local storage
+            await MainActor.run {
+                self.weightGoalsCache[petId] = weightGoal
+                self.objectWillChange.send()
+            }
             print("✅ \(isUpdating ? "Updated" : "Created") weight goal locally: \(weightGoal.id)")
         
         // Send to backend
@@ -325,24 +298,27 @@ class CachedWeightTrackingService: ObservableObject {
             )
             
             // Update local storage with backend response
-            weightGoalsCache.set(backendGoal, forKey: petId)
+            await MainActor.run {
+                self.weightGoalsCache[petId] = backendGoal
+                self.objectWillChange.send()
+            }
             print("✅ Successfully saved weight goal to backend: \(backendGoal.id)")
             print("   Target weight: \(backendGoal.targetWeightKg ?? 0) kg, Active: \(backendGoal.isActive)")
             
-            // Cache the weight goal with backend data
+            // Cache the weight goal with backend data using UnifiedCacheCoordinator
             if currentUserId != nil {
                 let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                cacheService.store(backendGoal, forKey: cacheKey)
+                cacheCoordinator.set(backendGoal, forKey: cacheKey)
             }
         } catch {
             print("❌ Failed to save weight goal to backend: \(error.localizedDescription)")
             // Don't throw error - keep the goal locally even if backend fails
             print("⚠️ Keeping goal locally despite backend failure")
             
-            // Still cache the local goal even if backend fails
+            // Still cache the local goal even if backend fails using UnifiedCacheCoordinator
             if currentUserId != nil {
                 let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                cacheService.store(weightGoal, forKey: cacheKey)
+                cacheCoordinator.set(weightGoal, forKey: cacheKey)
             }
         }
     }
@@ -372,12 +348,12 @@ class CachedWeightTrackingService: ObservableObject {
         // This ensures we get the latest data including goals from database
         if !forceRefresh {
             // Only check in-memory data if NOT forcing refresh
-            let hasInMemoryHistory = !(weightHistoryCache.get(petId)?.isEmpty ?? true)
-            let hasInMemoryGoal = weightGoalsCache.get(petId) != nil
+            let hasInMemoryHistory = !(weightHistoryCache[petId]?.isEmpty ?? true)
+            let hasInMemoryGoal = weightGoalsCache[petId] != nil
             let hasInMemoryData = hasInMemoryHistory || hasInMemoryGoal
             
             print("📊 [loadWeightData] In-memory data check:")
-            print("   - History count: \(weightHistoryCache.get(petId)?.count ?? 0)")
+            print("   - History count: \(weightHistoryCache[petId]?.count ?? 0)")
             print("   - Has goal: \(hasInMemoryGoal)")
             print("   - Has in-memory data: \(hasInMemoryData)")
             
@@ -413,13 +389,14 @@ class CachedWeightTrackingService: ObservableObject {
         if currentUserId != nil && !forceRefresh {
             print("👤 [loadWeightData] Current user ID exists, checking cache...")
             
-            // Try weight history cache
+            // Try weight history cache using UnifiedCacheCoordinator (synchronous)
             let historyCacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
-            if let cachedHistory = cacheService.retrieve([WeightRecord].self, forKey: historyCacheKey) {
+            if let cachedHistory = cacheCoordinator.get([WeightRecord].self, forKey: historyCacheKey) {
                 print("💾 [loadWeightData] Found cached history: \(cachedHistory.count) records")
                 if !cachedHistory.isEmpty {
                     await MainActor.run {
-                        self.weightHistoryCache.set(cachedHistory, forKey: petId)
+                        self.weightHistoryCache[petId] = cachedHistory
+                        self.objectWillChange.send()
                     }
                     hasCachedData = true
                     print("✅ [loadWeightData] Loaded from cache (non-empty)")
@@ -430,12 +407,13 @@ class CachedWeightTrackingService: ObservableObject {
                 print("❌ [loadWeightData] No cached history found")
             }
             
-            // Try weight goal cache
+            // Try weight goal cache using UnifiedCacheCoordinator (synchronous)
             let goalCacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-            if let cachedGoal = cacheService.retrieve(WeightGoal.self, forKey: goalCacheKey) {
+            if let cachedGoal = cacheCoordinator.get(WeightGoal.self, forKey: goalCacheKey) {
                 print("💾 [loadWeightData] Found cached goal")
                 await MainActor.run {
-                    self.weightGoalsCache.set(cachedGoal, forKey: petId)
+                    self.weightGoalsCache[petId] = cachedGoal
+                    self.objectWillChange.send()
                 }
                 hasCachedData = true
             } else {
@@ -447,9 +425,10 @@ class CachedWeightTrackingService: ObservableObject {
                 print("✅ [loadWeightData] Using cached data")
                 
                 // Update current weight from cached history
-                if let latestRecord = weightHistoryCache.get(petId)?.first {
+                if let latestRecord = weightHistoryCache[petId]?.first {
                     await MainActor.run {
-                        self.currentWeightsCache.set(latestRecord.weightKg, forKey: petId)
+                        self.currentWeightsCache[petId] = latestRecord.weightKg
+                        self.objectWillChange.send()
                     }
                     print("📊 [loadWeightData] Updated current weight: \(latestRecord.weightKg)kg")
                 }
@@ -524,11 +503,11 @@ class CachedWeightTrackingService: ObservableObject {
         do {
             let history = try await historyTask
             
-            // IMPORTANT: Store in ObservableCacheManager so UI updates
+            // Store in in-memory cache and UnifiedCacheCoordinator
             await MainActor.run {
-                self.weightHistoryCache.set(history, forKey: petId)
+                self.weightHistoryCache[petId] = history
+                self.objectWillChange.send()
                 print("✅ [CachedWeightTrackingService] Stored \(history.count) records in weightHistoryCache")
-                print("   Cache now has keys: \(self.weightHistoryCache.allKeys())")
             }
             
             // Log each record for debugging
@@ -536,10 +515,10 @@ class CachedWeightTrackingService: ObservableObject {
                 print("   Record \(index + 1): \(record.weightKg)kg at \(record.recordedAt)")
             }
             
-            // Cache weight history
+            // Cache weight history using UnifiedCacheCoordinator
             if currentUserId != nil {
                 let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
-                cacheService.store(history, forKey: cacheKey)
+                cacheCoordinator.set(history, forKey: cacheKey)
                 print("💾 [CachedWeightTrackingService] Cached \(history.count) records")
             } else {
                 print("⚠️ [CachedWeightTrackingService] No user ID, skipping cache")
@@ -550,14 +529,15 @@ class CachedWeightTrackingService: ObservableObject {
                 print("⚠️ [CachedWeightTrackingService] Weight history task was cancelled")
             }
             await MainActor.run {
-                self.weightHistoryCache.set([], forKey: petId)
+                self.weightHistoryCache[petId] = []
+                self.objectWillChange.send()
             }
             
-            // Cache empty history to prevent future API calls
+            // Cache empty history to prevent future API calls using UnifiedCacheCoordinator
             if currentUserId != nil {
                 let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
                 let emptyHistory: [WeightRecord] = []
-                cacheService.store(emptyHistory, forKey: cacheKey)
+                cacheCoordinator.set(emptyHistory, forKey: cacheKey)
                 print("💾 [CachedWeightTrackingService] Cached empty array to prevent retries")
             }
         }
@@ -570,27 +550,29 @@ class CachedWeightTrackingService: ObservableObject {
             // This ensures existing goals in database are loaded
             await MainActor.run {
                 if let goal = goal {
-                    self.weightGoalsCache.set(goal, forKey: petId)
+                    self.weightGoalsCache[petId] = goal
+                    self.objectWillChange.send()
                     print("✅ [loadWeightData] Updated goal from backend: \(goal.id)")
                     print("   Target weight: \(goal.targetWeightKg ?? 0) kg, Active: \(goal.isActive)")
                 } else {
-                    self.weightGoalsCache.remove(petId)
+                    self.weightGoalsCache.removeValue(forKey: petId)
+                    self.objectWillChange.send()
                     print("⚠️ [loadWeightData] Backend returned nil goal - no goal set for pet")
                 }
             }
             
             if let goal = goal {
-                // Cache weight goal
+                // Cache weight goal using UnifiedCacheCoordinator
                 if currentUserId != nil {
                     let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                    cacheService.store(goal, forKey: cacheKey)
+                    cacheCoordinator.set(goal, forKey: cacheKey)
                     print("💾 [loadWeightData] Cached weight goal")
                 }
             } else {
-                // Clear goal cache if backend has no goal
+                // Clear goal cache if backend has no goal using UnifiedCacheCoordinator
                 if currentUserId != nil {
                     let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
-                    cacheService.invalidate(forKey: cacheKey)
+                    cacheCoordinator.invalidate(forKey: cacheKey)
                     print("💾 [loadWeightData] Cleared goal cache")
                 }
             }
@@ -605,8 +587,8 @@ class CachedWeightTrackingService: ObservableObject {
         }
         
         // Update current weight
-        if let latestRecord = weightHistoryCache.get(petId)?.first {
-            currentWeightsCache.set(latestRecord.weightKg, forKey: petId)
+        if let latestRecord = weightHistoryCache[petId]?.first {
+            currentWeightsCache[petId] = latestRecord.weightKg
         }
         
         // Generate recommendations
@@ -621,10 +603,21 @@ class CachedWeightTrackingService: ObservableObject {
      * - Returns: Array of weight records
      */
     func weightHistory(for petId: String) -> [WeightRecord] {
-        let records = weightHistoryCache.get(petId) ?? []
-        // Only log when cache is accessed (not on every view update)
-        // Removed verbose logging to prevent console spam during view rendering
-        return records
+        // First check in-memory cache
+        if let cached = weightHistoryCache[petId] {
+            return cached
+        }
+        
+        // Try UnifiedCacheCoordinator (synchronous)
+        if currentUserId != nil {
+            let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
+            if let cached = cacheCoordinator.get([WeightRecord].self, forKey: cacheKey) {
+                weightHistoryCache[petId] = cached
+                return cached
+            }
+        }
+        
+        return []
     }
     
     /**
@@ -633,7 +626,7 @@ class CachedWeightTrackingService: ObservableObject {
      * - Returns: Current weight or nil if not available
      */
     func currentWeight(for petId: String) -> Double? {
-        return currentWeightsCache.get(petId)
+        return currentWeightsCache[petId]
     }
     
     /**
@@ -642,7 +635,21 @@ class CachedWeightTrackingService: ObservableObject {
      * - Returns: Active weight goal or nil if not set
      */
     func activeWeightGoal(for petId: String) -> WeightGoal? {
-        return weightGoalsCache.get(petId)
+        // First check in-memory cache
+        if let cached = weightGoalsCache[petId] {
+            return cached
+        }
+        
+        // Try UnifiedCacheCoordinator (synchronous)
+        if currentUserId != nil {
+            let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
+            if let cached = cacheCoordinator.get(WeightGoal.self, forKey: cacheKey) {
+                weightGoalsCache[petId] = cached
+                return cached
+            }
+        }
+        
+        return nil
     }
     
     /**
@@ -651,7 +658,7 @@ class CachedWeightTrackingService: ObservableObject {
      * - Returns: Array of recommendation strings
      */
     func recommendations(for petId: String) -> [String] {
-        return recommendationsCache.get(petId) ?? []
+        return recommendationsCache[petId] ?? []
     }
     
     /**
@@ -743,24 +750,27 @@ class CachedWeightTrackingService: ObservableObject {
         let historyCacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
         
         // If cache doesn't exist or is stale, refresh
-        if !cacheService.exists(forKey: historyCacheKey) {
+        if !cacheCoordinator.exists(forKey: historyCacheKey) {
             do {
                 // Load weight history silently
                 let history = try await apiService.getWeightHistory(petId: petId)
                 
                 // Update if different from current
-                let currentHistory = weightHistoryCache.get(petId) ?? []
+                let currentHistory = weightHistoryCache[petId] ?? []
                 if history != currentHistory {
                     await MainActor.run {
-                        self.weightHistoryCache.set(history, forKey: petId)
+                        self.weightHistoryCache[petId] = history
+                        self.objectWillChange.send()
                         
                         // Update current weight
                         if let latestRecord = history.first {
-                            self.currentWeightsCache.set(latestRecord.weightKg, forKey: petId)
+                            self.currentWeightsCache[petId] = latestRecord.weightKg
                         }
                         
-                        // Cache the updated data
-                        cacheService.store(history, forKey: historyCacheKey)
+                        // Cache the updated data using UnifiedCacheCoordinator
+                        if self.currentUserId != nil {
+                            self.cacheCoordinator.set(history, forKey: historyCacheKey)
+                        }
                     }
                     
                     // Regenerate recommendations with new data
@@ -787,20 +797,20 @@ class CachedWeightTrackingService: ObservableObject {
         
         // STEP 1: Update local currentWeights IMMEDIATELY for instant UI feedback
         await MainActor.run {
-            self.currentWeightsCache.set(weightKg, forKey: petId)
+            self.currentWeightsCache[petId] = weightKg
             print("✅ [updatePetWeight] Updated local currentWeights to \(weightKg) kg")
             objectWillChange.send()
         }
         
-        // STEP 2: Invalidate ALL pet-related caches to force fresh data
+        // STEP 2: Invalidate ALL pet-related caches to force fresh data using UnifiedCacheCoordinator
         if let userId = currentUserId {
             // Invalidate pets list cache
             let petsCacheKey = CacheKey.pets.scoped(forUserId: userId)
-            cacheService.invalidate(forKey: petsCacheKey)
+            cacheCoordinator.invalidate(forKey: petsCacheKey)
             
             // Invalidate individual pet detail cache
             let petDetailCacheKey = CacheKey.petDetails.scoped(forPetId: petId)
-            cacheService.invalidate(forKey: petDetailCacheKey)
+            cacheCoordinator.invalidate(forKey: petDetailCacheKey)
             
             print("🗑️ [updatePetWeight] Invalidated all pet caches")
         }
@@ -916,7 +926,8 @@ class CachedWeightTrackingService: ObservableObject {
             newRecommendations.append("Set a weight goal to track progress and get personalized recommendations.")
         }
         
-        recommendationsCache.set(newRecommendations, forKey: petId)
+        recommendationsCache[petId] = newRecommendations
+        objectWillChange.send()
     }
     
     // MARK: - Data Management
@@ -925,10 +936,11 @@ class CachedWeightTrackingService: ObservableObject {
      * Clear all cached data
      */
     func clearCache() {
-        weightHistoryCache.clear()
-        weightGoalsCache.clear()
-        currentWeightsCache.clear()
-        recommendationsCache.clear()
+        weightHistoryCache.removeAll()
+        weightGoalsCache.removeAll()
+        currentWeightsCache.removeAll()
+        recommendationsCache.removeAll()
+        objectWillChange.send()
     }
     
     /**
@@ -942,22 +954,23 @@ class CachedWeightTrackingService: ObservableObject {
     func refreshWeightData(petId: String) async throws {
         print("🔄 [refreshWeightData] Force refreshing data for petId: \(petId)")
         
-        // Invalidate caches first
+        // Invalidate caches first using UnifiedCacheCoordinator
         if currentUserId != nil {
             let cacheKeys = [
                 CacheKey.weightRecords.scoped(forPetId: petId),
                 CacheKey.weightGoals.scoped(forPetId: petId)
             ]
-            cacheKeys.forEach { cacheService.invalidate(forKey: $0) }
+            cacheKeys.forEach { cacheCoordinator.invalidate(forKey: $0) }
             print("💾 [refreshWeightData] Invalidated caches")
         }
         
         // Clear in-memory data to force fresh fetch
         await MainActor.run {
-            weightHistoryCache.remove(petId)
-            weightGoalsCache.remove(petId)
-            currentWeightsCache.remove(petId)
-            recommendationsCache.remove(petId)
+            weightHistoryCache.removeValue(forKey: petId)
+            weightGoalsCache.removeValue(forKey: petId)
+            currentWeightsCache.removeValue(forKey: petId)
+            recommendationsCache.removeValue(forKey: petId)
+            objectWillChange.send()
             print("🗑️ [refreshWeightData] Cleared in-memory data")
         }
         

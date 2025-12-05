@@ -22,7 +22,7 @@ class CachedAuthService: ObservableObject {
     @Published var isRefreshing = false
     
     private let apiService = APIService.shared
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     
     /// Cache refresh timer for background updates
@@ -100,9 +100,9 @@ class CachedAuthService: ObservableObject {
     
     /// Logout current user with cache cleanup
     func logout() async {
-        // Clear all caches
+        // Clear all caches using UnifiedCacheCoordinator
         if let userId = currentUser?.id {
-            cacheService.clearUserCache(userId: userId)
+            cacheCoordinator.clearUserCache(userId: userId)
         }
         
         // Clear auth token
@@ -318,10 +318,11 @@ class CachedAuthService: ObservableObject {
         }
     }
     
-    /// Update user cache
+    /// Update user cache using UnifiedCacheCoordinator
     private func updateUserCache(_ user: User) async {
         // Cache current user
-        cacheService.storeUserData(user, forKey: .currentUser, userId: user.id)
+        let userCacheKey = CacheKey.currentUser.scoped(forUserId: user.id)
+        cacheCoordinator.set(user, forKey: userCacheKey)
         
         // Cache user profile (subset of user data)
         let userProfile = UserProfile(
@@ -336,7 +337,8 @@ class CachedAuthService: ObservableObject {
             createdAt: user.createdAt,
             updatedAt: user.updatedAt
         )
-        cacheService.storeUserData(userProfile, forKey: .userProfile, userId: user.id)
+        let profileCacheKey = CacheKey.userProfile.scoped(forUserId: user.id)
+        cacheCoordinator.set(userProfile, forKey: profileCacheKey)
     }
     
     /// Check if user has pets and auto-complete onboarding if needed
@@ -441,7 +443,14 @@ struct UserProfile: Codable {
 extension CachedAuthService {
     /// Get cache statistics for authentication
     func getCacheStats() -> [String: Any] {
-        var stats = cacheService.getCacheStats()
+        var stats: [String: Any] = [:]
+        
+        // Get cache stats from UnifiedCacheCoordinator
+        let cacheStats = cacheCoordinator.cacheStats
+        stats["hits"] = cacheStats.hits
+        stats["misses"] = cacheStats.misses
+        stats["stores"] = cacheStats.stores
+        stats["invalidations"] = cacheStats.invalidations
         
         // Add auth-specific stats
         stats["is_authenticated"] = isAuthenticated

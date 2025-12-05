@@ -20,7 +20,7 @@ class CacheAnalyticsService: ObservableObject {
     @Published var isEnabled = true
     @Published var analyticsData: CacheAnalyticsData = CacheAnalyticsData()
     
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let cacheManager = CacheManager.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -189,12 +189,8 @@ class CacheAnalyticsService: ObservableObject {
     
     /// Setup observers for cache events
     private func setupObservers() {
-        // Observe cache service changes
-        cacheService.objectWillChange
-            .sink { [weak self] _ in
-                self?.updateAnalyticsData()
-            }
-            .store(in: &cancellables)
+        // UnifiedCacheCoordinator is @Observable, not ObservableObject
+        // Cache stats are updated automatically, no need for observation
         
         // Observe cache manager changes
         cacheManager.objectWillChange

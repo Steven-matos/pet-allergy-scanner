@@ -117,7 +117,7 @@ struct AdvancedNutritionView: View {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Menu {
                             Button("Refresh Data") {
-                                loadNutritionData()
+                                loadNutritionData(forceRefresh: true)
                             }
                             .disabled(selectedPet == nil || isLoading)
                             
@@ -141,8 +141,8 @@ struct AdvancedNutritionView: View {
             if let pet = selectedPet {
                 WeightEntryView(pet: pet, lastRecordedWeightId: .constant(nil))
                     .onDisappear {
-                        // Refresh nutrition data when the weight entry sheet is dismissed
-                        loadNutritionData()
+                        // Refresh nutrition data when the weight entry sheet is dismissed (force refresh to get latest data)
+                        loadNutritionData(forceRefresh: true)
                     }
             }
         }
@@ -150,8 +150,8 @@ struct AdvancedNutritionView: View {
             if let pet = selectedPet {
                 WeightGoalSettingView(pet: pet, existingGoal: nil)
                     .onDisappear {
-                        // Refresh nutrition data when the goal setting sheet is dismissed
-                        loadNutritionData()
+                        // Refresh nutrition data when the goal setting sheet is dismissed (force refresh to get latest data)
+                        loadNutritionData(forceRefresh: true)
                     }
             }
         }
@@ -171,6 +171,13 @@ struct AdvancedNutritionView: View {
             )
         }
         .onAppear {
+            // Load pets synchronously from cache first (immediate UI rendering)
+            petService.loadPets()
+            
+            // Auto-select pet if needed
+            autoSelectSinglePet()
+            
+            // Load nutrition data with cache-first pattern
             loadNutritionDataIfNeeded()
         }
         .onDisappear {
@@ -208,7 +215,8 @@ struct AdvancedNutritionView: View {
                     ForEach(petService.pets) { pet in
                         AdvancedNutritionPetSelectionCard(pet: pet) {
                             petSelectionService.selectPet(pet)
-                            loadNutritionData()
+                            // Load nutrition data with cache-first pattern when pet is selected
+                            loadNutritionDataIfNeeded()
                         }
                     }
                 }
@@ -366,34 +374,28 @@ struct AdvancedNutritionView: View {
     // MARK: - Helper Methods
     
     /**
-     * Load nutrition data only if needed (cache-first approach)
-     * Checks for cached data before making server calls
+     * Load nutrition data with cache-first pattern
+     * Checks cache synchronously first to avoid flashing
+     * Only shows loading spinner if no cache exists
      */
     private func loadNutritionDataIfNeeded() {
-        // First, load pets and check for auto-selection
-        Task {
-            petService.loadPets()
-            
-            await MainActor.run {
-                // Auto-select pet if user has only one pet
-                autoSelectSinglePet()
-            }
-        }
-        
         // If no pet is selected, don't proceed with nutrition data loading
-        guard let pet = selectedPet else { return }
+        guard let pet = selectedPet ?? petService.pets.first else { return }
         
-        // Check if we have cached data for this pet
+        // Check cache synchronously first (immediate UI rendering)
         let hasCachedNutritionData = cachedNutritionService.hasCachedNutritionData(for: pet.id)
         let hasCachedWeightData = cachedWeightService.hasCachedWeightData(for: pet.id)
         
         if hasCachedNutritionData && hasCachedWeightData {
-            // We have cached data, no need to make server calls
+            // We have cached data - refresh in background silently (no loading spinner)
             print("✅ Using cached nutrition data for pet: \(pet.name)")
-            return
+            Task {
+                await refreshNutritionDataInBackground(for: pet.id)
+            }
         } else {
-            // Missing some cached data, load from server
+            // Missing some cached data - show loading and load from server
             print("⚠️ Missing cached data, loading from server for pet: \(pet.name)")
+            isLoading = true
             loadNutritionData()
         }
     }
@@ -401,51 +403,94 @@ struct AdvancedNutritionView: View {
     /**
      * Load nutrition data using cache-first approach for optimal performance
      * Only makes API calls when cache is empty or data is stale
+     * Force refresh when explicitly called (e.g., after adding/deleting records)
      */
-    private func loadNutritionData() {
-        // First, load pets and check for auto-selection
-        Task {
-            petService.loadPets()
+    private func loadNutritionData(forceRefresh: Bool = false) {
+        // If no pet is selected, don't proceed with nutrition data loading
+        guard let pet = selectedPet ?? petService.pets.first else { return }
+        
+        // Check cache synchronously first to avoid flashing (unless force refresh)
+        if !forceRefresh {
+            let hasCachedNutrition = cachedNutritionService.hasCachedNutritionData(for: pet.id)
+            let hasCachedWeight = cachedWeightService.hasCachedWeightData(for: pet.id)
             
-            await MainActor.run {
-                // Auto-select pet if user has only one pet
-                autoSelectSinglePet()
+            // Only show loading if we don't have cached data
+            if !hasCachedNutrition || !hasCachedWeight {
+                isLoading = true
+            } else {
+                // Cache exists - refresh in background silently
+                Task {
+                    await refreshNutritionDataInBackground(for: pet.id)
+                }
+                return
             }
+        } else {
+            // Force refresh - show loading
+            isLoading = true
         }
         
-        // If no pet is selected, don't proceed with nutrition data loading
-        guard let pet = selectedPet else { return }
-        
-        isLoading = true
         errorMessage = nil
         
         Task {
             do {
-                // Use cached services to load data efficiently
+                // Use cached services to load data efficiently (cache-first)
                 // These services will check cache first before making API calls
                 
-                // Load nutritional requirements (cached)
+                // Load nutritional requirements (cache-first)
+                // Note: getNutritionalRequirements doesn't support forceRefresh, it always checks cache first
                 _ = try await cachedNutritionService.getNutritionalRequirements(for: pet.id)
                 
-                // Load weight data (cached)
-                try await cachedWeightService.loadWeightData(for: pet.id)
+                // Load weight data (cache-first)
+                try await cachedWeightService.loadWeightData(for: pet.id, forceRefresh: forceRefresh)
                 
-                // Load feeding records (cached)
-                try await cachedNutritionService.loadFeedingRecords(for: pet.id)
+                // Load feeding records (cache-first)
+                try await cachedNutritionService.loadFeedingRecords(for: pet.id, forceRefresh: forceRefresh)
                 
-                // Load daily summaries (cached)
-                try await cachedNutritionService.loadDailySummaries(for: pet.id)
+                // Load daily summaries (cache-first)
+                try await cachedNutritionService.loadDailySummaries(for: pet.id, forceRefresh: forceRefresh)
                 
                 await MainActor.run {
                     isLoading = false
                 }
                 
             } catch {
+                // Handle 404 errors gracefully
+                if let apiError = error as? APIError,
+                   case .serverError(let statusCode) = apiError,
+                   statusCode == 404 {
+                    // Resource deleted - cache already invalidated by service
+                    print("⚠️ Resource deleted (404) - cache invalidated")
+                }
+                
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isLoading = false
                 }
                 print("❌ Failed to load nutrition data: \(error)")
+            }
+        }
+    }
+    
+    /**
+     * Refresh nutrition data in background (silent refresh)
+     * Used when cache exists to update data without showing loading spinner
+     */
+    private func refreshNutritionDataInBackground(for petId: String) async {
+        do {
+            // Load data in background without showing loading state
+            // Note: getNutritionalRequirements doesn't support forceRefresh, it always checks cache first
+            _ = try await cachedNutritionService.getNutritionalRequirements(for: petId)
+            try await cachedWeightService.loadWeightData(for: petId, forceRefresh: false)
+            try await cachedNutritionService.loadFeedingRecords(for: petId, days: 30, forceRefresh: false)
+            try await cachedNutritionService.loadDailySummaries(for: petId, days: 30, forceRefresh: false)
+        } catch {
+            // Silent failure for background refresh
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode) = apiError,
+               statusCode == 404 {
+                print("⚠️ Background refresh: Resource deleted (404) - cache invalidated")
+            } else {
+                print("⚠️ Background refresh of nutrition data failed: \(error.localizedDescription)")
             }
         }
     }

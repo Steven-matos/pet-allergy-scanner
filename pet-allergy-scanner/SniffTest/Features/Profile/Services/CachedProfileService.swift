@@ -30,7 +30,7 @@ class CachedProfileService: ObservableObject {
     // MARK: - Private Properties
     
     private let apiService = APIService.shared
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     private var currentUserId: String? { authService.currentUser?.id }
     private var cancellables = Set<AnyCancellable>()
@@ -55,10 +55,10 @@ class CachedProfileService: ObservableObject {
      * - Returns: Current user from cache or server
      */
     func getCurrentUser(forceRefresh: Bool = false) async throws -> User {
-        // Try cache first
+        // Try cache first (synchronous for immediate UI)
         if !forceRefresh, let userId = currentUserId {
             let cacheKey = CacheKey.currentUser.scoped(forUserId: userId)
-            if let cached = cacheService.retrieve(User.self, forKey: cacheKey) {
+            if let cached = cacheCoordinator.get(User.self, forKey: cacheKey) {
                 currentUser = cached
                 return cached
             }
@@ -67,10 +67,10 @@ class CachedProfileService: ObservableObject {
         // Fallback to server
         let user = try await apiService.getCurrentUser()
         
-        // Cache the result
+        // Cache the result using UnifiedCacheCoordinator
         let userId = user.id
         let cacheKey = CacheKey.currentUser.scoped(forUserId: userId)
-        cacheService.store(user, forKey: cacheKey)
+        cacheCoordinator.set(user, forKey: cacheKey)
         
         currentUser = user
         return user
@@ -81,10 +81,10 @@ class CachedProfileService: ObservableObject {
      * - Returns: User profile from cache or server
      */
     func getUserProfile(forceRefresh: Bool = false) async throws -> UserProfile {
-        // Try cache first
+        // Try cache first (synchronous for immediate UI)
         if !forceRefresh, let userId = currentUserId {
             let cacheKey = CacheKey.userProfile.scoped(forUserId: userId)
-            if let cached = cacheService.retrieve(UserProfile.self, forKey: cacheKey) {
+            if let cached = cacheCoordinator.get(UserProfile.self, forKey: cacheKey) {
                 userProfile = cached
                 return cached
             }
@@ -105,10 +105,10 @@ class CachedProfileService: ObservableObject {
             updatedAt: user.updatedAt
         )
         
-        // Cache the result
+        // Cache the result using UnifiedCacheCoordinator
         let userId = user.id
         let cacheKey = CacheKey.userProfile.scoped(forUserId: userId)
-        cacheService.store(profile, forKey: cacheKey)
+        cacheCoordinator.set(profile, forKey: cacheKey)
         
         userProfile = profile
         return profile
@@ -126,10 +126,10 @@ class CachedProfileService: ObservableObject {
         do {
             let updatedUser = try await apiService.updateUser(userUpdate)
             
-            // Update cache
+            // Update cache using UnifiedCacheCoordinator
             let userId = updatedUser.id
             let userCacheKey = CacheKey.currentUser.scoped(forUserId: userId)
-            cacheService.store(updatedUser, forKey: userCacheKey)
+            cacheCoordinator.set(updatedUser, forKey: userCacheKey)
             
             // Update profile cache
             let profile = UserProfile(
@@ -145,7 +145,7 @@ class CachedProfileService: ObservableObject {
                 updatedAt: updatedUser.updatedAt
             )
             let profileCacheKey = CacheKey.userProfile.scoped(forUserId: userId)
-            cacheService.store(profile, forKey: profileCacheKey)
+            cacheCoordinator.set(profile, forKey: profileCacheKey)
             
             currentUser = updatedUser
             userProfile = UserProfile(
@@ -199,11 +199,11 @@ class CachedProfileService: ObservableObject {
                     )
                     userProfile = profile
                     
-                    // Cache the updated data
+                    // Cache the updated data using UnifiedCacheCoordinator
                     let userCacheKey = CacheKey.currentUser.scoped(forUserId: userId)
                     let profileCacheKey = CacheKey.userProfile.scoped(forUserId: userId)
-                    cacheService.store(user, forKey: userCacheKey)
-                    cacheService.store(profile, forKey: profileCacheKey)
+                    cacheCoordinator.set(user, forKey: userCacheKey)
+                    cacheCoordinator.set(profile, forKey: profileCacheKey)
                 }
             }
         } catch {

@@ -38,7 +38,7 @@ class CachedFoodComparisonService: ObservableObject {
     // MARK: - Private Properties
     
     private let apiService: APIService
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -145,10 +145,10 @@ class CachedFoodComparisonService: ObservableObject {
             throw ComparisonError.notImplemented
         }
         
-        // Try cache first unless force refresh is requested
+        // Try cache first unless force refresh is requested (synchronous for immediate UI)
         if !forceRefresh {
             let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
-            if let cachedComparison = cacheService.retrieve(FoodComparisonResults.self, forKey: cacheKey) {
+            if let cachedComparison = cacheCoordinator.get(FoodComparisonResults.self, forKey: cacheKey) {
                 currentComparison = cachedComparison
                 return cachedComparison
             }
@@ -248,9 +248,9 @@ class CachedFoodComparisonService: ObservableObject {
                 petName: nil
             )
             
-            // Cache the comparison
+            // Cache the comparison using UnifiedCacheCoordinator
             let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
-            cacheService.store(results, forKey: cacheKey, policy: .timeBased(600)) // 10 minutes cache
+            cacheCoordinator.set(results, forKey: cacheKey) // Uses default policy (30 minutes)
             
             currentComparison = results
             isLoading = false
@@ -280,9 +280,9 @@ class CachedFoodComparisonService: ObservableObject {
             // Remove from local storage
             recentComparisons.removeAll { $0.id == comparisonId }
             
-            // Invalidate cache
+            // Invalidate cache using UnifiedCacheCoordinator
             let cacheKey = "food_comparison_\(userId)_\(comparisonId)"
-            cacheService.invalidate(forKey: cacheKey)
+            cacheCoordinator.invalidate(forKey: cacheKey)
             
         } catch {
             throw error
@@ -314,9 +314,9 @@ class CachedFoodComparisonService: ObservableObject {
         error = nil
         isLoading = false
         
-        // Clear user-specific cache
+        // Clear user-specific cache using UnifiedCacheCoordinator
         if let userId = currentUserId {
-            cacheService.clearUserCache(userId: userId)
+            cacheCoordinator.clearUserCache(userId: userId)
         }
     }
     
@@ -590,9 +590,9 @@ class CachedFoodComparisonService: ObservableObject {
                 recentComparisons = Array(recentComparisons.prefix(20))
             }
             
-            // Cache the comparison
+            // Cache the comparison using UnifiedCacheCoordinator
             let cacheKey = "food_comparison_\(userId)_\(response.id)"
-            cacheService.store(results, forKey: cacheKey, policy: .timeBased(600)) // 10 minutes cache
+            cacheCoordinator.set(results, forKey: cacheKey) // Uses default policy
             
         } catch {
             print("Failed to save comparison to backend: \(error)")
@@ -617,9 +617,9 @@ class CachedFoodComparisonService: ObservableObject {
     private func loadRecentComparisons() {
         guard let userId = currentUserId else { return }
         
-        // Check cache first
+        // Check cache first (synchronous for immediate UI)
         let cacheKey = "recent_comparisons_\(userId)"
-        if let cachedComparisons = cacheService.retrieve([SavedComparison].self, forKey: cacheKey) {
+        if let cachedComparisons = cacheCoordinator.get([SavedComparison].self, forKey: cacheKey) {
             recentComparisons = cachedComparisons
         }
         
@@ -660,8 +660,8 @@ class CachedFoodComparisonService: ObservableObject {
                 
                 await MainActor.run {
                     recentComparisons = comparisons
-                    // Cache the recent comparisons
-                    cacheService.store(comparisons, forKey: cacheKey, policy: .timeBased(300)) // 5 minutes cache
+                    // Cache the recent comparisons using UnifiedCacheCoordinator
+                    cacheCoordinator.set(comparisons, forKey: cacheKey) // Uses default policy
                 }
                 
             } catch {

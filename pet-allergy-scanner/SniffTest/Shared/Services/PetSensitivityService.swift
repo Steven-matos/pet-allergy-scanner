@@ -24,13 +24,13 @@ class PetSensitivityService: ObservableObject {
     // MARK: - Properties
     
     private let apiService: APIService
-    private let cacheService: CacheService
+    private let cacheCoordinator: UnifiedCacheCoordinator
     
     // MARK: - Initialization
     
-    init(apiService: APIService = APIService.shared, cacheService: CacheService = CacheService.shared) {
+    init(apiService: APIService = APIService.shared, cacheCoordinator: UnifiedCacheCoordinator = UnifiedCacheCoordinator.shared) {
         self.apiService = apiService
-        self.cacheService = cacheService
+        self.cacheCoordinator = cacheCoordinator
     }
     
     // MARK: - Public Methods
@@ -114,8 +114,9 @@ class PetSensitivityService: ObservableObject {
     private func fetchPet(id: String) async throws -> Pet {
         print("🔍 [SENSITIVITY_SERVICE] Fetching pet with ID: \(id)")
         
-        // Try cache first
-        if let cachedPet: Pet = cacheService.retrievePetData(Pet.self, forKey: .petDetails, petId: id) {
+        // Try cache first using UnifiedCacheCoordinator
+        let cacheKey = CacheKey.petDetails.scoped(forPetId: id)
+        if let cachedPet = cacheCoordinator.get(Pet.self, forKey: cacheKey) {
             print("🔍 [SENSITIVITY_SERVICE] Pet found in cache: \(cachedPet.name)")
             return cachedPet
         }
@@ -126,8 +127,8 @@ class PetSensitivityService: ObservableObject {
         let pet = try await apiService.getPet(id: id)
         print("🔍 [SENSITIVITY_SERVICE] Pet fetched from API: \(pet.name)")
         
-        // Cache the result
-        cacheService.storePetData(pet, forKey: .petDetails, petId: id)
+        // Cache the result using UnifiedCacheCoordinator
+        cacheCoordinator.set(pet, forKey: cacheKey)
         print("🔍 [SENSITIVITY_SERVICE] Pet cached successfully")
         
         return pet

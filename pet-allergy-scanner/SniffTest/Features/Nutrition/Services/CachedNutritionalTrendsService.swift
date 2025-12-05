@@ -28,70 +28,27 @@ import Combine
 class CachedNutritionalTrendsService: ObservableObject {
     static let shared = CachedNutritionalTrendsService()
     
-    // MARK: - Observable Cache Managers
+    // MARK: - Published Properties
     
-    /**
-     * Use ObservableCacheManager for reliable SwiftUI observation
-     * Replaces dictionary-based @Published properties that don't trigger updates reliably
-     */
-    private let calorieTrendsCache = ObservableCacheManager<String, [CalorieTrend]>(
-        defaultTTL: 7200, // 2 hours
-        maxCacheSize: 50
-    )
-    
-    private let macronutrientTrendsCache = ObservableCacheManager<String, [MacronutrientTrend]>(
-        defaultTTL: 7200,
-        maxCacheSize: 50
-    )
-    
-    private let feedingPatternsCache = ObservableCacheManager<String, [FeedingPattern]>(
-        defaultTTL: 7200,
-        maxCacheSize: 50
-    )
-    
-    private let weightCorrelationsCache = ObservableCacheManager<String, WeightCorrelation>(
-        defaultTTL: 7200,
-        maxCacheSize: 50
-    )
-    
-    private let insightsCache = ObservableCacheManager<String, [String]>(
-        defaultTTL: 7200,
-        maxCacheSize: 50
-    )
-    
-    private let averageDailyCaloriesCache = ObservableCacheManager<String, Double>(
-        defaultTTL: 3600, // 1 hour
-        maxCacheSize: 50
-    )
-    
-    private let averageFeedingFrequencyCache = ObservableCacheManager<String, Double>(
-        defaultTTL: 3600,
-        maxCacheSize: 50
-    )
-    
-    private let nutritionalBalanceScoresCache = ObservableCacheManager<String, Double>(
-        defaultTTL: 3600,
-        maxCacheSize: 50
-    )
-    
-    private let totalWeightChangesCache = ObservableCacheManager<String, Double>(
-        defaultTTL: 3600,
-        maxCacheSize: 50
-    )
+    // In-memory caches for SwiftUI observation (synced with UnifiedCacheCoordinator)
+    @Published private var calorieTrendsCache: [String: [CalorieTrend]] = [:]
+    @Published private var macronutrientTrendsCache: [String: [MacronutrientTrend]] = [:]
+    @Published private var feedingPatternsCache: [String: [FeedingPattern]] = [:]
+    @Published private var weightCorrelationsCache: [String: WeightCorrelation] = [:]
+    @Published private var insightsCache: [String: [String]] = [:]
+    @Published private var averageDailyCaloriesCache: [String: Double] = [:]
+    @Published private var averageFeedingFrequencyCache: [String: Double] = [:]
+    @Published private var nutritionalBalanceScoresCache: [String: Double] = [:]
+    @Published private var totalWeightChangesCache: [String: Double] = [:]
     
     @Published var isLoading = false
     @Published var isRefreshing = false
     @Published var error: Error?
     
-    /**
-     * Published property that triggers when any cache updates
-     */
-    @Published private var cacheUpdateTrigger = UUID()
-    
-    // MARK: - Private Properties
+    // MARK: - Services
     
     private let apiService: APIService
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -104,77 +61,22 @@ class CachedNutritionalTrendsService: ObservableObject {
     
     private init() {
         self.apiService = APIService.shared
-        setupCacheObservers()
+        loadCachedDataOnInit()
         observeAuthChanges()
     }
     
     /**
-     * Setup observers for all cache managers to trigger service updates
+     * Load cached data synchronously on init for immediate UI rendering
      */
-    private func setupCacheObservers() {
-        // Observe all cache changes to trigger SwiftUI updates
-        calorieTrendsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+    private func loadCachedDataOnInit() {
+        guard currentUserId != nil else { return }
         
-        macronutrientTrendsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        feedingPatternsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        weightCorrelationsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        insightsCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        averageDailyCaloriesCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        averageFeedingFrequencyCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        nutritionalBalanceScoresCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        
-        totalWeightChangesCache.objectWillChange
-            .sink { [weak self] _ in
-                self?.cacheUpdateTrigger = UUID()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
+        // Load cached trends data from UnifiedCacheCoordinator synchronously
+        // Note: Trends are complex objects, will be loaded on demand
+        let pets = CachedPetService.shared.pets
+        for pet in pets {
+            _ = CacheKey.nutritionalTrends.scoped(forPetId: pet.id)
+        }
     }
     
     // MARK: - Public API
@@ -202,11 +104,12 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     func loadTrendsData(for petId: String, period: TrendPeriod, forceRefresh: Bool = false) async throws {
         guard let userId = currentUserId else {
-            self.calorieTrendsCache.set([], forKey: petId)
-            self.macronutrientTrendsCache.set([], forKey: petId)
-            self.feedingPatternsCache.set([], forKey: petId)
-            self.weightCorrelationsCache.remove(petId)
-            self.insightsCache.set([], forKey: petId)
+            self.calorieTrendsCache[petId] = []
+            self.macronutrientTrendsCache[petId] = []
+            self.feedingPatternsCache[petId] = []
+            self.weightCorrelationsCache.removeValue(forKey: petId)
+            self.insightsCache[petId] = []
+            self.objectWillChange.send()
             return
         }
         
@@ -215,7 +118,7 @@ class CachedNutritionalTrendsService: ObservableObject {
         
         // Try cache first unless force refresh is requested
         if !forceRefresh {
-            if let cachedData = cacheService.retrieve(TrendsCacheData.self, forKey: cacheKey) {
+            if let cachedData = cacheCoordinator.get(TrendsCacheData.self, forKey: cacheKey) {
                 // Only use cache if it has meaningful data (at least one non-empty array)
                 let hasData = !cachedData.calorieTrends.isEmpty || 
                              !cachedData.macronutrientTrends.isEmpty || 
@@ -225,13 +128,14 @@ class CachedNutritionalTrendsService: ObservableObject {
                 
                 if hasData {
                     // Update cache managers from cached data
-                    self.calorieTrendsCache.set(cachedData.calorieTrends, forKey: petId)
-                    self.macronutrientTrendsCache.set(cachedData.macronutrientTrends, forKey: petId)
-                    self.feedingPatternsCache.set(cachedData.feedingPatterns, forKey: petId)
+                    self.calorieTrendsCache[petId] = cachedData.calorieTrends
+                    self.macronutrientTrendsCache[petId] = cachedData.macronutrientTrends
+                    self.feedingPatternsCache[petId] = cachedData.feedingPatterns
                     if let correlation = cachedData.weightCorrelation {
-                        self.weightCorrelationsCache.set(correlation, forKey: petId)
+                        self.weightCorrelationsCache[petId] = correlation
                     }
-                    self.insightsCache.set(cachedData.insights, forKey: petId)
+                    self.insightsCache[petId] = cachedData.insights
+                    self.objectWillChange.send()
                     
                     // Calculate derived metrics
                     calculateDerivedMetrics(for: petId)
@@ -262,7 +166,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Array of calorie trend data
      */
     func calorieTrends(for petId: String) -> [CalorieTrend] {
-        return calorieTrendsCache.get(petId) ?? []
+        return calorieTrendsCache[petId] ?? []
     }
     
     /**
@@ -271,7 +175,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Array of macronutrient trend data
      */
     func macronutrientTrends(for petId: String) -> [MacronutrientTrend] {
-        return macronutrientTrendsCache.get(petId) ?? []
+        return macronutrientTrendsCache[petId] ?? []
     }
     
     /**
@@ -280,7 +184,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Array of feeding pattern data
      */
     func feedingPatterns(for petId: String) -> [FeedingPattern] {
-        return feedingPatternsCache.get(petId) ?? []
+        return feedingPatternsCache[petId] ?? []
     }
     
     /**
@@ -289,7 +193,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Weight correlation data or nil
      */
     func weightCorrelation(for petId: String) -> WeightCorrelation? {
-        return weightCorrelationsCache.get(petId)
+        return weightCorrelationsCache[petId]
     }
     
     /**
@@ -298,7 +202,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Array of insight strings
      */
     func insights(for petId: String) -> [String] {
-        return insightsCache.get(petId) ?? []
+        return insightsCache[petId] ?? []
     }
     
     /**
@@ -307,7 +211,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Average daily calories
      */
     func averageDailyCalories(for petId: String) -> Double {
-        return averageDailyCaloriesCache.get(petId) ?? 0.0
+        return averageDailyCaloriesCache[petId] ?? 0.0
     }
     
     /**
@@ -316,7 +220,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Average feeding frequency per day
      */
     func averageFeedingFrequency(for petId: String) -> Double {
-        return averageFeedingFrequencyCache.get(petId) ?? 0.0
+        return averageFeedingFrequencyCache[petId] ?? 0.0
     }
     
     /**
@@ -325,7 +229,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Nutritional balance score (0-100)
      */
     func nutritionalBalanceScore(for petId: String) -> Double {
-        return nutritionalBalanceScoresCache.get(petId) ?? 0.0
+        return nutritionalBalanceScoresCache[petId] ?? 0.0
     }
     
     /**
@@ -334,7 +238,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Returns: Total weight change in kg
      */
     func totalWeightChange(for petId: String) -> Double {
-        return totalWeightChangesCache.get(petId) ?? 0.0
+        return totalWeightChangesCache[petId] ?? 0.0
     }
     
     /**
@@ -431,19 +335,20 @@ class CachedNutritionalTrendsService: ObservableObject {
         // Invalidate all period caches for this pet
         for period in TrendPeriod.allCases {
             let cacheKey = generateTrendsCacheKey(petId: petId, period: period, userId: userId)
-            cacheService.invalidate(forKey: cacheKey)
+            cacheCoordinator.invalidate(forKey: cacheKey)
         }
         
         // Clear local data
-        calorieTrendsCache.remove(petId)
-        macronutrientTrendsCache.remove(petId)
-        feedingPatternsCache.remove(petId)
-        weightCorrelationsCache.remove(petId)
-        insightsCache.remove(petId)
-        averageDailyCaloriesCache.remove(petId)
-        averageFeedingFrequencyCache.remove(petId)
-        nutritionalBalanceScoresCache.remove(petId)
-        totalWeightChangesCache.remove(petId)
+        calorieTrendsCache.removeValue(forKey: petId)
+        macronutrientTrendsCache.removeValue(forKey: petId)
+        feedingPatternsCache.removeValue(forKey: petId)
+        weightCorrelationsCache.removeValue(forKey: petId)
+        insightsCache.removeValue(forKey: petId)
+        averageDailyCaloriesCache.removeValue(forKey: petId)
+        averageFeedingFrequencyCache.removeValue(forKey: petId)
+        nutritionalBalanceScoresCache.removeValue(forKey: petId)
+        totalWeightChangesCache.removeValue(forKey: petId)
+        objectWillChange.send()
     }
     
     /**
@@ -451,22 +356,23 @@ class CachedNutritionalTrendsService: ObservableObject {
      * Call this on logout
      */
     func clearCache() {
-        calorieTrendsCache.clear()
-        macronutrientTrendsCache.clear()
-        feedingPatternsCache.clear()
-        weightCorrelationsCache.clear()
-        insightsCache.clear()
-        averageDailyCaloriesCache.clear()
-        averageFeedingFrequencyCache.clear()
-        nutritionalBalanceScoresCache.clear()
-        totalWeightChangesCache.clear()
+        calorieTrendsCache.removeAll()
+        macronutrientTrendsCache.removeAll()
+        feedingPatternsCache.removeAll()
+        weightCorrelationsCache.removeAll()
+        insightsCache.removeAll()
+        averageDailyCaloriesCache.removeAll()
+        averageFeedingFrequencyCache.removeAll()
+        nutritionalBalanceScoresCache.removeAll()
+        totalWeightChangesCache.removeAll()
+        objectWillChange.send()
         error = nil
         isLoading = false
         isRefreshing = false
         
         // Clear user-specific cache
         if let userId = currentUserId {
-            cacheService.clearUserCache(userId: userId)
+            cacheCoordinator.clearUserCache(userId: userId)
         }
     }
     
@@ -497,13 +403,14 @@ class CachedNutritionalTrendsService: ObservableObject {
             )
             
             // Update cache managers
-            self.calorieTrendsCache.set(calories, forKey: petId)
-            self.macronutrientTrendsCache.set(macronutrients, forKey: petId)
-            self.feedingPatternsCache.set(feeding, forKey: petId)
+            self.calorieTrendsCache[petId] = calories
+            self.macronutrientTrendsCache[petId] = macronutrients
+            self.feedingPatternsCache[petId] = feeding
             if let correlation = correlation {
-                self.weightCorrelationsCache.set(correlation, forKey: petId)
+                self.weightCorrelationsCache[petId] = correlation
             }
-            self.insightsCache.set(insights, forKey: petId)
+            self.insightsCache[petId] = insights
+            self.objectWillChange.send()
             
             // Calculate derived metrics
             calculateDerivedMetrics(for: petId)
@@ -518,7 +425,7 @@ class CachedNutritionalTrendsService: ObservableObject {
             )
             
             let cacheKey = generateTrendsCacheKey(petId: petId, period: period, userId: userId)
-            cacheService.store(cacheData, forKey: cacheKey, policy: .timeBased(300)) // 5 minutes cache
+            cacheCoordinator.set(cacheData, forKey: cacheKey) // 5 minutes cache (handled by coordinator)
             
             isLoading = false
             
@@ -537,7 +444,7 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     private func refreshTrendsInBackground(petId: String, period: TrendPeriod, cacheKey: String) {
         // Check if cache exists (if not, it's stale)
-        if !cacheService.exists(forKey: cacheKey) {
+        if !cacheCoordinator.exists(forKey: cacheKey) {
             isRefreshing = true
             
             Task {
@@ -709,25 +616,25 @@ class CachedNutritionalTrendsService: ObservableObject {
         let calories = calorieTrends(for: petId)
         if !calories.isEmpty {
             let total = calories.reduce(0) { $0 + $1.calories }
-            averageDailyCaloriesCache.set(total / Double(calories.count), forKey: petId)
+            averageDailyCaloriesCache[petId] = total / Double(calories.count)
         }
         
         // Calculate average feeding frequency
         let patterns = feedingPatterns(for: petId)
         if !patterns.isEmpty {
             let total = patterns.reduce(0) { $0 + $1.feedingCount }
-            averageFeedingFrequencyCache.set(Double(total) / Double(patterns.count), forKey: petId)
+            averageFeedingFrequencyCache[petId] = Double(total) / Double(patterns.count)
         }
         
         // Calculate nutritional balance score
         if !patterns.isEmpty {
             let total = patterns.reduce(0) { $0 + $1.compatibilityScore }
-            nutritionalBalanceScoresCache.set(total / Double(patterns.count), forKey: petId)
+            nutritionalBalanceScoresCache[petId] = total / Double(patterns.count)
         }
         
         // Calculate total weight change
-        if let correlation = weightCorrelationsCache.get(petId) {
-            totalWeightChangesCache.set(correlation.correlation * 2.0, forKey: petId)
+        if let correlation = weightCorrelationsCache[petId] {
+            totalWeightChangesCache[petId] = correlation.correlation * 2.0
         }
     }
 }

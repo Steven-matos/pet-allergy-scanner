@@ -23,7 +23,10 @@ import SwiftUI
  * Follows SOLID principles with single responsibility for observable caching
  * Implements DRY by providing reusable cache patterns
  * Follows KISS by keeping the implementation simple and reliable
+ * 
+ * @deprecated Use UnifiedCacheCoordinator instead. This service is being phased out.
  */
+@available(*, deprecated, message: "Use UnifiedCacheCoordinator.shared instead")
 @MainActor
 class ObservableCacheManager<Key: Hashable, Value>: ObservableObject {
     

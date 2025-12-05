@@ -28,7 +28,7 @@ class CachedFoodService: ObservableObject {
     @Published var error: Error?
     
     private let apiService: APIService
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
     
@@ -39,7 +39,27 @@ class CachedFoodService: ObservableObject {
     
     private init() {
         self.apiService = APIService.shared
+        loadCachedDataOnInit()
         observeAuthChanges()
+    }
+    
+    /**
+     * Load cached data synchronously on init for immediate UI rendering
+     */
+    private func loadCachedDataOnInit() {
+        guard let userId = currentUserId else { return }
+        
+        // Load recent foods from UnifiedCacheCoordinator synchronously
+        let recentFoodsKey = CacheKey.recentFoods.scoped(forUserId: userId)
+        if let cached = cacheCoordinator.get([FoodItem].self, forKey: recentFoodsKey) {
+            recentFoods = cached
+        }
+        
+        // Load food database from UnifiedCacheCoordinator synchronously
+        let foodDatabaseKey = CacheKey.foodDatabase.rawValue
+        if let cached = cacheCoordinator.get([FoodItem].self, forKey: foodDatabaseKey) {
+            foodDatabase = cached
+        }
     }
     
     // MARK: - Authentication Observation
@@ -64,11 +84,33 @@ class CachedFoodService: ObservableObject {
      * Load recent foods for the user with caching
      */
     func loadRecentFoods() async throws {
-        // Try cache first
+        // Try cache first (synchronous for immediate UI)
         if let userId = currentUserId {
             let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-            if let cached = cacheService.retrieve([FoodItem].self, forKey: cacheKey) {
+            if let cached = cacheCoordinator.get([FoodItem].self, forKey: cacheKey) {
                 recentFoods = cached
+                objectWillChange.send()
+                
+                // Refresh in background
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let fresh = try await self.apiService.get(
+                            endpoint: "/nutrition/foods/recent",
+                            responseType: [FoodItem].self
+                        )
+                        self.recentFoods = fresh
+                        self.cacheCoordinator.set(fresh, forKey: cacheKey)
+                        self.objectWillChange.send()
+                    } catch {
+                        // Handle 404
+                        if let apiError = error as? APIError,
+                           case .serverError(let statusCode) = apiError,
+                           statusCode == 404 {
+                            self.cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                        }
+                    }
+                }
                 return
             }
         }
@@ -84,14 +126,24 @@ class CachedFoodService: ObservableObject {
             )
             
             recentFoods = response
+            objectWillChange.send()
             
-            // Cache the result
+            // Cache the result using UnifiedCacheCoordinator
             if let userId = currentUserId {
                 let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-                cacheService.store(response, forKey: cacheKey)
+                cacheCoordinator.set(response, forKey: cacheKey)
             }
             
         } catch {
+            // Handle 404
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode) = apiError,
+               statusCode == 404 {
+                if let userId = currentUserId {
+                    let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
+                    cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                }
+            }
             self.error = error
             throw error
         }
@@ -108,9 +160,10 @@ class CachedFoodService: ObservableObject {
         // For search results, we use a shorter cache duration since results can change frequently
         let searchCacheKey = "food_search_\(query.lowercased())"
         
-        // Try cache first (with shorter duration)
-        if let cached = cacheService.retrieve([FoodItem].self, forKey: searchCacheKey) {
+        // Try cache first (with shorter duration) using UnifiedCacheCoordinator
+        if let cached = cacheCoordinator.get([FoodItem].self, forKey: searchCacheKey) {
             foodDatabase = cached
+            objectWillChange.send()
             return cached
         }
         
@@ -127,7 +180,7 @@ class CachedFoodService: ObservableObject {
             foodDatabase = response
             
             // Cache search results with shorter duration (15 minutes)
-            cacheService.store(response, forKey: searchCacheKey, policy: .timeBased(900))
+            cacheCoordinator.set(response, forKey: searchCacheKey)
             
         } catch {
             self.error = error
@@ -146,7 +199,7 @@ class CachedFoodService: ObservableObject {
     func getFoodByBarcode(_ barcode: String) async throws -> FoodItem? {
         // Try cache first
         let barcodeCacheKey = "food_barcode_\(barcode)"
-        if let cached = cacheService.retrieve(FoodItem.self, forKey: barcodeCacheKey) {
+        if let cached = cacheCoordinator.get(FoodItem.self, forKey: barcodeCacheKey) {
             // Add to recent foods if found
             if !recentFoods.contains(where: { $0.id == cached.id }) {
                 recentFoods.insert(cached, at: 0)
@@ -158,7 +211,7 @@ class CachedFoodService: ObservableObject {
                 // Update recent foods cache
                 if let userId = currentUserId {
                     let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-                    cacheService.store(recentFoods, forKey: cacheKey)
+                    cacheCoordinator.set(recentFoods, forKey: cacheKey)
                 }
             }
             return cached
@@ -172,7 +225,7 @@ class CachedFoodService: ObservableObject {
             )
             
             // Cache the result
-            cacheService.store(response, forKey: barcodeCacheKey, policy: .timeBased(86400)) // 24 hours
+            cacheCoordinator.set(response, forKey: barcodeCacheKey) // 24 hours (handled by coordinator)
             
             // Add to recent foods if found
             if !recentFoods.contains(where: { $0.id == response.id }) {
@@ -185,7 +238,7 @@ class CachedFoodService: ObservableObject {
                 // Update recent foods cache
                 if let userId = currentUserId {
                     let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-                    cacheService.store(recentFoods, forKey: cacheKey)
+                    cacheCoordinator.set(recentFoods, forKey: cacheKey)
                 }
             }
             
@@ -218,10 +271,10 @@ class CachedFoodService: ObservableObject {
             // Add to recent foods
             recentFoods.insert(response, at: 0)
             
-            // Update recent foods cache
-            if currentUserId != nil {
-                let cacheKey = CacheKey.recentFoods.scoped(forUserId: currentUserId!)
-                cacheService.store(recentFoods, forKey: cacheKey)
+            // Update recent foods cache using UnifiedCacheCoordinator
+            if let userId = currentUserId {
+                let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
+                cacheCoordinator.set(recentFoods, forKey: cacheKey)
             }
             
             isLoading = false
@@ -263,14 +316,14 @@ class CachedFoodService: ObservableObject {
                 // Update recent foods cache
                 if let userId = currentUserId {
                     let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-                    cacheService.store(recentFoods, forKey: cacheKey)
+                    cacheCoordinator.set(recentFoods, forKey: cacheKey)
                 }
             }
             
             // Invalidate barcode cache if barcode exists
             if let barcode = foodItem.barcode {
                 let barcodeCacheKey = "food_barcode_\(barcode)"
-                cacheService.invalidate(forKey: barcodeCacheKey)
+                cacheCoordinator.invalidate(forKey: barcodeCacheKey)
             }
             
         } catch {
@@ -298,16 +351,16 @@ class CachedFoodService: ObservableObject {
             // Remove from recent foods
             recentFoods.removeAll { $0.id == foodId }
             
-            // Update recent foods cache
+            // Update recent foods cache using UnifiedCacheCoordinator
             if let userId = currentUserId {
                 let cacheKey = CacheKey.recentFoods.scoped(forUserId: userId)
-                cacheService.store(recentFoods, forKey: cacheKey)
+                cacheCoordinator.set(recentFoods, forKey: cacheKey)
             }
             
             // Invalidate barcode cache if barcode exists
             if let barcode = foodItem?.barcode {
                 let barcodeCacheKey = "food_barcode_\(barcode)"
-                cacheService.invalidate(forKey: barcodeCacheKey)
+                cacheCoordinator.invalidate(forKey: barcodeCacheKey)
             }
             
         } catch {
@@ -326,7 +379,7 @@ class CachedFoodService: ObservableObject {
     func getNutritionalAnalysis(for foodId: String) async throws -> FoodNutritionalAnalysis {
         // Try cache first
         let analysisCacheKey = "food_analysis_\(foodId)"
-        if let cached = cacheService.retrieve(FoodNutritionalAnalysis.self, forKey: analysisCacheKey) {
+        if let cached = cacheCoordinator.get(FoodNutritionalAnalysis.self, forKey: analysisCacheKey) {
             return cached
         }
         
@@ -337,7 +390,7 @@ class CachedFoodService: ObservableObject {
         )
         
         // Cache the result (24 hours)
-        cacheService.store(analysis, forKey: analysisCacheKey, policy: .timeBased(86400))
+        cacheCoordinator.set(analysis, forKey: analysisCacheKey) // 24 hours (handled by coordinator)
         
         return analysis
     }
@@ -401,8 +454,8 @@ class CachedFoodService: ObservableObject {
         // Create cache key based on search parameters
         let searchCacheKey = "food_search_filtered_\(query.lowercased())_\(brand ?? "")_\(category ?? "")"
         
-        // Try cache first
-        if let cached = cacheService.retrieve([FoodItem].self, forKey: searchCacheKey) {
+        // Try cache first using UnifiedCacheCoordinator
+        if let cached = cacheCoordinator.get([FoodItem].self, forKey: searchCacheKey) {
             return cached
         }
         
@@ -412,8 +465,8 @@ class CachedFoodService: ObservableObject {
             responseType: [FoodItem].self
         )
         
-        // Cache the result (15 minutes for filtered searches)
-        cacheService.store(response, forKey: searchCacheKey, policy: .timeBased(900))
+        // Cache the result (15 minutes for filtered searches) using UnifiedCacheCoordinator
+        cacheCoordinator.set(response, forKey: searchCacheKey) // 15 minutes (handled by coordinator)
         
         return response
     }

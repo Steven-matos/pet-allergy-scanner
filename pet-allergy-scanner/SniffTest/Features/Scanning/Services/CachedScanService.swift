@@ -25,7 +25,7 @@ class CachedScanService: ObservableObject {
     @Published var isRefreshing = false
     
     private let apiService = APIService.shared
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let scanService = ScanService.shared
     private var cancellables = Set<AnyCancellable>()
     private var currentAnalysisTask: Task<Void, Never>?
@@ -43,23 +43,23 @@ class CachedScanService: ObservableObject {
      * - Returns: Cached scans or nil if retrieval fails
      */
     private func safeRetrieveCachedScans(userId: String) -> [Scan]? {
-        // Use a completely safe approach to avoid casting errors
+        // Use UnifiedCacheCoordinator for safe cache retrieval
         let scopedKey = CacheKey.scans.scoped(forUserId: userId)
         
         // First, check if the cache key exists and is valid
-        guard cacheService.exists(forKey: scopedKey) else {
+        guard cacheCoordinator.exists(forKey: scopedKey) else {
             print("❌ Cache key does not exist: \(scopedKey)")
             return nil
         }
         
         // Try to retrieve with a fallback mechanism
         // If this fails due to casting, we'll catch it and clear the cache
-        let result = cacheService.retrieve([Scan].self, forKey: scopedKey)
+        let result = cacheCoordinator.get([Scan].self, forKey: scopedKey)
         
         // If we get nil, it could be due to cache corruption
         if result == nil {
             print("❌ Cache retrieval returned nil, clearing specific cache key")
-            cacheService.clearCache(forKey: scopedKey)
+            cacheCoordinator.invalidate(forKey: scopedKey)
         }
         
         return result
@@ -77,13 +77,13 @@ class CachedScanService: ObservableObject {
             return localScans
         }
         
-        // Try cache with error handling
+        // Try cache with error handling using UnifiedCacheCoordinator
         if let userId = currentUserId {
             let scopedKey = CacheKey.scans.scoped(forUserId: userId)
             
             // Check if cache exists before trying to retrieve
-            if cacheService.exists(forKey: scopedKey) {
-                let cachedScans = cacheService.retrieve([Scan].self, forKey: scopedKey)
+            if cacheCoordinator.exists(forKey: scopedKey) {
+                let cachedScans = cacheCoordinator.get([Scan].self, forKey: scopedKey)
                 if let scans = cachedScans {
                     let petScans = scans.filter { $0.petId == petId }
                     if !petScans.isEmpty {
@@ -91,7 +91,7 @@ class CachedScanService: ObservableObject {
                     }
                 } else {
                     print("❌ Cache retrieval returned nil, clearing cache")
-                    cacheService.clearCache(forKey: scopedKey)
+                    cacheCoordinator.invalidate(forKey: scopedKey)
                 }
             }
         }
@@ -100,9 +100,10 @@ class CachedScanService: ObservableObject {
         do {
             let scans = try await apiService.getScans(petId: petId)
             
-            // Cache the result
+            // Cache the result using UnifiedCacheCoordinator
             if let userId = currentUserId {
-                cacheService.storeUserData(scans, forKey: .scans, userId: userId)
+                let scopedKey = CacheKey.scans.scoped(forUserId: userId)
+                cacheCoordinator.set(scans, forKey: scopedKey)
             }
             
             return scans
@@ -261,9 +262,10 @@ class CachedScanService: ObservableObject {
         do {
             let scan = try await apiService.getScan(id: id)
             
-            // Cache the result
+            // Cache the result using UnifiedCacheCoordinator
             if let userId = currentUserId {
-                cacheService.storeUserData(scan, forKey: .scans, userId: userId)
+                let scopedKey = CacheKey.scans.scoped(forUserId: userId)
+                cacheCoordinator.set(scan, forKey: scopedKey)
             }
             
             return scan
@@ -313,9 +315,9 @@ class CachedScanService: ObservableObject {
         isRefreshing = false
         currentAnalysisTask?.cancel()
         
-        // Clear user-specific cache
+        // Clear user-specific cache using UnifiedCacheCoordinator
         if let userId = currentUserId {
-            cacheService.clearUserCache(userId: userId)
+            cacheCoordinator.clearUserCache(userId: userId)
         }
         
         // Stop refresh timer
@@ -358,25 +360,27 @@ class CachedScanService: ObservableObject {
         }
     }
     
-    /// Update scans cache
+    /// Update scans cache using UnifiedCacheCoordinator
     private func updateScansCache() async {
         guard let userId = currentUserId else { return }
         
         // Cache the scans list
-        cacheService.storeUserData(recentScans, forKey: .scans, userId: userId)
+        let scansKey = CacheKey.scans.scoped(forUserId: userId)
+        cacheCoordinator.set(recentScans, forKey: scansKey)
         
         // Cache scan history (last 50 scans)
         let historyScans = Array(recentScans.prefix(50))
-        cacheService.storeUserData(historyScans, forKey: .scanHistory, userId: userId)
+        let historyKey = CacheKey.scanHistory.scoped(forUserId: userId)
+        cacheCoordinator.set(historyScans, forKey: historyKey)
     }
     
     /// Refresh scans in background if cache is stale
     private func refreshScansInBackground() {
         guard let userId = currentUserId else { return }
         
-        // Check if cache is stale
+        // Check if cache is stale using UnifiedCacheCoordinator
         let cacheKey = CacheKey.scans.scoped(forUserId: userId)
-        if !cacheService.exists(forKey: cacheKey) {
+        if !cacheCoordinator.exists(forKey: cacheKey) {
             isRefreshing = true
             
             Task { @MainActor in
@@ -415,12 +419,12 @@ class CachedScanService: ObservableObject {
         // For now, we'll handle it in the loadRecentScans method
     }
     
-    /// Invalidate related caches when scans change
+    /// Invalidate related caches when scans change using UnifiedCacheCoordinator
     private func invalidateRelatedCaches() {
         guard let userId = currentUserId else { return }
         
         // Invalidate scan history cache
-        cacheService.invalidate(forKey: CacheKey.scanHistory.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.scanHistory.scoped(forUserId: userId))
     }
 }
 
@@ -429,7 +433,14 @@ class CachedScanService: ObservableObject {
 extension CachedScanService {
     /// Get cache statistics for scans
     func getCacheStats() -> [String: Any] {
-        var stats = cacheService.getCacheStats()
+        var stats: [String: Any] = [:]
+        
+        // Get cache stats from UnifiedCacheCoordinator
+        let cacheStats = cacheCoordinator.cacheStats
+        stats["hits"] = cacheStats.hits
+        stats["misses"] = cacheStats.misses
+        stats["stores"] = cacheStats.stores
+        stats["invalidations"] = cacheStats.invalidations
         
         // Add scan-specific stats
         stats["scans_count"] = recentScans.count

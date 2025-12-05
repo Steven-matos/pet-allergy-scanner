@@ -11,6 +11,8 @@ import Combine
 /**
  * Multi-Cache Service Helper
  * 
+ * @deprecated Use UnifiedCacheCoordinator.shared instead. This service is being phased out.
+ * 
  * Provides a convenient way to manage multiple ObservableCacheManager instances
  * in a single service, ensuring all cache updates trigger SwiftUI observation.
  * 
@@ -29,6 +31,7 @@ import Combine
  * }
  * ```
  */
+@available(*, deprecated, message: "Use UnifiedCacheCoordinator.shared instead")
 @MainActor
 class MultiCacheService: ObservableObject {
     
@@ -105,6 +108,8 @@ private protocol Clearable {
     func clear()
 }
 
+/// @deprecated ObservableCacheManager is deprecated. Use UnifiedCacheCoordinator.shared instead.
+@available(*, deprecated, message: "ObservableCacheManager is deprecated. Use UnifiedCacheCoordinator.shared instead.")
 @MainActor
 extension ObservableCacheManager: Clearable {}
 

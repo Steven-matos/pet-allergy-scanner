@@ -16,12 +16,12 @@ struct SniffTestApp: App {
     private let authService = AuthService.shared
     private let petService = CachedPetService.shared
     private let notificationManager = NotificationManager.shared
-    private let cacheManager = EnhancedCacheManager.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     
     init() {
-        // Initialize cache manager on app launch
+        // Initialize cache coordinator on app launch
         // This sets up URLSession caching and lifecycle observers
-        _ = cacheManager
+        _ = cacheCoordinator
     }
     
     var body: some Scene {
@@ -34,8 +34,8 @@ struct SniffTestApp: App {
                     _ = URLHandler.shared.handleURL(url)
                 }
                 .task {
-                    // Warm cache on app launch
-                    await cacheManager.warmCache()
+                    // Cache coordinator is initialized automatically
+                    // Background sync is handled by CacheServerSyncService
                 }
         }
     }

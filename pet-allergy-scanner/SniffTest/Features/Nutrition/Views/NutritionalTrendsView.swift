@@ -70,8 +70,9 @@ struct NutritionalTrendsView: View {
         .sheet(isPresented: $showingFeedingLog) {
             FeedingLogView()
                 .onDisappear {
-                    // Refresh trends data when the feeding log sheet is dismissed
+                    // Refresh trends data when the feeding log sheet is dismissed (force refresh to get latest data)
                     loadTrendsData()
+                    loadRecentMeals(forceRefresh: true)
                 }
         }
         .sheet(item: $showingCalorieGoalSheet) { pet in
@@ -93,15 +94,27 @@ struct NutritionalTrendsView: View {
             )
         }
         .onAppear {
+            // Load pets synchronously from cache first (immediate UI rendering)
+            petService.loadPets()
+            
+            // Set default selected pet if needed (use petSelectionService)
+            if let user = authService.currentUser,
+               user.role == .premium,
+               !petService.pets.isEmpty,
+               selectedPet == nil {
+                petSelectionService.selectPet(petService.pets.first!)
+            }
+            
+            // Load trends data with cache-first pattern
             loadTrendsDataIfNeeded()
             loadCalorieGoalsIfNeeded()
             loadRecentMeals()
         }
         .onChange(of: showingFeedingLog) { _, isShowing in
             if !isShowing {
-                // Refresh trends and meals when feeding log is dismissed
+                // Refresh trends and meals when feeding log is dismissed (force refresh to get latest data)
                 loadTrendsData()
-                loadRecentMeals()
+                loadRecentMeals(forceRefresh: true)
             }
         }
     }
@@ -318,8 +331,8 @@ struct NutritionalTrendsView: View {
                     
                     ForEach(recentMeals.prefix(5)) { meal in
                         MealRow(meal: meal, onDelete: {
-                            // Refresh the meals list after deletion
-                            loadRecentMeals()
+                            // Force refresh the meals list after deletion (bypass cache)
+                            loadRecentMeals(forceRefresh: true)
                             // Refresh trends after deletion
                             loadTrendsData()
                         })
@@ -350,23 +363,72 @@ struct NutritionalTrendsView: View {
     }
     
     /**
-     * Load recent meals for the selected pet
+     * Load recent meals for the selected pet with cache-first pattern
+     * - Parameter forceRefresh: If true, bypasses cache and fetches fresh data from server
      */
-    private func loadRecentMeals() {
-        guard let pet = selectedPet else {
+    private func loadRecentMeals(forceRefresh: Bool = false) {
+        guard let pet = selectedPet ?? petService.pets.first else {
             recentMeals = []
             return
         }
         
+        // Check cache synchronously first (immediate UI rendering)
+        let cacheCoordinator = UnifiedCacheCoordinator.shared
+        let cacheKey = CacheKey.feedingRecords.scoped(forPetId: pet.id)
+        
+        if !forceRefresh {
+            // Try cache first (synchronous)
+            if let cachedMeals = cacheCoordinator.get([FeedingRecord].self, forKey: cacheKey) {
+                // Filter to last 7 days
+                let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+                let recentCached = cachedMeals.filter { $0.feedingTime >= sevenDaysAgo }
+                if !recentCached.isEmpty {
+                    recentMeals = recentCached.sorted { $0.feedingTime > $1.feedingTime }
+                    // Refresh in background
+                    Task {
+                        await refreshRecentMealsInBackground(for: pet.id)
+                    }
+                    return
+                }
+            }
+        } else {
+            // Force refresh - invalidate cache first
+            cacheCoordinator.invalidate(forKey: cacheKey)
+        }
+        
+        // Cache miss or force refresh - load from server
         Task {
             do {
-                let meals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 7)
+                let meals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 7, forceRefresh: forceRefresh)
                 await MainActor.run {
                     recentMeals = meals
                 }
             } catch {
-                print("Failed to load recent meals: \(error.localizedDescription)")
+                // Handle 404 errors gracefully
+                if let apiError = error as? APIError,
+                   case .serverError(let statusCode) = apiError,
+                   statusCode == 404 {
+                    // Resource deleted - cache already invalidated by service
+                    print("⚠️ Recent meals resource deleted (404) - cache invalidated")
+                } else {
+                    print("Failed to load recent meals: \(error.localizedDescription)")
+                }
             }
+        }
+    }
+    
+    /**
+     * Refresh recent meals in background (silent refresh)
+     */
+    private func refreshRecentMealsInBackground(for petId: String) async {
+        do {
+            let meals = try await feedingLogService.getFeedingRecords(for: petId, days: 7, forceRefresh: false)
+            await MainActor.run {
+                recentMeals = meals
+            }
+        } catch {
+            // Silent failure for background refresh
+            print("⚠️ Background refresh of recent meals failed: \(error.localizedDescription)")
         }
     }
     
@@ -390,16 +452,28 @@ struct NutritionalTrendsView: View {
     }
     
     /**
-     * Load trends data only if not already cached
-     * This prevents unnecessary server calls when data is already available
+     * Load trends data with cache-first pattern
+     * Checks cache synchronously first to avoid flashing
+     * Only shows loading spinner if no cache exists
      */
     private func loadTrendsDataIfNeeded() {
-        guard selectedPet != nil else { return }
+        guard let pet = selectedPet ?? petService.pets.first else { return }
         
-        // Call the service - it will check cache first and populate in-memory if cache exists
-        // We don't show loading immediately - let the service check cache first
-        Task {
-            await loadTrendsDataAsync(showLoadingIfNeeded: false)
+        // Check cache synchronously first (immediate UI rendering)
+        let hasCachedData = trendsService.hasCachedTrendsData(for: pet.id)
+        
+        // Only show loading if we don't have cached data
+        if !hasCachedData {
+            isLoading = true
+            // Load from server if no cache
+            Task {
+                await loadTrendsDataAsync(showLoadingIfNeeded: true, forceRefresh: false)
+            }
+        } else {
+            // Cache exists - refresh in background silently (no loading spinner)
+            Task {
+                await loadTrendsDataAsync(showLoadingIfNeeded: false, forceRefresh: false)
+            }
         }
     }
     
@@ -411,14 +485,15 @@ struct NutritionalTrendsView: View {
         guard selectedPet != nil else { return }
         
         Task {
-            await loadTrendsDataAsync(showLoadingIfNeeded: true)
+            // Force refresh when data changes (after adding/deleting records)
+            await loadTrendsDataAsync(showLoadingIfNeeded: true, forceRefresh: true)
         }
     }
     
-    private func loadTrendsDataAsync(showLoadingIfNeeded: Bool = false) async {
-        guard let pet = selectedPet else { return }
+    private func loadTrendsDataAsync(showLoadingIfNeeded: Bool = false, forceRefresh: Bool = false) async {
+        guard let pet = selectedPet ?? petService.pets.first else { return }
         
-        // Check if we already have data in memory (from cache or previous load)
+        // Check if we already have data in memory (from cache or previous load) - synchronous check
         let hadDataBefore = trendsService.hasCachedTrendsData(for: pet.id)
         
         // Only show loading if explicitly requested and we don't have data
@@ -430,13 +505,21 @@ struct NutritionalTrendsView: View {
         }
         
         do {
-            // Load data - this will check cache first and populate in-memory if cache exists
-            try await trendsService.loadTrendsData(for: pet.id, period: selectedPeriod)
+            // Load data - use forceRefresh when explicitly requested (after adding/deleting records)
+            try await trendsService.loadTrendsData(for: pet.id, period: selectedPeriod, forceRefresh: forceRefresh)
             
             await MainActor.run {
                 isLoading = false
             }
         } catch {
+            // Handle 404 errors gracefully
+            if let apiError = error as? APIError,
+               case .serverError(let statusCode) = apiError,
+               statusCode == 404 {
+                // Resource deleted - cache already invalidated by service
+                print("⚠️ Trends data resource deleted (404) - cache invalidated")
+            }
+            
             await MainActor.run {
                 isLoading = false
                 errorMessage = error.localizedDescription
@@ -1350,6 +1433,7 @@ struct MealRow: View {
     @StateObject private var trendsService = CachedNutritionalTrendsService.shared
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
+    @State private var deleteError: String?
     
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -1435,12 +1519,19 @@ struct MealRow: View {
         .background(ModernDesignSystem.Colors.surface)
         .cornerRadius(ModernDesignSystem.CornerRadius.small)
         .alert("Delete Meal", isPresented: $showingDeleteAlert) {
-            Button("Cancel", role: .cancel) { }
+            Button("Cancel", role: .cancel) {
+                deleteError = nil
+            }
             Button("Delete", role: .destructive) {
+                deleteError = nil
                 deleteMeal()
             }
         } message: {
-            Text("Are you sure you want to delete this meal? This action cannot be undone.")
+            if let error = deleteError {
+                Text("Failed to delete meal: \(error)\n\nAre you sure you want to try again?")
+            } else {
+                Text("Are you sure you want to delete this meal? This action cannot be undone.")
+            }
         }
     }
     
@@ -1462,7 +1553,12 @@ struct MealRow: View {
             } catch {
                 await MainActor.run {
                     isDeleting = false
-                    print("Failed to delete meal: \(error.localizedDescription)")
+                    // Show error to user
+                    let errorMessage = error.localizedDescription
+                    print("❌ Failed to delete meal: \(errorMessage)")
+                    deleteError = errorMessage
+                    // Re-show the alert with error message
+                    showingDeleteAlert = true
                 }
             }
         }

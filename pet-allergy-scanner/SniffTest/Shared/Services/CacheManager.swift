@@ -19,10 +19,10 @@ class CacheManager: ObservableObject {
     // MARK: - Properties
     
     @Published var isInitialized = false
-    @Published var cacheStats: CacheStatistics?
+    @Published var cacheStats: CacheStatistics? = nil
     @Published var performanceMetrics: CachePerformanceMetrics?
     
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private var cancellables = Set<AnyCancellable>()
     
     /// Cache warming strategies
@@ -76,16 +76,16 @@ class CacheManager: ObservableObject {
         await performCacheWarming()
     }
     
-    /// Clear all caches
+    /// Clear all caches using UnifiedCacheCoordinator
     func clearAllCaches() {
-        cacheService.clearAll()
+        cacheCoordinator.clearAll()
         updateCacheStats()
     }
     
-    /// Clear user-specific caches
+    /// Clear user-specific caches using UnifiedCacheCoordinator
     /// - Parameter userId: User ID to clear caches for
     func clearUserCaches(userId: String) {
-        cacheService.clearUserCache(userId: userId)
+        cacheCoordinator.clearUserCache(userId: userId)
         updateCacheStats()
     }
     
@@ -249,7 +249,7 @@ class CacheManager: ObservableObject {
     private func ensureCacheExists(for key: CacheKey, userId: String) async {
         let scopedKey = key.scoped(forUserId: userId)
         
-        if !cacheService.exists(forKey: scopedKey) {
+        if !cacheCoordinator.exists(forKey: scopedKey) {
             await warmCacheForKey(key, userId: userId)
         }
     }
@@ -278,7 +278,8 @@ class CacheManager: ObservableObject {
     private func warmCurrentUserCache(userId: String) async {
         do {
             let user = try await APIService.shared.getCurrentUser()
-            cacheService.storeUserData(user, forKey: .currentUser, userId: userId)
+            let cacheKey = CacheKey.currentUser.scoped(forUserId: userId)
+            cacheCoordinator.set(user, forKey: cacheKey)
         } catch {
             print("❌ Failed to warm current user cache: \(error)")
         }
@@ -300,7 +301,8 @@ class CacheManager: ObservableObject {
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt
             )
-            cacheService.storeUserData(userProfile, forKey: .userProfile, userId: userId)
+            let profileCacheKey = CacheKey.userProfile.scoped(forUserId: userId)
+            cacheCoordinator.set(userProfile, forKey: profileCacheKey)
         } catch {
             print("❌ Failed to warm user profile cache: \(error)")
         }
@@ -310,7 +312,8 @@ class CacheManager: ObservableObject {
     private func warmPetsCache(userId: String) async {
         do {
             let pets = try await APIService.shared.getPets()
-            cacheService.storeUserData(pets, forKey: .pets, userId: userId)
+            let petsCacheKey = CacheKey.pets.scoped(forUserId: userId)
+            cacheCoordinator.set(pets, forKey: petsCacheKey)
         } catch {
             print("❌ Failed to warm pets cache: \(error)")
         }
@@ -320,7 +323,8 @@ class CacheManager: ObservableObject {
     private func warmScansCache(userId: String) async {
         do {
             let scans = try await APIService.shared.getScans()
-            cacheService.storeUserData(scans, forKey: .scans, userId: userId)
+            let scansCacheKey = CacheKey.scans.scoped(forUserId: userId)
+            cacheCoordinator.set(scans, forKey: scansCacheKey)
         } catch {
             print("❌ Failed to warm scans cache: \(error)")
         }
@@ -330,7 +334,7 @@ class CacheManager: ObservableObject {
     private func warmCommonAllergensCache() async {
         do {
             let allergens = try await APIService.shared.getCommonAllergens()
-            cacheService.store(allergens, forKey: CacheKey.commonAllergens.rawValue)
+            cacheCoordinator.set(allergens, forKey: CacheKey.commonAllergens.rawValue)
         } catch {
             print("❌ Failed to warm common allergens cache: \(error)")
         }
@@ -340,7 +344,7 @@ class CacheManager: ObservableObject {
     private func warmSafeAlternativesCache() async {
         do {
             let alternatives = try await APIService.shared.getSafeAlternatives()
-            cacheService.store(alternatives, forKey: CacheKey.safeAlternatives.rawValue)
+            cacheCoordinator.set(alternatives, forKey: CacheKey.safeAlternatives.rawValue)
         } catch {
             print("❌ Failed to warm safe alternatives cache: \(error)")
         }
@@ -367,30 +371,30 @@ class CacheManager: ObservableObject {
     private func invalidateUserDataCaches() {
         guard let userId = AuthService.shared.currentUser?.id else { return }
         
-        cacheService.invalidate(forKey: CacheKey.currentUser.scoped(forUserId: userId))
-        cacheService.invalidate(forKey: CacheKey.userProfile.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.currentUser.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.userProfile.scoped(forUserId: userId))
     }
     
     /// Invalidate pet data caches
     private func invalidatePetDataCaches() {
         guard let userId = AuthService.shared.currentUser?.id else { return }
         
-        cacheService.invalidate(forKey: CacheKey.pets.scoped(forUserId: userId))
-        cacheService.invalidateMatching(pattern: ".*pet_details.*")
+        cacheCoordinator.invalidate(forKey: CacheKey.pets.scoped(forUserId: userId))
+        cacheCoordinator.invalidateMatching(pattern: ".*pet_details.*")
     }
     
     /// Invalidate scan data caches
     private func invalidateScanDataCaches() {
         guard let userId = AuthService.shared.currentUser?.id else { return }
         
-        cacheService.invalidate(forKey: CacheKey.scans.scoped(forUserId: userId))
-        cacheService.invalidate(forKey: CacheKey.scanHistory.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.scans.scoped(forUserId: userId))
+        cacheCoordinator.invalidate(forKey: CacheKey.scanHistory.scoped(forUserId: userId))
     }
     
     /// Invalidate session-only caches
     private func invalidateSessionCaches() {
         // Clear session-only cache entries
-        cacheService.invalidateMatching(pattern: ".*session.*")
+        cacheCoordinator.invalidateMatching(pattern: ".*session.*")
     }
     
     /// Clear expired entries
@@ -416,16 +420,27 @@ class CacheManager: ObservableObject {
     
     /// Update cache statistics
     private func updateCacheStats() {
-        let stats = cacheService.getCacheStats()
+        let unifiedStats = cacheCoordinator.cacheStats
+        var stats: [String: Any] = [:]
+        stats["total_entries"] = 0 // UnifiedCacheCoordinator doesn't expose this
+        stats["memory_entries"] = 0
+        stats["disk_entries"] = 0
+        stats["memory_size_mb"] = 0.0
+        stats["disk_size_mb"] = 0.0
+        stats["hits"] = unifiedStats.hits
+        stats["misses"] = unifiedStats.misses
+        let total = unifiedStats.hits + unifiedStats.misses
+        let hitRate = total > 0 ? Double(unifiedStats.hits) / Double(total) : 0.0
+        let missRate = total > 0 ? Double(unifiedStats.misses) / Double(total) : 0.0
         
-        cacheStats = CacheStatistics(
+        self.cacheStats = CacheStatistics(
             totalEntries: stats["total_entries"] as? Int ?? 0,
             memoryEntries: stats["memory_entries"] as? Int ?? 0,
             diskEntries: stats["disk_entries"] as? Int ?? 0,
-            memorySizeMB: Double(stats["memory_size_mb"] as? String ?? "0") ?? 0,
-            diskSizeMB: Double(stats["disk_size_mb"] as? String ?? "0") ?? 0,
-            hitRate: 0.0, // Would need to track this in CacheService
-            missRate: 0.0, // Would need to track this in CacheService
+            memorySizeMB: stats["memory_size_mb"] as? Double ?? 0.0,
+            diskSizeMB: stats["disk_size_mb"] as? Double ?? 0.0,
+            hitRate: hitRate,
+            missRate: missRate,
             lastUpdated: Date()
         )
     }

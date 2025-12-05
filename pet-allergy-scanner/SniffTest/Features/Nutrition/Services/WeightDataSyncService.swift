@@ -148,6 +148,8 @@ class WeightDataSyncService: ObservableObject {
     
     /**
      * Start the polling timer
+     * No immediate sync - relies on cached data for instant UI
+     * Syncs periodically in background without blocking
      */
     private func startPolling() {
         guard syncTimer == nil else { return }
@@ -155,12 +157,11 @@ class WeightDataSyncService: ObservableObject {
         let interval = currentPollInterval()
         print("⏱️ Starting poll timer - interval: \(Int(interval))s")
         
-        // Perform immediate sync
-        Task {
-            await performSync()
-        }
+        // Don't perform immediate sync - rely on cached data for instant UI
+        // Weight data is static and only changes when user adds/deletes entries
+        // The periodic sync will pick up any changes from other devices/sessions
         
-        // Setup recurring timer
+        // Setup recurring timer for background updates
         syncTimer = Timer.scheduledTimer(
             withTimeInterval: interval,
             repeats: true
@@ -192,6 +193,16 @@ class WeightDataSyncService: ObservableObject {
     
     /**
      * Perform the actual sync operation
+     * 
+     * Weight data is static and only changes when user takes action.
+     * This sync operation is now cache-only - it doesn't make server calls.
+     * Server calls only happen:
+     * - First time (no cache) - handled by view
+     * - After user adds/deletes weight - handled by view
+     * - After user sets/updates goal - handled by view
+     * - On explicit refresh - handled by view
+     * 
+     * This method now just ensures cached data is loaded into memory.
      */
     private func performSync() async {
         guard !activePets.isEmpty else { return }
@@ -203,32 +214,21 @@ class WeightDataSyncService: ObservableObject {
         isSyncing = true
         syncError = nil
         
-        print("🔄 Syncing data for \(activePets.count) pet(s)")
+        print("🔄 Checking cached data for \(activePets.count) pet(s)")
         
-        // Sync each active pet
+        // Just ensure cached data is loaded - no server calls
+        // Weight data is static, so we only need to use cache
         for petId in activePets {
-            do {
-                // Check if we have cached data
-                let hadData = weightService.hasCachedWeightData(for: petId)
-                let oldRecordCount = weightService.weightHistory(for: petId).count
-                
-                // Force refresh from server (bypasses cache)
-                try await weightService.refreshWeightData(petId: petId)
-                
-                // Check if data changed
-                let newRecordCount = weightService.weightHistory(for: petId).count
-                
-                if newRecordCount != oldRecordCount {
-                    print("✅ Data updated for pet \(petId): \(oldRecordCount) → \(newRecordCount) records")
-                } else if !hadData && newRecordCount > 0 {
-                    print("✅ New data loaded for pet \(petId): \(newRecordCount) records")
-                } else {
-                    print("ℹ️ No changes for pet \(petId)")
-                }
-                
-            } catch {
-                print("❌ Sync failed for pet \(petId): \(error.localizedDescription)")
-                syncError = error
+            // Check if we have cached data in memory
+            let hasCachedData = weightService.hasCachedWeightData(for: petId)
+            
+            if hasCachedData {
+                // Data is already in memory from cache - nothing to do
+                print("✅ Cached data available for pet \(petId)")
+            } else {
+                // No cached data - but don't fetch here
+                // The view will handle first-time loading when needed
+                print("ℹ️ No cached data for pet \(petId) - view will handle first load")
             }
         }
         

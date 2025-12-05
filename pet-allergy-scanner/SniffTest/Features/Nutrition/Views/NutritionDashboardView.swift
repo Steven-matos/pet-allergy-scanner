@@ -55,8 +55,34 @@ struct NutritionDashboardView: View {
         .onAppear {
             PostHogAnalytics.trackNutritionDashboardOpened()
             print("🔍 NutritionDashboardView: onAppear called")
-            // Temporarily disable loadNutritionData to test
-            // loadNutritionData()
+            // Load pets (cache-first, synchronous)
+            petService.loadPets()
+            
+            // Set default selected pet for premium users
+            if let user = authService.currentUser,
+               user.role == .premium,
+               !petService.pets.isEmpty,
+               selectedPet == nil {
+                selectedPet = petService.pets.first
+            }
+            
+            // Nutrition data is loaded synchronously from cache in service init
+            // Only show loading if we have no cached data
+            if let pet = selectedPet ?? petService.pets.first {
+                let hasCachedData = CachedNutritionService.shared.hasCachedNutritionData(for: pet.id)
+                if !hasCachedData {
+                    // Load in background if no cache
+                    Task {
+                        do {
+                            _ = try await CachedNutritionService.shared.getNutritionalRequirements(for: pet.id)
+                            try await CachedNutritionService.shared.loadFeedingRecords(for: pet.id)
+                            try await CachedNutritionService.shared.loadDailySummaries(for: pet.id)
+                        } catch {
+                            print("⚠️ Failed to load nutrition data: \(error)")
+                        }
+                    }
+                }
+            }
         }
         .onDisappear {
             print("🔍 NutritionDashboardView: onDisappear called")

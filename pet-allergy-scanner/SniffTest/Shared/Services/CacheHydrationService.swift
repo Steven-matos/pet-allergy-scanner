@@ -44,7 +44,8 @@ final class CacheHydrationService {
     private let notificationService = NotificationService.shared
     private let profileService = CachedProfileService.shared
     private let apiService = APIService.shared
-    private let cacheService = CacheService.shared
+    private let cacheCoordinator = UnifiedCacheCoordinator.shared
+    private let cacheSyncService = CacheServerSyncService.shared
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -100,6 +101,64 @@ final class CacheHydrationService {
         
         // Consider hydrated if we have at least some data
         return hasWeightData || hasTrendsData || hasNutritionData
+    }
+    
+    /**
+     * Load critical cached data synchronously (non-blocking)
+     * This method loads cached data into memory for immediate UI access
+     * Does NOT fetch from server - only loads what's already in cache
+     * 
+     * Used on app launch to ensure instant UI rendering without flashing
+     * 
+     * Returns immediately - all operations are synchronous cache reads
+     */
+    func loadCriticalCachedDataSynchronously() {
+        guard AuthService.shared.currentUser != nil else { return }
+        
+        // Load pets synchronously from cache (foundation for all other data)
+        petService.loadPets(forceRefresh: false)
+        
+        // Load cached data for all pets synchronously (if available)
+        for pet in petService.pets {
+            // These are synchronous cache checks - they don't block
+            _ = weightService.hasCachedWeightData(for: pet.id)
+            _ = nutritionService.hasCachedNutritionData(for: pet.id)
+            _ = trendsService.hasCachedTrendsData(for: pet.id)
+        }
+        
+        print("✅ Loaded critical cached data synchronously")
+    }
+    
+    /**
+     * Warm caches in background (non-blocking, silent)
+     * Preloads data for all pets to improve perceived performance
+     * 
+     * This method:
+     * 1. Loads cached data first (if not already loaded)
+     * 2. Refreshes stale data from server in background
+     * 3. Does NOT show progress overlay (silent background operation)
+     * 4. Does NOT block UI (runs in background)
+     */
+    func warmCachesInBackground() async {
+        // Only warm if user is authenticated
+        guard AuthService.shared.currentUser != nil else {
+            return
+        }
+        
+        // Don't warm if already hydrating (initial hydration)
+        guard !isHydrating else {
+            return
+        }
+        
+        print("🔥 Starting background cache warming...")
+        
+        // Step 1: Load from cache first (if not already loaded)
+        await loadFromCache()
+        
+        // Step 2: Refresh stale data from server in background (silent, no progress overlay)
+        await refreshFromServer()
+        
+        print("✅ Background cache warming completed")
     }
     
     /**
@@ -257,11 +316,25 @@ final class CacheHydrationService {
     /**
      * Load static reference data (allergens, safe alternatives)
      * These are reference data that don't change often and should be cached
-     * Uses EnhancedCacheManager for optimal caching (7 day cache)
+     * Uses UnifiedCacheCoordinator for optimal caching (7 day cache)
      */
     private func loadStaticReferenceData() async {
-        // Use EnhancedCacheManager which handles caching with proper TTL
-        await EnhancedCacheManager.shared.refreshStaticData()
+        // Load static data using UnifiedCacheCoordinator
+        let apiService = APIService.shared
+        
+        do {
+            // Load common allergens (static data - 7 day cache)
+            let allergens = try await apiService.getCommonAllergens()
+            cacheCoordinator.set(allergens, forKey: CacheKey.commonAllergens.rawValue)
+            
+            // Load safe alternatives (static data - 7 day cache)
+            let safeAlternatives = try await apiService.getSafeAlternatives()
+            cacheCoordinator.set(safeAlternatives, forKey: CacheKey.safeAlternatives.rawValue)
+            
+            print("✅ Loaded static reference data")
+        } catch {
+            print("⚠️ Failed to load static reference data: \(error.localizedDescription)")
+        }
     }
     
     /**
@@ -304,9 +377,16 @@ final class CacheHydrationService {
     /**
      * Load data from cache (immediate UI)
      * This loads cached data into memory for instant access
+     * 
+     * Synchronous operations:
+     * - Pet loading (already synchronous via loadPets)
+     * - Cache existence checks (synchronous)
+     * 
+     * Asynchronous operations (non-blocking):
+     * - Loading cached data into memory for services that need it
      */
     private func loadFromCache() async {
-        // Load pets from cache (triggers cache load if available)
+        // Load pets from cache synchronously (triggers cache load if available)
         petService.loadPets(forceRefresh: false)
         
         // Load other cached data if pets exist
@@ -315,6 +395,7 @@ final class CacheHydrationService {
         }
         
         // Load cached data for each pet in parallel (non-blocking)
+        // These operations check cache synchronously and load into memory
         await withTaskGroup(of: Void.self) { group in
             for pet in petService.pets {
                 group.addTask { [weak self] in
@@ -322,13 +403,10 @@ final class CacheHydrationService {
                     
                     // Load cached data - must call on MainActor since services are @MainActor
                     await MainActor.run {
-                        // Load cached weight data
+                        // These are synchronous cache checks - they don't block
+                        // They ensure cached data is loaded into service memory
                         _ = self.weightService.hasCachedWeightData(for: pet.id)
-                        
-                        // Load cached trends data
                         _ = self.trendsService.hasCachedTrendsData(for: pet.id)
-                        
-                        // Load cached nutrition data
                         _ = self.nutritionService.hasCachedNutritionData(for: pet.id)
                     }
                 }
