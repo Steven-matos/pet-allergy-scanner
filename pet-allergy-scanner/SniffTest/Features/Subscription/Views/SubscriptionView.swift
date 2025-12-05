@@ -13,6 +13,10 @@ struct SubscriptionView: View {
     
     var body: some View {
         PaywallView()
+            .onAppear {
+                // Track analytics
+                PostHogAnalytics.trackSubscriptionViewOpened()
+            }
     }
 }
 

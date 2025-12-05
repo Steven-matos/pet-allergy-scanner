@@ -115,6 +115,9 @@ struct PetsView: View {
                 }
             }
             .onAppear {
+                // Track analytics
+                PostHogAnalytics.trackPetsViewOpened()
+                
                 // Refresh pets when view appears to ensure fresh data
                 // This is especially important after weight/event/food logging
                 petService.loadPets(forceRefresh: false)
@@ -417,6 +420,9 @@ struct PetCardView: View {
             
             try pdfData.write(to: tempURL)
             
+            // Track analytics
+            PostHogAnalytics.trackPDFExported(petId: pet.id, success: true)
+            
             // Present share sheet
             await MainActor.run {
                 self.pdfURL = tempURL
@@ -424,6 +430,9 @@ struct PetCardView: View {
                 self.showShareSheet = true
             }
         } catch {
+            // Track analytics
+            PostHogAnalytics.trackPDFExported(petId: pet.id, success: false, error: error.localizedDescription)
+            
             await MainActor.run {
                 self.isExportingPDF = false
                 self.exportErrorMessage = error.localizedDescription

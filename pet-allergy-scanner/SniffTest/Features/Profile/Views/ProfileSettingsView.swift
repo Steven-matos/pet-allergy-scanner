@@ -83,6 +83,9 @@ struct ProfileSettingsView: View {
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
+                // Track analytics
+                PostHogAnalytics.trackSettingsViewOpened()
+                
                 calculateCacheSize()
                 // Refresh user profile when view appears to ensure latest role is displayed
                 Task {

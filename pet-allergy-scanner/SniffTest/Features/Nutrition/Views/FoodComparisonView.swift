@@ -59,6 +59,15 @@ struct FoodComparisonView: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .onAppear {
+            // Track analytics
+            if let pet = petSelectionService.selectedPet {
+                PostHogAnalytics.trackFoodComparisonViewed(
+                    petId: pet.id,
+                    foodCount: selectedFoods.count
+                )
+            }
+        }
         .alert("Common Sensitivity Triggers", isPresented: $showingSensitivityInfo) {
             Button("OK") {
                 showingSensitivityInfo = false
@@ -918,6 +927,15 @@ struct FoodComparisonView: View {
                     comparisonResults = results
                     showingComparisonResults = true
                     isLoading = false
+                    
+                    // Track analytics for loaded comparison
+                    let petId = petSelectionService.selectedPet?.id ?? ""
+                    let bestFoodId = results.bestOverall
+                    PostHogAnalytics.trackFoodComparisonCompleted(
+                        petId: petId,
+                        foodCount: results.foods.count,
+                        bestFoodId: bestFoodId
+                    )
                 }
             } catch {
                 await MainActor.run {

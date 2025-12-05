@@ -95,6 +95,9 @@ struct FeedingLogView: View {
             }
         }
         .onAppear {
+            // Track analytics
+            PostHogAnalytics.trackFeedingLogViewOpened(petId: selectedPet?.id)
+            
             // Load pets synchronously from cache first (immediate UI rendering)
             petService.loadPets()
             
@@ -187,6 +190,13 @@ struct FeedingLogView: View {
                 )
                 
                 try await feedingService.logFeeding(feedingRecord)
+                
+                // Track analytics
+                PostHogAnalytics.trackFeedingLogged(
+                    petId: pet.id,
+                    foodId: food.id,
+                    amountGrams: amountInGrams
+                )
                 
                 await MainActor.run {
                     isLoading = false

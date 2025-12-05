@@ -186,6 +186,11 @@ class FeedingLogService: ObservableObject {
             // The server will validate ownership and return appropriate errors
             try await apiService.delete(endpoint: "/nutrition/feeding/record/\(recordId)")
             
+            // Track analytics
+            if let petId = petId {
+                PostHogAnalytics.trackFeedingDeleted(petId: petId, feedingId: recordId)
+            }
+            
             // Remove from local cache if it exists there
             recentFeedingRecords.removeAll { $0.id == recordId }
             

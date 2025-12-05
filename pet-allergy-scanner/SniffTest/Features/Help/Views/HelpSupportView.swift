@@ -49,6 +49,10 @@ struct HelpSupportView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
+            .onAppear {
+                // Track analytics
+                PostHogAnalytics.trackHelpViewOpened()
+            }
             .sheet(item: $selectedCategory) { category in
                 FAQDetailView(category: category)
             }

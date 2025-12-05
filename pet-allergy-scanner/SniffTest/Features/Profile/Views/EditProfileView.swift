@@ -448,6 +448,18 @@ struct EditProfileView: View {
             
             do {
                 _ = try await profileService.updateProfile(userUpdate)
+                
+                // Track analytics - determine which fields were updated
+                var fieldsUpdated: [String] = []
+                let currentUser = authService.currentUser
+                if firstName != (currentUser?.firstName ?? "") { fieldsUpdated.append("first_name") }
+                if lastName != (currentUser?.lastName ?? "") { fieldsUpdated.append("last_name") }
+                if username != (currentUser?.username ?? "") { fieldsUpdated.append("username") }
+                if selectedImage != nil { fieldsUpdated.append("image") }
+                if !fieldsUpdated.isEmpty {
+                    PostHogAnalytics.trackProfileUpdated(fieldsUpdated: fieldsUpdated)
+                }
+                
                 await MainActor.run {
                     showingSuccessAlert = true
                 }

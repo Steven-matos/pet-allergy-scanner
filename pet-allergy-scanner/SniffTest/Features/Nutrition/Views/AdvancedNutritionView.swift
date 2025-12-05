@@ -171,6 +171,11 @@ struct AdvancedNutritionView: View {
             )
         }
         .onAppear {
+            // Track analytics
+            if let pet = selectedPet {
+                PostHogAnalytics.trackAdvancedNutritionViewOpened(petId: pet.id)
+            }
+            
             // Load pets synchronously from cache first (immediate UI rendering)
             petService.loadPets()
             

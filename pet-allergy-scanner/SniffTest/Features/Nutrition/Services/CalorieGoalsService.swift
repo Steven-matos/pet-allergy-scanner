@@ -61,6 +61,9 @@ class CalorieGoalsService: ObservableObject {
             petGoals[petId] = response.dailyCalories
             saveLocalGoals()
             
+            // Track analytics
+            PostHogAnalytics.trackWeightGoalSet(petId: petId, targetWeightKg: calories)
+            
         } catch {
             self.error = error
             throw error

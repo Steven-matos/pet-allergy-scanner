@@ -62,6 +62,12 @@ class NotificationSettingsManager: NSObject, ObservableObject {
             UserDefaults.standard.set(engagementNotificationsEnabled, forKey: "engagement_notifications_enabled")
             UserDefaults.standard.synchronize()
             
+            // Track analytics
+            PostHogAnalytics.trackNotificationSettingsChanged(
+                enabled: engagementNotificationsEnabled,
+                notificationType: "engagement"
+            )
+            
             // Update engagement notifications immediately
             if engagementNotificationsEnabled && isAuthorized && enableNotifications {
                 scheduleEngagementNotifications()

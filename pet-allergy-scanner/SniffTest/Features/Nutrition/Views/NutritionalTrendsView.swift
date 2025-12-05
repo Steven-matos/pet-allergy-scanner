@@ -94,6 +94,11 @@ struct NutritionalTrendsView: View {
             )
         }
         .onAppear {
+            // Track analytics
+            if let pet = selectedPet {
+                PostHogAnalytics.trackNutritionalTrendsViewed(petId: pet.id)
+            }
+            
             // Load pets synchronously from cache first (immediate UI rendering)
             petService.loadPets()
             

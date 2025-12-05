@@ -69,6 +69,10 @@ struct WeightManagementView: View {
             }
         }
         .background(ModernDesignSystem.Colors.background)
+        .onAppear {
+            // Track analytics
+            PostHogAnalytics.trackWeightManagementViewOpened(petId: selectedPet?.id)
+        }
         .sheet(isPresented: $showingWeightEntry) {
             if let pet = selectedPet {
                 WeightEntryView(pet: pet, lastRecordedWeightId: $lastRecordedWeightId)
@@ -1498,6 +1502,10 @@ struct WeightEntryView: View {
                     weight: weightValue,
                     notes: notes.isEmpty ? nil : notes
                 )
+                
+                // Track analytics - convert to kg for tracking
+                let weightInKg = unitService.convertToKg(weightValue)
+                PostHogAnalytics.trackWeightRecorded(petId: pet.id, weightKg: weightInKg)
                 
                 await MainActor.run {
                     // Store the record ID for undo functionality

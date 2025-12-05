@@ -143,6 +143,9 @@ struct HistoryView: View {
                 }
             }
             .onAppear {
+                // Track analytics
+                PostHogAnalytics.trackHistoryViewOpened()
+                
                 scanService.loadRecentScans()
             }
         }

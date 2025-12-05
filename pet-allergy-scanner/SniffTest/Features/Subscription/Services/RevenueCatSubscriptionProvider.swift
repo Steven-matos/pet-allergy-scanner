@@ -316,6 +316,10 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         } catch {
             logger.error("RevenueCat purchase failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = "Purchase failed. Please try again."
+            
+            // Track analytics
+            PostHogAnalytics.trackPaymentFailed(productId: product.id, error: error.localizedDescription)
+            
             return .failed(error)
         }
     }
@@ -347,9 +351,15 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
         do {
             let info = try await performRestore()
             applyCustomerInfo(info)
+            
+            // Track analytics
+            PostHogAnalytics.trackSubscriptionRestored(success: true)
         } catch {
             logger.error("RevenueCat restore failed: \(error.localizedDescription, privacy: .public)")
             errorMessage = "Unable to restore purchases. Please try again."
+            
+            // Track analytics
+            PostHogAnalytics.trackSubscriptionRestored(success: false, error: error.localizedDescription)
         }
     }
 

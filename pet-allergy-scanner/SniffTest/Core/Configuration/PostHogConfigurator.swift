@@ -51,25 +51,58 @@ enum PostHogConfigurator {
         config.debug = true
         #endif
         
-        // Enable session replay for user session recording
+        // Session Replay Configuration (2025 Best Practices)
+        // For SwiftUI apps, screenshot mode is recommended for better compatibility
         // Note: Session replay may have URL construction issues in some SDK versions
-        // Disabled due to "bad URL" errors with PostHog assets endpoint
+        // Currently disabled due to "bad URL" errors with PostHog assets endpoint
         // Re-enable once PostHog SDK fixes the URL construction issue
         config.sessionReplay = false
-        // config.sessionReplayConfig.screenshotMode = true // Required for SwiftUI compatibility
+        // When re-enabled, use screenshot mode for SwiftUI compatibility:
+        // config.sessionReplayConfig.screenshotMode = true
+        // config.sessionReplayConfig.debouncerDelay = 1.0 // Balance performance and recording fidelity
+        // config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input for privacy
         
-        // Limit session replay to reduce data usage and potential errors
-        // config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input
-        // config.sessionReplayConfig.maskAllImages = false // Allow images for better debugging
+        // Enable additional tracking for better analytics (2025 Best Practices)
+        config.captureApplicationLifecycleEvents = true // Track app open/close events automatically
+        // For SwiftUI, manual screen tracking is recommended over autocapture
+        // We track screens manually via PostHogAnalytics.trackScreenViewed()
+        config.captureScreenViews = false // Disabled - using manual tracking for better control
+        config.captureElementInteractions = true // Enable autocapture of user interactions (taps, swipes)
         
-        // Enable additional tracking for better analytics
-        config.captureApplicationLifecycleEvents = true // Track app open/close events
-        config.captureScreenViews = true // Track screen view changes
-        config.captureElementInteractions = true // Enable autocapture of user interactions
+        // Privacy: Redact sensitive data before sending events
+        // This ensures user privacy while maintaining analytics value
+        config.setBeforeSend { event in
+            // Redact sensitive information from event properties
+            var properties = event.properties
+            
+            // Redact email addresses if present
+            if let email = properties["email"] as? String {
+                let redactedEmail = email.components(separatedBy: "@").first?.map { _ in "*" }.joined() ?? "***"
+                properties["email"] = "\(redactedEmail)@***"
+            }
+            
+            // Redact phone numbers if present
+            if let phone = properties["phone"] as? String {
+                properties["phone"] = "***-***-\(phone.suffix(4))"
+            }
+            
+            // Don't capture full error messages that might contain sensitive data
+            if let error = properties["error"] as? String {
+                // Keep first 100 chars for debugging, redact the rest
+                if error.count > 100 {
+                    properties["error"] = String(error.prefix(100)) + "... [redacted]"
+                }
+            }
+            
+            event.properties = properties
+            return event
+        }
         
         // Configure PostHog SDK
         // Note: PostHog SDK setup doesn't throw, so errors are handled internally
         PostHogSDK.shared.setup(config)
+        
+        logger.info("PostHog SDK configured successfully with API key and host: \(host)")
     }
     
     // Note: Additional PostHog methods (identify, track, reset) can be called directly
