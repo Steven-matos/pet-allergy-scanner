@@ -40,17 +40,18 @@ class PetDataAggregator {
         // Calculate nutritional requirements
         let nutritionalRequirements = PetNutritionalRequirements.calculate(for: pet)
         
-        // Load feeding records (last 30 days)
-        let feedingRecords = try await loadFeedingRecords(for: pet.id, days: 30)
+        // Force refresh all data to ensure we have the latest information for PDF
+        // Load feeding records (last 30 days) with force refresh
+        let feedingRecords = try await loadFeedingRecords(for: pet.id, days: 30, forceRefresh: true)
         
-        // Load food analyses for foods that were actually fed
-        let fedFoodAnalyses = try await loadFedFoodAnalyses(for: pet.id, feedingRecords: feedingRecords)
+        // Load food analyses for foods that were actually fed (with force refresh)
+        let fedFoodAnalyses = try await loadFedFoodAnalyses(for: pet.id, feedingRecords: feedingRecords, forceRefresh: true)
         
         // Load scan history filtered to only show scans for foods that were fed
         let scanHistory = await loadScanHistoryForFedFoods(for: pet.id, days: 30, fedFoodAnalyses: fedFoodAnalyses)
         
-        // Load daily nutrition summaries (last 30 days)
-        let dailySummaries = try await loadDailySummaries(for: pet.id, days: 30)
+        // Load daily nutrition summaries (last 30 days) with force refresh
+        let dailySummaries = try await loadDailySummaries(for: pet.id, days: 30, forceRefresh: true)
         
         // Load health events (last 30 days)
         let healthEvents = try await loadHealthEvents(for: pet.id, days: 30)
@@ -71,14 +72,17 @@ class PetDataAggregator {
      * Load feeding records for a pet
      * - Parameter petId: The pet's ID
      * - Parameter days: Number of days to load
+     * - Parameter forceRefresh: If true, bypasses cache and fetches fresh data
      * - Returns: Array of feeding records
      */
-    private func loadFeedingRecords(for petId: String, days: Int) async throws -> [FeedingRecord] {
+    private func loadFeedingRecords(for petId: String, days: Int, forceRefresh: Bool = false) async throws -> [FeedingRecord] {
         do {
-            try await nutritionService.loadFeedingRecords(for: petId, days: days)
-            return nutritionService.feedingRecords.filter { $0.petId == petId }
+            try await nutritionService.loadFeedingRecords(for: petId, days: days, forceRefresh: forceRefresh)
+            let records = nutritionService.feedingRecords.filter { $0.petId == petId }
+            print("📄 [PDF] Loaded \(records.count) feeding records for pet \(petId)")
+            return records
         } catch {
-            print("Failed to load feeding records: \(error)")
+            print("⚠️ [PDF] Failed to load feeding records: \(error)")
             // Return empty array instead of throwing to allow PDF generation with partial data
             return []
         }
@@ -88,26 +92,48 @@ class PetDataAggregator {
      * Load food analyses for foods that were actually fed to the pet
      * - Parameter petId: The pet's ID
      * - Parameter feedingRecords: Array of feeding records
+     * - Parameter forceRefresh: If true, bypasses cache and fetches fresh data
      * - Returns: Array of food analyses for fed foods
      */
-    private func loadFedFoodAnalyses(for petId: String, feedingRecords: [FeedingRecord]) async throws -> [FoodNutritionalAnalysis] {
+    private func loadFedFoodAnalyses(for petId: String, feedingRecords: [FeedingRecord], forceRefresh: Bool = false) async throws -> [FoodNutritionalAnalysis] {
         // Get unique food analysis IDs from feeding records
         let foodAnalysisIds = Set(feedingRecords.map { $0.foodAnalysisId })
         
         if foodAnalysisIds.isEmpty {
+            print("📄 [PDF] No food analysis IDs found in feeding records")
             return []
         }
         
         do {
-            // Load food analyses
+            // Load food analyses (force refresh if requested)
+            // Note: loadFoodAnalyses doesn't support forceRefresh yet, but we invalidate cache first
+            if forceRefresh {
+                // Invalidate cache for food analyses
+                // Use a generic cache key pattern for food analyses
+                let cacheKey = "food_analyses_\(petId)"
+                UnifiedCacheCoordinator.shared.invalidate(forKey: cacheKey)
+            }
+            
             try await nutritionService.loadFoodAnalyses(for: petId)
             
             // Filter to only include analyses that were fed
-            return nutritionService.foodAnalyses.filter { analysis in
+            let analyses = nutritionService.foodAnalyses.filter { analysis in
                 foodAnalysisIds.contains(analysis.id)
             }
+            
+            print("📄 [PDF] Loaded \(analyses.count) food analyses for \(foodAnalysisIds.count) unique food IDs")
+            
+            // Log any missing analyses
+            let missingIds = foodAnalysisIds.filter { id in
+                !analyses.contains { $0.id == id }
+            }
+            if !missingIds.isEmpty {
+                print("⚠️ [PDF] Missing food analyses for \(missingIds.count) IDs: \(missingIds.prefix(3))")
+            }
+            
+            return analyses
         } catch {
-            print("Failed to load food analyses: \(error)")
+            print("⚠️ [PDF] Failed to load food analyses: \(error)")
             return []
         }
     }
@@ -152,14 +178,17 @@ class PetDataAggregator {
      * Load daily nutrition summaries for a pet
      * - Parameter petId: The pet's ID
      * - Parameter days: Number of days to load
+     * - Parameter forceRefresh: If true, bypasses cache and fetches fresh data
      * - Returns: Array of daily nutrition summaries
      */
-    private func loadDailySummaries(for petId: String, days: Int) async throws -> [DailyNutritionSummary] {
+    private func loadDailySummaries(for petId: String, days: Int, forceRefresh: Bool = false) async throws -> [DailyNutritionSummary] {
         do {
-            try await nutritionService.loadDailySummaries(for: petId, days: days)
-            return nutritionService.dailySummaries(for: petId)
+            try await nutritionService.loadDailySummaries(for: petId, days: days, forceRefresh: forceRefresh)
+            let summaries = nutritionService.dailySummaries(for: petId)
+            print("📄 [PDF] Loaded \(summaries.count) daily summaries for pet \(petId)")
+            return summaries
         } catch {
-            print("Failed to load daily summaries: \(error)")
+            print("⚠️ [PDF] Failed to load daily summaries: \(error)")
             // Return empty array instead of throwing to allow PDF generation with partial data
             return []
         }

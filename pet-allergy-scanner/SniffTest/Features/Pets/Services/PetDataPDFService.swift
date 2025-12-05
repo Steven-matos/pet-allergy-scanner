@@ -564,9 +564,11 @@ class PetDataPDFService {
             dateFormatter.string(from: record.feedingTime).draw(at: CGPoint(x: colX, y: currentY), withAttributes: recordAttributes)
             colX += colWidths[0]
             
-            // Get food name from food analysis
-            let foodName = getFoodName(for: record.foodAnalysisId, from: data.fedFoodAnalyses)
-            foodName.draw(at: CGPoint(x: colX, y: currentY), withAttributes: recordAttributes)
+            // Get food name from record directly (with fallback to food analyses)
+            let foodName = getFoodName(for: record, from: data.fedFoodAnalyses)
+            // Truncate long food names to fit column width
+            let truncatedFoodName = truncateText(foodName, maxWidth: colWidths[1], attributes: recordAttributes)
+            truncatedFoodName.draw(at: CGPoint(x: colX, y: currentY), withAttributes: recordAttributes)
             colX += colWidths[1]
             
             String(format: "%.0fg", record.amountGrams).draw(at: CGPoint(x: colX, y: currentY), withAttributes: recordAttributes)
@@ -875,13 +877,31 @@ class PetDataPDFService {
     }
     
     /**
-     * Get food name from food analysis ID
-     * - Parameter foodAnalysisId: The food analysis ID
-     * - Parameter foodAnalyses: Array of food analyses
-     * - Returns: Food name or "Unknown Food"
+     * Get food name from feeding record, with fallback to food analysis lookup
+     * - Parameter record: The feeding record (may contain foodName directly)
+     * - Parameter foodAnalyses: Array of food analyses for fallback lookup
+     * - Returns: Food name with brand if available, or "Unknown Food"
      */
-    private func getFoodName(for foodAnalysisId: String, from foodAnalyses: [FoodNutritionalAnalysis]) -> String {
-        return foodAnalyses.first { $0.id == foodAnalysisId }?.foodName ?? "Unknown Food"
+    private func getFoodName(for record: FeedingRecord, from foodAnalyses: [FoodNutritionalAnalysis]) -> String {
+        // First, try to use foodName directly from the feeding record (from API)
+        if let foodName = record.foodName, !foodName.isEmpty {
+            // Include brand if available
+            if let brand = record.foodBrand, !brand.isEmpty {
+                return "\(foodName) (\(brand))"
+            }
+            return foodName
+        }
+        
+        // Fallback: Look up from food analyses array
+        if let analysis = foodAnalyses.first(where: { $0.id == record.foodAnalysisId }) {
+            if let brand = analysis.brand, !brand.isEmpty {
+                return "\(analysis.foodName) (\(brand))"
+            }
+            return analysis.foodName
+        }
+        
+        // Last resort: Return unknown with ID for debugging
+        return "Unknown Food (ID: \(record.foodAnalysisId.prefix(8)))"
     }
     
     /**
@@ -967,6 +987,40 @@ class PetDataPDFService {
         currentY += 20
         
         return currentY
+    }
+    
+    /**
+     * Truncate text to fit within a maximum width
+     * - Parameter text: Text to truncate
+     * - Parameter maxWidth: Maximum width in points
+     * - Parameter attributes: Text attributes for size calculation
+     * - Returns: Truncated text with ellipsis if needed
+     */
+    private func truncateText(_ text: String, maxWidth: CGFloat, attributes: [NSAttributedString.Key: Any]) -> String {
+        let textSize = text.size(withAttributes: attributes)
+        if textSize.width <= maxWidth {
+            return text
+        }
+        
+        // Binary search for the right truncation point
+        var truncated = text
+        var low = 0
+        var high = text.count
+        var mid = 0
+        
+        while low < high {
+            mid = (low + high) / 2
+            truncated = String(text.prefix(mid)) + "..."
+            let size = truncated.size(withAttributes: attributes)
+            
+            if size.width <= maxWidth {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+        
+        return String(text.prefix(max(0, low - 1))) + "..."
     }
 }
 
