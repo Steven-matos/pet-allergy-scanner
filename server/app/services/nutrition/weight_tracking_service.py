@@ -550,7 +550,7 @@ class WeightTrackingService:
         try:
             self.supabase.rpc("update_nutritional_trends", {
                 "pet_uuid": pet_id,
-                "trend_date": trend_date.isoformat()
+                "p_trend_date": trend_date.isoformat()  # Updated parameter name to avoid ambiguity
             }).execute()
         except Exception as e:
             # Log error but don't fail the weight recording

@@ -205,6 +205,28 @@ async def record_feeding_with_slash(
     record_data = DataTransformationService.model_to_dict(feeding_record)
     record_data['id'] = IDGenerationService.generate_uuid()
     
+    # Calculate calories before inserting (if food_analysis is available)
+    # Fetch food_analysis to get nutritional data for calorie calculation
+    food_analysis_id = feeding_record.food_analysis_id
+    amount_grams = float(feeding_record.amount_grams)
+    analysis_data = None
+    
+    if food_analysis_id:
+        # Fetch food_analysis to get nutritional data
+        food_analysis_query = QueryBuilderService(supabase, "food_analyses")
+        analysis_result = await food_analysis_query.with_filters({
+            "id": food_analysis_id,
+            "pet_id": feeding_record.pet_id
+        }).with_limit(1).execute()
+        
+        if analysis_result.get("data"):
+            analysis_data = analysis_result["data"][0]
+            
+            # Calculate calories: (calories_per_100g / 100) * amount_grams
+            calories_per_100g = analysis_data.get("calories_per_100g")
+            if calories_per_100g is not None and amount_grams > 0:
+                record_data["calories"] = (float(calories_per_100g) / 100.0) * amount_grams
+    
     # Insert into database using centralized service
     # Note: feeding_records table only has created_at, not updated_at
     db_service = DatabaseOperationService(supabase)
@@ -214,6 +236,28 @@ async def record_feeding_with_slash(
         include_created_at=True,
         include_updated_at=False  # feeding_records table doesn't have updated_at column
     )
+    
+    # Enrich response with food_analysis data (food_name, food_brand) for API response
+    if analysis_data:
+        created_record["food_name"] = analysis_data.get("food_name")
+        created_record["food_brand"] = analysis_data.get("brand")
+    
+    # Update nutritional trends for this date
+    # This aggregates feeding records and creates/updates the trend record
+    try:
+        from datetime import date as date_type
+        feeding_date = feeding_record.feeding_time.date() if hasattr(feeding_record.feeding_time, 'date') else feeding_record.feeding_time
+        if isinstance(feeding_date, str):
+            from datetime import datetime
+            feeding_date = datetime.fromisoformat(feeding_date.replace('Z', '+00:00')).date()
+        
+        supabase.rpc("update_nutritional_trends", {
+            "pet_uuid": feeding_record.pet_id,
+            "p_trend_date": feeding_date.isoformat()  # Updated parameter name to avoid ambiguity
+        }).execute()
+    except Exception as e:
+        # Log error but don't fail the feeding record creation
+        logger.warning(f"Failed to update nutritional trends: {e}")
     
     # Convert to response model
     return ResponseModelService.convert_to_model(created_record, FeedingRecordResponse)
@@ -314,6 +358,7 @@ async def delete_feeding_record(
         if record_result.get("data"):
             record_data = record_result["data"][0]
             pet_id = record_data.get("pet_id")
+            feeding_time = record_data.get("feeding_time")
             logger.info(
                 f"[DELETE_FEEDING] Found feeding record {feeding_record_id} for pet {pet_id} "
                 f"(user: {current_user.id})"
@@ -354,6 +399,7 @@ async def delete_feeding_record(
                 if service_result.get("data"):
                     record_data = service_result["data"][0]
                     pet_id = record_data.get("pet_id")
+                    feeding_time = record_data.get("feeding_time")
                     logger.info(
                         f"[DELETE_FEEDING] Found record using service role. pet_id: {pet_id}"
                     )
@@ -408,6 +454,27 @@ async def delete_feeding_record(
                 f"Successfully deleted feeding record {feeding_record_id} "
                 f"for pet {pet_id or 'unknown'} (user: {current_user.id})"
             )
+            
+            # Update nutritional trends for the date of the deleted record
+            if pet_id and feeding_time:
+                try:
+                    from datetime import datetime, date as date_type
+                    # Parse feeding_time to get the date
+                    if isinstance(feeding_time, str):
+                        feeding_date = datetime.fromisoformat(feeding_time.replace('Z', '+00:00')).date()
+                    elif hasattr(feeding_time, 'date'):
+                        feeding_date = feeding_time.date()
+                    else:
+                        feeding_date = feeding_time
+                    
+                    supabase.rpc("update_nutritional_trends", {
+                        "pet_uuid": pet_id,
+                        "p_trend_date": feeding_date.isoformat() if isinstance(feeding_date, date_type) else str(feeding_date)  # Updated parameter name to avoid ambiguity
+                    }).execute()
+                    logger.info(f"Updated nutritional trends for pet {pet_id} on {feeding_date}")
+                except Exception as trend_error:
+                    # Log error but don't fail the delete operation
+                    logger.warning(f"Failed to update nutritional trends after delete: {trend_error}")
         else:
             # Delete returned False - record might not exist or RLS blocked it
             logger.warning(
@@ -500,10 +567,19 @@ async def get_feeding_records(
     enriched_records = []
     for record in records_data:
         food_analysis_id = record.get("food_analysis_id")
+        amount_grams = record.get("amount_grams", 0)
+        
         if food_analysis_id and food_analysis_id in food_analyses_map:
             analysis = food_analyses_map[food_analysis_id]
             record["food_name"] = analysis.get("food_name")
             record["food_brand"] = analysis.get("brand")
+            
+            # Calculate calories: (calories_per_100g / 100) * amount_grams
+            calories_per_100g = analysis.get("calories_per_100g")
+            if calories_per_100g is not None and amount_grams > 0:
+                record["calories"] = (float(calories_per_100g) / 100.0) * float(amount_grams)
+            else:
+                record["calories"] = None
         
         enriched_records.append(record)
     

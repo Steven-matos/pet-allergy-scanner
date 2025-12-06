@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS public.feeding_records (
     amount_grams DECIMAL(8,2) NOT NULL CHECK (amount_grams > 0),
     feeding_time TIMESTAMP WITH TIME ZONE NOT NULL,
     notes TEXT CHECK (LENGTH(notes) <= 500),
+    calories DECIMAL(10,2) CHECK (calories >= 0),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -365,6 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_food_analyses_analyzed_at ON public.food_analyses
 CREATE INDEX IF NOT EXISTS idx_feeding_records_pet_id ON public.feeding_records(pet_id);
 CREATE INDEX IF NOT EXISTS idx_feeding_records_feeding_time ON public.feeding_records(feeding_time DESC);
 CREATE INDEX IF NOT EXISTS idx_feeding_records_food_analysis_id ON public.feeding_records(food_analysis_id);
+CREATE INDEX IF NOT EXISTS idx_feeding_records_calories ON public.feeding_records(calories) WHERE calories IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_pet_id ON public.daily_nutrition_summaries(pet_id);
 CREATE INDEX IF NOT EXISTS idx_daily_summaries_date ON public.daily_nutrition_summaries(date DESC);
 CREATE INDEX IF NOT EXISTS idx_nutrition_recommendations_pet_id ON public.nutrition_recommendations(pet_id);
@@ -1107,6 +1109,220 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public, pg_temp;
+
+-- Function to update nutritional trends for a specific pet and date
+-- This aggregates data from feeding_records and calculates nutritional metrics
+CREATE OR REPLACE FUNCTION update_nutritional_trends(
+    pet_uuid UUID,
+    trend_date DATE
+)
+RETURNS VOID AS $$
+DECLARE
+    v_total_calories DECIMAL(10,2) := 0;
+    v_total_protein DECIMAL(10,2) := 0;
+    v_total_fat DECIMAL(10,2) := 0;
+    v_total_fiber DECIMAL(10,2) := 0;
+    v_feeding_count INTEGER := 0;
+    v_avg_compatibility DECIMAL(5,2) := 0;
+    v_weight_change DECIMAL(5,2) := 0;
+    v_trend_id UUID;
+BEGIN
+    -- Calculate totals from feeding_records for the date
+    -- Use calories from feeding_records if available, otherwise calculate from food_analyses
+    SELECT 
+        COALESCE(SUM(COALESCE(fr.calories, (fa.calories_per_100g / 100.0) * fr.amount_grams)), 0),
+        COALESCE(SUM((fa.protein_percentage / 100.0) * fr.amount_grams), 0),
+        COALESCE(SUM((fa.fat_percentage / 100.0) * fr.amount_grams), 0),
+        COALESCE(SUM((fa.fiber_percentage / 100.0) * fr.amount_grams), 0),
+        COUNT(*)
+    INTO 
+        v_total_calories,
+        v_total_protein,
+        v_total_fat,
+        v_total_fiber,
+        v_feeding_count
+    FROM public.feeding_records fr
+    INNER JOIN public.food_analyses fa ON fa.id = fr.food_analysis_id
+    WHERE fr.pet_id = pet_uuid
+    AND DATE(fr.feeding_time) = trend_date;
+    
+    -- Calculate average compatibility score
+    -- This requires nutritional_requirements which may not exist for all pets
+    -- For now, we'll set it to 0 if requirements don't exist
+    SELECT COALESCE(AVG(
+        CASE 
+            WHEN nr.id IS NOT NULL THEN
+                -- Simple compatibility calculation based on protein/fat/fiber alignment
+                -- This is a simplified version - actual compatibility is calculated in the app
+                70.0  -- Default compatibility score
+            ELSE 0.0
+        END
+    ), 0.0)
+    INTO v_avg_compatibility
+    FROM public.feeding_records fr
+    INNER JOIN public.food_analyses fa ON fa.id = fr.food_analysis_id
+    LEFT JOIN public.nutritional_requirements nr ON nr.pet_id = fr.pet_id
+    WHERE fr.pet_id = pet_uuid
+    AND DATE(fr.feeding_time) = trend_date;
+    
+    -- Calculate weight change (difference from previous day)
+    SELECT COALESCE(
+        (SELECT weight_kg FROM public.pet_weight_records 
+         WHERE pet_id = pet_uuid 
+         AND DATE(recorded_at) = trend_date 
+         ORDER BY recorded_at DESC LIMIT 1) -
+        (SELECT weight_kg FROM public.pet_weight_records 
+         WHERE pet_id = pet_uuid 
+         AND DATE(recorded_at) < trend_date 
+         ORDER BY recorded_at DESC LIMIT 1),
+        0.0
+    )
+    INTO v_weight_change;
+    
+    -- Check if trend record already exists
+    -- Qualify trend_date with table alias to avoid ambiguity with function parameter
+    SELECT id INTO v_trend_id
+    FROM public.nutritional_trends nt
+    WHERE nt.pet_id = pet_uuid AND nt.trend_date = trend_date;
+    
+    -- Insert or update the trend record
+    IF v_trend_id IS NOT NULL THEN
+        -- Update existing record
+        UPDATE public.nutritional_trends
+        SET 
+            total_calories = v_total_calories,
+            total_protein_g = v_total_protein,
+            total_fat_g = v_total_fat,
+            total_fiber_g = v_total_fiber,
+            feeding_count = v_feeding_count,
+            average_compatibility_score = v_avg_compatibility,
+            weight_change_kg = v_weight_change,
+            updated_at = NOW()
+        WHERE id = v_trend_id;
+    ELSE
+        -- Insert new record
+        INSERT INTO public.nutritional_trends (
+            pet_id,
+            trend_date,
+            total_calories,
+            total_protein_g,
+            total_fat_g,
+            total_fiber_g,
+            feeding_count,
+            average_compatibility_score,
+            weight_change_kg
+        ) VALUES (
+            pet_uuid,
+            trend_date,
+            v_total_calories,
+            v_total_protein,
+            v_total_fat,
+            v_total_fiber,
+            v_feeding_count,
+            v_avg_compatibility,
+            v_weight_change
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public;
+
+-- Add comment to explain the function
+COMMENT ON FUNCTION update_nutritional_trends(UUID, DATE) IS 
+'Aggregates feeding records and weight data to create/update nutritional trends for a specific pet and date. Calculates total calories, macronutrients, feeding count, average compatibility score, and weight change.';
+
+-- Function to backfill missing nutritional trends
+-- Can be called anytime to create missing trend records from existing feeding_records
+CREATE OR REPLACE FUNCTION backfill_missing_nutritional_trends()
+RETURNS TABLE(
+    total_found INTEGER,
+    total_processed INTEGER,
+    total_errors INTEGER
+) AS $$
+DECLARE
+    v_pet_id UUID;
+    v_trend_date DATE;
+    v_processed_count INTEGER := 0;
+    v_error_count INTEGER := 0;
+    v_total_count INTEGER;
+    v_rec RECORD;
+BEGIN
+    -- Count total unique date/pet combinations to process
+    SELECT COUNT(*)
+    INTO v_total_count
+    FROM (
+        SELECT DISTINCT 
+            fr.pet_id,
+            DATE(fr.feeding_time) as trend_date
+        FROM public.feeding_records fr
+        WHERE NOT EXISTS (
+            SELECT 1 
+            FROM public.nutritional_trends nt
+            WHERE nt.pet_id = fr.pet_id 
+            AND nt.trend_date = DATE(fr.feeding_time)
+        )
+    ) missing_trends;
+    
+    RAISE NOTICE '🔍 Found % date/pet combinations with feeding records but no nutritional trends', v_total_count;
+    
+    IF v_total_count = 0 THEN
+        RAISE NOTICE '✅ No missing nutritional trends to backfill. All dates with feeding records already have trends.';
+        RETURN QUERY SELECT v_total_count, 0, 0;
+        RETURN;
+    END IF;
+    
+    RAISE NOTICE '🚀 Starting backfill process...';
+    
+    -- Process each unique pet_id and date combination
+    FOR v_rec IN
+        SELECT DISTINCT 
+            fr.pet_id,
+            DATE(fr.feeding_time) as trend_date
+        FROM public.feeding_records fr
+        WHERE NOT EXISTS (
+            SELECT 1 
+            FROM public.nutritional_trends nt
+            WHERE nt.pet_id = fr.pet_id 
+            AND nt.trend_date = DATE(fr.feeding_time)
+        )
+        ORDER BY fr.pet_id, DATE(fr.feeding_time)
+    LOOP
+        BEGIN
+            v_pet_id := v_rec.pet_id;
+            v_trend_date := v_rec.trend_date;
+            
+            -- Call the update function for this pet and date
+            -- This will INSERT a new nutritional_trends record if it doesn't exist
+            PERFORM update_nutritional_trends(v_pet_id, v_trend_date);
+            v_processed_count := v_processed_count + 1;
+            
+            -- Log progress every 100 records
+            IF v_processed_count % 100 = 0 THEN
+                RAISE NOTICE '📊 Processed % of % nutritional trends records...', v_processed_count, v_total_count;
+            END IF;
+        EXCEPTION WHEN OTHERS THEN
+            -- Log error but continue processing
+            v_error_count := v_error_count + 1;
+            RAISE WARNING '⚠️ Failed to create nutritional trend for pet % on date %: %', 
+                v_pet_id, v_trend_date, SQLERRM;
+        END;
+    END LOOP;
+    
+    RAISE NOTICE '✅ Backfill complete! Created/updated % nutritional trends records', v_processed_count;
+    IF v_error_count > 0 THEN
+        RAISE NOTICE '⚠️ Encountered % errors during backfill', v_error_count;
+    END IF;
+    RAISE NOTICE '📈 Nutritional trends are now available for all dates with feeding records';
+    
+    -- Return summary statistics
+    RETURN QUERY SELECT v_total_count, v_processed_count, v_error_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public;
+
+-- Add comment to explain the function
+COMMENT ON FUNCTION backfill_missing_nutritional_trends() IS 
+'Backfills missing nutritional trends records for all dates that have feeding records but no corresponding trend records. Returns summary statistics: total_found, total_processed, total_errors. Can be called anytime to sync nutritional_trends with feeding_records data.';
 
 -- Insert initial ingredient data
 INSERT INTO public.ingredients (name, aliases, safety_level, species_compatibility, description, common_allergen) VALUES

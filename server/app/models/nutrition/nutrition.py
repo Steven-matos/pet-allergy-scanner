@@ -167,6 +167,7 @@ class FeedingRecordResponse(FeedingRecordBase):
     created_at: datetime
     food_name: Optional[str] = None  # Optional: populated when joining food_analysis
     food_brand: Optional[str] = None  # Optional: populated when joining food_analysis
+    calories: Optional[float] = None  # Optional: calculated from food_analysis and amount_grams
     
     class Config:
         from_attributes = True
