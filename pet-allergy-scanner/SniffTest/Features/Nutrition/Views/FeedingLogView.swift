@@ -95,6 +95,12 @@ struct FeedingLogView: View {
             }
         }
         .onAppear {
+            // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
+            if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                print("⏭️ FeedingLogView: Skipping onAppear - navigation cooldown active")
+                return
+            }
+            
             // Track analytics (non-blocking)
             Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackFeedingLogViewOpened(petId: selectedPet?.id)

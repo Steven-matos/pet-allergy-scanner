@@ -53,6 +53,12 @@ struct NutritionDashboardView: View {
             }
         }
         .onAppear {
+            // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
+            if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                print("⏭️ NutritionDashboardView: Skipping onAppear - navigation cooldown active")
+                return
+            }
+            
             // Track analytics (non-blocking)
             Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackNutritionDashboardOpened()

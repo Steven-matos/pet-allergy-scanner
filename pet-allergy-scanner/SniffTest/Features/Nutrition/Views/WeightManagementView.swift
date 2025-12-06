@@ -113,11 +113,46 @@ struct WeightManagementView: View {
             }
         }
         .onAppear {
+            // CRITICAL: Check navigation coordinator first - but still load if no cached data
+            let isInCooldown = TabNavigationCoordinator.shared.shouldBlockOperations()
+            
             // CRITICAL: Debounce rapid tab switches to prevent freezing
             let now = Date()
+            let shouldSkipDebounce: Bool
             if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
-                // If appeared within last 0.5 seconds, skip to prevent rapid successive loads
-                print("⏭️ WeightManagementView: Skipping onAppear (too soon after last appear)")
+                shouldSkipDebounce = true
+            } else {
+                shouldSkipDebounce = false
+            }
+            
+            // Check if we have cached data - if not, we MUST load it even during cooldown
+            guard let pet = selectedPet ?? petService.pets.first else {
+                lastAppearTime = now
+                return
+            }
+            let hasCachedData = weightService.hasCachedWeightData(for: pet.id)
+            
+            // Skip only if: debouncing AND (in cooldown OR have cached data)
+            // If no cached data, we need to load it regardless of cooldown
+            if shouldSkipDebounce && (isInCooldown || hasCachedData) {
+                print("⏭️ WeightManagementView: Skipping onAppear (too soon after last appear, cooldown: \(isInCooldown), hasCache: \(hasCachedData))")
+                // Still update lastAppearTime to prevent rapid successive calls
+                lastAppearTime = now
+                // But if no cached data, we still need to load it (with delay)
+                if !hasCachedData {
+                    // Load data even during cooldown if we don't have cache
+                    loadTask?.cancel()
+                    loadTask = Task { @MainActor in
+                        // Wait for cooldown if active
+                        if isInCooldown {
+                            await TabNavigationCoordinator.shared.waitForCooldownIfNeeded()
+                        }
+                        // Small delay to respect debouncing
+                        try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+                        guard !Task.isCancelled else { return }
+                        await loadWeightDataAsync(showLoadingIfNeeded: true, forceRefresh: false)
+                    }
+                }
                 return
             }
             lastAppearTime = now
@@ -128,6 +163,21 @@ struct WeightManagementView: View {
             
             // Create a single task for all onAppear operations
             onAppearTask = Task(priority: .userInitiated) { @MainActor in
+                // Wait for cooldown if active
+                if isInCooldown {
+                    await TabNavigationCoordinator.shared.waitForCooldownIfNeeded()
+                }
+                
+                // Small delay to ensure previous view cleanup
+                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+                guard !Task.isCancelled else { return }
+                
+                // Double-check coordinator after delay
+                if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                    print("⏭️ WeightManagementView: Skipping operations after delay - cooldown still active")
+                    return
+                }
+                
                 guard !Task.isCancelled else { return }
                 
                 // Track analytics (dispatch asynchronously to prevent blocking) - don't capture self
@@ -159,9 +209,14 @@ struct WeightManagementView: View {
                 // 3. User pulls to refresh (explicit user action)
                 guard let pet = selectedPet ?? petService.pets.first else { return }
                 
-                // Check if we have cached data - if not, load it (cache-first, no server call if cached)
-                // loadWeightData with forceRefresh: false will use cache if available
-                if !weightService.hasCachedWeightData(for: pet.id) {
+                // CRITICAL: Check if we have weight HISTORY (not just cached data)
+                // hasCachedWeightData might return true if there's a goal but no history
+                // We need history to show the graph, so check specifically for history
+                let hasWeightHistory = !weightService.weightHistory(for: pet.id).isEmpty
+                let hasCachedData = weightService.hasCachedWeightData(for: pet.id)
+                
+                // Load if: no cached data OR no weight history (even if we have a goal)
+                if !hasCachedData || !hasWeightHistory {
                     // Cancel any existing load task
                     loadTask?.cancel()
                     loadTask = nil
@@ -399,12 +454,74 @@ struct WeightManagementView: View {
                 let maxPoints = DevicePerformanceHelper.maxChartDataPoints
                 let limitedHistory = Array(weightHistory.prefix(maxPoints))
                 
-                if !limitedHistory.isEmpty {
-                    VStack(spacing: ModernDesignSystem.Spacing.sm) {                        
+                // Always show the chart section - it will show empty/loading state if no data
+                // This ensures the graph appears when data loads
+                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    if !limitedHistory.isEmpty {
                         WeightTrendChart(
                             weightHistory: limitedHistory,
                             petName: pet.name,
                             pet: pet  // Pass pet for background image
+                        )
+                    } else if isLoading {
+                        // Show loading state while data is being fetched
+                        VStack(spacing: ModernDesignSystem.Spacing.md) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text("Loading weight history...")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        .frame(height: 200)
+                        .frame(maxWidth: .infinity)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    } else {
+                        // Show empty state with pet image on scale - encourage user to add weight data
+                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                            Text("Weight Trend")
+                                .font(ModernDesignSystem.Typography.title3)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            ZStack {
+                                // Background for the chart area
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .fill(ModernDesignSystem.Colors.lightGray.opacity(0.3))
+                                    .frame(height: 200)
+                                
+                                // Centered content with pet image on scale
+                                VStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                    // Show species-specific scale image centered
+                                    Image(pet.species == .dog ? "Illustrations/dog-scale" : "Illustrations/cat-scale")
+                                        .resizable()
+                                        .renderingMode(.original)
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(height: 140)
+                                    
+                                    Text("No weight data yet")
+                                        .font(ModernDesignSystem.Typography.subheadline)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    
+                                    Text("Record your pet's weight to see trends")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary.opacity(0.7))
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .padding(ModernDesignSystem.Spacing.lg)
+                        .background(ModernDesignSystem.Colors.softCream)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+                        )
+                        .shadow(
+                            color: ModernDesignSystem.Shadows.small.color,
+                            radius: ModernDesignSystem.Shadows.small.radius,
+                            x: ModernDesignSystem.Shadows.small.x,
+                            y: ModernDesignSystem.Shadows.small.y
                         )
                     }
                 }
