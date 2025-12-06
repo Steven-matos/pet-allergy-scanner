@@ -48,10 +48,13 @@ struct WeightManagementView: View {
     @State private var showingAllWeightEntries = false
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var refreshTrigger = false
+    // Removed refreshTrigger - it was causing infinite re-render loops
+    // SwiftUI will automatically update when @Published properties in weightService change
     @State private var lastRecordedWeightId: String?
     @State private var showingUndoToast = false
     @State private var loadTask: Task<Void, Never>?
+    @State private var onAppearTask: Task<Void, Never>?
+    @State private var lastAppearTime: Date?
     
     // MARK: - Computed Properties
     
@@ -82,9 +85,7 @@ struct WeightManagementView: View {
                         // Use Task to avoid blocking
                         Task { @MainActor in
                             await loadWeightDataAsync(showLoadingIfNeeded: false, forceRefresh: true)
-                            if !Task.isCancelled {
-                                refreshTrigger.toggle()
-                            }
+                            // Don't toggle refreshTrigger - SwiftUI will update automatically
                         }
                         
                         // Trends will be automatically refreshed via invalidateTrendsCache with autoReload
@@ -106,110 +107,142 @@ struct WeightManagementView: View {
                         // Use Task to avoid blocking
                         Task { @MainActor in
                             await loadWeightDataAsync(showLoadingIfNeeded: false, forceRefresh: true)
-                            if !Task.isCancelled {
-                                refreshTrigger.toggle()
-                            }
+                            // Don't toggle refreshTrigger - SwiftUI will update automatically
                         }
                     }
             }
         }
         .onAppear {
-            // Track analytics (dispatch asynchronously to prevent blocking)
-            Task.detached(priority: .utility) { @MainActor in
-                PostHogAnalytics.trackWeightManagementViewOpened(petId: selectedPet?.id)
+            // CRITICAL: Debounce rapid tab switches to prevent freezing
+            let now = Date()
+            if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
+                // If appeared within last 0.5 seconds, skip to prevent rapid successive loads
+                print("⏭️ WeightManagementView: Skipping onAppear (too soon after last appear)")
+                return
             }
+            lastAppearTime = now
             
-            // Load pets synchronously from cache first (immediate UI rendering)
-            petService.loadPets()
+            // Cancel any existing onAppear task first
+            onAppearTask?.cancel()
+            onAppearTask = nil
             
-            // Auto-select pet if needed
-            if selectedPet == nil, !petService.pets.isEmpty, let firstPet = petService.pets.first {
-                petSelectionService.selectPet(firstPet)
-            }
-            
-            // Weight data is static - use cached data exclusively
-            // No server calls on view appearance since data only changes when:
-            // 1. User adds/deletes weight entry (handled by sheet onDisappear)
-            // 2. User sets/updates goal (handled by sheet onDisappear)
-            // 3. User pulls to refresh (explicit user action)
-            guard let pet = selectedPet ?? petService.pets.first else { return }
-            
-            // Check if we have cached data - if not, load it (cache-first, no server call if cached)
-            // loadWeightData with forceRefresh: false will use cache if available
-            if !weightService.hasCachedWeightData(for: pet.id) {
-                // Cancel any existing load task
-                loadTask?.cancel()
+            // Create a single task for all onAppear operations
+            onAppearTask = Task(priority: .userInitiated) { @MainActor in
+                guard !Task.isCancelled else { return }
                 
-                // First time - load data (will use cache if available, only calls server if no cache)
-                // Use Task with MainActor to ensure UI updates work correctly
-                loadTask = Task { @MainActor in
-                    // Yield immediately to allow view to render first - critical for preventing UI freeze
-                    await Task.yield()
+                // Track analytics (dispatch asynchronously to prevent blocking) - don't capture self
+                let petId = selectedPet?.id
+                Task.detached(priority: .utility) { @MainActor in
+                    PostHogAnalytics.trackWeightManagementViewOpened(petId: petId)
+                }
+                
+                // Load pets asynchronously to prevent blocking UI
+                petService.loadPets()
+                
+                // Yield to allow UI to render first
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                
+                // Auto-select pet if needed
+                if selectedPet == nil, !petService.pets.isEmpty, let firstPet = petService.pets.first {
+                    petSelectionService.selectPet(firstPet)
+                }
+                
+                // Yield again after auto-select
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                
+                // Weight data is static - use cached data exclusively
+                // No server calls on view appearance since data only changes when:
+                // 1. User adds/deletes weight entry (handled by sheet onDisappear)
+                // 2. User sets/updates goal (handled by sheet onDisappear)
+                // 3. User pulls to refresh (explicit user action)
+                guard let pet = selectedPet ?? petService.pets.first else { return }
+                
+                // Check if we have cached data - if not, load it (cache-first, no server call if cached)
+                // loadWeightData with forceRefresh: false will use cache if available
+                if !weightService.hasCachedWeightData(for: pet.id) {
+                    // Cancel any existing load task
+                    loadTask?.cancel()
+                    loadTask = nil
                     
-                    // Check if task was cancelled (e.g., view disappeared)
-                    guard !Task.isCancelled else { return }
-                    
-                    // Prevent multiple simultaneous loads
-                    guard !isLoading else { return }
-                    
-                    // Set loading state with timeout protection
-                    isLoading = true
-                    
-                    // Add timeout to prevent isLoading from getting stuck
-                    let loadStartTime = Date()
-                    let timeoutTask = Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
-                        if !Task.isCancelled && isLoading {
-                            let freezeDuration = Date().timeIntervalSince(loadStartTime)
-                            print("⚠️ Weight data load timeout - resetting isLoading")
-                            // Track UI freeze in PostHog
-                            PostHogAnalytics.trackUIFreeze(
-                                viewName: "WeightManagementView",
-                                duration: freezeDuration,
-                                action: "loadWeightData"
-                            )
-                            PostHogAnalytics.trackError(
-                                error: "Weight data load timeout after \(Int(freezeDuration))s",
-                                context: "WeightManagementView.loadWeightData",
-                                severity: "high"
-                            )
-                            isLoading = false
-                        }
-                    }
-                    
-                    defer {
-                        timeoutTask.cancel()
-                        if !Task.isCancelled {
-                            isLoading = false
-                        }
-                    }
-                    
-                    do {
-                        // forceRefresh: false means it will use cache if available
-                        try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
+                    // First time - load data (will use cache if available, only calls server if no cache)
+                    // Use Task with MainActor to ensure UI updates work correctly
+                    loadTask = Task { @MainActor in
+                        // Yield immediately to allow view to render first - critical for preventing UI freeze
+                        await Task.yield()
                         
-                        // Only update UI if task wasn't cancelled
-                        if !Task.isCancelled {
-                            refreshTrigger.toggle()
+                        // Check if task was cancelled (e.g., view disappeared)
+                        guard !Task.isCancelled else { return }
+                        
+                        // Prevent multiple simultaneous loads
+                        guard !isLoading else { return }
+                        
+                        // Set loading state with timeout protection
+                        isLoading = true
+                        
+                        // Add timeout to prevent isLoading from getting stuck
+                        let loadStartTime = Date()
+                        let timeoutTask = Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                            guard !Task.isCancelled else { return }
+                            if isLoading {
+                                let freezeDuration = Date().timeIntervalSince(loadStartTime)
+                                print("⚠️ Weight data load timeout - resetting isLoading")
+                                // Track UI freeze in PostHog
+                                PostHogAnalytics.trackUIFreeze(
+                                    viewName: "WeightManagementView",
+                                    duration: freezeDuration,
+                                    action: "loadWeightData"
+                                )
+                                PostHogAnalytics.trackError(
+                                    error: "Weight data load timeout after \(Int(freezeDuration))s",
+                                    context: "WeightManagementView.loadWeightData",
+                                    severity: "high"
+                                )
+                                isLoading = false
+                            }
                         }
-                    } catch {
-                        // Handle error gracefully - don't crash the app
-                        if !Task.isCancelled {
+                        
+                        defer {
+                            timeoutTask.cancel()
+                            // CRITICAL: Only update state if task wasn't cancelled
+                            if !Task.isCancelled {
+                                isLoading = false
+                            }
+                        }
+                        
+                        do {
+                            // forceRefresh: false means it will use cache if available
+                            try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
+                            
+                        // Don't toggle refreshTrigger - it causes view recreation
+                        // SwiftUI will automatically update when weightService @Published properties change
+                        } catch {
+                            // Handle error gracefully - don't crash the app
+                            guard !Task.isCancelled else { return }
                             print("⚠️ Failed to load weight data: \(error.localizedDescription)")
                             // Don't set errorMessage here to avoid blocking UI
                         }
                     }
                 }
+                // If we have cached data, it's already in memory - no action needed
+                
+                // Note: Sync service is disabled since weight data is static
+                // We don't need periodic syncing - data only changes on user actions
             }
-            // If we have cached data, it's already in memory - no action needed
-            
-            // Note: Sync service is disabled since weight data is static
-            // We don't need periodic syncing - data only changes on user actions
         }
         .onDisappear {
-            // Cancel any ongoing load tasks to prevent state updates after view disappears
+            // CRITICAL: Cancel all ongoing tasks to prevent state updates after view disappears
+            // Cancel in reverse order of creation to ensure proper cleanup
             loadTask?.cancel()
             loadTask = nil
+            onAppearTask?.cancel()
+            onAppearTask = nil
+            
+            // Reset loading state to prevent stuck UI
+            // Only reset if view is still accessible (safety check)
+            isLoading = false
             
             // Sync service is disabled, but clean up just in case
             if let pet = selectedPet {
@@ -221,20 +254,15 @@ struct WeightManagementView: View {
             loadTask?.cancel()
             loadTask = nil
             
+            // Reset loading state when pet changes
+            isLoading = false
+            
             // Sync service is disabled, but clean up just in case
             if let oldPet = oldPet {
                 syncService.stopSyncing(forPetId: oldPet.id)
             }
-            // Force UI refresh when pet changes (uses cached data)
-            // Use Task to ensure this happens on next run loop to avoid conflicts
-            if newPet != nil {
-                Task { @MainActor in
-                    await Task.yield()
-                    if !Task.isCancelled {
-                        refreshTrigger.toggle()
-                    }
-                }
-            }
+            // Don't toggle refreshTrigger - it causes view recreation and potential loops
+            // SwiftUI will automatically update when weightService @Published properties change
         }
         .refreshable {
             // Pull to refresh weight data
@@ -362,7 +390,8 @@ struct WeightManagementView: View {
                     currentWeight: weightService.currentWeight(for: pet.id) ?? pet.weightKg,
                     weightGoal: weightService.activeWeightGoal(for: pet.id)
                 )
-                .id("\(pet.id)-\(weightService.currentWeight(for: pet.id) ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
+                // Remove .id() modifier - it causes view recreation and potential infinite loops
+                // SwiftUI will automatically update when @Published properties change
                 
                 // Weight Trend Chart
                 // Limit data points on older devices to prevent freezing
@@ -378,29 +407,6 @@ struct WeightManagementView: View {
                             pet: pet  // Pass pet for background image
                         )
                     }
-                } else {
-                    // No weight data - show empty state with chart preview
-                    VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                        // Debug info banner (temporary for troubleshooting)
-                        HStack {
-                            Text("⚠️ No weight records loaded")
-                                .font(.caption)
-                                .foregroundColor(.orange)
-                            Spacer()
-                            Button("Force Refresh") {
-                                Task {
-                                    await refreshWeightData()
-                                }
-                            }
-                            .font(.caption)
-                        }
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(Color.orange.opacity(0.1))
-                        .cornerRadius(8)
-                        
-                        EmptyWeightChartCard(pet: pet)
-                    }
                 }
                 
                 // Goal Progress
@@ -410,7 +416,8 @@ struct WeightManagementView: View {
                         currentWeight: weightService.currentWeight(for: pet.id) ?? pet.weightKg, 
                         pet: pet
                     )
-                    .id("\(goal.id)-\(weightService.currentWeight(for: pet.id) ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
+                    // Remove .id() modifier - it causes view recreation and potential infinite loops
+                    // SwiftUI will automatically update when @Published properties change
                 } else {
                     // No goal set - show "Set Goal" card
                     SetGoalCard(pet: pet)
@@ -499,7 +506,7 @@ struct WeightManagementView: View {
                 
                 do {
                     try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
-                    refreshTrigger.toggle()
+                    // Don't toggle refreshTrigger - SwiftUI will update automatically
                 } catch {
                     print("⚠️ Failed to load weight data: \(error.localizedDescription)")
                 }
@@ -566,7 +573,7 @@ struct WeightManagementView: View {
             
             await MainActor.run {
                 isLoading = false
-                refreshTrigger.toggle()
+                // Don't toggle refreshTrigger - SwiftUI will update automatically
             }
         } catch {
             // Handle 404 errors gracefully
@@ -598,9 +605,7 @@ struct WeightManagementView: View {
             // Force refresh from server
             try await weightService.refreshWeightData(petId: pet.id)
             
-            await MainActor.run {
-                refreshTrigger.toggle() // Force UI refresh
-            }
+            // Don't toggle refreshTrigger - SwiftUI will update automatically when service updates
         } catch {
             await MainActor.run {
                 errorMessage = "Failed to refresh weight data: \(error.localizedDescription)"
@@ -645,9 +650,8 @@ struct WeightManagementView: View {
                     }
                 }
                 
-                // Trigger UI refresh
+                // Update state - SwiftUI will refresh automatically
                 await MainActor.run {
-                    refreshTrigger.toggle()
                     lastRecordedWeightId = nil
                 }
             } catch {

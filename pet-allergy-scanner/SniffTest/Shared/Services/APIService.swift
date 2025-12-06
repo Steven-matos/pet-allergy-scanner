@@ -1109,21 +1109,47 @@ class APIService: ObservableObject, @unchecked Sendable {
     // MARK: - 404 Cache Invalidation Helpers
     
     /**
-     * Handle 404 response by invalidating cache for deleted resource
+     * Handle 404 response by invalidating cache appropriately
      * - Parameter request: The request that returned 404
+     * 
+     * Note: Not all 404s mean "permanently deleted"
+     * - Computed/aggregated data (daily summaries, trends) may return 404 when no source data exists
+     * - These should be cleared from cache but not marked as "permanently deleted"
+     * - Only permanent resources (pets, users) should be marked as deleted
      */
     private func handle404Response(request: URLRequest) async {
         guard let url = request.url else { return }
         
-        let cacheCoordinator = UnifiedCacheCoordinator.shared
         let path = url.path
+        let cacheCoordinator = UnifiedCacheCoordinator.shared
         
-        // Extract resource ID and infer cache key from URL pattern
+        // Don't treat subscription status 404s as deleted resources
+        if path.contains("/subscriptions/status") {
+            print("⚠️ [APIService] Subscription status endpoint returned 404 - not treating as deleted resource")
+            return
+        }
+        
+        // Don't treat computed/aggregated data 404s as permanently deleted
+        // These are computed from source data and may not exist yet
+        if path.contains("/nutrition/summaries") || path.contains("/nutrition/trends") {
+            // Just invalidate cache - don't mark as permanently deleted
+            // This allows re-checking when source data (meals, weights) is added
+            if let resourceId = extractResourceId(from: path) {
+                let cacheKey = inferCacheKey(from: path, resourceId: resourceId)
+                await MainActor.run {
+                    cacheCoordinator.invalidate(forKey: cacheKey)
+                    print("🔄 [APIService] 404 for computed data - invalidated cache (will re-check when source data added): \(cacheKey)")
+                }
+            }
+            return
+        }
+        
+        // For permanent resources (pets, users, etc.), mark as deleted
         if let resourceId = extractResourceId(from: path) {
             let cacheKey = inferCacheKey(from: path, resourceId: resourceId)
             await MainActor.run {
                 cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
-                print("🗑️ [APIService] 404 detected - invalidated cache for key: \(cacheKey)")
+                print("🗑️ [APIService] 404 detected - marked as deleted resource: \(cacheKey)")
             }
         }
     }

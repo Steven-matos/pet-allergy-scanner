@@ -464,17 +464,21 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 freshUser
             }
             
-            // Hydrate all caches before transitioning to authenticated state
-            await cacheHydrationService.hydrateAllCaches()
-            cacheAuthenticatedUser(finalUser)
-            
-            // Only transition to authenticated once cache hydration is complete
-            await MainActor.run {
-                authState = .authenticated(finalUser)
-            }
-            
-            // Post login notification for services to reload their data
-            NotificationCenter.default.post(name: .userDidLogin, object: nil)
+                // CRITICAL: Clear all previous user data before loading new user data
+                // This prevents showing previous user's data
+                cacheHydrationService.clearAllCaches()
+                
+                // Hydrate all caches with NEW user's data (force refresh to prevent stale data)
+                await cacheHydrationService.hydrateAllCaches(forceRefresh: true)
+                cacheAuthenticatedUser(finalUser)
+                
+                // Only transition to authenticated once cache hydration is complete
+                await MainActor.run {
+                    authState = .authenticated(finalUser)
+                }
+                
+                // Post login notification for services to reload their data
+                NotificationCenter.default.post(name: .userDidLogin, object: nil)
             
         } catch {
             // Fallback to auth response user if getCurrentUser fails
@@ -526,8 +530,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     user
                 }
                 
-                // Hydrate all caches before transitioning to authenticated state
-                await cacheHydrationService.hydrateAllCaches()
+                // CRITICAL: Clear all previous user data before loading new user data
+                // This prevents showing previous user's data
+                cacheHydrationService.clearAllCaches()
+                
+                // Hydrate all caches with NEW user's data (force refresh to prevent stale data)
+                await cacheHydrationService.hydrateAllCaches(forceRefresh: true)
                 cacheAuthenticatedUser(finalUser)
                 
                 await MainActor.run {
@@ -610,8 +618,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
                     user
                 }
                 
-                // Hydrate all caches before transitioning to authenticated state
-                await cacheHydrationService.hydrateAllCaches()
+                // CRITICAL: Clear all previous user data before loading new user data
+                // This prevents showing previous user's data
+                cacheHydrationService.clearAllCaches()
+                
+                // Hydrate all caches with NEW user's data (force refresh to prevent stale data)
+                await cacheHydrationService.hydrateAllCaches(forceRefresh: true)
                 cacheAuthenticatedUser(finalUser)
                 
                 await MainActor.run {

@@ -96,8 +96,12 @@ final class CachedPetService {
                     self.isLoading = false
                     self.errorMessage = nil
                     
+                    // Validate defaultPetId against cached pets (fixes Picker invalid selection warnings)
+                    let petIds = cachedPets.map { $0.id }
+                    SettingsManager.shared.validateDefaultPetId(against: petIds)
+
                     print("✅ Loaded \(cachedPets.count) pet(s) from cache")
-                    
+
                     // Trigger background refresh if cache is stale
                     refreshPetsInBackground()
                     return
@@ -136,15 +140,19 @@ final class CachedPetService {
             if let cachedPets = cacheCoordinator.get([Pet].self, forKey: cacheKey) {
                 if !cachedPets.isEmpty {
                     await MainActor.run {
-                        self.pets = cachedPets
-                        self.isLoading = false
-                        self.errorMessage = nil
-                    }
-                    print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+                    self.pets = cachedPets
+                    self.isLoading = false
+                    self.errorMessage = nil
                     
-                    // Trigger background refresh if cache is stale
-                    refreshPetsInBackground()
-                    return cachedPets
+                    // Validate defaultPetId against cached pets (fixes Picker invalid selection warnings)
+                    let petIds = cachedPets.map { $0.id }
+                    SettingsManager.shared.validateDefaultPetId(against: petIds)
+                }
+                print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+
+                // Trigger background refresh if cache is stale
+                refreshPetsInBackground()
+                return cachedPets
                 }
             }
         }
@@ -158,16 +166,20 @@ final class CachedPetService {
         do {
             let loadedPets = try await apiService.getPets()
             
-            await MainActor.run {
-                self.pets = loadedPets
-                self.isLoading = false
-            }
-            
-            // Update cache
-            await updatePetsCache()
-            
-            print("✅ Loaded \(loadedPets.count) pet(s) from server")
-            return loadedPets
+                await MainActor.run {
+                    self.pets = loadedPets
+                    self.isLoading = false
+                    
+                    // Validate defaultPetId against loaded pets (fixes Picker invalid selection warnings)
+                    let petIds = loadedPets.map { $0.id }
+                    SettingsManager.shared.validateDefaultPetId(against: petIds)
+                }
+
+                // Update cache
+                await updatePetsCache()
+
+                print("✅ Loaded \(loadedPets.count) pet(s) from server")
+                return loadedPets
             
         } catch let apiError as APIError {
             await MainActor.run {

@@ -16,6 +16,8 @@ struct PetsView: View {
     @State private var petToDelete: Pet?
     @State private var showingDeleteAlert = false
     @State private var showingAlert = false
+    @State private var lastAppearTime: Date?
+    @State private var onAppearTask: Task<Void, Never>?
     
     var body: some View {
         NavigationStack {
@@ -115,14 +117,53 @@ struct PetsView: View {
                 }
             }
             .onAppear {
-                // Track analytics (non-blocking)
-                Task.detached(priority: .utility) { @MainActor in
-                PostHogAnalytics.trackPetsViewOpened()
+                // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
+                if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                    print("⏭️ PetsView: Skipping onAppear - navigation cooldown active")
+                    return
                 }
                 
-                // Refresh pets when view appears to ensure fresh data
-                // This is especially important after weight/event/food logging
-                petService.loadPets(forceRefresh: false)
+                // CRITICAL: Debounce rapid tab switches to prevent freezing and memory leaks
+                let now = Date()
+                if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
+                    print("⏭️ PetsView: Skipping onAppear (too soon after last appear: \(now.timeIntervalSince(lastAppear))s)")
+                    return
+                }
+                lastAppearTime = now
+                
+                // CRITICAL: Cancel ALL existing tasks FIRST to prevent memory leaks
+                onAppearTask?.cancel()
+                onAppearTask = nil
+                
+                // CRITICAL: Longer delay to ensure previous view is completely gone
+                // This is essential for preventing freezes when switching rapidly
+                onAppearTask = Task(priority: .utility) { @MainActor in
+                    try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+                    guard !Task.isCancelled else { return }
+                    
+                    // Double-check coordinator after delay
+                    if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                        print("⏭️ PetsView: Skipping operations after delay - cooldown still active")
+                        return
+                    }
+                    
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    
+                    // Track analytics (non-blocking)
+                    Task.detached(priority: .utility) { @MainActor in
+                        PostHogAnalytics.trackPetsViewOpened()
+                    }
+                    
+                    // Refresh pets when view appears to ensure fresh data
+                    // This is especially important after weight/event/food logging
+                    petService.loadPets(forceRefresh: false)
+                }
+            }
+            .onDisappear {
+                // CRITICAL: Cancel task on disappear to prevent memory leaks
+                onAppearTask?.cancel()
+                onAppearTask = nil
             }
             .refreshable {
                 // Pull-to-refresh to force fresh data from server
@@ -140,8 +181,8 @@ struct PetCardView: View {
     let pet: Pet
     let onEdit: () -> Void
     let onDelete: () -> Void
-    @StateObject private var unitService = WeightUnitPreferenceService.shared
-    @StateObject private var weightService = CachedWeightTrackingService.shared
+    @ObservedObject private var unitService = WeightUnitPreferenceService.shared
+    @ObservedObject private var weightService = CachedWeightTrackingService.shared
     @State private var isExportingPDF = false
     @State private var showExportError = false
     @State private var exportErrorMessage: String?

@@ -61,8 +61,9 @@ final class CacheHydrationService {
     /**
      * Hydrate all caches with user data
      * Called automatically on sign-in, can be called manually for refresh
+     * - Parameter forceRefresh: If true, forces fresh data from server (used on login to prevent showing previous user's data)
      */
-    func hydrateAllCaches() async {
+    func hydrateAllCaches(forceRefresh: Bool = false) async {
         guard !isHydrating else { return }
         
         isHydrating = true
@@ -70,7 +71,7 @@ final class CacheHydrationService {
         error = nil
         
         do {
-            try await performHydration()
+            try await performHydration(forceRefresh: forceRefresh)
         } catch {
             self.error = error
             print("❌ Cache hydration failed: \(error.localizedDescription)")
@@ -199,6 +200,10 @@ final class CacheHydrationService {
      * Called on logout
      */
     func clearAllCaches() {
+        // CRITICAL: Clear all cache entries (not just user-scoped) to prevent data leakage between users
+        UnifiedCacheCoordinator.shared.clearAll()
+        
+        // Clear all service in-memory state
         petService.clearPets()
         weightService.clearCache()
         trendsService.clearCache()
@@ -208,8 +213,16 @@ final class CacheHydrationService {
         notificationService.clearCache()
         profileService.clearCache()
         
+        // Clear pet selection state
+        NutritionPetSelectionService.shared.clearSelection()
+        
+        // Clear user-specific settings (prevents Picker issues with invalid pet IDs)
+        SettingsManager.shared.clearUserSpecificSettings()
+        
         hydrationProgress = 0.0
         currentStep = ""
+        
+        print("🗑️ [CacheHydrationService] Cleared all caches and service state")
     }
     
     // MARK: - Private Methods
@@ -219,35 +232,35 @@ final class CacheHydrationService {
      * Perform the actual cache hydration process
      * Loads all static and user data into cache for instant access
      */
-    private func performHydration() async throws {
+    private func performHydration(forceRefresh: Bool = false) async throws {
         let totalSteps = 9.0
         var currentStep = 0.0
-        
+
         // Step 1: Load user profile data
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading profile data...")
         if AuthService.shared.currentUser != nil {
-            _ = try await profileService.getCurrentUser()
-            _ = try await profileService.getUserProfile()
+            _ = try await profileService.getCurrentUser(forceRefresh: forceRefresh)
+            _ = try await profileService.getUserProfile(forceRefresh: forceRefresh)
         }
         currentStep += 1.0
-        
+
         // Step 2: Load static reference data (allergens, safe alternatives)
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading reference data...")
         await loadStaticReferenceData()
         currentStep += 1.0
-        
+
         // Step 3: Load pets (foundation for all other data)
         // Wait for pets to load synchronously before proceeding
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading pets...")
-        await waitForPetsToLoad()
+        await waitForPetsToLoad(forceRefresh: forceRefresh)
         currentStep += 1.0
-        
-        // Step 4: Load weight data for all pets (force refresh from server)
+
+        // Step 4: Load weight data for all pets (force refresh from server if requested)
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading weight data...")
         for pet in petService.pets {
             do {
-                // Force refresh to ensure we get latest data from server including goals
-                try await weightService.loadWeightData(for: pet.id, forceRefresh: true)
+                // Force refresh if requested (e.g., on login to prevent showing previous user's data)
+                try await weightService.loadWeightData(for: pet.id, forceRefresh: forceRefresh)
             } catch {
                 // Log but don't fail - individual pet data load failures are non-critical
                 // New pets may not have data yet, which is expected
@@ -260,7 +273,7 @@ final class CacheHydrationService {
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading nutrition data...")
         for pet in petService.pets {
             do {
-                try await nutritionService.loadFeedingRecords(for: pet.id)
+                try await nutritionService.loadFeedingRecords(for: pet.id, forceRefresh: forceRefresh)
             } catch {
                 // Log but don't fail - individual pet data load failures are non-critical
                 // New pets may not have data yet, which is expected
@@ -273,7 +286,7 @@ final class CacheHydrationService {
         await updateProgress(step: currentStep, total: totalSteps, message: "Loading trends data...")
         for pet in petService.pets {
             do {
-                try await trendsService.loadTrendsData(for: pet.id, period: .thirtyDays)
+                try await trendsService.loadTrendsData(for: pet.id, period: .thirtyDays, forceRefresh: forceRefresh)
             } catch {
                 // Log but don't fail - individual pet data load failures are non-critical
                 // New pets may not have data yet, which is expected
@@ -341,30 +354,30 @@ final class CacheHydrationService {
      * Wait for pets to load synchronously
      * Ensures pets are loaded before proceeding with pet-specific data hydration
      */
-    private func waitForPetsToLoad() async {
-        // Trigger load - this will return immediately if cached
-        petService.loadPets()
-        
-        // If we have pets already (from cache), we're done
-        if !petService.pets.isEmpty {
+    private func waitForPetsToLoad(forceRefresh: Bool = false) async {
+        // Trigger load - use forceRefresh if requested (e.g., on login to prevent showing previous user's pets)
+        petService.loadPets(forceRefresh: forceRefresh)
+
+        // If we have pets already (from cache or server), we're done
+        if !petService.pets.isEmpty && !forceRefresh {
             return
         }
-        
+
         // If loading from server, wait for it to complete
         // Poll isLoading status until it's false (max 10 seconds timeout)
         let maxWaitTime: TimeInterval = 10.0
         let pollInterval: TimeInterval = 0.1
         var elapsed: TimeInterval = 0.0
-        
+
         while petService.isLoading && elapsed < maxWaitTime {
             try? await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
             elapsed += pollInterval
         }
-        
-        // If still no pets and not loading, force refresh one more time
-        if petService.pets.isEmpty && !petService.isLoading {
+
+        // If still no pets and not loading, force refresh one more time (only if not already forced)
+        if petService.pets.isEmpty && !petService.isLoading && !forceRefresh {
             petService.loadPets(forceRefresh: true)
-            
+
             // Wait for the refresh to complete
             elapsed = 0.0
             while petService.isLoading && elapsed < maxWaitTime {

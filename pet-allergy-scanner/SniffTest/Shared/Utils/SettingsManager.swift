@@ -198,6 +198,27 @@ class SettingsManager: ObservableObject {
     var shouldAutoAnalyze: Bool {
         return enableAutoAnalysis
     }
+    
+    /// Clear user-specific settings (called on logout)
+    /// This prevents data leakage between user accounts
+    func clearUserSpecificSettings() {
+        defaultPetId = nil
+        UserDefaults.standard.removeObject(forKey: "defaultPetId")
+        UserDefaults.standard.synchronize()
+    }
+    
+    /// Validate and fix defaultPetId against current pets list
+    /// If defaultPetId doesn't exist in pets, clears it
+    /// - Parameter petIds: Array of valid pet IDs for current user
+    func validateDefaultPetId(against petIds: [String]) {
+        if let currentDefaultPetId = defaultPetId,
+           !petIds.contains(currentDefaultPetId) {
+            // Pet ID doesn't exist in current user's pets - clear it
+            defaultPetId = nil
+            UserDefaults.standard.removeObject(forKey: "defaultPetId")
+            UserDefaults.standard.synchronize()
+        }
+    }
 }
 
 // MARK: - Camera Resolution Extension

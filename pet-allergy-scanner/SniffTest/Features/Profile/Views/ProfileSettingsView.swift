@@ -37,15 +37,23 @@ struct ProfileSettingsView: View {
     @State private var showingGDPRView = false
     @State private var showingSubscriptionView = false
     @State private var showingEditProfile = false
+    @State private var isRefreshingCache = false
+    @State private var refreshProfileTask: Task<Void, Never>?
+    @State private var analyticsTask: Task<Void, Never>?
+    @State private var cacheSizeTask: Task<Void, Never>?
+    @State private var lastAppearTime: Date?
+    @State private var lastCacheSizeCalculation: Date?
     
     // MARK: - Service Dependencies
     @EnvironmentObject var authService: AuthService
     @State private var petService = CachedPetService.shared
-    @StateObject private var gdprService = GDPRService.shared
-    @StateObject private var analyticsManager = AnalyticsManager.shared
-    @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
-    @StateObject private var weightUnitService = WeightUnitPreferenceService.shared
-    @StateObject private var profileService = CachedProfileService.shared
+    // MEMORY FIX: Use @ObservedObject for shared singletons to prevent memory leaks
+    // @StateObject creates a new instance, but these are singletons - we should observe, not own
+    @ObservedObject private var gdprService = GDPRService.shared
+    @ObservedObject private var analyticsManager = AnalyticsManager.shared
+    @ObservedObject private var notificationSettingsManager = NotificationSettingsManager.shared
+    @ObservedObject private var weightUnitService = WeightUnitPreferenceService.shared
+    @ObservedObject private var profileService = CachedProfileService.shared
     
     var body: some View {
         NavigationStack {
@@ -83,17 +91,83 @@ struct ProfileSettingsView: View {
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
-                // Track analytics (non-blocking)
-                Task.detached(priority: .utility) { @MainActor in
-                    PostHogAnalytics.trackSettingsViewOpened()
+                // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
+                if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                    print("⏭️ ProfileSettingsView: Skipping onAppear - navigation cooldown active")
+                    return
                 }
                 
-                calculateCacheSize()
-                // Refresh user profile when view appears to ensure latest role is displayed
-                // Use Task with low priority to prevent blocking navigation
-                Task(priority: .utility) { @MainActor in
-                    await authService.refreshUserProfile(forceRefresh: true)
+                // CRITICAL: Debounce rapid tab switches to prevent freezing and memory leaks
+                let now = Date()
+                if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
+                    print("⏭️ ProfileSettingsView: Skipping onAppear (too soon after last appear: \(now.timeIntervalSince(lastAppear))s)")
+                    return
                 }
+                lastAppearTime = now
+                
+                // CRITICAL: Cancel ALL existing tasks FIRST to prevent memory leaks
+                cacheSizeTask?.cancel()
+                cacheSizeTask = nil
+                refreshProfileTask?.cancel()
+                refreshProfileTask = nil
+                analyticsTask?.cancel()
+                analyticsTask = nil
+                
+                // CRITICAL: Longer delay to ensure previous view is completely gone
+                // This is essential for preventing freezes when switching rapidly
+                Task(priority: .utility) { @MainActor in
+                    // Wait longer to ensure previous view's onDisappear completed
+                    try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds (increased)
+                    guard !Task.isCancelled else { return }
+                    
+                    // Double-check coordinator before proceeding
+                    if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                        print("⏭️ ProfileSettingsView: Aborting operations - cooldown still active")
+                        return
+                    }
+                    
+                    // Yield to allow any pending cancellations to complete
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    
+                    // Track analytics (non-blocking)
+                    analyticsTask = Task(priority: .utility) { @MainActor in
+                        guard !Task.isCancelled else { return }
+                        PostHogAnalytics.trackSettingsViewOpened()
+                    }
+                    
+                    // Calculate cache size only if not calculated recently (debounce)
+                    let shouldCalculateCacheSize: Bool
+                    if let lastCalculation = lastCacheSizeCalculation {
+                        shouldCalculateCacheSize = Date().timeIntervalSince(lastCalculation) > 3.0 // 3 seconds
+                    } else {
+                        shouldCalculateCacheSize = true
+                    }
+                    
+                    if shouldCalculateCacheSize {
+                        calculateCacheSize()
+                    }
+                    
+                    // Refresh user profile - but only if view is still visible
+                    refreshProfileTask = Task(priority: .utility) { @MainActor in
+                        await Task.yield()
+                        guard !Task.isCancelled else { return }
+                        await authService.refreshUserProfile(forceRefresh: true)
+                    }
+                }
+            }
+            .onDisappear {
+                // CRITICAL: Cancel all ongoing tasks to prevent state updates and memory leaks
+                // Cancel in reverse order of creation to ensure proper cleanup
+                cacheSizeTask?.cancel()
+                cacheSizeTask = nil
+                refreshProfileTask?.cancel()
+                refreshProfileTask = nil
+                analyticsTask?.cancel()
+                analyticsTask = nil
+                
+                // Reset state to prevent memory retention
+                // Don't reset lastAppearTime or lastCacheSizeCalculation - they're used for debouncing
             }
             .sheet(isPresented: $showingGDPRView) {
                 GDPRView()
@@ -109,11 +183,14 @@ struct ProfileSettingsView: View {
             }
             .alert("Clear Cache", isPresented: $showingClearCacheAlert) {
                 Button("Cancel", role: .cancel) { }
-                Button("Clear", role: .destructive) {
+                Button("Clear Only", role: .destructive) {
                     clearCache()
                 }
+                Button("Clear & Refresh", role: .destructive) {
+                    clearCacheAndRefresh()
+                }
             } message: {
-                Text("This will clear all cached data including images and temporary files.")
+                Text("Clear Only: Removes cached data.\nClear & Refresh: Clears cache and reloads fresh data from server.")
             }
             .alert("Reset Settings", isPresented: $showingResetSettingsAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -331,7 +408,21 @@ struct ProfileSettingsView: View {
                             .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         
-                        Picker("Default Pet for Scans", selection: $settingsManager.defaultPetId) {
+                        Picker("Default Pet for Scans", selection: Binding(
+                            get: {
+                                // Validate selection exists in current pets
+                                let petIds = petService.pets.map { $0.id }
+                                if let currentId = settingsManager.defaultPetId,
+                                   petIds.contains(currentId) {
+                                    return currentId
+                                }
+                                // Invalid selection - return nil
+                                return nil
+                            },
+                            set: { newValue in
+                                settingsManager.defaultPetId = newValue
+                            }
+                        )) {
                             Text("None").tag(nil as String?)
                             ForEach(petService.pets) { pet in
                                 Text(pet.name).tag(pet.id as String?)
@@ -671,22 +762,31 @@ struct ProfileSettingsView: View {
                         // Cache Management
                         Button(action: { showingClearCacheAlert = true }) {
                             HStack {
-                                Image(systemName: "externaldrive")
-                                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                                Text("Clear Cache")
+                                if isRefreshingCache {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                } else {
+                                    Image(systemName: "externaldrive")
+                                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                                }
+                                Text(isRefreshingCache ? "Refreshing Cache..." : "Clear Cache")
                                     .font(ModernDesignSystem.Typography.body)
                                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                                 Spacer()
-                                Text(cacheSize)
-                                    .font(ModernDesignSystem.Typography.caption)
-                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                if !isRefreshingCache {
+                                    Text(cacheSize)
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                }
                             }
                             .padding(.vertical, ModernDesignSystem.Spacing.sm)
                         }
                         .buttonStyle(PlainButtonStyle())
+                        .disabled(isRefreshingCache)
                         
                         Divider()
                             .background(ModernDesignSystem.Colors.borderPrimary)
@@ -875,8 +975,20 @@ struct ProfileSettingsView: View {
     // MARK: - Helper Methods
     
     /// Calculate total cache size asynchronously to avoid blocking main thread
+    /// CRITICAL: This function can be slow with large caches, so it includes:
+    /// - Cancellation support
+    /// - Timeout protection
+    /// - Depth limiting to prevent excessive recursion
+    /// - Yield points to prevent blocking
     private func calculateCacheSize() {
-        Task.detached(priority: .utility) {
+        // Cancel any existing cache size calculation
+        cacheSizeTask?.cancel()
+        cacheSizeTask = nil
+        
+        cacheSizeTask = Task.detached(priority: .utility) {
+            // Check cancellation immediately
+            guard !Task.isCancelled else { return }
+            
             let fileManager = FileManager.default
             
             guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
@@ -884,45 +996,92 @@ struct ProfileSettingsView: View {
             }
             
             var totalSize: Int64 = 0
+            var fileCount = 0
+            let maxFiles = 10000 // Limit to prevent excessive scanning
+            let maxDepth = 10 // Limit recursion depth
             
-            // Recursively calculate directory size to include subdirectories
-            func calculateDirectorySize(at url: URL) -> Int64 {
+            // Recursively calculate directory size with depth and file count limits
+            func calculateDirectorySize(at url: URL, depth: Int = 0) async -> Int64 {
+                // Check cancellation and limits
+                guard !Task.isCancelled else { return 0 }
+                guard depth < maxDepth else { return 0 }
+                guard fileCount < maxFiles else { return 0 }
+                
                 var size: Int64 = 0
                 
                 do {
                     let contents = try fileManager.contentsOfDirectory(at: url, includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey], options: [.skipsHiddenFiles])
                     
+                    // Yield periodically to prevent blocking
+                    if fileCount % 100 == 0 {
+                        await Task.yield()
+                        guard !Task.isCancelled else { return 0 }
+                    }
+                    
                     for fileURL in contents {
+                        guard !Task.isCancelled else { return 0 }
+                        guard fileCount < maxFiles else { break }
+                        
                         let resourceValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isDirectoryKey])
                         
                         if let isDirectory = resourceValues?.isDirectory, isDirectory {
                             // Recursively calculate subdirectory size
-                            size += calculateDirectorySize(at: fileURL)
+                            size += await calculateDirectorySize(at: fileURL, depth: depth + 1)
                         } else if let fileSize = resourceValues?.fileSize {
                             size += Int64(fileSize)
+                            fileCount += 1
                         }
                     }
                 } catch {
-                    print("Failed to read directory \(url.path): \(error)")
+                    // Silently fail - don't log every error to prevent log spam
+                    if fileCount == 0 {
+                        print("⚠️ Failed to read directory \(url.path): \(error.localizedDescription)")
+                    }
                 }
                 
                 return size
             }
             
-            totalSize = calculateDirectorySize(at: cachesURL)
+            // Add timeout protection
+            let timeoutTask = Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 second timeout
+                if !Task.isCancelled {
+                    print("⚠️ Cache size calculation timed out after 5 seconds")
+                }
+            }
+            
+            defer {
+                timeoutTask.cancel()
+            }
+            
+            // Calculate size with limits
+            totalSize = await calculateDirectorySize(at: cachesURL)
+            
+            // Check cancellation before updating UI
+            guard !Task.isCancelled else { return }
+            
             let sizeInMB = Double(totalSize) / 1024.0 / 1024.0
             
             await MainActor.run {
+                // Double-check cancellation before state update
+                guard !Task.isCancelled else { return }
                 cacheSize = String(format: "%.2f MB", sizeInMB)
+                lastCacheSizeCalculation = Date()
             }
         }
     }
     
-    /// Clear all cached data asynchronously to avoid blocking main thread
+    /**
+     * Clear all cached data (file system and app cache)
+     * Clears UnifiedCacheCoordinator, service in-memory caches, and file system cache
+     */
     private func clearCache() {
-        Task.detached(priority: .userInitiated) {
-            let fileManager = FileManager.default
+        Task.detached(priority: .userInitiated) { @MainActor in
+            // Clear UnifiedCacheCoordinator cache (memory + disk)
+            CacheHydrationService.shared.clearAllCaches()
             
+            // Clear file system cache
+            let fileManager = FileManager.default
             guard let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else {
                 return
             }
@@ -934,16 +1093,49 @@ struct ProfileSettingsView: View {
                     try fileManager.removeItem(at: file)
                 }
                 
-                await MainActor.run {
-                    HapticFeedback.success()
-                    calculateCacheSize()
-                }
+                HapticFeedback.success()
+                calculateCacheSize()
+                print("✅ Cache cleared successfully")
             } catch {
-                print("Failed to clear cache: \(error)")
-                await MainActor.run {
-                    HapticFeedback.error()
+                print("Failed to clear file system cache: \(error)")
+                HapticFeedback.error()
+            }
+        }
+    }
+    
+    /**
+     * Clear cache and refresh with live data from server
+     * This ensures the app has the latest data after clearing cache
+     */
+    private func clearCacheAndRefresh() {
+        Task { @MainActor in
+            isRefreshingCache = true
+            
+            // Clear all caches first
+            CacheHydrationService.shared.clearAllCaches()
+            
+            // Clear file system cache
+            let fileManager = FileManager.default
+            if let cachesURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first {
+                do {
+                    let cacheFiles = try fileManager.contentsOfDirectory(at: cachesURL, includingPropertiesForKeys: nil)
+                    for file in cacheFiles {
+                        try fileManager.removeItem(at: file)
+                    }
+                } catch {
+                    print("Failed to clear file system cache: \(error)")
                 }
             }
+            
+            // Refresh cache with live data from server (force refresh)
+            await CacheHydrationService.shared.hydrateAllCaches(forceRefresh: true)
+            
+            // Update cache size
+            calculateCacheSize()
+            
+            isRefreshingCache = false
+            HapticFeedback.success()
+            print("✅ Cache cleared and refreshed with live data")
         }
     }
     
@@ -1022,7 +1214,8 @@ struct CameraPermissionsView: View {
 /// View for notification permissions management
 /// Similar to CameraPermissionsView, guides users to enable notifications
 struct NotificationPermissionsView: View {
-    @StateObject private var notificationSettingsManager = NotificationSettingsManager.shared
+    // MEMORY FIX: Use @ObservedObject for shared singleton to prevent memory leaks
+    @ObservedObject private var notificationSettingsManager = NotificationSettingsManager.shared
     @State private var showingPermissionAlert = false
     @State private var permissionAlertMessage = ""
     

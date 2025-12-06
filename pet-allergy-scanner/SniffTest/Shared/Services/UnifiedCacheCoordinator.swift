@@ -239,19 +239,33 @@ final class UnifiedCacheCoordinator {
     }
     
     /**
+     * Check if a resource is marked as deleted (404)
+     * - Parameter key: Cache key to check
+     * - Returns: True if resource is marked as deleted
+     */
+    func isResourceDeleted(forKey key: String) -> Bool {
+        return deletedResourceKeys.contains(key)
+    }
+    
+    /**
      * Handle 404 response - resource deleted on server
      * Automatically invalidates cache and prevents re-caching
      * - Parameter key: Cache key for deleted resource
+     * 
+     * Note: This is non-blocking and safe to call from any thread
      */
     func handleResourceDeleted(forKey key: String) {
-        // Invalidate cache
-        invalidate(forKey: key)
-        
-        // Mark as deleted to prevent re-caching
+        // Mark as deleted first to prevent race conditions
         deletedResourceKeys.insert(key)
         
-        // Call invalidation callbacks
-        invalidationCallbacks[key]?()
+        // Invalidate cache (non-blocking)
+        invalidate(forKey: key)
+        
+        // Call invalidation callbacks (non-blocking, but could trigger UI updates)
+        // Use Task to ensure callbacks don't block
+        Task { @MainActor in
+            invalidationCallbacks[key]?()
+        }
         
         print("🗑️ [UnifiedCacheCoordinator] Resource deleted (404) - invalidated cache for key: \(key)")
     }

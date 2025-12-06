@@ -356,9 +356,10 @@ class CachedNutritionService: ObservableObject {
             let cacheKey = CacheKey.feedingRecords.scoped(forPetId: request.petId)
             cacheCoordinator.invalidate(forKey: cacheKey)
             
-            // Also invalidate daily summaries cache
+            // Also invalidate daily summaries cache (will be recreated when summaries are fetched)
             let dailySummariesKey = CacheKey.dailySummaries.scoped(forPetId: request.petId)
             cacheCoordinator.invalidate(forKey: dailySummariesKey)
+            // Note: invalidate() automatically removes from deletedResourceKeys, allowing re-checking
         }
         
         // Invalidate trends cache so trends update with new feeding data
@@ -505,6 +506,10 @@ class CachedNutritionService: ObservableObject {
         
         let cacheKey = CacheKey.dailySummaries.scoped(forPetId: petId)
         
+        // NOTE: Daily summaries are computed/aggregated data, not permanent resources
+        // A 404 means "no data exists yet" (no meals logged), not "resource permanently deleted"
+        // We don't use "deleted resource" tracking for computed data - just clear cache and allow re-checking
+        
         // Invalidate cache if force refresh is requested
         if forceRefresh {
             cacheCoordinator.invalidate(forKey: cacheKey)
@@ -516,23 +521,33 @@ class CachedNutritionService: ObservableObject {
                 dailySummariesCache[petId] = cached
                 objectWillChange.send()
                 
-                // Refresh in background
+                // Refresh in background to sync with server
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
+                    
                     do {
                         let fresh = try await self.apiService.get(
                             endpoint: "/nutrition/summaries/\(petId)?days=\(days)",
                             responseType: [DailyNutritionSummary].self
                         )
+                        // Update cache with fresh data (even if empty - that's valid)
                         self.cacheCoordinator.set(fresh, forKey: cacheKey)
                         self.dailySummariesCache[petId] = fresh
                         self.objectWillChange.send()
                     } catch {
-                        // Handle 404
+                        // Handle 404 - means no data exists yet (no meals logged), not an error
                         if let apiError = error as? APIError,
                            case .serverError(let statusCode) = apiError,
                            statusCode == 404 {
-                            self.cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                            // Clear cache and set empty array - this is normal for computed data
+                            self.cacheCoordinator.invalidate(forKey: cacheKey)
+                            self.dailySummariesCache[petId] = []
+                            self.objectWillChange.send()
+                            print("ℹ️ [CachedNutritionService] No daily summaries yet for pet \(petId) - no meals logged")
+                            // Don't track as error - this is expected when no meals exist
+                        } else {
+                            // Other errors - log but don't fail silently
+                            print("⚠️ [CachedNutritionService] Background refresh failed: \(error.localizedDescription)")
                         }
                     }
                 }
@@ -547,16 +562,25 @@ class CachedNutritionService: ObservableObject {
                 responseType: [DailyNutritionSummary].self
             )
             
+            // Update cache with data (even if empty - that's valid)
             dailySummariesCache[petId] = summaries
             cacheCoordinator.set(summaries, forKey: cacheKey)
             objectWillChange.send()
         } catch {
-            // Handle 404
+            // Handle 404 - means no data exists yet (no meals logged), not an error
             if let apiError = error as? APIError,
                case .serverError(let statusCode) = apiError,
                statusCode == 404 {
-                cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                // Clear cache and set empty array - this is normal for computed data
+                // Don't mark as "deleted" - allow re-checking when meals are logged
+                cacheCoordinator.invalidate(forKey: cacheKey)
+                dailySummariesCache[petId] = []
+                objectWillChange.send()
+                print("ℹ️ [CachedNutritionService] No daily summaries yet for pet \(petId) - no meals logged")
+                // Don't throw error - empty state is valid
+                return
             }
+            // Other errors - re-throw
             throw error
         }
     }

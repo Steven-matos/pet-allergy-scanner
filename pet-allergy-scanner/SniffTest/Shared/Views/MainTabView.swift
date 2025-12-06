@@ -12,6 +12,7 @@ struct MainTabView: View {
     @EnvironmentObject var notificationManager: NotificationManager
     @State private var petService = CachedPetService.shared
     @State private var selectedTab = 2
+    @ObservedObject private var navigationCoordinator = TabNavigationCoordinator.shared
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -60,37 +61,16 @@ struct MainTabView: View {
                 }
                 .tag(4)
         }
-        .onChange(of: selectedTab) { _, newValue in
-            // Track navigation performance between tabs
-            let tabNames = ["Pets", "Trackers", "Scan", "Nutrition", "Profile"]
-            let fromTab = selectedTab < tabNames.count ? tabNames[selectedTab] : "Unknown"
-            let toTab = newValue < tabNames.count ? tabNames[newValue] : "Unknown"
-            
-            let navigationStart = Date()
-            Task(priority: .utility) { @MainActor in
-                // Wait a moment to see if navigation completes
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                let duration = Date().timeIntervalSince(navigationStart)
-                
-                // Track navigation - flag slow navigations (>1s) or between Profile/Nutrition
-                let isSlowNavigation = duration > 1.0
-                let isProblematicNavigation = (fromTab == "Profile" && toTab == "Nutrition") || 
-                                             (fromTab == "Nutrition" && toTab == "Profile")
-                
-                if isSlowNavigation || isProblematicNavigation {
-                    PostHogAnalytics.trackNavigation(
-                        fromView: fromTab,
-                        toView: toTab,
-                        duration: duration,
-                        success: duration < 5.0 // Consider >5s as failure
-                    )
-                }
-            }
+        .onChange(of: selectedTab) { oldValue, newValue in
+            // Record tab change in coordinator for cooldown management
+            navigationCoordinator.recordTabChange(fromTab: oldValue, toTab: newValue)
         }
         .onAppear {
             // Load pets asynchronously to prevent blocking tab navigation
-            Task.detached(priority: .utility) { @MainActor in
-                petService.loadPets()
+            Task { @MainActor in
+                // Small delay to prevent blocking
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                CachedPetService.shared.loadPets()
             }
         }
         .onChange(of: notificationManager.navigateToScan) { oldValue, newValue in

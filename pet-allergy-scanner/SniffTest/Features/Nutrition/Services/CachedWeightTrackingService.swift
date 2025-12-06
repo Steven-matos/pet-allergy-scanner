@@ -9,6 +9,31 @@ import Foundation
 import Combine
 
 /**
+ * Timeout helper to prevent hanging API calls
+ */
+private func withTaskTimeout<T: Sendable>(seconds: UInt64, operation: @escaping @Sendable () async throws -> T) async throws -> T {
+    try await withThrowingTaskGroup(of: T.self) { group in
+        // Add the actual operation
+        group.addTask {
+            try await operation()
+        }
+        
+        // Add timeout task
+        group.addTask {
+            try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            throw CancellationError()
+        }
+        
+        // Return the first completed task and cancel the other
+        guard let result = try await group.next() else {
+            throw CancellationError()
+        }
+        group.cancelAll()
+        return result
+    }
+}
+
+/**
  * Cached Weight Tracking Service
  * 
  * Provides cached access to weight tracking data with automatic cache management.
@@ -482,9 +507,14 @@ class CachedWeightTrackingService: ObservableObject {
             }
         }()
         
+        let apiServiceRef = self.apiService
         async let goalTask: WeightGoal? = {
             do {
-                let goal = try await apiService.getActiveWeightGoal(petId: petId)
+                // Add timeout protection to prevent hanging on weight goal fetch
+                // Use Task.withTimeout pattern to prevent indefinite blocking
+                let goal = try await withTaskTimeout(seconds: 10) {
+                    try await apiServiceRef.getActiveWeightGoal(petId: petId)
+                }
                 if let goal = goal {
                     print("✅ [loadWeightData] Loaded weight goal from backend: \(goal.id)")
                     print("   Target weight: \(goal.targetWeightKg ?? 0) kg, Active: \(goal.isActive)")
@@ -499,6 +529,7 @@ class CachedWeightTrackingService: ObservableObject {
                     throw error
                 }
                 // If goal loading fails, log the error but don't fail the entire load
+                // Return nil to allow weight history to still load
                 print("❌ [loadWeightData] Failed to load weight goal from backend: \(error.localizedDescription)")
                 print("   Error type: \(type(of: error))")
                 return nil
@@ -618,7 +649,10 @@ class CachedWeightTrackingService: ObservableObject {
         if currentUserId != nil {
             let cacheKey = CacheKey.weightRecords.scoped(forPetId: petId)
             if let cached = cacheCoordinator.get([WeightRecord].self, forKey: cacheKey) {
-                weightHistoryCache[petId] = cached
+                // Defer cache update to avoid publishing during view updates
+                Task { @MainActor in
+                    self.weightHistoryCache[petId] = cached
+                }
                 return cached
             }
         }
@@ -650,7 +684,10 @@ class CachedWeightTrackingService: ObservableObject {
         if currentUserId != nil {
             let cacheKey = CacheKey.weightGoals.scoped(forPetId: petId)
             if let cached = cacheCoordinator.get(WeightGoal.self, forKey: cacheKey) {
-                weightGoalsCache[petId] = cached
+                // Defer cache update to avoid publishing during view updates
+                Task { @MainActor in
+                    self.weightGoalsCache[petId] = cached
+                }
                 return cached
             }
         }

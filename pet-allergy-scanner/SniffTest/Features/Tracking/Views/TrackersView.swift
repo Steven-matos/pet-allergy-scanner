@@ -23,9 +23,11 @@ import SwiftUI
 struct TrackersView: View {
     @EnvironmentObject var authService: AuthService
     @State private var petService = CachedPetService.shared
-    @StateObject private var healthEventService = HealthEventService.shared
+    @ObservedObject private var healthEventService = HealthEventService.shared
     @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false
+    @State private var lastAppearTime: Date?
+    @State private var onAppearTask: Task<Void, Never>?
     
 enum TrackerType: String, CaseIterable {
     case health = "Health Events"
@@ -67,6 +69,54 @@ enum TrackerType: String, CaseIterable {
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
+        }
+        .onAppear {
+            // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
+            if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                print("⏭️ TrackersView: Skipping onAppear - navigation cooldown active")
+                return
+            }
+            
+            // CRITICAL: Debounce rapid tab switches to prevent freezing and memory leaks
+            let now = Date()
+            if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
+                print("⏭️ TrackersView: Skipping onAppear (too soon after last appear: \(now.timeIntervalSince(lastAppear))s)")
+                return
+            }
+            lastAppearTime = now
+            
+            // CRITICAL: Cancel ALL existing tasks FIRST to prevent memory leaks
+            onAppearTask?.cancel()
+            onAppearTask = nil
+            
+            // CRITICAL: Longer delay to ensure previous view is completely gone
+            // This is essential for preventing freezes when switching rapidly
+            onAppearTask = Task(priority: .utility) { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
+                guard !Task.isCancelled else { return }
+                
+                // Double-check coordinator after delay
+                if TabNavigationCoordinator.shared.shouldBlockOperations() {
+                    print("⏭️ TrackersView: Skipping operations after delay - cooldown still active")
+                    return
+                }
+                
+                await Task.yield()
+                guard !Task.isCancelled else { return }
+                
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
+                    PostHogAnalytics.trackScreenViewed(screenName: "trackers_view")
+                }
+                
+                // Load pets (cache-first, non-blocking)
+                petService.loadPets(forceRefresh: false)
+            }
+        }
+        .onDisappear {
+            // CRITICAL: Cancel task on disappear to prevent memory leaks
+            onAppearTask?.cancel()
+            onAppearTask = nil
         }
         .sheet(isPresented: $showingAddTracker) {
             AddHealthEventView()
@@ -196,7 +246,7 @@ struct QuickActionCard: View {
 
 struct PetHealthEventCard: View {
     let pet: Pet
-    @StateObject private var healthEventService = HealthEventService.shared
+    @ObservedObject private var healthEventService = HealthEventService.shared
     
     var recentEvents: [HealthEvent] {
         Array(healthEventService.healthEvents(for: pet.id).prefix(3))
