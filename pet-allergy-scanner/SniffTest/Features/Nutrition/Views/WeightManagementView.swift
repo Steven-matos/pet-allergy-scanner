@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import Darwin
 
 /**
  * Weight Management View
@@ -50,6 +51,7 @@ struct WeightManagementView: View {
     @State private var refreshTrigger = false
     @State private var lastRecordedWeightId: String?
     @State private var showingUndoToast = false
+    @State private var loadTask: Task<Void, Never>?
     
     // MARK: - Computed Properties
     
@@ -58,10 +60,12 @@ struct WeightManagementView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            // Main content
             if isLoading {
                 ModernLoadingView(message: "Loading weight data...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .allowsHitTesting(false) // Prevent touches on loading view
             } else if let pet = selectedPet {
                 weightManagementContent(for: pet)
             } else {
@@ -69,23 +73,22 @@ struct WeightManagementView: View {
             }
         }
         .background(ModernDesignSystem.Colors.background)
-        .onAppear {
-            // Track analytics
-            PostHogAnalytics.trackWeightManagementViewOpened(petId: selectedPet?.id)
-        }
         .sheet(isPresented: $showingWeightEntry) {
             if let pet = selectedPet {
                 WeightEntryView(pet: pet, lastRecordedWeightId: $lastRecordedWeightId)
                     .onDisappear {
                         // Weight was added - refresh data from server to get latest
                         // This is the only time we need to fetch from server (after user action)
-                        loadWeightData(forceRefresh: true)
+                        // Use Task to avoid blocking
+                        Task { @MainActor in
+                            await loadWeightDataAsync(showLoadingIfNeeded: false, forceRefresh: true)
+                            if !Task.isCancelled {
+                                refreshTrigger.toggle()
+                            }
+                        }
                         
                         // Trends will be automatically refreshed via invalidateTrendsCache with autoReload
                         // (handled in CachedWeightTrackingService.recordWeight)
-                        
-                        // Force UI refresh
-                        refreshTrigger.toggle()
                     }
             }
         }
@@ -100,19 +103,28 @@ struct WeightManagementView: View {
                     .onDisappear {
                         // Goal was set/updated - refresh data from server to get latest
                         // This is the only time we need to fetch from server (after user action)
-                        loadWeightData(forceRefresh: true)
-                        // Force UI refresh
-                        refreshTrigger.toggle()
+                        // Use Task to avoid blocking
+                        Task { @MainActor in
+                            await loadWeightDataAsync(showLoadingIfNeeded: false, forceRefresh: true)
+                            if !Task.isCancelled {
+                                refreshTrigger.toggle()
+                            }
+                        }
                     }
             }
         }
         .onAppear {
+            // Track analytics (dispatch asynchronously to prevent blocking)
+            Task.detached(priority: .utility) { @MainActor in
+                PostHogAnalytics.trackWeightManagementViewOpened(petId: selectedPet?.id)
+            }
+            
             // Load pets synchronously from cache first (immediate UI rendering)
             petService.loadPets()
             
             // Auto-select pet if needed
-            if selectedPet == nil, !petService.pets.isEmpty {
-                petSelectionService.selectPet(petService.pets.first!)
+            if selectedPet == nil, !petService.pets.isEmpty, let firstPet = petService.pets.first {
+                petSelectionService.selectPet(firstPet)
             }
             
             // Weight data is static - use cached data exclusively
@@ -125,19 +137,67 @@ struct WeightManagementView: View {
             // Check if we have cached data - if not, load it (cache-first, no server call if cached)
             // loadWeightData with forceRefresh: false will use cache if available
             if !weightService.hasCachedWeightData(for: pet.id) {
+                // Cancel any existing load task
+                loadTask?.cancel()
+                
                 // First time - load data (will use cache if available, only calls server if no cache)
-                Task { @MainActor in
-                    await Task.yield() // Yield to allow view to render first
+                // Use Task with MainActor to ensure UI updates work correctly
+                loadTask = Task { @MainActor in
+                    // Yield immediately to allow view to render first - critical for preventing UI freeze
+                    await Task.yield()
+                    
+                    // Check if task was cancelled (e.g., view disappeared)
                     guard !Task.isCancelled else { return }
+                    
+                    // Prevent multiple simultaneous loads
+                    guard !isLoading else { return }
+                    
+                    // Set loading state with timeout protection
                     isLoading = true
+                    
+                    // Add timeout to prevent isLoading from getting stuck
+                    let loadStartTime = Date()
+                    let timeoutTask = Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                        if !Task.isCancelled && isLoading {
+                            let freezeDuration = Date().timeIntervalSince(loadStartTime)
+                            print("⚠️ Weight data load timeout - resetting isLoading")
+                            // Track UI freeze in PostHog
+                            PostHogAnalytics.trackUIFreeze(
+                                viewName: "WeightManagementView",
+                                duration: freezeDuration,
+                                action: "loadWeightData"
+                            )
+                            PostHogAnalytics.trackError(
+                                error: "Weight data load timeout after \(Int(freezeDuration))s",
+                                context: "WeightManagementView.loadWeightData",
+                                severity: "high"
+                            )
+                            isLoading = false
+                        }
+                    }
+                    
+                    defer {
+                        timeoutTask.cancel()
+                        if !Task.isCancelled {
+                            isLoading = false
+                        }
+                    }
+                    
                     do {
                         // forceRefresh: false means it will use cache if available
                         try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
-                        isLoading = false
-                        refreshTrigger.toggle()
+                        
+                        // Only update UI if task wasn't cancelled
+                        if !Task.isCancelled {
+                            refreshTrigger.toggle()
+                        }
                     } catch {
-                        isLoading = false
-                        print("⚠️ Failed to load weight data: \(error.localizedDescription)")
+                        // Handle error gracefully - don't crash the app
+                        if !Task.isCancelled {
+                            print("⚠️ Failed to load weight data: \(error.localizedDescription)")
+                            // Don't set errorMessage here to avoid blocking UI
+                        }
                     }
                 }
             }
@@ -147,19 +207,33 @@ struct WeightManagementView: View {
             // We don't need periodic syncing - data only changes on user actions
         }
         .onDisappear {
+            // Cancel any ongoing load tasks to prevent state updates after view disappears
+            loadTask?.cancel()
+            loadTask = nil
+            
             // Sync service is disabled, but clean up just in case
             if let pet = selectedPet {
                 syncService.stopSyncing(forPetId: pet.id)
             }
         }
         .onChange(of: selectedPet) { oldPet, newPet in
+            // Cancel any ongoing load tasks when pet changes
+            loadTask?.cancel()
+            loadTask = nil
+            
             // Sync service is disabled, but clean up just in case
             if let oldPet = oldPet {
                 syncService.stopSyncing(forPetId: oldPet.id)
             }
             // Force UI refresh when pet changes (uses cached data)
+            // Use Task to ensure this happens on next run loop to avoid conflicts
             if newPet != nil {
-                refreshTrigger.toggle()
+                Task { @MainActor in
+                    await Task.yield()
+                    if !Task.isCancelled {
+                        refreshTrigger.toggle()
+                    }
+                }
             }
         }
         .refreshable {
@@ -291,12 +365,15 @@ struct WeightManagementView: View {
                 .id("\(pet.id)-\(weightService.currentWeight(for: pet.id) ?? 0)-\(refreshTrigger)") // Force refresh when weight changes
                 
                 // Weight Trend Chart
+                // Limit data points on older devices to prevent freezing
                 let weightHistory = weightService.weightHistory(for: pet.id)
+                let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+                let limitedHistory = Array(weightHistory.prefix(maxPoints))
                 
-                if !weightHistory.isEmpty {
+                if !limitedHistory.isEmpty {
                     VStack(spacing: ModernDesignSystem.Spacing.sm) {                        
                         WeightTrendChart(
-                            weightHistory: weightHistory,
+                            weightHistory: limitedHistory,
                             petName: pet.name,
                             pet: pet  // Pass pet for background image
                         )
@@ -391,13 +468,39 @@ struct WeightManagementView: View {
         if !hasCachedData {
             // No cache - load from server
             isLoading = true
+            
+            // Add timeout protection to prevent isLoading from getting stuck
+            let loadStartTime = Date()
+            let timeoutTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                if isLoading {
+                    let freezeDuration = Date().timeIntervalSince(loadStartTime)
+                    print("⚠️ Weight data load timeout in loadWeightDataIfNeeded - resetting isLoading")
+                    // Track UI freeze in PostHog
+                    PostHogAnalytics.trackUIFreeze(
+                        viewName: "WeightManagementView",
+                        duration: freezeDuration,
+                        action: "loadWeightDataIfNeeded"
+                    )
+                    PostHogAnalytics.trackError(
+                        error: "Weight data load timeout after \(Int(freezeDuration))s",
+                        context: "WeightManagementView.loadWeightDataIfNeeded",
+                        severity: "high"
+                    )
+                    isLoading = false
+                }
+            }
+            
             Task { @MainActor in
+                defer {
+                    timeoutTask.cancel()
+                    isLoading = false
+                }
+                
                 do {
                     try await weightService.loadWeightData(for: pet.id, forceRefresh: false)
-                    isLoading = false
                     refreshTrigger.toggle()
                 } catch {
-                    isLoading = false
                     print("⚠️ Failed to load weight data: \(error.localizedDescription)")
                 }
             }
@@ -416,7 +519,10 @@ struct WeightManagementView: View {
     private func loadWeightData(forceRefresh: Bool = true) {
         guard selectedPet != nil || !petService.pets.isEmpty else { return }
         
-        Task {
+        // Cancel any existing load task
+        loadTask?.cancel()
+        
+        loadTask = Task {
             await loadWeightDataAsync(showLoadingIfNeeded: true, forceRefresh: forceRefresh)
         }
     }
@@ -428,17 +534,35 @@ struct WeightManagementView: View {
         let hadDataBefore = weightService.hasCachedWeightData(for: pet.id)
         
         // Only show loading if explicitly requested and we don't have data (or force refresh)
+        var timeoutTask: Task<Void, Never>?
+        
         if showLoadingIfNeeded && (!hadDataBefore || forceRefresh) {
             await MainActor.run {
                 isLoading = true
                 errorMessage = nil
             }
+            
+            // Add timeout protection to prevent isLoading from getting stuck
+            timeoutTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                if isLoading {
+                    print("⚠️ Weight data load timeout in loadWeightDataAsync - resetting isLoading")
+                    isLoading = false
+                }
+            }
+        }
+        
+        defer {
+            timeoutTask?.cancel()
         }
         
         do {
             // Load data (cache-first, but refresh goals from server if needed)
             // Use forceRefresh when explicitly requested (e.g., after adding new data)
             try await weightService.loadWeightData(for: pet.id, forceRefresh: forceRefresh)
+            
+            // Check if task was cancelled before updating UI
+            guard !Task.isCancelled else { return }
             
             await MainActor.run {
                 isLoading = false
@@ -452,6 +576,9 @@ struct WeightManagementView: View {
                 // Resource deleted - cache already invalidated by service
                 print("⚠️ Weight data resource deleted (404) - cache invalidated")
             }
+            
+            // Only update UI if task wasn't cancelled
+            guard !Task.isCancelled else { return }
             
             await MainActor.run {
                 isLoading = false
@@ -648,6 +775,7 @@ struct WeightTrendChart: View {
     let pet: Pet
     
     @StateObject private var unitService = WeightUnitPreferenceService.shared
+    @State private var isChartReady = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -678,11 +806,34 @@ struct WeightTrendChart: View {
     @ViewBuilder
     private var chartContent: some View {
         ZStack {
-            // Faded pet image background
-            backgroundImage
+            // Faded pet image background (disabled on older devices)
+            if !DevicePerformanceHelper.shouldDisableChartBackgrounds {
+                backgroundImage
+            }
             
             // Chart overlay
-            weightChart
+            if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
+                weightChart
+            } else {
+                // Placeholder while chart loads
+                ProgressView()
+                    .frame(height: 200)
+            }
+        }
+        .onAppear {
+            // Defer chart rendering on older devices to prevent freezing
+            if DevicePerformanceHelper.shouldDeferChartRendering {
+                Task { @MainActor in
+                    // Wait for next run loop to allow view to render first
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                    if !Task.isCancelled {
+                        isChartReady = true
+                    }
+                }
+            } else {
+                isChartReady = true
+            }
         }
     }
     
@@ -702,13 +853,19 @@ struct WeightTrendChart: View {
     private var weightChart: some View {
         PerformanceOptimizer.optimizedChart {
             if #available(iOS 16.0, *) {
-                Chart(weightHistory.prefix(30)) { record in
-                    // Area under the line
-                    AreaMark(
-                        x: .value("Date", record.recordedAt),
-                        y: .value("Weight", record.weightKg)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.primary.opacity(0.25))
+                let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+                let chartData = weightHistory.prefix(maxPoints)
+                let useSimplified = DevicePerformanceHelper.shouldUseSimplifiedCharts
+                
+                Chart(chartData) { record in
+                    // Area under the line (disabled on older devices for performance)
+                    if !useSimplified {
+                        AreaMark(
+                            x: .value("Date", record.recordedAt),
+                            y: .value("Weight", record.weightKg)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary.opacity(0.25))
+                    }
                     
                     // Main line
                     LineMark(
@@ -716,16 +873,18 @@ struct WeightTrendChart: View {
                         y: .value("Weight", record.weightKg)
                     )
                     .foregroundStyle(ModernDesignSystem.Colors.primary)
-                    .lineStyle(StrokeStyle(lineWidth: 3))
+                    .lineStyle(StrokeStyle(lineWidth: useSimplified ? 2 : 3))
                     
-                    // Data points
-                    PointMark(
-                        x: .value("Date", record.recordedAt),
-                        y: .value("Weight", record.weightKg)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.primary)
-                    .symbolSize(80)
-                    .symbol(.circle)
+                    // Data points (fewer/smaller on older devices)
+                    if !useSimplified || chartData.count <= 10 {
+                        PointMark(
+                            x: .value("Date", record.recordedAt),
+                            y: .value("Weight", record.weightKg)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary)
+                        .symbolSize(useSimplified ? 40 : 80)
+                        .symbol(.circle)
+                    }
                 }
                 .frame(height: 200)
                 .chartXAxis {

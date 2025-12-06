@@ -9,6 +9,8 @@
 import Foundation
 import PostHog
 import os.log
+import UIKit
+import Darwin
 
 // MARK: - Safe Execution Helper
 
@@ -374,13 +376,101 @@ enum PostHogAnalytics {
     
     // MARK: - Error & Performance Events
     
-    /// Track when an error occurs
-    static func trackError(error: String, context: String, severity: String = "medium") {
-        trackEvent("error_occurred", properties: [
+    /// Track when an error occurs with device diagnostics
+    /// - Parameters:
+    ///   - error: Error message or description
+    ///   - context: Where the error occurred (view name, function, etc.)
+    ///   - severity: Error severity (low, medium, high, critical)
+    ///   - includeDeviceInfo: Whether to include device diagnostics (default: true)
+    static func trackError(error: String, context: String, severity: String = "medium", includeDeviceInfo: Bool = true) {
+        var properties: [String: Any] = [
             "error": error,
             "context": context,
-            "severity": severity
-        ])
+            "severity": severity,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if includeDeviceInfo {
+            properties.merge(getDeviceDiagnostics()) { (_, new) in new }
+        }
+        
+        trackEvent("error_occurred", properties: properties)
+    }
+    
+    /// Track UI freeze detection
+    /// Call this when a freeze is detected (e.g., timeout, stuck loading state)
+    /// - Parameters:
+    ///   - viewName: Name of the view where freeze occurred
+    ///   - duration: How long the freeze lasted (in seconds)
+    ///   - action: What action triggered the freeze
+    static func trackUIFreeze(viewName: String, duration: TimeInterval, action: String? = nil) {
+        var properties: [String: Any] = [
+            "view_name": viewName,
+            "freeze_duration_seconds": duration,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let action = action {
+            properties["action"] = action
+        }
+        
+        // Include device diagnostics for freeze events
+        properties.merge(getDeviceDiagnostics()) { (_, new) in new }
+        
+        // Include performance metrics
+        properties.merge(getPerformanceMetrics()) { (_, new) in new }
+        
+        trackEvent("ui_freeze_detected", properties: properties)
+    }
+    
+    /// Track navigation performance
+    /// - Parameters:
+    ///   - fromView: Source view name
+    ///   - toView: Destination view name
+    ///   - duration: Navigation duration in seconds
+    ///   - success: Whether navigation completed successfully
+    static func trackNavigation(fromView: String, toView: String, duration: TimeInterval, success: Bool) {
+        var properties: [String: Any] = [
+            "from_view": fromView,
+            "to_view": toView,
+            "duration_seconds": duration,
+            "success": success,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        // Include device info for navigation issues
+        if !success || duration > 1.0 {
+            properties.merge(getDeviceDiagnostics()) { (_, new) in new }
+        }
+        
+        trackEvent("navigation_performance", properties: properties)
+    }
+    
+    /// Track view load performance
+    /// - Parameters:
+    ///   - viewName: Name of the view
+    ///   - loadTime: Time taken to load (in seconds)
+    ///   - dataLoadTime: Time taken to load data (in seconds)
+    ///   - success: Whether load was successful
+    static func trackViewLoad(viewName: String, loadTime: TimeInterval, dataLoadTime: TimeInterval? = nil, success: Bool) {
+        var properties: [String: Any] = [
+            "view_name": viewName,
+            "load_time_seconds": loadTime,
+            "success": success,
+            "timestamp": Date().timeIntervalSince1970
+        ]
+        
+        if let dataLoadTime = dataLoadTime {
+            properties["data_load_time_seconds"] = dataLoadTime
+        }
+        
+        // Include device info for slow loads
+        if loadTime > 2.0 || !success {
+            properties.merge(getDeviceDiagnostics()) { (_, new) in new }
+            properties.merge(getPerformanceMetrics()) { (_, new) in new }
+        }
+        
+        trackEvent("view_load_performance", properties: properties)
     }
     
     /// Track API call performance
@@ -568,6 +658,108 @@ enum PostHogAnalytics {
             // PostHog SDK should be thread-safe, but we ensure MainActor for safety
             PostHogSDK.shared.capture(eventName, properties: sanitizedProperties)
             logger.debug("Analytics event tracked: \(eventName)")
+        }
+    }
+    
+    /// Get device diagnostics for error tracking
+    /// Returns device information that helps diagnose issues
+    private static func getDeviceDiagnostics() -> [String: Any] {
+        var diagnostics: [String: Any] = [:]
+        
+        // Device model
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let modelCode = withUnsafePointer(to: &systemInfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(validatingCString: $0)
+            }
+        } ?? "unknown"
+        diagnostics["device_model"] = modelCode
+        diagnostics["device_name"] = UIDevice.current.name
+        diagnostics["device_type"] = UIDevice.current.model
+        
+        // iOS version
+        diagnostics["ios_version"] = UIDevice.current.systemVersion
+        
+        // Device capabilities
+        diagnostics["is_older_device"] = DevicePerformanceHelper.isOlderDevice
+        diagnostics["max_chart_data_points"] = DevicePerformanceHelper.maxChartDataPoints
+        diagnostics["should_use_simplified_charts"] = DevicePerformanceHelper.shouldUseSimplifiedCharts
+        
+        // Battery level (if available)
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        if UIDevice.current.batteryLevel >= 0 {
+            diagnostics["battery_level"] = Int(UIDevice.current.batteryLevel * 100)
+            diagnostics["battery_state"] = batteryStateString(UIDevice.current.batteryState)
+        }
+        
+        // Screen size
+        let screen = UIScreen.main
+        diagnostics["screen_width"] = Int(screen.bounds.width)
+        diagnostics["screen_height"] = Int(screen.bounds.height)
+        diagnostics["screen_scale"] = screen.scale
+        
+        return diagnostics
+    }
+    
+    /// Get performance metrics
+    /// Returns current performance metrics for diagnostics
+    private static func getPerformanceMetrics() -> [String: Any] {
+        var metrics: [String: Any] = [:]
+        
+        // Process info
+        let processInfo = ProcessInfo.processInfo
+        metrics["processor_count"] = processInfo.processorCount
+        metrics["active_processor_count"] = processInfo.activeProcessorCount
+        metrics["physical_memory_mb"] = Int(processInfo.physicalMemory / 1_024 / 1_024)
+        
+        // System uptime
+        metrics["system_uptime_seconds"] = processInfo.systemUptime
+        
+        // Thermal state (iOS 11+)
+        if #available(iOS 11.0, *) {
+            let thermalState = processInfo.thermalState
+            metrics["thermal_state"] = thermalStateString(thermalState)
+        }
+        
+        // Low power mode
+        if #available(iOS 9.0, *) {
+            metrics["low_power_mode"] = processInfo.isLowPowerModeEnabled
+        }
+        
+        return metrics
+    }
+    
+    /// Convert battery state to string
+    private static func batteryStateString(_ state: UIDevice.BatteryState) -> String {
+        switch state {
+        case .unknown:
+            return "unknown"
+        case .unplugged:
+            return "unplugged"
+        case .charging:
+            return "charging"
+        case .full:
+            return "full"
+        @unknown default:
+            return "unknown"
+        }
+    }
+    
+    /// Convert thermal state to string
+    @available(iOS 11.0, *)
+    private static func thermalStateString(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal:
+            return "nominal"
+        case .fair:
+            return "fair"
+        case .serious:
+            return "serious"
+        case .critical:
+            return "critical"
+        @unknown default:
+            return "unknown"
         }
     }
     

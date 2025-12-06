@@ -240,9 +240,13 @@ struct PaywallView: View {
                 .multilineTextAlignment(.center)
             
             HStack(spacing: ModernDesignSystem.Spacing.md) {
-                Link("Privacy Policy", destination: URL(string: "https://www.snifftestapp.com/privacy")!)
+                if let privacyURL = URL(string: "https://www.snifftestapp.com/privacy") {
+                    Link("Privacy Policy", destination: privacyURL)
+                }
                 Text("•")
-                Link("Terms of Service", destination: URL(string: "https://www.snifftestapp.com/terms")!)
+                if let termsURL = URL(string: "https://www.snifftestapp.com/terms") {
+                    Link("Terms of Service", destination: termsURL)
+                }
             }
             .font(ModernDesignSystem.Typography.caption)
             .foregroundColor(ModernDesignSystem.Colors.primary)

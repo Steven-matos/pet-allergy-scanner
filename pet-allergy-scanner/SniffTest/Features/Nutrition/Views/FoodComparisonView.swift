@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import Darwin
 
 /**
  * Food Comparison View
@@ -1060,13 +1061,18 @@ struct BestOptionCard: View {
 struct NutritionalComparisonChart: View {
     let foods: [FoodAnalysis]
     
-    // Filter foods that have nutritional data
+    @State private var isChartReady = false
+
+    // Filter foods that have nutritional data and limit for older devices
     private var foodsWithData: [FoodAnalysis] {
-        foods.filter { food in
+        let filtered = foods.filter { food in
             food.caloriesPer100g > 0 ||
             food.proteinPercentage > 0 ||
             food.fatPercentage > 0
         }
+        // Limit to 5 foods on older devices to prevent chart complexity
+        let maxFoods = DevicePerformanceHelper.isOlderDevice ? 5 : 10
+        return Array(filtered.prefix(maxFoods))
     }
     
     var body: some View {
@@ -1080,46 +1086,69 @@ struct NutritionalComparisonChart: View {
                     .foregroundColor(.secondary)
                     .padding()
             } else {
-                PerformanceOptimizer.optimizedChart {
-                    if #available(iOS 16.0, *) {
-                        Chart(foodsWithData) { food in
-                            // Calories
-                            BarMark(
-                                x: .value("Food", food.foodName),
-                                y: .value("Calories", food.caloriesPer100g)
-                            )
-                            .foregroundStyle(.orange)
-                            
-                            // Protein
-                            BarMark(
-                                x: .value("Food", food.foodName),
-                                y: .value("Protein %", food.proteinPercentage)
-                            )
-                            .foregroundStyle(.red)
-                            
-                            // Fat
-                            BarMark(
-                                x: .value("Food", food.foodName),
-                                y: .value("Fat %", food.fatPercentage)
-                            )
-                            .foregroundStyle(.blue)
-                        }
-                        .frame(height: 200)
-                        .chartLegend(position: .top)
-                        .chartXAxis {
-                            AxisMarks { value in
-                                AxisValueLabel {
-                                    if let foodName = value.as(String.self) {
-                                        Text(foodName)
-                                            .font(.caption2)
-                                            .lineLimit(2)
-                                            .multilineTextAlignment(.center)
+                if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
+                    PerformanceOptimizer.optimizedChart {
+                        if #available(iOS 16.0, *) {
+                            Chart(foodsWithData) { food in
+                                // Calories
+                                BarMark(
+                                    x: .value("Food", food.foodName),
+                                    y: .value("Calories", food.caloriesPer100g)
+                                )
+                                .foregroundStyle(.orange)
+                                
+                                // Protein (disabled on older devices if too many foods)
+                                if !DevicePerformanceHelper.shouldUseSimplifiedCharts || foodsWithData.count <= 3 {
+                                    BarMark(
+                                        x: .value("Food", food.foodName),
+                                        y: .value("Protein %", food.proteinPercentage)
+                                    )
+                                    .foregroundStyle(.red)
+                                }
+                                
+                                // Fat (disabled on older devices if too many foods)
+                                if !DevicePerformanceHelper.shouldUseSimplifiedCharts || foodsWithData.count <= 3 {
+                                    BarMark(
+                                        x: .value("Food", food.foodName),
+                                        y: .value("Fat %", food.fatPercentage)
+                                    )
+                                    .foregroundStyle(.blue)
+                                }
+                            }
+                            .frame(height: 200)
+                            .chartLegend(position: .top)
+                            .chartXAxis {
+                                AxisMarks { value in
+                                    AxisValueLabel {
+                                        if let foodName = value.as(String.self) {
+                                            Text(foodName)
+                                                .font(.caption2)
+                                                .lineLimit(2)
+                                                .multilineTextAlignment(.center)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                } else {
+                    ProgressView()
+                        .frame(height: 200)
                 }
+            }
+        }
+        .onAppear {
+            // Defer chart rendering on older devices to prevent freezing
+            if DevicePerformanceHelper.shouldDeferChartRendering {
+                Task { @MainActor in
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                    if !Task.isCancelled {
+                        isChartReady = true
+                    }
+                }
+            } else {
+                isChartReady = true
             }
         }
         .padding()

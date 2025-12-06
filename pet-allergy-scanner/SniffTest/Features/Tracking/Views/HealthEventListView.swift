@@ -178,7 +178,10 @@ struct HealthEventListView: View {
             await loadHealthEvents()
         }
         .onAppear {
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackHealthEventsViewOpened(petId: pet.id)
+            }
             // Ensure data is loaded when view appears
             Task {
                 await loadHealthEvents()
@@ -409,7 +412,22 @@ struct HealthEventListView: View {
     
     private func loadHealthEvents() async {
         print("🔄 [HealthEventListView] Starting to load health events for pet: \(pet.id)")
+        await MainActor.run {
         isLoading = true
+        }
+        
+        // Add timeout protection to prevent isLoading from getting stuck
+        let timeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            if isLoading {
+                print("⚠️ Health events load timeout - resetting isLoading")
+                isLoading = false
+            }
+        }
+        
+        defer {
+            timeoutTask.cancel()
+        }
         
         do {
             // Force refresh to ensure we get latest data from server
@@ -431,8 +449,12 @@ struct HealthEventListView: View {
                 
                 // Force UI update after data is loaded
                 invalidateCache()
+                isLoading = false
             }
         } catch {
+            await MainActor.run {
+                isLoading = false
+            }
             print("❌ [HealthEventListView] Error loading health events for pet \(pet.id):")
             print("   Error: \(error)")
             print("   Error type: \(type(of: error))")

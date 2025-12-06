@@ -38,9 +38,27 @@ struct AdvancedNutritionView: View {
     @State private var showingPeriodSelector = false
     @State private var selectedPeriod: TrendPeriod = .thirtyDays
     @State private var showingPaywall = false
+    @State private var loadTask: Task<Void, Never>?
+    @State private var refreshTask: Task<Void, Never>?
     
     private var selectedPet: Pet? {
         petSelectionService.selectedPet
+    }
+    
+    /// Get current tab name for analytics
+    private var selectedTabName: String {
+        tabName(for: selectedTab)
+    }
+    
+    /// Get tab name from index
+    private func tabName(for index: Int) -> String {
+        switch index {
+        case 0: return "Weight"
+        case 1: return "Trends"
+        case 2: return "Compare"
+        case 3: return "Analytics"
+        default: return "Unknown"
+        }
     }
     
     var body: some View {
@@ -171,9 +189,22 @@ struct AdvancedNutritionView: View {
             )
         }
         .onAppear {
-            // Track analytics
-            if let pet = selectedPet {
-                PostHogAnalytics.trackAdvancedNutritionViewOpened(petId: pet.id)
+            let viewLoadStart = Date()
+            
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
+                if let pet = selectedPet {
+                    PostHogAnalytics.trackAdvancedNutritionViewOpened(petId: pet.id)
+                    // Track screen for session replay
+                    PostHogAnalytics.trackScreenViewed(
+                        screenName: "AdvancedNutritionView",
+                        properties: [
+                            "pet_id": pet.id,
+                            "pet_name": pet.name,
+                            "selected_tab": selectedTabName
+                        ]
+                    )
+                }
             }
             
             // Load pets synchronously from cache first (immediate UI rendering)
@@ -184,8 +215,43 @@ struct AdvancedNutritionView: View {
             
             // Load nutrition data with cache-first pattern
             loadNutritionDataIfNeeded()
+            
+            // Track view load performance
+            let loadTime = Date().timeIntervalSince(viewLoadStart)
+            Task.detached(priority: .utility) { @MainActor in
+                PostHogAnalytics.trackViewLoad(
+                    viewName: "AdvancedNutritionView",
+                    loadTime: loadTime,
+                    success: true
+                )
+            }
+        }
+        .onChange(of: selectedTab) { oldValue, newValue in
+            // Track tab changes for session replay analysis
+            Task.detached(priority: .utility) { @MainActor in
+                if let pet = selectedPet {
+                    PostHogAnalytics.trackScreenViewed(
+                        screenName: "AdvancedNutritionView_\(selectedTabName)",
+                        properties: [
+                            "pet_id": pet.id,
+                            "tab_index": newValue,
+                            "tab_name": selectedTabName,
+                            "previous_tab": tabName(for: oldValue)
+                        ]
+                    )
+                }
+            }
         }
         .onDisappear {
+            // CRITICAL: Cancel all ongoing tasks to prevent state updates after view disappears
+            loadTask?.cancel()
+            loadTask = nil
+            refreshTask?.cancel()
+            refreshTask = nil
+            
+            // Reset loading state to prevent stuck UI
+            isLoading = false
+            
             // MEMORY OPTIMIZATION: Clear cached data when view disappears to free memory
             // This helps prevent memory buildup when navigating between tabs
             Task {
@@ -394,12 +460,16 @@ struct AdvancedNutritionView: View {
         if hasCachedNutritionData && hasCachedWeightData {
             // We have cached data - refresh in background silently (no loading spinner)
             print("✅ Using cached nutrition data for pet: \(pet.name)")
-            Task {
+            // Cancel any existing refresh task
+            refreshTask?.cancel()
+            refreshTask = Task {
                 await refreshNutritionDataInBackground(for: pet.id)
             }
         } else {
             // Missing some cached data - show loading and load from server
             print("⚠️ Missing cached data, loading from server for pet: \(pet.name)")
+            // Cancel any existing load task
+            loadTask?.cancel()
             isLoading = true
             loadNutritionData()
         }
@@ -424,7 +494,9 @@ struct AdvancedNutritionView: View {
                 isLoading = true
             } else {
                 // Cache exists - refresh in background silently
-                Task {
+                // Cancel any existing refresh task
+                refreshTask?.cancel()
+                refreshTask = Task {
                     await refreshNutritionDataInBackground(for: pet.id)
                 }
                 return
@@ -436,7 +508,42 @@ struct AdvancedNutritionView: View {
         
         errorMessage = nil
         
-        Task {
+        // Add timeout protection to prevent isLoading from getting stuck
+        var timeoutTask: Task<Void, Never>?
+        let loadStartTime = Date()
+        timeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            if !Task.isCancelled && isLoading {
+                let freezeDuration = Date().timeIntervalSince(loadStartTime)
+                print("⚠️ Nutrition data load timeout - resetting isLoading")
+                // Track UI freeze in PostHog
+                PostHogAnalytics.trackUIFreeze(
+                    viewName: "AdvancedNutritionView",
+                    duration: freezeDuration,
+                    action: "loadNutritionData"
+                )
+                PostHogAnalytics.trackError(
+                    error: "Nutrition data load timeout after \(Int(freezeDuration))s",
+                    context: "AdvancedNutritionView.loadNutritionData",
+                    severity: "high"
+                )
+                isLoading = false
+            }
+        }
+        
+        // Cancel any existing load task before starting a new one
+        loadTask?.cancel()
+        loadTask = Task {
+            defer {
+                timeoutTask?.cancel()
+            }
+            
+            // Yield immediately to allow view to render first - critical for preventing UI freeze
+            await Task.yield()
+            
+            // Check if task was cancelled (e.g., view disappeared)
+            guard !Task.isCancelled else { return }
+            
             do {
                 // Use cached services to load data efficiently (cache-first)
                 // These services will check cache first before making API calls
@@ -445,20 +552,37 @@ struct AdvancedNutritionView: View {
                 // Note: getNutritionalRequirements doesn't support forceRefresh, it always checks cache first
                 _ = try await cachedNutritionService.getNutritionalRequirements(for: pet.id)
                 
+                // Check cancellation before continuing
+                guard !Task.isCancelled else { return }
+                
                 // Load weight data (cache-first)
                 try await cachedWeightService.loadWeightData(for: pet.id, forceRefresh: forceRefresh)
+                
+                // Check cancellation before continuing
+                guard !Task.isCancelled else { return }
                 
                 // Load feeding records (cache-first)
                 try await cachedNutritionService.loadFeedingRecords(for: pet.id, forceRefresh: forceRefresh)
                 
+                // Check cancellation before continuing
+                guard !Task.isCancelled else { return }
+                
                 // Load daily summaries (cache-first)
                 try await cachedNutritionService.loadDailySummaries(for: pet.id, forceRefresh: forceRefresh)
                 
+                // Check cancellation before updating UI
+                guard !Task.isCancelled else { return }
+                
                 await MainActor.run {
-                    isLoading = false
+                    if !Task.isCancelled {
+                        isLoading = false
+                    }
                 }
                 
             } catch {
+                // Check cancellation before handling error
+                guard !Task.isCancelled else { return }
+                
                 // Handle 404 errors gracefully
                 if let apiError = error as? APIError,
                    case .serverError(let statusCode) = apiError,
@@ -467,9 +591,18 @@ struct AdvancedNutritionView: View {
                     print("⚠️ Resource deleted (404) - cache invalidated")
                 }
                 
+                // Track error in PostHog
+                PostHogAnalytics.trackError(
+                    error: error.localizedDescription,
+                    context: "AdvancedNutritionView.loadNutritionData",
+                    severity: "medium"
+                )
+                
                 await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
+                    if !Task.isCancelled {
+                        errorMessage = error.localizedDescription
+                        isLoading = false
+                    }
                 }
                 print("❌ Failed to load nutrition data: \(error)")
             }

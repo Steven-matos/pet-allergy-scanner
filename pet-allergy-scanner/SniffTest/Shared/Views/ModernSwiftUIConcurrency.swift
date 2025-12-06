@@ -81,7 +81,20 @@ struct ModernAsyncView<Content: View, LoadingView: View, ErrorView: View>: View 
         isLoading = true
         error = nil
         
+        // Add timeout protection to prevent isLoading from getting stuck
+        let timeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            if isLoading {
+                print("⚠️ ModernAsyncContentView load timeout - resetting isLoading")
+                isLoading = false
+            }
+        }
+        
         task = Task {
+            defer {
+                timeoutTask.cancel()
+            }
+            
             do {
                 try await asyncOperation()
                 await MainActor.run {

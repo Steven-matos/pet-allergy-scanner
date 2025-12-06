@@ -14,8 +14,10 @@ struct SubscriptionView: View {
     var body: some View {
         PaywallView()
             .onAppear {
-                // Track analytics
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
                 PostHogAnalytics.trackSubscriptionViewOpened()
+                }
             }
     }
 }

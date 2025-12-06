@@ -106,11 +106,14 @@ struct ScanResultView: View {
                 } else {
                     print("⚠️ ScanResultView: No scan result available")
                 }
+                
+                // Load sensitivity assessment immediately
                 loadSensitivityAssessment()
-            }
-            .onAppear {
+                
                 // Ensure sensitivity assessment loads even if there are timing issues
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                // Use Task instead of DispatchQueue for better Swift concurrency
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
                     if !hasAttemptedSensitivityLoad && !isLoadingSensitivity {
                         print("🔍 ScanResultView: Retrying sensitivity assessment load")
                         loadSensitivityAssessment()
@@ -145,7 +148,20 @@ struct ScanResultView: View {
         
         print("🔍 ScanResultView: Starting sensitivity assessment for scan")
         
+        // Add timeout protection to prevent isLoadingSensitivity from getting stuck
+        let timeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            if isLoadingSensitivity {
+                print("⚠️ ScanResultView: Sensitivity assessment timeout - resetting isLoadingSensitivity")
+                isLoadingSensitivity = false
+            }
+        }
+        
         Task {
+            defer {
+                timeoutTask.cancel()
+            }
+            
             do {
                 let assessment = try await sensitivityService.assessSensitivities(for: scan)
                 await MainActor.run {

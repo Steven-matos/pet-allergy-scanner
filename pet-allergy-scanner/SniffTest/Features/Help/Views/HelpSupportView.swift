@@ -50,8 +50,10 @@ struct HelpSupportView: View {
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
-                // Track analytics
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
                 PostHogAnalytics.trackHelpViewOpened()
+                }
             }
             .sheet(item: $selectedCategory) { category in
                 FAQDetailView(category: category)

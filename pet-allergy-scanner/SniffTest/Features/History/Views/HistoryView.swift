@@ -143,8 +143,10 @@ struct HistoryView: View {
                 }
             }
             .onAppear {
-                // Track analytics
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
                 PostHogAnalytics.trackHistoryViewOpened()
+                }
                 
                 scanService.loadRecentScans()
             }

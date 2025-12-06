@@ -558,7 +558,7 @@ struct EditPetView: View {
         name = pet.name
         breed = pet.breed ?? ""
         // Convert stored kg weight to selected unit for display
-        weightKg = pet.weightKg != nil ? unitService.convertFromKg(pet.weightKg!) : nil
+        weightKg = pet.weightKg.map { unitService.convertFromKg($0) }
         activityLevel = pet.effectiveActivityLevel
         knownSensitivities = pet.knownSensitivities
         vetName = pet.vetName ?? ""
@@ -683,7 +683,7 @@ struct EditPetView: View {
             }
             
             // Convert weight to kg for storage (backend expects kg)
-            let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+            let weightInKg = weightKg.map { unitService.convertToKg($0) }
             let originalWeightInKg = pet.weightKg
             
             // Create PetUpdate - imageUrl will be nil if no image change, which is correct
@@ -838,7 +838,9 @@ struct EditPetView: View {
     private func monthName(for month: Int) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM"
-        let date = Calendar.current.date(from: DateComponents(year: 2024, month: month, day: 1))!
+        guard let date = Calendar.current.date(from: DateComponents(year: 2024, month: month, day: 1)) else {
+            return "Unknown"
+        }
         return formatter.string(from: date)
     }
 }
@@ -850,7 +852,7 @@ struct EditPetView: View {
         name: "Max",
         species: .dog,
         breed: "Golden Retriever",
-        birthday: Calendar.current.date(from: DateComponents(year: 2020, month: 3))!,
+        birthday: Calendar.current.date(from: DateComponents(year: 2020, month: 3)) ?? Date(),
         weightKg: 25.5,
         activityLevel: .high,
         imageUrl: nil,

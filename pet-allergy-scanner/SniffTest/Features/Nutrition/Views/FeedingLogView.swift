@@ -95,15 +95,17 @@ struct FeedingLogView: View {
             }
         }
         .onAppear {
-            // Track analytics
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackFeedingLogViewOpened(petId: selectedPet?.id)
+            }
             
             // Load pets synchronously from cache first (immediate UI rendering)
             petService.loadPets()
             
             // Auto-select pet if needed
-            if selectedPet == nil, !petService.pets.isEmpty {
-                petSelectionService.selectPet(petService.pets.first!)
+            if selectedPet == nil, !petService.pets.isEmpty, let firstPet = petService.pets.first {
+                petSelectionService.selectPet(firstPet)
             }
         }
     }
@@ -168,7 +170,21 @@ struct FeedingLogView: View {
         isLoading = true
         errorMessage = nil
         
+        // Add timeout protection to prevent isLoading from getting stuck
+        let timeoutTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+            if isLoading {
+                print("⚠️ Feeding log save timeout - resetting isLoading")
+                isLoading = false
+            }
+        }
+        
         Task {
+            defer {
+                timeoutTask.cancel()
+                isLoading = false
+            }
+            
             do {
                 let feedingDateTime = Calendar.current.date(
                     bySettingHour: Calendar.current.component(.hour, from: selectedTime),

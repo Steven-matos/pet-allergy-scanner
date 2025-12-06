@@ -337,9 +337,10 @@ struct ProfileImagePickerView: View {
             do {
                 let image: UIImage?
                 
-                if imageUrl.hasPrefix("http://") || imageUrl.hasPrefix("https://") {
+                if imageUrl.hasPrefix("http://") || imageUrl.hasPrefix("https://"),
+                   let url = URL(string: imageUrl) {
                     // Load remote image
-                    let (data, _) = try await URLSession.shared.data(from: URL(string: imageUrl)!)
+                    let (data, _) = try await URLSession.shared.data(from: url)
                     image = UIImage(data: data)
                 } else {
                     // Load local image
@@ -488,9 +489,10 @@ struct PetProfileImagePickerView: View {
             do {
                 let image: UIImage?
                 
-                if imageUrl.hasPrefix("http://") || imageUrl.hasPrefix("https://") {
+                if imageUrl.hasPrefix("http://") || imageUrl.hasPrefix("https://"),
+                   let url = URL(string: imageUrl) {
                     // Load remote image
-                    let (data, _) = try await URLSession.shared.data(from: URL(string: imageUrl)!)
+                    let (data, _) = try await URLSession.shared.data(from: url)
                     image = UIImage(data: data)
                 } else {
                     // Load local image

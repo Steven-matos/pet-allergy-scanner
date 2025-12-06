@@ -83,12 +83,15 @@ struct ProfileSettingsView: View {
             .toolbarBackground(ModernDesignSystem.Colors.softCream, for: .navigationBar)
             .toolbarColorScheme(.light, for: .navigationBar)
             .onAppear {
-                // Track analytics
-                PostHogAnalytics.trackSettingsViewOpened()
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
+                    PostHogAnalytics.trackSettingsViewOpened()
+                }
                 
                 calculateCacheSize()
                 // Refresh user profile when view appears to ensure latest role is displayed
-                Task {
+                // Use Task with low priority to prevent blocking navigation
+                Task(priority: .utility) { @MainActor in
                     await authService.refreshUserProfile(forceRefresh: true)
                 }
             }

@@ -52,15 +52,15 @@ enum PostHogConfigurator {
         #endif
         
         // Session Replay Configuration (2025 Best Practices)
-        // For SwiftUI apps, screenshot mode is recommended for better compatibility
-        // Note: Session replay may have URL construction issues in some SDK versions
-        // Currently disabled due to "bad URL" errors with PostHog assets endpoint
-        // Re-enable once PostHog SDK fixes the URL construction issue
-        config.sessionReplay = false
-        // When re-enabled, use screenshot mode for SwiftUI compatibility:
-        // config.sessionReplayConfig.screenshotMode = true
-        // config.sessionReplayConfig.debouncerDelay = 1.0 // Balance performance and recording fidelity
-        // config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input for privacy
+        // For SwiftUI apps, screenshot mode is required for compatibility
+        // Screenshot mode captures UI state as images rather than DOM-like structure
+        config.sessionReplay = true
+        config.sessionReplayConfig.screenshotMode = true // Required for SwiftUI compatibility
+        config.sessionReplayConfig.throttleDelay = 1.0 // Balance performance and recording fidelity (1 second delay)
+        config.sessionReplayConfig.maskAllTextInputs = true // Mask sensitive input for privacy
+        config.sessionReplayConfig.maskAllImages = false // Keep images visible for nutrition section analysis
+        
+        logger.info("Session Replay enabled with screenshot mode for SwiftUI compatibility")
         
         // Enable additional tracking for better analytics (2025 Best Practices)
         config.captureApplicationLifecycleEvents = true // Track app open/close events automatically

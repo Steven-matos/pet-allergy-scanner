@@ -53,7 +53,10 @@ struct NutritionDashboardView: View {
             }
         }
         .onAppear {
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackNutritionDashboardOpened()
+            }
             print("🔍 NutritionDashboardView: onAppear called")
             // Load pets (cache-first, synchronous)
             petService.loadPets()
@@ -281,7 +284,7 @@ struct NutritionOverviewSection: View {
                 
                 NutritionMetricCard(
                     title: "Weight",
-                    value: pet.weightKg != nil ? unitService.formatWeight(pet.weightKg!, precision: 0) : "Not set",
+                    value: pet.weightKg.map { unitService.formatWeight($0, precision: 0) } ?? "Not set",
                     icon: "scalemass",
                     color: .purple
                 )

@@ -115,8 +115,10 @@ struct PetsView: View {
                 }
             }
             .onAppear {
-                // Track analytics
+                // Track analytics (non-blocking)
+                Task.detached(priority: .utility) { @MainActor in
                 PostHogAnalytics.trackPetsViewOpened()
+                }
                 
                 // Refresh pets when view appears to ensure fresh data
                 // This is especially important after weight/event/food logging

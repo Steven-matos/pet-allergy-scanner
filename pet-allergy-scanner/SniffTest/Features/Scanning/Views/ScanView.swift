@@ -748,7 +748,10 @@ struct ScanView: View {
             )
         }
         .onAppear {
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
             PostHogAnalytics.trackScanViewOpened()
+            }
             checkCameraPermission()
             // Don't resume camera here - it will be handled when sheets are dismissed
             // This prevents camera resume while sheets are still showing

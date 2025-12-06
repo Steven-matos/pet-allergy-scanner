@@ -652,7 +652,7 @@ struct AddPetView: View {
             }
             
             // Convert weight to kg for storage (backend expects kg)
-            let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
+            let weightInKg = weightKg.map { unitService.convertToKg($0) }
             
             let petCreate = PetCreate(
                 name: name,
@@ -798,7 +798,9 @@ struct AddPetView: View {
     private func monthName(for month: Int) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM"
-        let date = Calendar.current.date(from: DateComponents(year: 2024, month: month, day: 1))!
+        guard let date = Calendar.current.date(from: DateComponents(year: 2024, month: month, day: 1)) else {
+            return "Unknown"
+        }
         return formatter.string(from: date)
     }
 }

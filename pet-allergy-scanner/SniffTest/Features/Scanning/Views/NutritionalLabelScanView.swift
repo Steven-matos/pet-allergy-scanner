@@ -541,9 +541,10 @@ struct CameraPreviewView: UIViewRepresentable {
         let view = PreviewView()
         
         // Set session if available
-        if let session = cameraService.captureSession {
-            view.videoPreviewLayer.session = session
-            view.videoPreviewLayer.videoGravity = .resizeAspectFill
+        if let session = cameraService.captureSession,
+           let previewLayer = view.videoPreviewLayer {
+            previewLayer.session = session
+            previewLayer.videoGravity = .resizeAspectFill
         }
         
         return view
@@ -551,20 +552,22 @@ struct CameraPreviewView: UIViewRepresentable {
     
     func updateUIView(_ uiView: PreviewView, context: Context) {
         // Update session if it changed or is nil
+        guard let previewLayer = uiView.videoPreviewLayer else { return }
+        
         if let session = cameraService.captureSession {
-            if uiView.videoPreviewLayer.session !== session {
-                uiView.videoPreviewLayer.session = session
+            if previewLayer.session !== session {
+                previewLayer.session = session
                 print("📷 Camera preview: Session updated")
             }
             
             // Ensure preview layer is properly configured
-            if uiView.videoPreviewLayer.videoGravity != .resizeAspectFill {
-                uiView.videoPreviewLayer.videoGravity = .resizeAspectFill
+            if previewLayer.videoGravity != .resizeAspectFill {
+                previewLayer.videoGravity = .resizeAspectFill
             }
         } else {
             // Clear session if it becomes nil
-            if uiView.videoPreviewLayer.session != nil {
-                uiView.videoPreviewLayer.session = nil
+            if previewLayer.session != nil {
+                previewLayer.session = nil
                 print("📷 Camera preview: Session cleared")
             }
         }
@@ -578,13 +581,13 @@ struct CameraPreviewView: UIViewRepresentable {
             return AVCaptureVideoPreviewLayer.self
         }
         
-        var videoPreviewLayer: AVCaptureVideoPreviewLayer {
-            return layer as! AVCaptureVideoPreviewLayer
+        var videoPreviewLayer: AVCaptureVideoPreviewLayer? {
+            return layer as? AVCaptureVideoPreviewLayer
         }
         
         override init(frame: CGRect) {
             super.init(frame: frame)
-            videoPreviewLayer.videoGravity = .resizeAspectFill
+            videoPreviewLayer?.videoGravity = .resizeAspectFill
         }
         
         required init?(coder: NSCoder) {
@@ -593,7 +596,7 @@ struct CameraPreviewView: UIViewRepresentable {
         
         override func layoutSubviews() {
             super.layoutSubviews()
-            videoPreviewLayer.frame = bounds
+            videoPreviewLayer?.frame = bounds
         }
     }
 }

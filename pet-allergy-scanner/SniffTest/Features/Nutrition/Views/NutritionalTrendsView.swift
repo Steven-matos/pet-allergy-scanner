@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Charts
+import Darwin
 
 /**
  * Nutritional Trends View
@@ -94,9 +95,11 @@ struct NutritionalTrendsView: View {
             )
         }
         .onAppear {
-            // Track analytics
-            if let pet = selectedPet {
-                PostHogAnalytics.trackNutritionalTrendsViewed(petId: pet.id)
+            // Track analytics (non-blocking)
+            Task.detached(priority: .utility) { @MainActor in
+                if let pet = selectedPet {
+                    PostHogAnalytics.trackNutritionalTrendsViewed(petId: pet.id)
+                }
             }
             
             // Load pets synchronously from cache first (immediate UI rendering)
@@ -106,8 +109,9 @@ struct NutritionalTrendsView: View {
             if let user = authService.currentUser,
                user.role == .premium,
                !petService.pets.isEmpty,
-               selectedPet == nil {
-                petSelectionService.selectPet(petService.pets.first!)
+               selectedPet == nil,
+               let firstPet = petService.pets.first {
+                petSelectionService.selectPet(firstPet)
             }
             
             // Load trends data with cache-first pattern
@@ -180,25 +184,36 @@ struct NutritionalTrendsView: View {
                 logMealSection
                 
                 // Calorie Trends Chart
-                if !trendsService.calorieTrends(for: pet.id).isEmpty {
+                // Limit data points on older devices to prevent freezing
+                let calorieTrends = trendsService.calorieTrends(for: pet.id)
+                let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+                let limitedCalorieTrends = Array(calorieTrends.prefix(maxPoints))
+                
+                if !limitedCalorieTrends.isEmpty {
                     CalorieTrendsChart(
-                        trends: trendsService.calorieTrends(for: pet.id),
+                        trends: limitedCalorieTrends,
                         petName: pet.name
                     )
                 }
                 
                 // Macronutrient Trends Chart
-                if !trendsService.macronutrientTrends(for: pet.id).isEmpty {
+                let macronutrientTrends = trendsService.macronutrientTrends(for: pet.id)
+                let limitedMacronutrientTrends = Array(macronutrientTrends.prefix(maxPoints))
+                
+                if !limitedMacronutrientTrends.isEmpty {
                     MacronutrientTrendsChart(
-                        trends: trendsService.macronutrientTrends(for: pet.id),
+                        trends: limitedMacronutrientTrends,
                         petName: pet.name
                     )
                 }
                 
                 // Feeding Patterns Chart
-                if !trendsService.feedingPatterns(for: pet.id).isEmpty {
+                let feedingPatterns = trendsService.feedingPatterns(for: pet.id)
+                let limitedFeedingPatterns = Array(feedingPatterns.prefix(maxPoints))
+                
+                if !limitedFeedingPatterns.isEmpty {
                     FeedingPatternsChart(
-                        patterns: trendsService.feedingPatterns(for: pet.id),
+                        patterns: limitedFeedingPatterns,
                         petName: pet.name
                     )
                 }
@@ -794,6 +809,14 @@ struct CalorieTrendsChart: View {
     let trends: [CalorieTrend]
     let petName: String
     
+    @State private var isChartReady = false
+    
+    // Limit data points for older devices
+    private var chartData: [CalorieTrend] {
+        let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+        return Array(trends.prefix(maxPoints))
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Calorie Trends")
@@ -801,40 +824,48 @@ struct CalorieTrendsChart: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
-                Chart(trends) { trend in
-                    LineMark(
-                        x: .value("Date", trend.date),
-                        y: .value("Calories", trend.calories)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    
-                    AreaMark(
-                        x: .value("Date", trend.date),
-                        y: .value("Calories", trend.calories)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow.opacity(0.2))
-                    
-                    if let target = trend.target {
-                        RuleMark(y: .value("Target", target))
-                            .foregroundStyle(ModernDesignSystem.Colors.primary)
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
+                    Chart(chartData) { trend in
+                        LineMark(
+                            x: .value("Date", trend.date),
+                            y: .value("Calories", trend.calories)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
+                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 2 : 2))
+                        
+                        // AreaMark disabled on older devices for performance
+                        if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
+                            AreaMark(
+                                x: .value("Date", trend.date),
+                                y: .value("Calories", trend.calories)
+                            )
+                            .foregroundStyle(ModernDesignSystem.Colors.goldenYellow.opacity(0.2))
+                        }
+                        
+                        if let target = trend.target {
+                            RuleMark(y: .value("Target", target))
+                                .foregroundStyle(ModernDesignSystem.Colors.primary)
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
+                        }
                     }
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                        AxisValueLabel(format: .dateTime.month().day())
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                            AxisValueLabel(format: .dateTime.month().day())
+                        }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks { value in
-                        AxisValueLabel {
-                            if let calories = value.as(Double.self) {
-                                Text("\(Int(calories)) kcal")
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisValueLabel {
+                                if let calories = value.as(Double.self) {
+                                    Text("\(Int(calories)) kcal")
+                                }
                             }
                         }
                     }
+                } else {
+                    ProgressView()
+                        .frame(height: 200)
                 }
             } else {
                 // Fallback for iOS 15 and earlier
@@ -842,6 +873,20 @@ struct CalorieTrendsChart: View {
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
+            }
+        }
+        .onAppear {
+            // Defer chart rendering on older devices to prevent freezing
+            if DevicePerformanceHelper.shouldDeferChartRendering {
+                Task { @MainActor in
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                    if !Task.isCancelled {
+                        isChartReady = true
+                    }
+                }
+            } else {
+                isChartReady = true
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -864,6 +909,14 @@ struct MacronutrientTrendsChart: View {
     let trends: [MacronutrientTrend]
     let petName: String
     
+    @State private var isChartReady = false
+    
+    // Limit data points for older devices
+    private var chartData: [MacronutrientTrend] {
+        let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+        return Array(trends.prefix(maxPoints))
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Macronutrient Trends")
@@ -871,50 +924,72 @@ struct MacronutrientTrendsChart: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
-                Chart(trends) { trend in
-                    LineMark(
-                        x: .value("Date", trend.date),
-                        y: .value("Protein", trend.protein)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.warmCoral)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    
-                    LineMark(
-                        x: .value("Date", trend.date),
-                        y: .value("Fat", trend.fat)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.primary)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                    
-                    LineMark(
-                        x: .value("Date", trend.date),
-                        y: .value("Fiber", trend.fiber)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                        AxisValueLabel(format: .dateTime.month().day())
+                if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
+                    Chart(chartData) { trend in
+                        LineMark(
+                            x: .value("Date", trend.date),
+                            y: .value("Protein", trend.protein)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.warmCoral)
+                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 1.5 : 2))
+                        
+                        LineMark(
+                            x: .value("Date", trend.date),
+                            y: .value("Fat", trend.fat)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary)
+                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 1.5 : 2))
+                        
+                        // Fiber line only if not simplified (reduce complexity on older devices)
+                        if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
+                            LineMark(
+                                x: .value("Date", trend.date),
+                                y: .value("Fiber", trend.fiber)
+                            )
+                            .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks { value in
-                        AxisValueLabel {
-                            if let grams = value.as(Double.self) {
-                                Text("\(grams, specifier: "%.0f") g")
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                            AxisValueLabel(format: .dateTime.month().day())
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisValueLabel {
+                                if let grams = value.as(Double.self) {
+                                    Text("\(grams, specifier: "%.0f") g")
+                                }
                             }
                         }
                     }
+                    .chartLegend(position: .top)
+                } else {
+                    ProgressView()
+                        .frame(height: 200)
                 }
-                .chartLegend(position: .top)
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Macronutrient trends chart requires iOS 16+")
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
+            }
+        }
+        .onAppear {
+            // Defer chart rendering on older devices to prevent freezing
+            if DevicePerformanceHelper.shouldDeferChartRendering {
+                Task { @MainActor in
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds (staggered for multiple charts)
+                    if !Task.isCancelled {
+                        isChartReady = true
+                    }
+                }
+            } else {
+                isChartReady = true
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
@@ -937,6 +1012,14 @@ struct FeedingPatternsChart: View {
     let patterns: [FeedingPattern]
     let petName: String
     
+    @State private var isChartReady = false
+    
+    // Limit data points for older devices
+    private var chartData: [FeedingPattern] {
+        let maxPoints = DevicePerformanceHelper.maxChartDataPoints
+        return Array(patterns.prefix(maxPoints))
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
             Text("Feeding Patterns")
@@ -944,34 +1027,42 @@ struct FeedingPatternsChart: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             if #available(iOS 16.0, *) {
-                Chart(patterns) { pattern in
-                    BarMark(
-                        x: .value("Date", pattern.date),
-                        y: .value("Feedings", pattern.feedingCount)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.primary)
-                    
-                    LineMark(
-                        x: .value("Date", pattern.date),
-                        y: .value("Compatibility", pattern.compatibilityScore)
-                    )
-                    .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
-                    .lineStyle(StrokeStyle(lineWidth: 2))
-                }
-                .frame(height: 200)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: 7)) { _ in
-                        AxisValueLabel(format: .dateTime.month().day())
+                if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
+                    Chart(chartData) { pattern in
+                        BarMark(
+                            x: .value("Date", pattern.date),
+                            y: .value("Feedings", pattern.feedingCount)
+                        )
+                        .foregroundStyle(ModernDesignSystem.Colors.primary)
+                        
+                        // LineMark disabled on older devices for performance
+                        if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
+                            LineMark(
+                                x: .value("Date", pattern.date),
+                                y: .value("Compatibility", pattern.compatibilityScore)
+                            )
+                            .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                        }
                     }
-                }
-                .chartYAxis {
-                    AxisMarks { value in
-                        AxisValueLabel {
-                            if let count = value.as(Int.self) {
-                                Text("\(count)")
+                    .frame(height: 200)
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day, count: 7)) { _ in
+                            AxisValueLabel(format: .dateTime.month().day())
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks { value in
+                            AxisValueLabel {
+                                if let count = value.as(Int.self) {
+                                    Text("\(count)")
+                                }
                             }
                         }
                     }
+                } else {
+                    ProgressView()
+                        .frame(height: 200)
                 }
             } else {
                 // Fallback for iOS 15 and earlier
@@ -979,6 +1070,20 @@ struct FeedingPatternsChart: View {
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     .frame(height: 200)
+            }
+        }
+        .onAppear {
+            // Defer chart rendering on older devices to prevent freezing
+            if DevicePerformanceHelper.shouldDeferChartRendering {
+                Task { @MainActor in
+                    await Task.yield()
+                    try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds (staggered for multiple charts)
+                    if !Task.isCancelled {
+                        isChartReady = true
+                    }
+                }
+            } else {
+                isChartReady = true
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)
