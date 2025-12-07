@@ -547,15 +547,16 @@ async def get_feeding_records(
     # Handle empty response
     records_data = handle_empty_response(result["data"])
     
-    # Debug: Log first record to verify calories column is being returned
+    # CRITICAL: Debug - Log raw database values to verify calories column
     if records_data:
-        first_record = records_data[0]
-        logger.debug(
-            f"[GET_FEEDING_RECORDS] First record sample - ID: {first_record.get('id')}, "
-            f"calories from DB: {first_record.get('calories')}, "
-            f"amount_grams: {first_record.get('amount_grams')}, "
-            f"food_analysis_id: {first_record.get('food_analysis_id')}"
-        )
+        for idx, record in enumerate(records_data[:3]):  # Log first 3 records
+            raw_calories = record.get("calories")
+            logger.info(
+                f"[GET_FEEDING_RECORDS] 🔍 RAW DB Record {idx} - ID: {record.get('id')}, "
+                f"calories (raw from DB): {raw_calories} (type: {type(raw_calories).__name__}), "
+                f"amount_grams: {record.get('amount_grams')} (type: {type(record.get('amount_grams')).__name__}), "
+                f"food_analysis_id: {record.get('food_analysis_id')}"
+            )
     
     # Join food_analysis data for each feeding record
     # Get all unique food_analysis_ids
@@ -585,7 +586,26 @@ async def get_feeding_records(
         # The feeding_records table has a calories column that may already contain the correct value
         # This is important because food_analysis might have calories_per_100g = 0, but the database
         # feeding_records table may have the correct calculated calories stored
-        existing_calories = record.get("calories")
+        # Handle both string and numeric types (Supabase may return DECIMAL as string)
+        raw_calories = record.get("calories")
+        existing_calories = None
+        if raw_calories is not None:
+            if isinstance(raw_calories, str):
+                try:
+                    existing_calories = float(raw_calories)
+                    logger.debug(
+                        f"[GET_FEEDING_RECORDS] Converted calories string '{raw_calories}' to float {existing_calories} for record {record_id}"
+                    )
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"[GET_FEEDING_RECORDS] Failed to convert calories string '{raw_calories}' to float for record {record_id}"
+                    )
+            elif isinstance(raw_calories, (int, float)):
+                existing_calories = float(raw_calories)
+            else:
+                logger.warning(
+                    f"[GET_FEEDING_RECORDS] Unexpected calories type {type(raw_calories)} for record {record_id}: {raw_calories}"
+                )
         
         # Log what we're starting with
         logger.debug(
