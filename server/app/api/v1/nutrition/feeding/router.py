@@ -642,9 +642,18 @@ async def get_feeding_records(
         
         # Log final calories value being returned
         final_calories = record.get("calories")
-        logger.debug(
-            f"[GET_FEEDING_RECORDS] Final calories for record {record_id}: {final_calories}"
+        logger.info(
+            f"[GET_FEEDING_RECORDS] ✅ Final calories for record {record_id}: {final_calories} "
+            f"(type: {type(final_calories).__name__})"
         )
+        
+        # CRITICAL: Ensure calories is always in the record dict (even if None)
+        # This ensures the response model includes the calories field
+        if "calories" not in record:
+            record["calories"] = None
+            logger.warning(
+                f"[GET_FEEDING_RECORDS] ⚠️ Calories key missing from record {record_id}, setting to None"
+            )
         
         enriched_records.append(record)
     
