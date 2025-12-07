@@ -865,6 +865,14 @@ struct AdvancedAnalyticsView: View {
                     // Analytics Summary
                     analyticsSummarySection
                     
+                    // Insights & Recommendations
+                    if let pet = petSelectionService.selectedPet {
+                        InsightsCard(
+                            insights: healthInsights?.recommendations.map { $0.title } ?? [],
+                            pet: pet
+                        )
+                    }
+                    
                     // Disclaimer
                     VeterinaryDisclaimerView()
                 }
@@ -1258,16 +1266,40 @@ struct AdvancedAnalyticsView: View {
     
     /**
      * Calculate feeding consistency score
+     * Measures how consistently the pet is being fed over the analysis period
+     * Score is based on:
+     * - Number of days with feedings vs. total days
+     * - Minimum 2 feeding records required for meaningful analysis
      */
     private func calculateConsistencyScore(feedingRecords: [FeedingRecord]) -> Double {
-        guard feedingRecords.count >= 7 else { return 0.0 }
+        // Need at least 2 records to calculate consistency
+        guard feedingRecords.count >= 2 else {
+            print("⚠️ [calculateConsistencyScore] Not enough records: \(feedingRecords.count), need at least 2")
+            return 0.0
+        }
         
-        // Simple consistency calculation based on feeding frequency
-        let daysWithFeedings = Set(feedingRecords.map { Calendar.current.startOfDay(for: $0.feedingTime) }).count
-        let totalDays = 7 // Last week
-        let consistency = Double(daysWithFeedings) / Double(totalDays)
+        // Get unique days with feedings
+        let daysWithFeedings = Set(feedingRecords.map { Calendar.current.startOfDay(for: $0.feedingTime) })
         
-        return consistency * 100
+        // Calculate the date range of the feeding records
+        let sortedDates = feedingRecords.map { $0.feedingTime }.sorted()
+        guard let firstDate = sortedDates.first, let lastDate = sortedDates.last else {
+            print("⚠️ [calculateConsistencyScore] Could not determine date range")
+            return 0.0
+        }
+        
+        // Calculate total days in the analysis period
+        let calendar = Calendar.current
+        let daysBetween = calendar.dateComponents([.day], from: calendar.startOfDay(for: firstDate), to: calendar.startOfDay(for: lastDate)).day ?? 0
+        let totalDays = max(1, daysBetween + 1) // +1 to include both first and last day
+        
+        // Calculate consistency percentage
+        let consistency = Double(daysWithFeedings.count) / Double(totalDays)
+        let score = consistency * 100
+        
+        print("✅ [calculateConsistencyScore] Score: \(score)% (\(daysWithFeedings.count) days with feedings out of \(totalDays) total days)")
+        
+        return score
     }
     
     /**
@@ -2053,6 +2085,223 @@ class AdvancedAnalyticsService: ObservableObject {
         } catch {
             self.error = error
             throw error
+        }
+    }
+}
+
+// MARK: - Insights & Recommendations Card
+
+/**
+ * Insights and Recommendations Card
+ * Displays recommended daily calories, weight, and insights for a pet
+ */
+private struct InsightsCard: View {
+    let insights: [String]
+    let pet: Pet
+    
+    @StateObject private var unitService = WeightUnitPreferenceService.shared
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            Text("Insights & Recommendations")
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Recommended Daily Calories
+                RecommendationRow(
+                    icon: "flame.fill",
+                    iconColor: ModernDesignSystem.Colors.warmCoral,
+                    title: "Recommended Daily Calories",
+                    value: formatCalories(recommendedCalories)
+                )
+                
+                // Recommended Weight
+                RecommendationRow(
+                    icon: "scalemass.fill",
+                    iconColor: ModernDesignSystem.Colors.primary,
+                    title: "Recommended Weight",
+                    value: formatWeight(recommendedWeight)
+                )
+                
+                // Existing insights
+                ForEach(insights, id: \.self) { insight in
+                    HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                            .padding(.top, 2)
+                        
+                        Text(insight)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Spacer()
+                    }
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+    
+    // MARK: - Computed Properties
+    
+    /// Calculate recommended daily calories based on pet's species, age, and activity level
+    private var recommendedCalories: Double {
+        let requirements = PetNutritionalRequirements.calculate(for: pet)
+        return requirements.dailyCalories
+    }
+    
+    /// Calculate recommended weight based on species, age, and breed
+    private var recommendedWeight: Double {
+        calculateRecommendedWeight(for: pet)
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func formatCalories(_ calories: Double) -> String {
+        "\(Int(calories)) kcal/day"
+    }
+    
+    private func formatWeight(_ weightKg: Double) -> String {
+        unitService.formatWeight(weightKg)
+    }
+    
+    /// Calculate recommended weight range based on species, age, and breed
+    private func calculateRecommendedWeight(for pet: Pet) -> Double {
+        let ageMonths = pet.ageMonths ?? 0
+        
+        switch pet.species {
+        case .dog:
+            return calculateRecommendedDogWeight(ageMonths: ageMonths, breed: pet.breed)
+        case .cat:
+            return calculateRecommendedCatWeight(ageMonths: ageMonths)
+        }
+    }
+    
+    /// Calculate recommended weight for dogs based on age and breed size
+    private func calculateRecommendedDogWeight(ageMonths: Int, breed: String?) -> Double {
+        let breedSize = estimateBreedSize(breed: breed)
+        
+        if ageMonths < 12 {
+            return calculatePuppyWeight(ageMonths: ageMonths, breedSize: breedSize)
+        }
+        
+        switch breedSize {
+        case .small:
+            return 5.0
+        case .medium:
+            return 15.0
+        case .large:
+            return 30.0
+        case .giant:
+            return 50.0
+        }
+    }
+    
+    /// Calculate recommended weight for cats based on age
+    private func calculateRecommendedCatWeight(ageMonths: Int) -> Double {
+        if ageMonths < 12 {
+            let adultWeight = 4.5
+            return min(0.5 + (Double(ageMonths) / 12.0) * (adultWeight - 0.5), adultWeight)
+        }
+        return 4.5
+    }
+    
+    /// Estimate breed size category for dogs
+    private func estimateBreedSize(breed: String?) -> DogBreedSize {
+        guard let breed = breed?.lowercased() else {
+            return .medium
+        }
+        
+        let smallBreeds = ["chihuahua", "yorkie", "yorkshire", "pomeranian", "maltese", "shih tzu", "pug", "dachshund", "beagle", "corgi", "jack russell"]
+        let largeBreeds = ["labrador", "golden retriever", "german shepherd", "rottweiler", "boxer", "doberman", "husky", "border collie", "australian shepherd"]
+        let giantBreeds = ["great dane", "mastiff", "st. bernard", "newfoundland", "bernese mountain", "irish wolfhound"]
+        
+        if smallBreeds.contains(where: { breed.contains($0) }) {
+            return .small
+        } else if largeBreeds.contains(where: { breed.contains($0) }) {
+            return .large
+        } else if giantBreeds.contains(where: { breed.contains($0) }) {
+            return .giant
+        }
+        
+        return .medium
+    }
+    
+    /// Calculate expected weight for puppies based on age and breed size
+    private func calculatePuppyWeight(ageMonths: Int, breedSize: DogBreedSize) -> Double {
+        let adultWeight: Double
+        switch breedSize {
+        case .small:
+            adultWeight = 7.5
+        case .medium:
+            adultWeight = 17.5
+        case .large:
+            adultWeight = 32.5
+        case .giant:
+            adultWeight = 55.0
+        }
+        
+        let growthFactor: Double
+        if ageMonths < 4 {
+            growthFactor = 0.5 * (Double(ageMonths) / 4.0)
+        } else if ageMonths < 8 {
+            growthFactor = 0.5 + 0.25 * (Double(ageMonths - 4) / 4.0)
+        } else {
+            growthFactor = 0.75 + 0.15 * (Double(ageMonths - 8) / 4.0)
+        }
+        
+        return adultWeight * growthFactor
+    }
+}
+
+/// Dog breed size categories for weight estimation
+private enum DogBreedSize {
+    case small
+    case medium
+    case large
+    case giant
+}
+
+/// Recommendation row component for displaying calorie and weight recommendations
+private struct RecommendationRow: View {
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let value: String
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+            Image(systemName: icon)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(iconColor)
+                .padding(.top, 2)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                
+                Text(value)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
+            
+            Spacer()
         }
     }
 }
