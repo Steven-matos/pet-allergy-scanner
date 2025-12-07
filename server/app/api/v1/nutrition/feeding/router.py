@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from typing import List, Optional
 from datetime import datetime
+import asyncio
 
 from app.core.database import get_db
 from app.models.nutrition.nutrition import (
@@ -544,17 +545,38 @@ async def get_feeding_records(
         .with_ordering("created_at", desc=True)\
         .execute()
     
+    # CRITICAL DEBUG: Execute a raw SQL query to verify what's actually in the database
+    # This bypasses any potential issues with the query builder or RLS
+    try:
+        raw_query_result = await asyncio.to_thread(
+            lambda: supabase.rpc(
+                'get_feeding_records_raw',
+                {'p_pet_id': pet_id}
+            ).execute()
+        )
+        if raw_query_result.data:
+            logger.info(
+                f"[GET_FEEDING_RECORDS] ⚠️ RAW SQL Query Result (first 2 records): "
+                f"{raw_query_result.data[:2]}"
+            )
+    except Exception as raw_error:
+        logger.warning(
+            f"[GET_FEEDING_RECORDS] Raw SQL query failed (function may not exist): {raw_error}"
+        )
+    
     # Handle empty response
     records_data = handle_empty_response(result["data"])
     
-    # CRITICAL: Debug - Log raw database values to verify calories column
+    # CRITICAL DEBUG: Log ALL records to verify calories column from database
+    logger.info(f"[GET_FEEDING_RECORDS] Retrieved {len(records_data)} records from database")
     if records_data:
-        for idx, record in enumerate(records_data[:3]):  # Log first 3 records
-            raw_calories = record.get("calories")
+        for idx, record in enumerate(records_data[:5]):  # Log first 5 records
+            record_id = record.get('id', 'unknown')
+            db_calories = record.get('calories')
             logger.info(
-                f"[GET_FEEDING_RECORDS] 🔍 RAW DB Record {idx} - ID: {record.get('id')}, "
-                f"calories (raw from DB): {raw_calories} (type: {type(raw_calories).__name__}), "
-                f"amount_grams: {record.get('amount_grams')} (type: {type(record.get('amount_grams')).__name__}), "
+                f"[GET_FEEDING_RECORDS] Record {idx} (ID: {record_id}) - "
+                f"RAW calories from DB: {repr(db_calories)} (type: {type(db_calories).__name__}), "
+                f"amount_grams: {record.get('amount_grams')}, "
                 f"food_analysis_id: {record.get('food_analysis_id')}"
             )
     
@@ -586,26 +608,7 @@ async def get_feeding_records(
         # The feeding_records table has a calories column that may already contain the correct value
         # This is important because food_analysis might have calories_per_100g = 0, but the database
         # feeding_records table may have the correct calculated calories stored
-        # Handle both string and numeric types (Supabase may return DECIMAL as string)
-        raw_calories = record.get("calories")
-        existing_calories = None
-        if raw_calories is not None:
-            if isinstance(raw_calories, str):
-                try:
-                    existing_calories = float(raw_calories)
-                    logger.debug(
-                        f"[GET_FEEDING_RECORDS] Converted calories string '{raw_calories}' to float {existing_calories} for record {record_id}"
-                    )
-                except (ValueError, TypeError):
-                    logger.warning(
-                        f"[GET_FEEDING_RECORDS] Failed to convert calories string '{raw_calories}' to float for record {record_id}"
-                    )
-            elif isinstance(raw_calories, (int, float)):
-                existing_calories = float(raw_calories)
-            else:
-                logger.warning(
-                    f"[GET_FEEDING_RECORDS] Unexpected calories type {type(raw_calories)} for record {record_id}: {raw_calories}"
-                )
+        existing_calories = record.get("calories")
         
         # Log what we're starting with
         logger.debug(
