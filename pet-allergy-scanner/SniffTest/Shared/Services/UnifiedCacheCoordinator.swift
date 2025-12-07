@@ -149,7 +149,7 @@ final class UnifiedCacheCoordinator {
         // Try memory cache first
         if let memoryEntry = memoryCache[key], memoryEntry.isValid {
             cacheStats.hits += 1
-            return decodeEntry(memoryEntry, as: type)
+            return decodeEntry(memoryEntry, as: type, key: key)
         }
         
         // Try disk cache
@@ -158,7 +158,7 @@ final class UnifiedCacheCoordinator {
             memoryCache[key] = diskEntry
             cacheStats.hits += 1
             // Decode the data
-            return decodeEntry(diskEntry, as: type)
+            return decodeEntry(diskEntry, as: type, key: key)
         }
         
         cacheStats.misses += 1
@@ -519,12 +519,21 @@ final class UnifiedCacheCoordinator {
     
     /**
      * Decode cache entry data
+     * If decoding fails, invalidates the corrupted cache entry
+     * - Parameter entry: The cache entry to decode
+     * - Parameter type: The type to decode to
+     * - Parameter key: The cache key (used for invalidation if decoding fails)
      */
-    private func decodeEntry<T: Codable>(_ entry: CacheEntry<Data>, as type: T.Type) -> T? {
+    private func decodeEntry<T: Codable>(_ entry: CacheEntry<Data>, as type: T.Type, key: String) -> T? {
         do {
             return try JSONDecoder().decode(T.self, from: entry.data)
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to decode cache entry: \(error)")
+            print("⚠️ [UnifiedCacheCoordinator] Failed to decode cache entry for key '\(key)': \(error)")
+            
+            // If decoding fails, it's likely corrupted - invalidate it
+            print("🗑️ [UnifiedCacheCoordinator] Invalidating corrupted cache entry: \(key)")
+            invalidate(forKey: key)
+            
             return nil
         }
     }

@@ -396,16 +396,36 @@ extension View {
 /**
  * Modern concurrency loading view to avoid conflicts
  * Provides smooth, animated loading states for concurrency operations
+ * Uses animated spinner with pulsing effect for clear visual feedback
  */
 struct ModernConcurrencyLoadingView: View {
     let message: String
     @State private var isAnimating = false
+    @State private var rotationAngle: Double = 0
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
-            ProgressView()
-                .scaleEffect(1.2)
-                .tint(ModernDesignSystem.Colors.primary)
+            // Animated rotating spinner
+            ZStack {
+                Circle()
+                    .stroke(ModernDesignSystem.Colors.primary.opacity(0.2), lineWidth: 4)
+                    .frame(width: 50, height: 50)
+                
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        ModernDesignSystem.Colors.primary,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .frame(width: 50, height: 50)
+                    .rotationEffect(.degrees(rotationAngle))
+                    .animation(
+                        .linear(duration: 1.0)
+                        .repeatForever(autoreverses: false),
+                        value: rotationAngle
+                    )
+            }
+            .padding(.bottom, ModernDesignSystem.Spacing.md)
             
             Text(message)
                 .font(ModernDesignSystem.Typography.body)
@@ -417,6 +437,7 @@ struct ModernConcurrencyLoadingView: View {
         .background(ModernDesignSystem.Colors.background)
         .onAppear {
             isAnimating = true
+            rotationAngle = 360
         }
     }
 }

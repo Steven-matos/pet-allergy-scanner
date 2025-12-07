@@ -25,20 +25,27 @@ import SwiftUI
 
 /**
  * Modern loading animation using PhaseAnimator (SwiftUI 5.0)
- * Provides smooth, multi-phase loading animations
+ * Provides smooth, multi-phase loading animations with multiple animated dots
+ * Clearly indicates the app is actively loading and not frozen
  */
 struct ModernLoadingAnimation: View {
     @State private var isAnimating = false
     
     var body: some View {
-        PhaseAnimator([0, 1, 2, 3], trigger: isAnimating) { phase in
-            Circle()
-                .fill(ModernDesignSystem.Colors.primary)
-                .frame(width: 20, height: 20)
-                .scaleEffect(phase == 0 ? 1.0 : phase == 1 ? 1.2 : phase == 2 ? 0.8 : 1.0)
-                .opacity(phase == 0 ? 1.0 : phase == 1 ? 0.8 : phase == 2 ? 0.6 : 1.0)
-        } animation: { phase in
-            .easeInOut(duration: 0.6)
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(ModernDesignSystem.Colors.primary)
+                    .frame(width: 12, height: 12)
+                    .scaleEffect(isAnimating ? 1.0 : 0.5)
+                    .opacity(isAnimating ? 1.0 : 0.3)
+                    .animation(
+                        .easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.2),
+                        value: isAnimating
+                    )
+            }
         }
         .onAppear {
             isAnimating = true
@@ -190,26 +197,37 @@ extension View {
 
 /**
  * Modern loading view using latest SwiftUI 5.0 features
- * Provides smooth, animated loading states
+ * Provides smooth, animated loading states with clear visual feedback
+ * Includes animated dots and pulsing text to indicate active loading
  */
 struct ModernLoadingView: View {
     let message: String
     @State private var isAnimating = false
+    @State private var pulseScale: CGFloat = 1.0
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            // Animated loading indicator with multiple dots
             ModernLoadingAnimation()
+                .padding(.bottom, ModernDesignSystem.Spacing.md)
             
+            // Pulsing message text
             Text(message)
                 .font(ModernDesignSystem.Typography.body)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 .opacity(isAnimating ? 1.0 : 0.0)
-                .animation(.easeInOut(duration: 0.5).delay(0.2), value: isAnimating)
+                .scaleEffect(pulseScale)
+                .animation(
+                    .easeInOut(duration: 1.0)
+                    .repeatForever(autoreverses: true),
+                    value: pulseScale
+                )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ModernDesignSystem.Colors.background)
         .onAppear {
             isAnimating = true
+            pulseScale = 1.05
         }
     }
 }

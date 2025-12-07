@@ -1138,8 +1138,25 @@ class APIService: ObservableObject, @unchecked Sendable {
                 let cacheKey = inferCacheKey(from: path, resourceId: resourceId)
                 await MainActor.run {
                     cacheCoordinator.invalidate(forKey: cacheKey)
-                    print("🔄 [APIService] 404 for computed data - invalidated cache (will re-check when source data added): \(cacheKey)")
                 }
+                print("🔄 [APIService] 404 for computed data - invalidated cache (will re-check when source data added): \(cacheKey)")
+                return
+            }
+            return
+        }
+        
+        // Don't treat food analysis 404s as permanently deleted
+        // Food analyses may be missing temporarily or the ID might be incorrect
+        // Feeding records reference them, so we should allow retry attempts
+        if path.contains("/nutrition/food-analysis/") {
+            // Just invalidate cache - don't mark as permanently deleted
+            // This allows re-checking if the food analysis is recreated or ID is corrected
+            if let resourceId = extractResourceId(from: path) {
+                let cacheKey = inferCacheKey(from: path, resourceId: resourceId)
+                await MainActor.run {
+                    cacheCoordinator.invalidate(forKey: cacheKey)
+                }
+                print("🔄 [APIService] 404 for food analysis - invalidated cache (may be missing temporarily): \(cacheKey)")
             }
             return
         }

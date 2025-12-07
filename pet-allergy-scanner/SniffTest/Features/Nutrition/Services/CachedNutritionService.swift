@@ -121,34 +121,56 @@ class CachedNutritionService: ObservableObject {
      * Get nutritional requirements with cache-first approach
      * Uses UnifiedCacheCoordinator for all cache operations
      * - Parameter petId: The pet's ID
+     * - Parameter skipCache: If true, skip cache check and go directly to server (used internally to avoid recursion)
      * - Returns: Nutritional requirements from cache or server
      */
-    func getNutritionalRequirements(for petId: String) async throws -> PetNutritionalRequirements {
+    func getNutritionalRequirements(for petId: String, skipCache: Bool = false) async throws -> PetNutritionalRequirements {
         guard currentUserId != nil else {
             throw APIError.authenticationError
         }
         
         let cacheKey = CacheKey.nutritionRequirements.scoped(forPetId: petId)
         
-        // Try cache first (synchronous)
-        if let cached = cacheCoordinator.get(PetNutritionalRequirements.self, forKey: cacheKey) {
+        // Try cache first (synchronous) - skip if skipCache is true
+        if !skipCache, let cached = cacheCoordinator.get(PetNutritionalRequirements.self, forKey: cacheKey) {
             nutritionalRequirementsCache[petId] = cached
             objectWillChange.send()
             
-            // Refresh in background if needed
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
+            // If cached values are zeros, trigger auto-creation immediately
+            // For async callers, we should wait for creation to complete
+            if cached.dailyCalories == 0.0 && cached.proteinPercentage == 0.0 {
+                print("🔄 [getNutritionalRequirements] Cached requirements are zeros - triggering auto-creation for pet \(petId)")
+                // Skip cache and force auto-creation (this will block until complete)
+                // This ensures async callers get the created requirements
                 do {
-                    let fresh = try await self.loadNutritionalRequirementsFromServer(for: petId)
-                    self.cacheCoordinator.set(fresh, forKey: cacheKey)
-                    self.nutritionalRequirementsCache[petId] = fresh
-                    self.objectWillChange.send()
+                    let fresh = try await getNutritionalRequirements(for: petId, skipCache: true)
+                    // Update cache with fresh requirements
+                    cacheCoordinator.set(fresh, forKey: cacheKey)
+                    nutritionalRequirementsCache[petId] = fresh
+                    objectWillChange.send()
+                    print("✅ [getNutritionalRequirements] Auto-created requirements updated in cache: calories=\(fresh.dailyCalories)")
+                    return fresh
                 } catch {
-                    // If 404, handle resource deleted
-                    if let apiError = error as? APIError,
-                       case .serverError(let statusCode) = apiError,
-                       statusCode == 404 {
-                        self.cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                    print("⚠️ [getNutritionalRequirements] Auto-creation failed: \(error.localizedDescription)")
+                    // Return cached zeros if creation fails
+                    return cached
+                }
+            } else {
+                // Normal background refresh for valid cached data
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    do {
+                        let fresh = try await self.loadNutritionalRequirementsFromServer(for: petId)
+                        self.cacheCoordinator.set(fresh, forKey: cacheKey)
+                        self.nutritionalRequirementsCache[petId] = fresh
+                        self.objectWillChange.send()
+                    } catch {
+                        // If 404, handle resource deleted
+                        if let apiError = error as? APIError,
+                           case .serverError(let statusCode) = apiError,
+                           statusCode == 404 {
+                            self.cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
+                        }
                     }
                 }
             }
@@ -158,6 +180,83 @@ class CachedNutritionService: ObservableObject {
         // Cache miss - try server
         do {
             let requirements = try await loadNutritionalRequirementsFromServer(for: petId)
+            
+            print("📊 [getNutritionalRequirements] Loaded requirements from server for pet \(petId): calories=\(requirements.dailyCalories), protein=\(requirements.proteinPercentage)")
+            
+            // Check if server returned zeros (no requirements exist yet)
+            // If so, calculate them locally and save to server
+            if requirements.dailyCalories == 0.0 && requirements.proteinPercentage == 0.0 {
+                print("🔄 [getNutritionalRequirements] Requirements are zeros - will calculate locally for pet \(petId)")
+                
+                // Get the pet to calculate requirements
+                guard let pet = CachedPetService.shared.pets.first(where: { $0.id == petId }) else {
+                    print("⚠️ [getNutritionalRequirements] Pet not found for \(petId) - cannot calculate requirements")
+                    // If no pet found, return the zeros from server
+                    cacheCoordinator.set(requirements, forKey: cacheKey)
+                    nutritionalRequirementsCache[petId] = requirements
+                    objectWillChange.send()
+                    return requirements
+                }
+                
+                print("✅ [getNutritionalRequirements] Pet found: \(pet.name), weight=\(pet.weightKg ?? 0)kg, lifeStage=\(pet.lifeStage), activity=\(pet.effectiveActivityLevel)")
+                
+                // Validate pet has required data for calculation
+                if pet.weightKg == nil || pet.weightKg == 0 {
+                    print("⚠️ [getNutritionalRequirements] Pet has no weight - will use default weight for calculation")
+                }
+                
+                // Calculate requirements locally based on pet characteristics
+                let calculatedRequirements = PetNutritionalRequirements.calculate(for: pet)
+                
+                print("✅ [getNutritionalRequirements] Calculated requirements:")
+                print("   - Calories: \(calculatedRequirements.dailyCalories)")
+                print("   - Protein: \(calculatedRequirements.proteinPercentage)%")
+                print("   - Fat: \(calculatedRequirements.fatPercentage)%")
+                print("   - Fiber: \(calculatedRequirements.fiberPercentage)%")
+                print("   - Life Stage: \(calculatedRequirements.lifeStage.rawValue)")
+                print("   - Activity: \(calculatedRequirements.activityLevel.rawValue)")
+                
+                // Validate calculated requirements before saving (should always be > 0 due to minimum guarantee)
+                if calculatedRequirements.dailyCalories <= 0 {
+                    print("❌ [getNutritionalRequirements] ERROR: Calculated calories is 0 or negative - this should not happen!")
+                    print("   - Base calories calculation may have failed")
+                    print("   - Pet weight: \(pet.weightKg ?? 0)kg")
+                    print("   - Pet species: \(pet.species)")
+                }
+                
+                // Save calculated requirements to server
+                do {
+                    let savedRequirements = try await saveNutritionalRequirementsToServer(calculatedRequirements)
+                    print("✅ [getNutritionalRequirements] Successfully saved requirements to server")
+                    
+                    // Use saved requirements from server (may have server-generated ID)
+                    cacheCoordinator.set(savedRequirements, forKey: cacheKey)
+                    nutritionalRequirementsCache[petId] = savedRequirements
+                    objectWillChange.send()
+                    print("✅ [getNutritionalRequirements] Requirements cached and returned for pet \(petId)")
+                    
+                    // Notify that requirements have been created (for any listeners that need to recalculate)
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("NutritionalRequirementsCreated"),
+                        object: nil,
+                        userInfo: ["petId": petId]
+                    )
+                    
+                    return savedRequirements
+                } catch {
+                    print("⚠️ [getNutritionalRequirements] Failed to save calculated requirements to server: \(error.localizedDescription)")
+                    print("⚠️ [getNutritionalRequirements] Error details: \(error)")
+                    // Continue with local calculation even if save fails
+                    // Cache and return calculated requirements locally
+                    cacheCoordinator.set(calculatedRequirements, forKey: cacheKey)
+                    nutritionalRequirementsCache[petId] = calculatedRequirements
+                    objectWillChange.send()
+                    print("✅ [getNutritionalRequirements] Requirements cached locally (server save failed) for pet \(petId)")
+                    return calculatedRequirements
+                }
+            }
+            
+            // Server returned valid requirements
             cacheCoordinator.set(requirements, forKey: cacheKey)
             nutritionalRequirementsCache[petId] = requirements
             objectWillChange.send()
@@ -181,6 +280,12 @@ class CachedNutritionService: ObservableObject {
             
             // Calculate requirements locally
             let requirements = PetNutritionalRequirements.calculate(for: pet)
+            
+            // Try to save to server (non-blocking)
+            Task {
+                try? await saveNutritionalRequirementsToServer(requirements)
+            }
+            
             cacheCoordinator.set(requirements, forKey: cacheKey)
             nutritionalRequirementsCache[petId] = requirements
             objectWillChange.send()
@@ -205,8 +310,8 @@ class CachedNutritionService: ObservableObject {
             objectWillChange.send()
         }
         
-        // Save to server
-        try await saveNutritionalRequirementsToServer(requirements)
+        // Save to server (result is used for caching, but we don't need to store it here)
+        _ = try await saveNutritionalRequirementsToServer(requirements)
         
         return requirements
     }
@@ -226,13 +331,47 @@ class CachedNutritionService: ObservableObject {
     /**
      * Save nutritional requirements to server
      * - Parameter requirements: The requirements to save
+     * - Returns: The saved requirements from server
      */
-    private func saveNutritionalRequirementsToServer(_ requirements: PetNutritionalRequirements) async throws {
-        let _: EmptyResponse = try await apiService.post(
-            endpoint: "/nutrition/requirements",
-            body: requirements,
-            responseType: EmptyResponse.self
-        )
+    private func saveNutritionalRequirementsToServer(_ requirements: PetNutritionalRequirements) async throws -> PetNutritionalRequirements {
+        print("🔄 [saveNutritionalRequirementsToServer] Saving requirements for pet \(requirements.petId)")
+        print("   - Calories: \(requirements.dailyCalories)")
+        print("   - Protein: \(requirements.proteinPercentage)%")
+        print("   - Fat: \(requirements.fatPercentage)%")
+        print("   - Fiber: \(requirements.fiberPercentage)%")
+        print("   - Life Stage: \(requirements.lifeStage.rawValue)")
+        print("   - Activity Level: \(requirements.activityLevel.rawValue)")
+        
+        // Validate requirements before sending (server requires daily_calories > 0)
+        guard requirements.dailyCalories > 0 else {
+            let error = NSError(domain: "NutritionService", code: -1, userInfo: [
+                NSLocalizedDescriptionKey: "Cannot save requirements: daily calories must be greater than 0 (got \(requirements.dailyCalories))"
+            ])
+            print("❌ [saveNutritionalRequirementsToServer] Validation failed: daily calories is 0 or negative")
+            throw error
+        }
+        
+        do {
+            let saved: PetNutritionalRequirements = try await apiService.post(
+                endpoint: "/nutrition/requirements",
+                body: requirements,
+                responseType: PetNutritionalRequirements.self
+            )
+            
+            print("✅ [saveNutritionalRequirementsToServer] Successfully saved requirements to server")
+            print("   - Saved ID: \(saved.petId)")
+            print("   - Saved Calories: \(saved.dailyCalories)")
+            print("   - Saved Protein: \(saved.proteinPercentage)%")
+            return saved
+        } catch {
+            print("❌ [saveNutritionalRequirementsToServer] Failed to save requirements: \(error)")
+            print("   - Error type: \(type(of: error))")
+            if let apiError = error as? APIError {
+                print("   - API Error: \(apiError)")
+            }
+            // Re-throw to let caller handle
+            throw error
+        }
     }
     
     // MARK: - Food Analysis
@@ -329,6 +468,34 @@ class CachedNutritionService: ObservableObject {
      */
     func getFoodAnalysis(by analysisId: String) -> FoodNutritionalAnalysis? {
         return foodAnalyses.first { $0.id == analysisId }
+    }
+    
+    /**
+     * Load a specific food analysis by ID from server
+     * - Parameter analysisId: The food analysis ID
+     * - Returns: Food analysis if found
+     */
+    func loadFoodAnalysis(by analysisId: String) async throws -> FoodNutritionalAnalysis {
+        // Check cache first
+        if let cached = foodAnalyses.first(where: { $0.id == analysisId }) {
+            return cached
+        }
+        
+        // Load from server
+        let analysis: FoodNutritionalAnalysis = try await apiService.get(
+            endpoint: "/nutrition/food-analysis/\(analysisId)",
+            responseType: FoodNutritionalAnalysis.self
+        )
+        
+        // Add to cache
+        await MainActor.run {
+            if !self.foodAnalyses.contains(where: { $0.id == analysis.id }) {
+                self.foodAnalyses.append(analysis)
+                self.objectWillChange.send()
+            }
+        }
+        
+        return analysis
     }
     
     // MARK: - Feeding Records

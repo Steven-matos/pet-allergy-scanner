@@ -65,22 +65,31 @@ struct AdvancedNutritionView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if gatekeeper.canAccessAnalytics() {
-                    if isLoading {
-                        ProgressView("Loading nutrition data...")
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let pet = selectedPet {
-                        phase3Content(for: pet)
+            ZStack {
+                VStack(spacing: 0) {
+                    if gatekeeper.canAccessAnalytics() {
+                        if let pet = selectedPet {
+                            phase3Content(for: pet)
+                        } else {
+                            petSelectionView
+                        }
                     } else {
-                        petSelectionView
+                        SubscriptionBlockerView(
+                            featureName: "Advanced Nutrition Analytics",
+                            featureDescription: "Get detailed nutrition analytics, weight tracking, and personalized insights for your pet's health.",
+                            icon: "chart.bar.fill"
+                        )
                     }
-                } else {
-                    SubscriptionBlockerView(
-                        featureName: "Advanced Nutrition Analytics",
-                        featureDescription: "Get detailed nutrition analytics, weight tracking, and personalized insights for your pet's health.",
-                        icon: "chart.bar.fill"
-                    )
+                }
+                .allowsHitTesting(!isLoading) // Block all interaction during loading
+                
+                // Loading overlay that blocks all interaction
+                if isLoading {
+                    ModernLoadingView(message: "Loading nutrition data...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.3))
+                        .ignoresSafeArea()
+                        .allowsHitTesting(true) // Allow touches on overlay to block underlying content
                 }
             }
             .navigationTitle(selectedPet.map { "\($0.name) - Advanced" } ?? "Advanced Nutrition")
@@ -829,6 +838,7 @@ struct AdvancedAnalyticsView: View {
     private let analyticsService = AdvancedAnalyticsService.shared
     private let cachedNutritionService = CachedNutritionService.shared
     private let cachedWeightService = CachedWeightTrackingService.shared
+    private let trendsService = CachedNutritionalTrendsService.shared
     @ObservedObject private var petSelectionService = NutritionPetSelectionService.shared
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -854,6 +864,9 @@ struct AdvancedAnalyticsView: View {
                     
                     // Analytics Summary
                     analyticsSummarySection
+                    
+                    // Disclaimer
+                    VeterinaryDisclaimerView()
                 }
             }
             .padding(ModernDesignSystem.Spacing.lg)
@@ -878,6 +891,15 @@ struct AdvancedAnalyticsView: View {
         
         let petId = pet.id
         
+        // CRITICAL: Ensure trends data is loaded first (with improved fallback logic)
+        // This ensures nutritional balance score is calculated correctly
+        do {
+            try await trendsService.loadTrendsData(for: petId, period: .thirtyDays, forceRefresh: false)
+        } catch {
+            print("⚠️ [AdvancedAnalyticsView] Failed to load trends data: \(error.localizedDescription)")
+            // Continue anyway - will use fallback calculation
+        }
+        
         do {
             async let insightsTask = analyticsService.fetchHealthInsights(petId: petId)
             async let patternsTask = analyticsService.fetchNutritionalPatterns(petId: petId)
@@ -886,7 +908,26 @@ struct AdvancedAnalyticsView: View {
             let patterns = try await patternsTask
             
             await MainActor.run {
-                self.healthInsights = insights
+                // CRITICAL: Override nutritionalAdequacyScore with trends service value
+                // This ensures we use the improved fallback logic (food name matching)
+                let trendsBalance = trendsService.nutritionalBalanceScore(for: petId)
+                if trendsBalance > 0 {
+                    // Create updated insights with correct nutritional balance
+                    let updatedInsights = HealthInsights(
+                        petId: insights.petId,
+                        analysisDate: insights.analysisDate,
+                        weightManagementStatus: insights.weightManagementStatus,
+                        nutritionalAdequacyScore: trendsBalance, // Use trends service value
+                        feedingConsistencyScore: insights.feedingConsistencyScore,
+                        healthRisks: insights.healthRisks,
+                        positiveIndicators: insights.positiveIndicators,
+                        recommendations: insights.recommendations,
+                        overallHealthScore: insights.overallHealthScore
+                    )
+                    self.healthInsights = updatedInsights
+                } else {
+                    self.healthInsights = insights
+                }
                 self.nutritionalPatterns = patterns
                 self.isLoading = false
                 self.errorMessage = nil
@@ -935,7 +976,7 @@ struct AdvancedAnalyticsView: View {
                 petId: petId,
                 analysisDate: Date(),
                 weightManagementStatus: trendDirectionString(weightTrend.trendDirection),
-                nutritionalAdequacyScore: calculateNutritionalScore(dailySummaries: dailySummaries),
+                nutritionalAdequacyScore: calculateNutritionalScore(dailySummaries: dailySummaries, petId: petId),
                 feedingConsistencyScore: calculateConsistencyScore(feedingRecords: feedingRecords),
                 healthRisks: generateHealthRisks(
                     weightTrend: weightTrend,
@@ -1107,6 +1148,15 @@ struct AdvancedAnalyticsView: View {
         Task {
             let petId = pet.id
             
+            // CRITICAL: Ensure trends data is loaded first (with improved fallback logic)
+            // This ensures nutritional balance score is calculated correctly
+            do {
+                try await trendsService.loadTrendsData(for: petId, period: .thirtyDays, forceRefresh: false)
+            } catch {
+                print("⚠️ [AdvancedAnalyticsView] Failed to load trends data: \(error.localizedDescription)")
+                // Continue anyway - will use fallback calculation
+            }
+            
             do {
                 // Fetch data from API in parallel for better performance
                 async let insightsTask = analyticsService.fetchHealthInsights(petId: petId)
@@ -1117,7 +1167,26 @@ struct AdvancedAnalyticsView: View {
                 let patterns = try await patternsTask
                 
                 await MainActor.run {
-                    self.healthInsights = insights
+                    // CRITICAL: Override nutritionalAdequacyScore with trends service value
+                    // This ensures we use the improved fallback logic (food name matching)
+                    let trendsBalance = trendsService.nutritionalBalanceScore(for: petId)
+                    if trendsBalance > 0 {
+                        // Create updated insights with correct nutritional balance
+                        let updatedInsights = HealthInsights(
+                            petId: insights.petId,
+                            analysisDate: insights.analysisDate,
+                            weightManagementStatus: insights.weightManagementStatus,
+                            nutritionalAdequacyScore: trendsBalance, // Use trends service value
+                            feedingConsistencyScore: insights.feedingConsistencyScore,
+                            healthRisks: insights.healthRisks,
+                            positiveIndicators: insights.positiveIndicators,
+                            recommendations: insights.recommendations,
+                            overallHealthScore: insights.overallHealthScore
+                        )
+                        self.healthInsights = updatedInsights
+                    } else {
+                        self.healthInsights = insights
+                    }
                     self.nutritionalPatterns = patterns
                     self.isLoading = false
                     self.errorMessage = nil
@@ -1164,12 +1233,27 @@ struct AdvancedAnalyticsView: View {
     
     /**
      * Calculate nutritional adequacy score from daily summaries
+     * Falls back to trends service if daily summaries don't have valid compatibility scores
      */
-    private func calculateNutritionalScore(dailySummaries: [DailyNutritionSummary]) -> Double {
+    private func calculateNutritionalScore(dailySummaries: [DailyNutritionSummary], petId: String) -> Double {
+        // First try to use trends service (which has the improved fallback logic)
+        let trendsBalance = trendsService.nutritionalBalanceScore(for: petId)
+        if trendsBalance > 0 {
+            return trendsBalance
+        }
+        
+        // Fallback to daily summaries if trends service doesn't have data
         guard !dailySummaries.isEmpty else { return 0.0 }
         
         let avgCompatibility = dailySummaries.map { $0.averageCompatibility }.reduce(0, +) / Double(dailySummaries.count)
-        return avgCompatibility
+        
+        // Only use daily summaries if they have valid scores (not all zeros)
+        if avgCompatibility > 0 {
+            return avgCompatibility
+        }
+        
+        // If daily summaries are all zeros, return 0 (trends service already returned 0)
+        return 0.0
     }
     
     /**

@@ -48,6 +48,7 @@ class CachedNutritionalTrendsService: ObservableObject {
     // MARK: - Services
     
     private let apiService: APIService
+    private var requirementsCreatedObserver: NSObjectProtocol?
     private let cacheCoordinator = UnifiedCacheCoordinator.shared
     private let authService = AuthService.shared
     private var cancellables = Set<AnyCancellable>()
@@ -63,6 +64,32 @@ class CachedNutritionalTrendsService: ObservableObject {
         self.apiService = APIService.shared
         loadCachedDataOnInit()
         observeAuthChanges()
+        observeRequirementsCreated()
+    }
+    
+    /**
+     * Observe when nutritional requirements are created
+     * This triggers a recalculation of derived metrics
+     */
+    private func observeRequirementsCreated() {
+        requirementsCreatedObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("NutritionalRequirementsCreated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let petId = notification.userInfo?["petId"] as? String else {
+                return
+            }
+            print("🔄 [CachedNutritionalTrendsService] Requirements created for pet \(petId) - recalculating metrics")
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                await self.calculateDerivedMetrics(for: petId)
+                print("✅ [CachedNutritionalTrendsService] Metrics recalculated after requirements creation")
+                print("   - Average Daily Calories: \(self.averageDailyCaloriesCache[petId] ?? 0)")
+                print("   - Nutritional Balance: \(self.nutritionalBalanceScoresCache[petId] ?? 0)")
+            }
+        }
     }
     
     /**
@@ -137,8 +164,8 @@ class CachedNutritionalTrendsService: ObservableObject {
                     self.insightsCache[petId] = cachedData.insights
                     self.objectWillChange.send()
                     
-                    // Calculate derived metrics
-                    calculateDerivedMetrics(for: petId)
+                    // Calculate derived metrics (async to allow requirements loading)
+                    await calculateDerivedMetrics(for: petId)
                     
                     // Trigger background refresh if cache is stale
                     refreshTrendsInBackground(petId: petId, period: period, cacheKey: cacheKey)
@@ -423,9 +450,42 @@ class CachedNutritionalTrendsService: ObservableObject {
             self.insightsCache[petId] = insights
             self.objectWillChange.send()
             
+            // Ensure nutritional requirements and food analyses are loaded for balance calculation
+            // These are needed for accurate nutritional balance calculation
+            let nutritionService = CachedNutritionService.shared
+            
+            print("🔄 [loadTrendsFromServer] Loading requirements and food analyses for pet \(petId)")
+            
+            // Load requirements and food analyses in parallel (will use cache if available)
+            // This ensures requirements are available for compatibility calculations
+            // Requirements will be auto-created if they don't exist (returns zeros from server)
+            let requirements = try? await nutritionService.getNutritionalRequirements(for: petId)
+            try? await nutritionService.loadFoodAnalyses(for: petId)
+            
+            // Verify requirements are valid after loading
+            if let req = requirements {
+                print("📊 [loadTrendsFromServer] Requirements loaded: calories=\(req.dailyCalories), protein=\(req.proteinPercentage)")
+                
+                if req.dailyCalories == 0.0 && req.proteinPercentage == 0.0 {
+                    print("⚠️ [loadTrendsFromServer] Requirements still zeros after load - checking cache")
+                    // Check cache again - getNutritionalRequirements should have updated it
+                    if let cachedReq = nutritionService.nutritionalRequirements(for: petId),
+                       cachedReq.dailyCalories > 0 {
+                        print("✅ [loadTrendsFromServer] Found valid requirements in cache after auto-creation")
+                    } else {
+                        print("⚠️ [loadTrendsFromServer] Requirements still zeros - will try to calculate in fallback")
+                    }
+                } else {
+                    print("✅ [loadTrendsFromServer] Valid requirements loaded: calories=\(req.dailyCalories)")
+                }
+            } else {
+                print("⚠️ [loadTrendsFromServer] Failed to load requirements - will try fallback calculation")
+            }
+            
             // Calculate derived metrics from loaded trends
-            // This will use fallback calculation from raw data if trends are empty
-            calculateDerivedMetrics(for: petId)
+            // This will use fallback calculation from raw data if trends are empty or have placeholder values
+            // Requirements should now be in cache (either from server or auto-created)
+            await calculateDerivedMetrics(for: petId)
             
             // Cache the data
             let cacheData = TrendsCacheData(
@@ -622,8 +682,21 @@ class CachedNutritionalTrendsService: ObservableObject {
     /**
      * Calculate derived metrics from trend data
      * - Parameter petId: The pet's ID
+     * Note: This is async to allow loading requirements if they don't exist
      */
-    private func calculateDerivedMetrics(for petId: String) {
+    @MainActor
+    private func calculateDerivedMetrics(for petId: String) async {
+        print("🔄 [calculateDerivedMetrics] Starting calculation for pet \(petId)")
+        
+        // Ensure food analyses are loaded before calculating
+        let nutritionService = CachedNutritionService.shared
+        do {
+            try await nutritionService.loadFoodAnalyses(for: petId)
+            print("✅ [calculateDerivedMetrics] Food analyses loaded for calculation")
+        } catch {
+            print("⚠️ [calculateDerivedMetrics] Failed to load food analyses: \(error.localizedDescription)")
+        }
+        
         // Calculate average daily calories
         let calories = calorieTrends(for: petId)
         if !calories.isEmpty {
@@ -632,18 +705,69 @@ class CachedNutritionalTrendsService: ObservableObject {
         } else {
             // If no trends data, try to calculate from feeding records directly
             // This ensures we show data even if trends haven't been generated yet
-            let nutritionService = CachedNutritionService.shared
             let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
             
+            print("📊 [calculateDerivedMetrics] No calorie trends data, calculating from \(feedingRecords.count) feeding records")
+            
             if !feedingRecords.isEmpty {
+                // Collect unique food analysis IDs from feeding records
+                let foodAnalysisIds = Set(feedingRecords.compactMap { $0.foodAnalysisId })
+                print("📊 [calculateDerivedMetrics] Need to load \(foodAnalysisIds.count) unique food analyses: \(foodAnalysisIds)")
+                
+                // Load missing food analyses by their IDs
+                for analysisId in foodAnalysisIds {
+                    if nutritionService.getFoodAnalysis(by: analysisId) == nil {
+                        print("🔄 [calculateDerivedMetrics] Loading missing food analysis: \(analysisId)")
+                        do {
+                            _ = try await nutritionService.loadFoodAnalysis(by: analysisId)
+                        } catch {
+                            print("⚠️ [calculateDerivedMetrics] Failed to load food analysis \(analysisId): \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
                 // Calculate average calories from feeding records
                 var totalCalories: Double = 0
                 var recordCount = 0
                 
+                // Debug: Check available food analyses
+                let allAnalyses = nutritionService.foodAnalyses.filter { $0.petId == petId }
+                print("📊 [calculateDerivedMetrics] Available food analyses after loading: \(allAnalyses.count)")
+                for analysis in allAnalyses {
+                    print("   - Analysis ID: \(analysis.id), Food: \(analysis.foodName)")
+                }
+                
                 for record in feedingRecords {
-                    // Try to get food analysis to calculate calories
-                    if let analysis = nutritionService.getFoodAnalysis(by: record.foodAnalysisId) {
-                        let calories = record.calculateCaloriesConsumed(from: analysis)
+                    print("🔍 [calculateDerivedMetrics] Checking record \(record.id) with foodAnalysisId: \(record.foodAnalysisId)")
+                    
+                    // Try to get calories from record first (if API provided it)
+                    var recordCalories: Double? = nil
+                    if record.calories > 0 {
+                        recordCalories = record.calories
+                        print("✅ [calculateDerivedMetrics] Using API-provided calories: \(record.calories) for record \(record.id)")
+                    } else if let analysis = nutritionService.getFoodAnalysis(by: record.foodAnalysisId) {
+                        // Fallback to calculating from food analysis
+                        recordCalories = record.calculateCaloriesConsumed(from: analysis)
+                        print("✅ [calculateDerivedMetrics] Calculated calories from analysis: \(recordCalories ?? 0) for record \(record.id), food: \(analysis.foodName)")
+                    } else {
+                        // Food analysis not found - try to find by food name as fallback
+                        if let foodName = record.foodName {
+                            // Try to find food analysis by name (case-insensitive match)
+                            if let matchingAnalysis = nutritionService.foodAnalyses.first(where: { 
+                                $0.petId == petId && 
+                                $0.foodName.localizedCaseInsensitiveContains(foodName)
+                            }) {
+                                recordCalories = record.calculateCaloriesConsumed(from: matchingAnalysis)
+                                print("✅ [calculateDerivedMetrics] Found food analysis by name match: \(matchingAnalysis.foodName) (ID: \(matchingAnalysis.id)), calculated calories: \(recordCalories ?? 0)")
+                            } else {
+                                print("⚠️ [calculateDerivedMetrics] No calories available for record \(record.id) - no API calories, no food analysis found for ID: \(record.foodAnalysisId), and no match by name: \(foodName)")
+                            }
+                        } else {
+                            print("⚠️ [calculateDerivedMetrics] No calories available for record \(record.id) - no API calories, no food analysis found for ID: \(record.foodAnalysisId), and no food name to match")
+                        }
+                    }
+                    
+                    if let calories = recordCalories {
                         totalCalories += calories
                         recordCount += 1
                     }
@@ -656,7 +780,15 @@ class CachedNutritionalTrendsService: ObservableObject {
                         calendar.startOfDay(for: record.feedingTime)
                     }
                     let daysCount = Double(groupedByDate.keys.count)
-                    averageDailyCaloriesCache[petId] = daysCount > 0 ? totalCalories / daysCount : 0
+                    let avgCalories = daysCount > 0 ? totalCalories / daysCount : 0
+                    averageDailyCaloriesCache[petId] = avgCalories
+                    objectWillChange.send()
+                    print("✅ [calculateDerivedMetrics] Average daily calories calculated: \(avgCalories) kcal from \(recordCount) records over \(Int(daysCount)) days")
+                } else {
+                    // No records with valid food analysis - set to 0
+                    averageDailyCaloriesCache[petId] = 0.0
+                    objectWillChange.send()
+                    print("⚠️ [calculateDerivedMetrics] No records with valid food analysis for average calories")
                 }
             } else {
                 averageDailyCaloriesCache[petId] = 0.0
@@ -686,11 +818,103 @@ class CachedNutritionalTrendsService: ObservableObject {
         }
         
         // Calculate nutritional balance score
-        if !patterns.isEmpty {
-            let total = patterns.reduce(0) { $0 + $1.compatibilityScore }
-            nutritionalBalanceScoresCache[petId] = total / Double(patterns.count)
+        // Check if patterns have valid compatibility scores (not placeholder values)
+        let patternsWithValidScores = patterns.filter { $0.compatibilityScore > 0 && $0.compatibilityScore != 70.0 }
+        
+        if !patternsWithValidScores.isEmpty {
+            // Use patterns data if we have valid scores
+            let total = patternsWithValidScores.reduce(0) { $0 + $1.compatibilityScore }
+            nutritionalBalanceScoresCache[petId] = total / Double(patternsWithValidScores.count)
         } else {
-            nutritionalBalanceScoresCache[petId] = 0.0
+            // If no valid patterns data, calculate from feeding records directly
+            // This ensures we show accurate data even if database has placeholder values
+            let nutritionService = CachedNutritionService.shared
+            let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
+            
+            if !feedingRecords.isEmpty {
+                print("🔄 [calculateDerivedMetrics] Calculating nutritional balance for pet \(petId) with \(feedingRecords.count) feeding records")
+                
+                // Get nutritional requirements for compatibility assessment
+                // First check cache, then try to load if missing
+                var requirements = nutritionService.nutritionalRequirements(for: petId)
+                
+                print("📊 [calculateDerivedMetrics] Initial requirements check: \(requirements != nil ? "found" : "nil"), calories=\(requirements?.dailyCalories ?? 0)")
+                
+                // If no requirements in cache OR requirements are zeros, load them (this will auto-create if missing)
+                if requirements == nil || (requirements?.dailyCalories == 0.0 && requirements?.proteinPercentage == 0.0) {
+                    print("🔄 [calculateDerivedMetrics] Requirements missing or zeros - loading/creating for pet \(petId)")
+                    
+                    // Try to load/create requirements synchronously in this async context
+                    // This is called from loadTrendsFromServer which is already async
+                    do {
+                        requirements = try await nutritionService.getNutritionalRequirements(for: petId)
+                        print("✅ [calculateDerivedMetrics] Requirements loaded: calories=\(requirements?.dailyCalories ?? 0), protein=\(requirements?.proteinPercentage ?? 0)")
+                        
+                        // If still zeros after loading, check cache again (auto-creation might have just completed)
+                        if requirements?.dailyCalories == 0.0 && requirements?.proteinPercentage == 0.0 {
+                            print("⚠️ [calculateDerivedMetrics] Requirements still zeros after load - checking cache again...")
+                            // Small delay to allow auto-creation to complete
+                            try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
+                            requirements = nutritionService.nutritionalRequirements(for: petId)
+                            print("📊 [calculateDerivedMetrics] Re-checked requirements from cache: calories=\(requirements?.dailyCalories ?? 0)")
+                        }
+                    } catch {
+                        print("⚠️ [calculateDerivedMetrics] Failed to load/create requirements: \(error.localizedDescription)")
+                        nutritionalBalanceScoresCache[petId] = 0.0
+                        return
+                    }
+                }
+                
+                // We should now have valid requirements - calculate compatibility scores
+                if let req = requirements, req.dailyCalories > 0 {
+                    print("✅ [calculateDerivedMetrics] Using requirements: calories=\(req.dailyCalories), protein=\(req.proteinPercentage)")
+                    var compatibilityScores: [Double] = []
+                    
+                    for record in feedingRecords {
+                        // Try to get food analysis to calculate compatibility
+                        var analysis: FoodNutritionalAnalysis? = nutritionService.getFoodAnalysis(by: record.foodAnalysisId)
+                        
+                        // Fallback: try to find by food name if ID lookup fails
+                        if analysis == nil, let foodName = record.foodName {
+                            analysis = nutritionService.foodAnalyses.first(where: { 
+                                $0.petId == petId && 
+                                $0.foodName.localizedCaseInsensitiveContains(foodName)
+                            })
+                            if analysis != nil {
+                                print("✅ [calculateDerivedMetrics] Found food analysis by name match for record \(record.id): \(analysis!.foodName) (ID: \(analysis!.id))")
+                            }
+                        }
+                        
+                        if let analysis = analysis {
+                            let compatibility = analysis.assessCompatibility(with: req)
+                            compatibilityScores.append(compatibility.score)
+                            print("📊 [calculateDerivedMetrics] Record \(record.id): compatibility score=\(compatibility.score)")
+                        } else {
+                            print("⚠️ [calculateDerivedMetrics] No food analysis found for record \(record.id) (ID: \(record.foodAnalysisId), name: \(record.foodName ?? "unknown"))")
+                        }
+                    }
+                    
+                    if !compatibilityScores.isEmpty {
+                        // Calculate average compatibility score
+                        let total = compatibilityScores.reduce(0, +)
+                        let average = total / Double(compatibilityScores.count)
+                        nutritionalBalanceScoresCache[petId] = average
+                        objectWillChange.send()
+                        print("✅ [calculateDerivedMetrics] Nutritional balance calculated: \(average)% from \(compatibilityScores.count) records")
+                        print("   - Compatibility scores: \(compatibilityScores)")
+                    } else {
+                        print("⚠️ [calculateDerivedMetrics] No compatibility scores calculated - no food analyses available")
+                        nutritionalBalanceScoresCache[petId] = 0.0
+                        objectWillChange.send()
+                    }
+                } else {
+                    print("⚠️ [calculateDerivedMetrics] No valid requirements available (calories=\(requirements?.dailyCalories ?? 0))")
+                    nutritionalBalanceScoresCache[petId] = 0.0
+                }
+            } else {
+                print("⚠️ [calculateDerivedMetrics] No feeding records for pet \(petId)")
+                nutritionalBalanceScoresCache[petId] = 0.0
+            }
         }
         
         // Calculate total weight change

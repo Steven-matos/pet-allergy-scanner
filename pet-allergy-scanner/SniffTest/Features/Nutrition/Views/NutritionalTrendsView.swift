@@ -46,25 +46,34 @@ struct NutritionalTrendsView: View {
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            if gatekeeper.canAccessTrends() {
+        ZStack {
+            VStack(spacing: 0) {
+                if gatekeeper.canAccessTrends() {
+                    if let pet = selectedPet {
+                        trendsContent(for: pet)
+                    } else {
+                        petSelectionView
+                    }
+                } else {
+                    SubscriptionBlockerView(
+                        featureName: "Nutritional Trends",
+                        featureDescription: "Track your pet's nutrition over time with detailed analytics, calorie trends, and feeding pattern insights.",
+                        icon: "chart.line.uptrend.xyaxis"
+                    )
+                }
+            }
+            .background(ModernDesignSystem.Colors.background)
+            .allowsHitTesting(!isLoading) // Block all interaction during loading
+            
+            // Loading overlay that blocks all interaction
             if isLoading {
                 ModernLoadingView(message: "Loading trends...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let pet = selectedPet {
-                trendsContent(for: pet)
-            } else {
-                petSelectionView
-                }
-            } else {
-                SubscriptionBlockerView(
-                    featureName: "Nutritional Trends",
-                    featureDescription: "Track your pet's nutrition over time with detailed analytics, calorie trends, and feeding pattern insights.",
-                    icon: "chart.line.uptrend.xyaxis"
-                )
+                    .background(Color.black.opacity(0.3))
+                    .ignoresSafeArea()
+                    .allowsHitTesting(true) // Allow touches on overlay to block underlying content
             }
         }
-        .background(ModernDesignSystem.Colors.background)
         .sheet(isPresented: $showingPeriodSelector) {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
         }
@@ -124,6 +133,14 @@ struct NutritionalTrendsView: View {
             loadTrendsDataIfNeeded()
             loadCalorieGoalsIfNeeded()
             loadRecentMeals()
+            
+            // Ensure food analyses are loaded for calorie display
+            if let pet = selectedPet {
+                Task {
+                    let nutritionService = CachedNutritionService.shared
+                    try? await nutritionService.loadFoodAnalyses(for: pet.id)
+                }
+            }
         }
         .onChange(of: showingFeedingLog) { _, isShowing in
             if !isShowing {
@@ -236,6 +253,9 @@ struct NutritionalTrendsView: View {
                     // Show recommendations even if no insights
                     InsightsCard(insights: [], pet: pet)
                 }
+                
+                // Disclaimer
+                VeterinaryDisclaimerView()
             }
             .padding(ModernDesignSystem.Spacing.lg)
         }
@@ -420,8 +440,10 @@ struct NutritionalTrendsView: View {
                 let recentCached = cachedMeals.filter { $0.feedingTime >= sevenDaysAgo }
                 if !recentCached.isEmpty {
                     recentMeals = recentCached.sorted { $0.feedingTime > $1.feedingTime }
-                    // Refresh in background to ensure we have latest data
+                    // Load food analyses in background to enable calorie display
                     Task {
+                        let nutritionService = CachedNutritionService.shared
+                        try? await nutritionService.loadFoodAnalyses(for: pet.id)
                         await refreshRecentMealsInBackground(for: pet.id)
                     }
                     return
@@ -429,8 +451,10 @@ struct NutritionalTrendsView: View {
                     // We have cached meals but they're older than 7 days - still show them
                     // This handles the case where user has meals but they're slightly older
                     recentMeals = cachedMeals.sorted { $0.feedingTime > $1.feedingTime }
-                    // Refresh in background to get latest data
+                    // Load food analyses in background to enable calorie display
                     Task {
+                        let nutritionService = CachedNutritionService.shared
+                        try? await nutritionService.loadFoodAnalyses(for: pet.id)
                         await refreshRecentMealsInBackground(for: pet.id)
                     }
                     return
@@ -446,6 +470,11 @@ struct NutritionalTrendsView: View {
             do {
                 // Load all records (days parameter is handled client-side for filtering)
                 let allMeals = try await feedingLogService.getFeedingRecords(for: pet.id, days: 30, forceRefresh: forceRefresh)
+                
+                // Load food analyses to enable calorie calculation
+                // This is done in parallel with meal loading for better performance
+                let nutritionService = CachedNutritionService.shared
+                try? await nutritionService.loadFoodAnalyses(for: pet.id)
                 
                 // Filter to last 7 days for display
                 let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -499,6 +528,10 @@ struct NutritionalTrendsView: View {
         do {
             // Load all records and filter client-side
             let allMeals = try await feedingLogService.getFeedingRecords(for: petId, days: 30, forceRefresh: false)
+            
+            // Load food analyses to enable calorie calculation
+            let nutritionService = CachedNutritionService.shared
+            try? await nutritionService.loadFoodAnalyses(for: petId)
             
             // Filter to last 7 days for display
             let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
@@ -592,7 +625,13 @@ struct NutritionalTrendsView: View {
         
         do {
             // Load data - use forceRefresh when explicitly requested (after adding/deleting records)
+            // This will also load requirements and food analyses internally
             try await trendsService.loadTrendsData(for: pet.id, period: selectedPeriod, forceRefresh: forceRefresh)
+            
+            // Ensure requirements and food analyses are loaded (may create requirements if missing)
+            let nutritionService = CachedNutritionService.shared
+            _ = try? await nutritionService.getNutritionalRequirements(for: pet.id)
+            try? await nutritionService.loadFoodAnalyses(for: pet.id)
             
             await MainActor.run {
                 isLoading = false
@@ -1791,6 +1830,7 @@ struct MealRow: View {
     let onDelete: () -> Void
     @StateObject private var feedingLogService = FeedingLogService.shared
     @StateObject private var trendsService = CachedNutritionalTrendsService.shared
+    @StateObject private var nutritionService = CachedNutritionService.shared
     @State private var showingDeleteAlert = false
     @State private var isDeleting = false
     @State private var deleteError: String?
@@ -1806,6 +1846,62 @@ struct MealRow: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter
+    }
+    
+    /**
+     * Calculate calories for this meal
+     * - Returns: Calories consumed, or nil if food analysis is not available
+     * - Note: Prefers calories from API response, falls back to calculation
+     * - Uses improved fallback logic: tries ID lookup first, then food name matching
+     */
+    private var mealCalories: Double? {
+        // First try: Use calories from API response if available and > 0
+        // Since calories is now non-optional, check if it's > 0 to determine if it's valid
+        if meal.calories > 0 {
+            print("✅ [MealRow] Using API calories: \(meal.calories) for meal \(meal.id)")
+            return meal.calories
+        }
+        
+        // Debug: Log if API calories are 0
+        if meal.calories == 0 {
+            print("⚠️ [MealRow] API returned 0 calories for meal \(meal.id), will calculate from food analysis")
+        }
+        
+        // Second try: Get food analysis by ID
+        var analysis = nutritionService.getFoodAnalysis(by: meal.foodAnalysisId)
+        
+        if analysis != nil {
+            print("✅ [MealRow] Found food analysis by ID: \(analysis!.foodName) (calories_per_100g: \(analysis!.caloriesPer100g))")
+        } else {
+            print("⚠️ [MealRow] Food analysis not found by ID: \(meal.foodAnalysisId) for meal \(meal.id)")
+        }
+        
+        // Third try: If not found by ID, try to find by food name (case-insensitive match)
+        // This uses the same improved fallback logic we added to trends service
+        if analysis == nil, let foodName = meal.foodName, !foodName.isEmpty {
+            // Try to find food analysis by name (case-insensitive match)
+            analysis = nutritionService.foodAnalyses.first(where: {
+                $0.petId == meal.petId &&
+                $0.foodName.localizedCaseInsensitiveContains(foodName)
+            })
+            
+            if analysis != nil {
+                print("✅ [MealRow] Found food analysis by name match: \(analysis!.foodName) (ID: \(analysis!.id), calories_per_100g: \(analysis!.caloriesPer100g))")
+            } else {
+                print("⚠️ [MealRow] Food analysis not found by name: '\(foodName)' for meal \(meal.id)")
+                print("   Available food analyses: \(nutritionService.foodAnalyses.filter { $0.petId == meal.petId }.map { $0.foodName })")
+            }
+        }
+        
+        // Calculate calories from analysis if found
+        if let analysis = analysis {
+            let calculatedCalories = meal.calculateCaloriesConsumed(from: analysis)
+            print("✅ [MealRow] Calculated calories: \(calculatedCalories) for meal \(meal.id) (amount: \(meal.amountGrams)g, calories_per_100g: \(analysis.caloriesPer100g))")
+            return calculatedCalories
+        }
+        
+        print("❌ [MealRow] No calories available for meal \(meal.id) - no API calories and no food analysis found")
+        return nil
     }
     
     var body: some View {
@@ -1832,7 +1928,7 @@ struct MealRow: View {
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                 }
                 
-                // Amount and brand
+                // Amount, brand, and calories
                 HStack(spacing: ModernDesignSystem.Spacing.xs) {
                     Text("\(meal.amountGrams, specifier: "%.0f")g")
                         .font(ModernDesignSystem.Typography.caption)
@@ -1843,6 +1939,14 @@ struct MealRow: View {
                             .font(ModernDesignSystem.Typography.caption)
                             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                             .lineLimit(1)
+                    }
+                    
+                    // Always show calories if available (prominent display)
+                    if let calories = mealCalories {
+                        Text("• \(Int(calories)) kcal")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
                     }
                     
                     if let notes = meal.notes, !notes.isEmpty {
@@ -1873,6 +1977,20 @@ struct MealRow: View {
                         .font(.system(size: 14))
                 }
                 .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .task {
+            // Ensure food analyses are loaded when this view appears
+            // This helps ensure calories can be calculated even if they weren't loaded initially
+            if mealCalories == nil {
+                Task {
+                    do {
+                        try await nutritionService.loadFoodAnalyses(for: meal.petId)
+                        print("✅ [MealRow] Loaded food analyses for pet \(meal.petId) - \(nutritionService.foodAnalyses.filter { $0.petId == meal.petId }.count) analyses available")
+                    } catch {
+                        print("⚠️ [MealRow] Failed to load food analyses: \(error.localizedDescription)")
+                    }
+                }
             }
         }
         .padding(ModernDesignSystem.Spacing.sm)
@@ -1922,6 +2040,46 @@ struct MealRow: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Veterinary Disclaimer View
+
+/**
+ * Veterinary Disclaimer View
+ * 
+ * Displays a disclaimer that the app is for tracking purposes only
+ * and does not replace veterinary recommendations.
+ */
+struct VeterinaryDisclaimerView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: "info.circle.fill")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .padding(.top, 2)
+                
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text("Medical Disclaimer")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Text("This information is for tracking purposes only and does not replace a veterinarian's recommendation. Please seek professional veterinary advice for medically accurate information specific to your individual pet.")
+                        .font(ModernDesignSystem.Typography.caption2)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream.opacity(0.5))
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.5), lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
     }
 }
 

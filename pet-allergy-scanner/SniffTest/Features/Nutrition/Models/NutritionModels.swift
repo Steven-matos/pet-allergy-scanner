@@ -56,7 +56,11 @@ struct PetNutritionalRequirements: Codable {
         let activityMultiplier = getActivityMultiplier(for: pet.effectiveActivityLevel)
         let lifeStageMultiplier = getLifeStageMultiplier(for: pet.lifeStage)
         
-        let dailyCalories = baseCalories * activityMultiplier * lifeStageMultiplier
+        var dailyCalories = baseCalories * activityMultiplier * lifeStageMultiplier
+        
+        // Ensure minimum calories (server requires daily_calories > 0)
+        // Use 200 as safe minimum for any pet
+        dailyCalories = max(dailyCalories, 200.0)
         
         return PetNutritionalRequirements(
             petId: pet.id,
@@ -74,13 +78,20 @@ struct PetNutritionalRequirements: Codable {
     /**
      * Calculate base calories using Resting Energy Requirement (RER) formula
      * RER = 70 * (body weight in kg)^0.75
+     * Ensures minimum calories to meet server validation (daily_calories > 0)
      */
     private static func calculateBaseCalories(for pet: Pet) -> Double {
-        guard let weightKg = pet.weightKg else {
+        let baseCalories: Double
+        if let weightKg = pet.weightKg, weightKg > 0 {
+            baseCalories = 70.0 * pow(weightKg, 0.75)
+        } else {
             // Default weight based on species and life stage
-            return getDefaultWeight(for: pet) * 70.0
+            let defaultWeight = getDefaultWeight(for: pet)
+            baseCalories = 70.0 * pow(defaultWeight, 0.75)
         }
-        return 70.0 * pow(weightKg, 0.75)
+        
+        // Ensure minimum calories (server requires > 0, use 100 as safe minimum)
+        return max(baseCalories, 100.0)
     }
     
     /**
@@ -213,6 +224,32 @@ struct FoodNutritionalAnalysis: Codable, Identifiable {
         case ingredients
         case allergens
         case analyzedAt = "analyzed_at"
+    }
+    
+    /**
+     * Custom decoder to handle missing fields in old cached data
+     * Provides default values for missing required fields
+     */
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        petId = try container.decode(String.self, forKey: .petId)
+        foodName = try container.decode(String.self, forKey: .foodName)
+        brand = try container.decodeIfPresent(String.self, forKey: .brand)
+        
+        // Handle missing calories_per_100g in old cached data
+        caloriesPer100g = try container.decodeIfPresent(Double.self, forKey: .caloriesPer100g) ?? 0.0
+        
+        proteinPercentage = try container.decodeIfPresent(Double.self, forKey: .proteinPercentage) ?? 0.0
+        fatPercentage = try container.decodeIfPresent(Double.self, forKey: .fatPercentage) ?? 0.0
+        fiberPercentage = try container.decodeIfPresent(Double.self, forKey: .fiberPercentage) ?? 0.0
+        moisturePercentage = try container.decodeIfPresent(Double.self, forKey: .moisturePercentage) ?? 0.0
+        
+        ingredients = try container.decodeIfPresent([String].self, forKey: .ingredients) ?? []
+        allergens = try container.decodeIfPresent([String].self, forKey: .allergens) ?? []
+        
+        analyzedAt = try container.decodeIfPresent(Date.self, forKey: .analyzedAt) ?? Date()
     }
     
     /**
@@ -377,8 +414,9 @@ struct FeedingRecord: Codable, Identifiable {
     let feedingTime: Date
     let notes: String?
     let createdAt: Date
-    let foodName: String?  // Optional: food name from food_analysis
-    let foodBrand: String?  // Optional: food brand from food_analysis
+    let foodName: String?
+    let foodBrand: String?
+    let calories: Double
     
     enum CodingKeys: String, CodingKey {
         case id
@@ -386,10 +424,114 @@ struct FeedingRecord: Codable, Identifiable {
         case foodAnalysisId = "food_analysis_id"
         case amountGrams = "amount_grams"
         case feedingTime = "feeding_time"
-        case notes
+        case notes = "notes"
         case createdAt = "created_at"
         case foodName = "food_name"
         case foodBrand = "food_brand"
+        case calories = "calories"
+    }
+    
+    /**
+     * Custom decoder to handle calories as either string or number
+     * Database may return calories as a string (e.g., "29.54") or as a number
+     */
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(String.self, forKey: .id)
+        petId = try container.decode(String.self, forKey: .petId)
+        foodAnalysisId = try container.decode(String.self, forKey: .foodAnalysisId)
+        
+        // Handle amount_grams as either string or number (database may return as string)
+        if let amountString = try? container.decode(String.self, forKey: .amountGrams),
+           let amount = Double(amountString) {
+            amountGrams = amount
+        } else {
+            amountGrams = try container.decode(Double.self, forKey: .amountGrams)
+        }
+        
+        feedingTime = try container.decode(Date.self, forKey: .feedingTime)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        foodName = try container.decodeIfPresent(String.self, forKey: .foodName)
+        foodBrand = try container.decodeIfPresent(String.self, forKey: .foodBrand)
+        
+        // CRITICAL: Handle calories as either string or number
+        // Database may return calories as a string (e.g., "29.54") or as a number
+        // Since calories is now non-optional, we must always provide a value
+        // Try multiple decoding strategies to handle different API response formats
+        var decodedCalories: Double = 0.0
+        var decodedSuccessfully = false
+        
+        // Check if calories key exists in the container
+        let hasCaloriesKey = container.contains(.calories)
+        print("🔍 [FeedingRecord] Decoding record \(id) - calories key exists: \(hasCaloriesKey)")
+        
+        // Strategy 1: Try decoding as String first (most common from database)
+        // Database returns "calories":"29.54" as a string
+        do {
+            let caloriesString = try container.decode(String.self, forKey: .calories)
+            if let caloriesValue = Double(caloriesString) {
+                decodedCalories = caloriesValue
+                decodedSuccessfully = true
+                print("✅ [FeedingRecord] Decoded calories from string '\(caloriesString)' -> \(caloriesValue) for record \(id)")
+            } else {
+                print("⚠️ [FeedingRecord] Failed to convert calories string '\(caloriesString)' to Double for record \(id)")
+            }
+        } catch {
+            // Not a string - try other strategies
+            print("🔍 [FeedingRecord] Calories is not a string for record \(id), trying number decode")
+        }
+        
+        // Strategy 2: If string decode failed, try as Double
+        if !decodedSuccessfully {
+            do {
+                let caloriesNumber = try container.decode(Double.self, forKey: .calories)
+                decodedCalories = caloriesNumber
+                decodedSuccessfully = true
+                print("✅ [FeedingRecord] Decoded calories from number: \(caloriesNumber) for record \(id)")
+            } catch {
+                // Not a number - try optional
+                print("🔍 [FeedingRecord] Calories is not a number for record \(id), trying optional decode")
+            }
+        }
+        
+        // Strategy 3: If both failed, try as optional Double (might be null)
+        if !decodedSuccessfully {
+            do {
+                if let caloriesValue = try container.decodeIfPresent(Double.self, forKey: .calories) {
+                    decodedCalories = caloriesValue
+                    decodedSuccessfully = true
+                    print("✅ [FeedingRecord] Decoded calories from optional: \(caloriesValue) for record \(id)")
+                } else {
+                    print("⚠️ [FeedingRecord] Calories is null (optional decode returned nil) for record \(id)")
+                }
+            } catch {
+                print("⚠️ [FeedingRecord] Optional decode failed for record \(id): \(error)")
+            }
+        }
+        
+        // Strategy 4: If still not decoded, check if key exists but is null
+        if !decodedSuccessfully {
+            if hasCaloriesKey {
+                // Key exists - check if it's null
+                if (try? container.decodeNil(forKey: .calories)) == true {
+                    print("⚠️ [FeedingRecord] Calories key exists but is null for record \(id), using default 0.0")
+                    decodedCalories = 0.0
+                } else {
+                    // Key exists but all decoding strategies failed
+                    print("❌ [FeedingRecord] Calories key exists but all decoding strategies failed for record \(id), using default 0.0")
+                    decodedCalories = 0.0
+                }
+            } else {
+                // Key doesn't exist at all in JSON response
+                print("❌ [FeedingRecord] Calories key MISSING from JSON response for record \(id), using default 0.0")
+                decodedCalories = 0.0
+            }
+        }
+        
+        calories = decodedCalories
+        print("📊 [FeedingRecord] Final decoded calories for record \(id): \(calories)")
     }
     
     /**
@@ -399,6 +541,23 @@ struct FeedingRecord: Codable, Identifiable {
      */
     func calculateCaloriesConsumed(from foodAnalysis: FoodNutritionalAnalysis) -> Double {
         return (foodAnalysis.caloriesPer100g / 100.0) * amountGrams
+    }
+    
+    /**
+     * Get calories for this feeding record
+     * - Returns: Calories from API response if > 0, otherwise calculates from food analysis
+     * - Note: Since calories is now non-optional, we check if it's > 0 to determine if it's valid
+     */
+    func getCalories(foodAnalysis: FoodNutritionalAnalysis?) -> Double? {
+        // Prefer calories from API response if available and > 0
+        if calories > 0 {
+            return calories
+        }
+        // Fallback to calculation if food analysis is available
+        if let analysis = foodAnalysis {
+            return calculateCaloriesConsumed(from: analysis)
+        }
+        return nil
     }
 }
 

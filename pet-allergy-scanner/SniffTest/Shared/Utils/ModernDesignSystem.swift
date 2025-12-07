@@ -313,12 +313,30 @@ extension StatusIndicator {
 
 struct ModernDesignLoadingView: View {
     let message: String
+    @State private var rotationAngle: Double = 0
     
     var body: some View {
         VStack(spacing: ModernDesignSystem.Spacing.lg) {
-            ProgressView()
-                .scaleEffect(1.2)
-                .tint(ModernDesignSystem.Colors.primary)
+            // Animated rotating spinner
+            ZStack {
+                Circle()
+                    .stroke(ModernDesignSystem.Colors.primary.opacity(0.2), lineWidth: 4)
+                    .frame(width: 40, height: 40)
+                
+                Circle()
+                    .trim(from: 0, to: 0.7)
+                    .stroke(
+                        ModernDesignSystem.Colors.primary,
+                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
+                    )
+                    .frame(width: 40, height: 40)
+                    .rotationEffect(.degrees(rotationAngle))
+                    .animation(
+                        .linear(duration: 1.0)
+                        .repeatForever(autoreverses: false),
+                        value: rotationAngle
+                    )
+            }
             
             Text(message)
                 .font(ModernDesignSystem.Typography.body)
@@ -327,6 +345,9 @@ struct ModernDesignLoadingView: View {
         }
         .padding(ModernDesignSystem.Spacing.xl)
         .modernCard()
+        .onAppear {
+            rotationAngle = 360
+        }
     }
 }
 
