@@ -218,7 +218,8 @@ struct OnboardingView: View {
                                 // On paywall step (or completion step for premium users)
                                 if shouldSkipPaywall {
                                     // Premium user - just create pet and complete onboarding
-                                    createPet(shouldDismissOnboarding: false)
+                                    // iOS 18.6.2 Fix: Must dismiss onboarding after pet creation
+                                    createPet(shouldDismissOnboarding: true)
                                 } else {
                                     // Regular user - try to subscribe then create pet
                                     handlePaywallAction()
