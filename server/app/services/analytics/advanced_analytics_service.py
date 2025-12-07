@@ -324,23 +324,62 @@ class AdvancedAnalyticsService:
         return statistics.mean(compatibility_scores)
     
     def _calculate_feeding_consistency_score(self, trends: List[Dict[str, Any]]) -> float:
-        """Calculate feeding consistency score"""
+        """
+        Calculate feeding consistency score
+        
+        Measures consistency of feeding patterns based on daily feeding counts.
+        Uses coefficient of variation (CV) to measure consistency.
+        Lower CV = more consistent feeding schedule.
+        
+        Returns:
+            Score from 0-100, where 100 is perfectly consistent
+        """
+        # Need at least 2 data points to calculate consistency
         if not trends or len(trends) < 2:
+            logger.debug(
+                f"[_calculate_feeding_consistency_score] Not enough trends data: {len(trends) if trends else 0}, "
+                f"need at least 2 for consistency calculation"
+            )
             return 0.0
         
+        # Extract feeding counts from trends
         feeding_counts = [trend.get("feeding_count", 0) for trend in trends]
         
-        # Calculate coefficient of variation (lower is more consistent)
-        mean_count = statistics.mean(feeding_counts)
+        # Filter out zero counts for more meaningful analysis
+        non_zero_counts = [count for count in feeding_counts if count > 0]
+        
+        if not non_zero_counts:
+            logger.debug("[_calculate_feeding_consistency_score] No non-zero feeding counts found")
+            return 0.0
+        
+        # Calculate mean feeding count
+        mean_count = statistics.mean(non_zero_counts)
         if mean_count == 0:
+            logger.debug("[_calculate_feeding_consistency_score] Mean count is 0")
             return 0.0
         
         try:
-            cv = statistics.stdev(feeding_counts) / mean_count
+            # Calculate standard deviation
+            if len(non_zero_counts) == 1:
+                # Perfect consistency if only one data point
+                return 100.0
+            
+            stdev = statistics.stdev(non_zero_counts)
+            # Calculate coefficient of variation (lower is more consistent)
+            cv = stdev / mean_count
+            
             # Convert to score (0-100, higher is more consistent)
+            # CV of 0 = 100% consistent, CV of 1.0 or higher = 0% consistent
             consistency_score = max(0, 100 - (cv * 100))
+            
+            logger.info(
+                f"[_calculate_feeding_consistency_score] Calculated score: {consistency_score:.1f}% "
+                f"(mean={mean_count:.1f}, stdev={stdev:.2f}, cv={cv:.2f}, data_points={len(non_zero_counts)})"
+            )
+            
             return consistency_score
-        except statistics.StatisticsError:
+        except statistics.StatisticsError as e:
+            logger.warning(f"[_calculate_feeding_consistency_score] Statistics error: {e}")
             return 0.0
     
     async def _identify_health_risks(
