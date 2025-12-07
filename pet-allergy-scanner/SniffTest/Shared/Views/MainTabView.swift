@@ -61,15 +61,17 @@ struct MainTabView: View {
                 }
                 .tag(4)
         }
+        // iOS 18.6.2 Fix: Use tint instead of accentColor for better compatibility
+        .tint(ModernDesignSystem.Colors.tabBarActive)
         .onChange(of: selectedTab) { oldValue, newValue in
             // Record tab change in coordinator for cooldown management
             navigationCoordinator.recordTabChange(fromTab: oldValue, toTab: newValue)
         }
-        .onAppear {
-            // Load pets asynchronously to prevent blocking tab navigation
-            Task { @MainActor in
-                // Small delay to prevent blocking
-                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        .task {
+            // iOS 18.6.2 Fix: Use task instead of onAppear for async operations
+            // This prevents blocking the main thread during tab initialization
+            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+            await MainActor.run {
                 CachedPetService.shared.loadPets()
             }
         }
@@ -78,8 +80,6 @@ struct MainTabView: View {
                 selectedTab = 2 // Navigate to scan tab (now in middle position)
             }
         }
-        .accentColor(ModernDesignSystem.Colors.tabBarActive)
-        .background(ModernDesignSystem.Colors.tabBarBackground)
     }
 }
 
