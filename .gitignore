@@ -185,7 +185,5 @@ project.pbxproj.backup
 server/database_migrations/*.sql
 server/scripts/*.py
 server/docs/*.md
+assets/*.png
 pet-allergy-scanner/docs/*.md
-
-Info.plist
-PrivacyInfo.xcprivacy
