@@ -538,6 +538,7 @@ async def get_feeding_records(
     # Get feeding records with joined food_analysis data
     # Note: feeding_records table only has pet_id, not user_id
     # Authorization is handled via RLS policies checking pet ownership
+    # CRITICAL: Ensure calories column is included in the query
     query_builder = QueryBuilderService(supabase, "feeding_records")
     result = await query_builder.with_filters({"pet_id": pet_id})\
         .with_ordering("created_at", desc=True)\
@@ -545,6 +546,16 @@ async def get_feeding_records(
     
     # Handle empty response
     records_data = handle_empty_response(result["data"])
+    
+    # Debug: Log first record to verify calories column is being returned
+    if records_data:
+        first_record = records_data[0]
+        logger.debug(
+            f"[GET_FEEDING_RECORDS] First record sample - ID: {first_record.get('id')}, "
+            f"calories from DB: {first_record.get('calories')}, "
+            f"amount_grams: {first_record.get('amount_grams')}, "
+            f"food_analysis_id: {first_record.get('food_analysis_id')}"
+        )
     
     # Join food_analysis data for each feeding record
     # Get all unique food_analysis_ids
@@ -568,6 +579,7 @@ async def get_feeding_records(
     for record in records_data:
         food_analysis_id = record.get("food_analysis_id")
         amount_grams = record.get("amount_grams", 0)
+        record_id = record.get("id", "unknown")
         
         # CRITICAL: Preserve calories from database if already set
         # The feeding_records table has a calories column that may already contain the correct value
@@ -575,36 +587,64 @@ async def get_feeding_records(
         # feeding_records table may have the correct calculated calories stored
         existing_calories = record.get("calories")
         
+        # Log what we're starting with
+        logger.debug(
+            f"[GET_FEEDING_RECORDS] Processing record {record_id}: "
+            f"existing_calories={existing_calories}, food_analysis_id={food_analysis_id}, amount_grams={amount_grams}"
+        )
+        
         if food_analysis_id and food_analysis_id in food_analyses_map:
             analysis = food_analyses_map[food_analysis_id]
             record["food_name"] = analysis.get("food_name")
             record["food_brand"] = analysis.get("brand")
             
-            # Only calculate calories if not already set in database (and it's a valid value > 0)
-            # This ensures we use the stored calories value from the database if it exists
+            # CRITICAL: Only calculate calories if database doesn't have a valid value (> 0)
+            # Always preserve database calories if they exist - don't overwrite with calculated value
             if existing_calories is None or existing_calories == 0:
                 # Calculate calories: (calories_per_100g / 100) * amount_grams
                 calories_per_100g = analysis.get("calories_per_100g")
                 if calories_per_100g is not None and calories_per_100g > 0 and amount_grams > 0:
                     calculated_calories = (float(calories_per_100g) / 100.0) * float(amount_grams)
                     record["calories"] = calculated_calories
-                    logger.debug(
-                        f"Calculated calories for feeding record {record.get('id')}: "
+                    logger.info(
+                        f"[GET_FEEDING_RECORDS] Calculated calories for record {record_id}: "
                         f"{calculated_calories} (from food_analysis {food_analysis_id}, "
                         f"calories_per_100g={calories_per_100g}, amount={amount_grams}g)"
                     )
                 else:
-                    # Keep existing value (None or 0) - don't overwrite
+                    # Keep existing value (None or 0) - don't overwrite with None
                     # This preserves the database value even if food_analysis has no calories data
                     logger.debug(
-                        f"Keeping existing calories for feeding record {record.get('id')}: "
-                        f"{existing_calories} (food_analysis calories_per_100g={calories_per_100g})"
+                        f"[GET_FEEDING_RECORDS] Keeping existing calories for record {record_id}: "
+                        f"{existing_calories} (food_analysis calories_per_100g={calories_per_100g}, cannot calculate)"
                     )
             else:
-                # Database already has calories - use that value
-                logger.debug(
-                    f"Using database calories for feeding record {record.get('id')}: {existing_calories}"
+                # Database already has calories - ALWAYS use that value, don't recalculate
+                logger.info(
+                    f"[GET_FEEDING_RECORDS] ✅ Using database calories for record {record_id}: {existing_calories} "
+                    f"(NOT recalculating from food_analysis)"
                 )
+                # Explicitly set it to ensure it's included in response
+                record["calories"] = existing_calories
+        else:
+            # No food_analysis found - preserve database calories if they exist
+            if existing_calories is not None and existing_calories > 0:
+                logger.info(
+                    f"[GET_FEEDING_RECORDS] ✅ No food_analysis found for record {record_id}, "
+                    f"but using database calories: {existing_calories}"
+                )
+                record["calories"] = existing_calories
+            else:
+                logger.debug(
+                    f"[GET_FEEDING_RECORDS] No food_analysis found for record {record_id}, "
+                    f"and no database calories (value: {existing_calories})"
+                )
+        
+        # Log final calories value being returned
+        final_calories = record.get("calories")
+        logger.debug(
+            f"[GET_FEEDING_RECORDS] Final calories for record {record_id}: {final_calories}"
+        )
         
         enriched_records.append(record)
     
