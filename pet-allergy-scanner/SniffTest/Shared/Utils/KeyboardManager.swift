@@ -273,19 +273,22 @@ struct KeyboardAvoidanceScrollViewModifier: ViewModifier {
 
 /// ViewModifier that adds tap-to-dismiss keyboard functionality
 /// Safely handles keyboard dismissal without causing session errors
-/// iOS 18.6.2 fix: Uses simultaneous gesture to avoid blocking interactive elements
+/// iOS 18.6.2 fix: Uses background tap that doesn't interfere with interactive elements
 struct DismissKeyboardOnTap: ViewModifier {
     
     func body(content: Content) -> some View {
         content
-            .simultaneousGesture(
-                TapGesture().onEnded { _ in
-                    // Only dismiss if keyboard is actually visible
-                    // This prevents blocking tab bar and other interactive elements
-                    if KeyboardManager.isKeyboardVisible() {
-                        KeyboardManager.dismiss()
+            .background(
+                // Invisible background that captures taps on empty space only
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // Only dismiss if keyboard is actually visible
+                        // This allows TextFields, Pickers, and Buttons to work normally
+                        if KeyboardManager.isKeyboardVisible() {
+                            KeyboardManager.dismiss()
+                        }
                     }
-                }
             )
     }
 }
