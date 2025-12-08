@@ -94,8 +94,10 @@ struct AdvancedNutritionView: View {
             }
             .navigationTitle(selectedPet.map { "\($0.name) - Advanced" } ?? "Advanced Nutrition")
             .navigationBarTitleDisplayMode(.large)
+            // CRITICAL iOS 18.6+: Use toolbarBackground with ultraThinMaterial for liquid glass effect
+            // DO NOT combine with toolbarColorScheme to avoid opacity issues
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbarColorScheme(.light, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 // Only show toolbar items if user has premium access
                 if gatekeeper.canAccessAnalytics() {
@@ -1046,33 +1048,38 @@ struct AdvancedAnalyticsView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: ModernDesignSystem.Spacing.md) {
+                // CRITICAL: Sanitize all numeric values to prevent NaN propagation
+                let healthScore = sanitizeScore(healthInsights?.overallHealthScore)
+                let nutritionalScore = sanitizeScore(healthInsights?.nutritionalAdequacyScore)
+                let feedingScore = sanitizeScore(healthInsights?.feedingConsistencyScore)
+                
                 // Health Score Card
                 AnalyticsSummaryCard(
                     title: "Health Score",
-                    value: healthInsights?.overallHealthScore ?? 0,
+                    value: healthScore,
                     unit: "/100",
                     icon: "heart.fill",
-                    color: healthScoreColor(healthInsights?.overallHealthScore ?? 0)
+                    color: healthScoreColor(healthScore)
                 )
-                
+
                 // Nutritional Balance Card
                 AnalyticsSummaryCard(
                     title: "Nutritional Balance",
-                    value: healthInsights?.nutritionalAdequacyScore ?? 0,
+                    value: nutritionalScore,
                     unit: "%",
                     icon: "leaf.fill",
-                    color: scoreColor(healthInsights?.nutritionalAdequacyScore ?? 0)
+                    color: scoreColor(nutritionalScore)
                 )
-                
+
                 // Feeding Consistency Card
                 AnalyticsSummaryCard(
                     title: "Feeding Consistency",
-                    value: healthInsights?.feedingConsistencyScore ?? 0,
+                    value: feedingScore,
                     unit: "%",
                     icon: "clock.fill",
-                    color: scoreColor(healthInsights?.feedingConsistencyScore ?? 0)
+                    color: scoreColor(feedingScore)
                 )
-                
+
                 // Weight Management Card
                 AnalyticsSummaryCard(
                     title: "Weight Status",
@@ -1096,6 +1103,18 @@ struct AdvancedAnalyticsView: View {
             x: ModernDesignSystem.Shadows.small.x,
             y: ModernDesignSystem.Shadows.small.y
         )
+    }
+    
+    /**
+     * Sanitize score values to prevent NaN or infinite values
+     * Returns 0 for any invalid values (NaN, infinite, negative)
+     */
+    private func sanitizeScore(_ score: Double?) -> Double {
+        guard let score = score else { return 0.0 }
+        if score.isNaN || score.isInfinite || score < 0 {
+            return 0.0
+        }
+        return min(100.0, score) // Cap at 100
     }
     
     /**
@@ -1750,8 +1769,11 @@ struct AnalyticsSummaryCard: View {
             VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                 HStack(alignment: .firstTextBaseline, spacing: ModernDesignSystem.Spacing.xs) {
                     if let numericValue = value as? Double {
+                        // CRITICAL: Sanitize numeric value to prevent display issues
+                        let safeValue = numericValue.isNaN || numericValue.isInfinite ? 0 : numericValue
+                        
                         // Display numeric value with unit
-                        Text("\(Int(numericValue))")
+                        Text("\(Int(safeValue))")
                             .font(ModernDesignSystem.Typography.title2)
                             .fontWeight(.semibold)
                             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -1788,7 +1810,7 @@ struct AnalyticsSummaryCard: View {
                 }
                 
                 // Progress bar for numeric values
-                if let numericValue = value as? Double, numericValue >= 0 && numericValue <= 100 {
+                if let numericValue = value as? Double, numericValue >= 0 && numericValue <= 100, !numericValue.isNaN, !numericValue.isInfinite {
                     GeometryReader { geometry in
                         ZStack(alignment: .leading) {
                             // Background track
@@ -1796,11 +1818,12 @@ struct AnalyticsSummaryCard: View {
                                 .fill(color.opacity(0.2))
                                 .frame(height: 4)
                             
-                            // Progress fill
+                            // Progress fill - CRITICAL: Sanitize width calculation to prevent NaN
+                            let safeWidth = max(0, min(geometry.size.width, geometry.size.width * CGFloat(numericValue / 100)))
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(color)
                                 .frame(
-                                    width: geometry.size.width * CGFloat(numericValue / 100),
+                                    width: safeWidth.isNaN || safeWidth.isInfinite ? 0 : safeWidth,
                                     height: 4
                                 )
                         }

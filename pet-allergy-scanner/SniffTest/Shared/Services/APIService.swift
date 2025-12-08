@@ -1668,18 +1668,34 @@ extension APIService {
      * - Returns: FoodProduct if found in database, nil otherwise
      */
     func lookupProductByBarcode(_ barcode: String) async throws -> FoodProduct? {
-        guard let url = URL(string: "\(baseURL)/foods/barcode/\(barcode)") else {
+        // Normalize barcode: trim whitespace and remove any non-alphanumeric chars except dash
+        let cleanedBarcode = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        print("📡 [APIService] Barcode lookup - Original: '\(barcode)'")
+        print("📡 [APIService] Barcode lookup - Cleaned: '\(cleanedBarcode)'")
+        
+        guard let url = URL(string: "\(baseURL)/foods/barcode/\(cleanedBarcode)") else {
+            print("❌ [APIService] Invalid URL for barcode: \(cleanedBarcode)")
             throw APIError.invalidURL
         }
         
-        let request = await createRequest(url: url)
+        print("📡 [APIService] Request URL: \(url.absoluteString)")
+        
+        // Create request with CACHE BYPASS - always fetch fresh data for barcode lookups
+        var request = await createRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        print("🔄 [APIService] Cache policy: BYPASS - fetching fresh data")
         
         do {
-            return try await performRequest(request, responseType: FoodProduct.self)
+            let product = try await performRequest(request, responseType: FoodProduct.self)
+            print("✅ [APIService] Found product: \(product.name), barcode in DB: \(product.barcode ?? "none")")
+            return product
         } catch APIError.notFound {
             // Product not found in database - this is expected, not an error
+            print("❌ [APIService] Product not found for barcode: '\(cleanedBarcode)'")
             return nil
         } catch {
+            print("❌ [APIService] Barcode lookup error: \(error)")
             throw error
         }
     }

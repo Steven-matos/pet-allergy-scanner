@@ -514,9 +514,13 @@ struct ScanQualityCard: View {
                         .fill(ModernDesignSystem.Colors.softCream)
                         .frame(height: 8)
                     
+                    // CRITICAL: Sanitize width calculation to prevent NaN
+                    let safeConfidence = confidence.isNaN || confidence.isInfinite ? 0 : max(0, min(1, confidence))
+                    let safeWidth = geometry.size.width * safeConfidence
+                    
                     RoundedRectangle(cornerRadius: 4)
                         .fill(qualityLevel.color)
-                        .frame(width: geometry.size.width * confidence, height: 8)
+                        .frame(width: safeWidth.isNaN || safeWidth.isInfinite ? 0 : safeWidth, height: 8)
                 }
             }
             .frame(height: 8)

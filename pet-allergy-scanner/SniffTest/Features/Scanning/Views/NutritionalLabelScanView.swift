@@ -394,11 +394,31 @@ class CameraService: NSObject {
         }
         
         let output = AVCapturePhotoOutput()
+        
+        // Add output to session FIRST (required before setting maxPhotoDimensions)
         if session.canAddOutput(output) {
             session.addOutput(output)
         }
         
+        // CRITICAL: Must commit configuration to connect output to video source
+        // BEFORE setting maxPhotoDimensions
         session.commitConfiguration()
+        
+        // Now configure output with phone's MAXIMUM photo dimensions
+        // This must be done AFTER the output is connected to a video source
+        if #available(iOS 16.0, *) {
+            // Get all supported dimensions from the camera's active format
+            let supportedDimensions = camera.activeFormat.supportedMaxPhotoDimensions
+            
+            // Find the absolute maximum dimensions (by total pixels)
+            if let maxDimension = supportedDimensions.max(by: { $0.width * $0.height < $1.width * $1.height }) {
+                output.maxPhotoDimensions = maxDimension
+                let megapixels = Double(maxDimension.width * maxDimension.height) / 1_000_000.0
+                print("📸 Configured photo output with phone's MAX dimensions: \(maxDimension.width)x\(maxDimension.height) (~\(String(format: "%.1f", megapixels))MP)")
+            } else {
+                print("⚠️ No supported max dimensions found, using system default")
+            }
+        }
         
         await MainActor.run {
             self.captureSession = session
@@ -470,14 +490,27 @@ class CameraService: NSObject {
         print("📸 CameraService: Starting photo capture...")
         completionHandler = completion
         
-        // Create photo settings with high quality
+        // Create photo settings matching the output's configuration
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
-        // Use maxPhotoDimensions instead of deprecated isHighResolutionPhotoEnabled
+        
+        // Use the SAME max dimensions that were configured on the output
+        // This MUST match the photoOutput.maxPhotoDimensions set during setup
         if #available(iOS 16.0, *) {
-            settings.maxPhotoDimensions = CMVideoDimensions(width: 4096, height: 4096)
+            let outputMaxDimensions = output.maxPhotoDimensions
+            // Check if dimensions are valid (non-zero means they were configured)
+            if outputMaxDimensions.width > 0 && outputMaxDimensions.height > 0 {
+                // Match the output's dimensions exactly
+                settings.maxPhotoDimensions = outputMaxDimensions
+                print("📸 Using photo dimensions matching output: \(outputMaxDimensions.width)x\(outputMaxDimensions.height)")
+            } else {
+                // Output has no max dimensions set, so don't set on settings either
+                print("📸 Using default dimensions (no output max dimensions configured)")
+            }
         } else {
+            // iOS 15 and earlier: enable high resolution
             settings.isHighResolutionPhotoEnabled = true
+            print("📸 High resolution photo enabled (iOS 15 or earlier)")
         }
         
         // Capture photo with delegate

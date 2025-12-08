@@ -880,6 +880,8 @@ struct ScanView: View {
         Task {
             // Look up product in database
             do {
+                print("🔍 [BARCODE_LOOKUP] Searching for barcode: '\(barcode.value)'")
+                print("🔍 [BARCODE_LOOKUP] Barcode type: \(barcode.type), confidence: \(barcode.confidence)")
                 let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
                 
                 await MainActor.run {
