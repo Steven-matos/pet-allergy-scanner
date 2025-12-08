@@ -90,8 +90,8 @@ struct OnboardingView: View {
                         .tabViewStyle(.page(indexDisplayMode: .never))
                         .animation(.easeInOut, value: currentStep)
                         .frame(height: UIScreen.main.bounds.height * 0.7) // Fixed height for TabView
-                        // iOS 18 compatible: Use onChange to detect step changes instead of gesture
-                        // Removed simultaneousGesture which can interfere with button taps
+                        // iOS 18.6.2 Fix: Don't use .disabled on TabView - it blocks ALL interactions including TextFields
+                        // Swipe prevention is handled by onChange validation logic above
                         .onChange(of: currentStep) { oldValue, newValue in
                             // Prevent swiping forward if validation fails
                             if newValue > oldValue {
@@ -119,11 +119,11 @@ struct OnboardingView: View {
                                 }
                             }
                         }
-                        .disabled(currentStep == 1 && !canProceed) // Disable swiping on step 1 if validation fails
                     }
             }
             .scrollDismissesKeyboard(.interactively)
-            .dismissKeyboardOnTap()
+            // iOS 18.6.2 Fix: Removed .dismissKeyboardOnTap() - conflicts with TabView page style
+            // .scrollDismissesKeyboard(.interactively) already handles keyboard dismissal
                 .onChange(of: isNameFieldFocused) { _, isFocused in
                     if isFocused {
                         // Scroll to the name field when it gets focus
@@ -218,7 +218,8 @@ struct OnboardingView: View {
                                 // On paywall step (or completion step for premium users)
                                 if shouldSkipPaywall {
                                     // Premium user - just create pet and complete onboarding
-                                    createPet(shouldDismissOnboarding: false)
+                                    // iOS 18.6.2 Fix: Must dismiss onboarding after pet creation
+                                    createPet(shouldDismissOnboarding: true)
                                 } else {
                                     // Regular user - try to subscribe then create pet
                                     handlePaywallAction()
