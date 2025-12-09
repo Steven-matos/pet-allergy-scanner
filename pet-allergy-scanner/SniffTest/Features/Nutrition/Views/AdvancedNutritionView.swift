@@ -2131,13 +2131,55 @@ private struct InsightsCard: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
-                // Recommended Daily Calories
-                RecommendationRow(
-                    icon: "flame.fill",
-                    iconColor: ModernDesignSystem.Colors.warmCoral,
-                    title: "Recommended Daily Calories",
-                    value: formatCalories(recommendedCalories)
-                )
+                // Daily Calories with explicit RER and MER labels
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                        Image(systemName: "flame.fill")
+                            .font(ModernDesignSystem.Typography.body)
+                            .foregroundColor(ModernDesignSystem.Colors.warmCoral)
+                            .frame(width: 24)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Daily Calories")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            // MER (Maintenance Energy Requirement)
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("MER:")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                
+                                Text(formatCalories(maintenanceEnergyRequirement))
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    .fontWeight(.bold)
+                            }
+                            
+                            // RER (Resting Energy Requirement)
+                            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                Text("RER:")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                
+                                Text(formatCalories(restingEnergyRequirement))
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                                    .fontWeight(.bold)
+                                
+                                Text("× \(String(format: "%.1f", calorieMultiplier))")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    .fontWeight(.bold)
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.sm)
+                .background(Color.white.opacity(0.5))
+                .cornerRadius(ModernDesignSystem.CornerRadius.small)
                 
                 // Recommended Weight
                 RecommendationRow(
@@ -2146,6 +2188,49 @@ private struct InsightsCard: View {
                     title: "Recommended Weight",
                     value: formatWeight(recommendedWeight)
                 )
+                
+                // Educational insights about MER and RER
+                HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "info.circle.fill")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .padding(.top, 2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("MER (Maintenance Energy Requirement)")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            .fontWeight(.semibold)
+                        
+                        Text("The total daily calories your pet needs based on their activity level, life stage, and weight goals.")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    Spacer()
+                }
+                
+                HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "info.circle.fill")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .padding(.top, 2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("RER (Resting Energy Requirement)")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            .fontWeight(.semibold)
+                        
+                        Text("The baseline calories your pet needs at rest. MER is calculated by multiplying RER by an activity factor.")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    Spacer()
+                }
                 
                 // Existing insights
                 ForEach(insights, id: \.self) { insight in
@@ -2181,10 +2266,46 @@ private struct InsightsCard: View {
     
     // MARK: - Computed Properties
     
-    /// Calculate recommended daily calories based on pet's species, age, and activity level
-    private var recommendedCalories: Double {
+    /**
+     * Calculate RER (Resting Energy Requirement)
+     * This is the baseline calories the pet needs at rest
+     * Formula: RER = 70 × (body weight in kg)^0.75
+     */
+    private var restingEnergyRequirement: Double {
+        // Get weight for calculation (current weight or default)
+        let weightKg: Double
+        if let weight = pet.weightKg, weight > 0 {
+            weightKg = weight
+        } else {
+            // Use species-appropriate default
+            weightKg = pet.species == .cat ? 4.0 : 20.0
+        }
+        
+        return 70.0 * pow(weightKg, 0.75)
+    }
+    
+    /**
+     * Calculate MER (Maintenance Energy Requirement)
+     * This is the actual daily calories needed based on activity, life stage, etc.
+     * Formula: MER = RER × species/life stage/activity multiplier
+     */
+    private var maintenanceEnergyRequirement: Double {
         let requirements = PetNutritionalRequirements.calculate(for: pet)
         return requirements.dailyCalories
+    }
+    
+    /**
+     * Calculate the multiplier being applied to RER
+     * This shows the factor applied for life stage, activity level, etc.
+     */
+    private var calorieMultiplier: Double {
+        guard restingEnergyRequirement > 0 else { return 1.0 }
+        return maintenanceEnergyRequirement / restingEnergyRequirement
+    }
+    
+    /// Legacy property for backward compatibility
+    private var recommendedCalories: Double {
+        return maintenanceEnergyRequirement
     }
     
     /// Calculate recommended weight based on species, age, and breed

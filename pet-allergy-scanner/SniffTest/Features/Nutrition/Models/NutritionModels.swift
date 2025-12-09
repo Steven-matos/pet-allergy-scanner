@@ -48,15 +48,30 @@ struct PetNutritionalRequirements: Codable {
     
     /**
      * Calculate nutritional requirements based on pet characteristics
-     * - Parameter pet: The pet to calculate requirements for
+     * Uses veterinary-approved formulas with species-specific multipliers
+     * 
+     * - Parameters:
+     *   - pet: The pet to calculate requirements for
+     *   - weightGoal: Optional weight goal for weight management calculations
      * - Returns: Calculated nutritional requirements
      */
-    static func calculate(for pet: Pet) -> PetNutritionalRequirements {
-        let baseCalories = calculateBaseCalories(for: pet)
-        let activityMultiplier = getActivityMultiplier(for: pet.effectiveActivityLevel)
-        let lifeStageMultiplier = getLifeStageMultiplier(for: pet.lifeStage)
+    static func calculate(for pet: Pet, weightGoal: WeightGoal? = nil) -> PetNutritionalRequirements {
+        // Determine which weight to use for RER calculation
+        let weightForCalculation = determineCalculationWeight(for: pet, weightGoal: weightGoal)
         
-        var dailyCalories = baseCalories * activityMultiplier * lifeStageMultiplier
+        // Calculate RER (Resting Energy Requirement)
+        let rer = calculateRER(weightKg: weightForCalculation)
+        
+        // Get appropriate multiplier based on species, life stage, and weight goal
+        let multiplier = getCalorieMultiplier(
+            for: pet.species,
+            lifeStage: pet.lifeStage,
+            activityLevel: pet.effectiveActivityLevel,
+            weightGoal: weightGoal
+        )
+        
+        // Calculate daily calories: MER = RER × multiplier
+        var dailyCalories = rer * multiplier
         
         // Ensure minimum calories (server requires daily_calories > 0)
         // Use 200 as safe minimum for any pet
@@ -65,8 +80,8 @@ struct PetNutritionalRequirements: Codable {
         return PetNutritionalRequirements(
             petId: pet.id,
             dailyCalories: dailyCalories,
-            proteinPercentage: getProteinPercentage(for: pet.lifeStage),
-            fatPercentage: getFatPercentage(for: pet.lifeStage),
+            proteinPercentage: getProteinPercentage(for: pet.lifeStage, species: pet.species),
+            fatPercentage: getFatPercentage(for: pet.lifeStage, species: pet.species),
             fiberPercentage: getFiberPercentage(for: pet.lifeStage),
             moisturePercentage: 10.0, // Standard recommendation
             lifeStage: pet.lifeStage,
@@ -76,94 +91,265 @@ struct PetNutritionalRequirements: Codable {
     }
     
     /**
-     * Calculate base calories using Resting Energy Requirement (RER) formula
-     * RER = 70 * (body weight in kg)^0.75
-     * Ensures minimum calories to meet server validation (daily_calories > 0)
+     * Determine which weight to use for calorie calculations
+     * Priority: Weight goal target → Current weight → Default weight
+     * 
+     * - Parameters:
+     *   - pet: The pet
+     *   - weightGoal: Optional weight goal
+     * - Returns: Weight in kg to use for RER calculation
      */
-    private static func calculateBaseCalories(for pet: Pet) -> Double {
-        let baseCalories: Double
-        if let weightKg = pet.weightKg, weightKg > 0 {
-            baseCalories = 70.0 * pow(weightKg, 0.75)
-        } else {
-            // Default weight based on species and life stage
-            let defaultWeight = getDefaultWeight(for: pet)
-            baseCalories = 70.0 * pow(defaultWeight, 0.75)
+    private static func determineCalculationWeight(for pet: Pet, weightGoal: WeightGoal?) -> Double {
+        // If there's an active weight goal with target weight, use it for calculations
+        if let goal = weightGoal, let targetWeight = goal.targetWeightKg, targetWeight > 0 {
+            return targetWeight
         }
         
-        // Ensure minimum calories (server requires > 0, use 100 as safe minimum)
-        return max(baseCalories, 100.0)
+        // Otherwise use current weight if available
+        if let weightKg = pet.weightKg, weightKg > 0 {
+            return weightKg
+        }
+        
+        // Fallback to default weight based on species and life stage
+        return getDefaultWeight(for: pet)
     }
     
     /**
-     * Get activity level multiplier for calorie calculation
+     * Calculate RER (Resting Energy Requirement) using veterinary formula
+     * RER = 70 × (body weight in kg)^0.75
+     * 
+     * This is the gold standard formula used by veterinarians worldwide.
+     * 
+     * - Parameter weightKg: Weight in kilograms
+     * - Returns: Resting Energy Requirement in kcal/day
      */
-    private static func getActivityMultiplier(for activityLevel: PetActivityLevel) -> Double {
-        switch activityLevel {
-        case .low:
-            return 1.0
-        case .moderate:
-            return 1.2
-        case .high:
+    private static func calculateRER(weightKg: Double) -> Double {
+        let rer = 70.0 * pow(weightKg, 0.75)
+        // Ensure minimum RER (server requires > 0, use 100 as safe minimum)
+        return max(rer, 100.0)
+    }
+    
+    /**
+     * Get species-specific calorie multiplier (MER factor)
+     * Based on veterinary nutrition guidelines for dogs and cats
+     * 
+     * - Parameters:
+     *   - species: Pet species (dog or cat)
+     *   - lifeStage: Current life stage
+     *   - activityLevel: Activity level
+     *   - weightGoal: Optional weight goal for weight management
+     * - Returns: Multiplier for RER to get daily calories (MER)
+     */
+    private static func getCalorieMultiplier(
+        for species: PetSpecies,
+        lifeStage: PetLifeStage,
+        activityLevel: PetActivityLevel,
+        weightGoal: WeightGoal?
+    ) -> Double {
+        // If there's a weight goal, use weight management multipliers
+        if let goal = weightGoal {
+            return getWeightManagementMultiplier(for: species, goalType: goal.goalType)
+        }
+        
+        // Otherwise use standard maintenance multipliers
+        switch species {
+        case .dog:
+            return getDogMaintenanceMultiplier(lifeStage: lifeStage, activityLevel: activityLevel)
+        case .cat:
+            return getCatMaintenanceMultiplier(lifeStage: lifeStage, activityLevel: activityLevel)
+        }
+    }
+    
+    /**
+     * Dog-specific maintenance multipliers
+     * Based on veterinary nutrition guidelines
+     * 
+     * Dogs generally need more calories than cats of similar weight
+     */
+    private static func getDogMaintenanceMultiplier(
+        lifeStage: PetLifeStage,
+        activityLevel: PetActivityLevel
+    ) -> Double {
+        switch lifeStage {
+        case .puppy:
+            // Puppies: 2.0-3.0 × RER (higher for younger puppies)
+            return 2.5
+            
+        case .adult:
+            switch activityLevel {
+            case .low:
+                // Neutered/indoor adult: ~1.6 × RER
+                return 1.6
+            case .moderate:
+                // Active adult: ~1.8 × RER
+                return 1.8
+            case .high:
+                // Very active/intact adult: ~2.0 × RER
+                return 2.0
+            }
+            
+        case .senior:
+            // Senior dogs: ~1.4 × RER (less active, slower metabolism)
             return 1.4
+            
+        case .pregnant:
+            // Pregnant: ~1.5-2.0 × RER
+            return 1.7
+            
+        case .lactating:
+            // Lactating: ~2.0-4.0 × RER depending on litter size
+            return 3.0
         }
     }
     
     /**
-     * Get life stage multiplier for calorie calculation
+     * Cat-specific maintenance multipliers
+     * Based on veterinary nutrition guidelines
+     * 
+     * Cats generally need fewer calories than dogs of similar weight
      */
-    private static func getLifeStageMultiplier(for lifeStage: PetLifeStage) -> Double {
+    private static func getCatMaintenanceMultiplier(
+        lifeStage: PetLifeStage,
+        activityLevel: PetActivityLevel
+    ) -> Double {
         switch lifeStage {
-        case .puppy:
+        case .puppy: // .puppy is used for kittens too
+            // Kittens: 2.0-2.5 × RER
+            return 2.25
+            
+        case .adult:
+            switch activityLevel {
+            case .low:
+                // Indoor/neutered adult cat: ~1.0-1.2 × RER
+                return 1.0
+            case .moderate:
+                // Moderately active neutered cat: ~1.2 × RER
+                return 1.2
+            case .high:
+                // Very active/intact cat: ~1.4 × RER
+                return 1.4
+            }
+            
+        case .senior:
+            // Senior cats: ~1.1 × RER (less active)
+            return 1.1
+            
+        case .pregnant:
+            // Pregnant: ~1.6 × RER
+            return 1.6
+            
+        case .lactating:
+            // Lactating: ~2.0-2.5 × RER depending on litter size
             return 2.0
-        case .adult:
-            return 1.0
-        case .senior:
-            return 0.9
-        case .pregnant:
-            return 1.5
-        case .lactating:
-            return 2.0
         }
     }
     
     /**
-     * Get protein percentage based on life stage
+     * Weight management multipliers (for dogs and cats with weight goals)
+     * 
+     * - Parameters:
+     *   - species: Pet species
+     *   - goalType: Type of weight goal (loss, gain, maintenance)
+     * - Returns: Multiplier for RER when using ideal/target weight
      */
-    private static func getProteinPercentage(for lifeStage: PetLifeStage) -> Double {
-        switch lifeStage {
-        case .puppy:
-            return 28.0
-        case .adult:
-            return 25.0
-        case .senior:
-            return 26.0
-        case .pregnant:
-            return 29.0
-        case .lactating:
-            return 30.0
+    private static func getWeightManagementMultiplier(
+        for species: PetSpecies,
+        goalType: WeightGoalType
+    ) -> Double {
+        switch goalType {
+        case .weightLoss:
+            // Weight loss: 0.8 × RER (cats) or 1.0 × RER (dogs)
+            // Using IDEAL weight for RER calculation
+            return species == .cat ? 0.8 : 1.0
+            
+        case .weightGain:
+            // Weight gain: 1.8 × RER
+            // Using IDEAL weight for RER calculation
+            return 1.8
+            
+        case .maintenance, .healthImprovement:
+            // Maintenance at goal weight: use standard neutered adult multiplier
+            return species == .cat ? 1.2 : 1.6
         }
     }
     
     /**
-     * Get fat percentage based on life stage
+     * Get protein percentage based on life stage and species
+     * Cats are obligate carnivores and need more protein than dogs
      */
-    private static func getFatPercentage(for lifeStage: PetLifeStage) -> Double {
-        switch lifeStage {
-        case .puppy:
-            return 17.0
-        case .adult:
-            return 12.0
-        case .senior:
-            return 10.0
-        case .pregnant:
-            return 20.0
-        case .lactating:
-            return 22.0
+    private static func getProteinPercentage(for lifeStage: PetLifeStage, species: PetSpecies) -> Double {
+        switch species {
+        case .cat:
+            // Cats need 26-40% protein (higher than dogs)
+            switch lifeStage {
+            case .puppy: // Kittens
+                return 35.0
+            case .adult:
+                return 30.0
+            case .senior:
+                return 32.0 // Senior cats benefit from higher protein
+            case .pregnant:
+                return 38.0
+            case .lactating:
+                return 40.0
+            }
+        case .dog:
+            // Dogs need 18-29% protein
+            switch lifeStage {
+            case .puppy:
+                return 28.0
+            case .adult:
+                return 25.0
+            case .senior:
+                return 23.0
+            case .pregnant:
+                return 29.0
+            case .lactating:
+                return 30.0
+            }
+        }
+    }
+    
+    /**
+     * Get fat percentage based on life stage and species
+     * Varies by species and life stage
+     */
+    private static func getFatPercentage(for lifeStage: PetLifeStage, species: PetSpecies) -> Double {
+        switch species {
+        case .cat:
+            // Cats need 9-15% fat (minimum)
+            switch lifeStage {
+            case .puppy: // Kittens
+                return 15.0
+            case .adult:
+                return 12.0
+            case .senior:
+                return 10.0 // Lower fat for less active seniors
+            case .pregnant:
+                return 15.0
+            case .lactating:
+                return 18.0
+            }
+        case .dog:
+            // Dogs need 5-15% fat (minimum)
+            switch lifeStage {
+            case .puppy:
+                return 12.0
+            case .adult:
+                return 10.0
+            case .senior:
+                return 8.0
+            case .pregnant:
+                return 12.0
+            case .lactating:
+                return 15.0
+            }
         }
     }
     
     /**
      * Get fiber percentage based on life stage
+     * Fiber needs are similar for both dogs and cats
      */
     private static func getFiberPercentage(for lifeStage: PetLifeStage) -> Double {
         switch lifeStage {

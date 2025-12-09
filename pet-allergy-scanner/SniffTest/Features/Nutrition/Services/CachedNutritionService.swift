@@ -204,10 +204,12 @@ class CachedNutritionService: ObservableObject {
                 if pet.weightKg == nil || pet.weightKg == 0 {
                     print("⚠️ [getNutritionalRequirements] Pet has no weight - will use default weight for calculation")
                 }
-                
+
                 // Calculate requirements locally based on pet characteristics
-                let calculatedRequirements = PetNutritionalRequirements.calculate(for: pet)
-                
+                // Get active weight goal if one exists for accurate calorie calculation
+                let weightGoal = CachedWeightTrackingService.shared.activeWeightGoal(for: petId)
+                let calculatedRequirements = PetNutritionalRequirements.calculate(for: pet, weightGoal: weightGoal)
+
                 print("✅ [getNutritionalRequirements] Calculated requirements:")
                 print("   - Calories: \(calculatedRequirements.dailyCalories)")
                 print("   - Protein: \(calculatedRequirements.proteinPercentage)%")
@@ -277,10 +279,11 @@ class CachedNutritionService: ObservableObject {
             guard let pet = CachedPetService.shared.pets.first(where: { $0.id == petId }) else {
                 throw error
             }
-            
-            // Calculate requirements locally
-            let requirements = PetNutritionalRequirements.calculate(for: pet)
-            
+
+            // Calculate requirements locally with weight goal consideration
+            let weightGoal = CachedWeightTrackingService.shared.activeWeightGoal(for: pet.id)
+            let requirements = PetNutritionalRequirements.calculate(for: pet, weightGoal: weightGoal)
+
             // Try to save to server (non-blocking)
             Task {
                 try? await saveNutritionalRequirementsToServer(requirements)
@@ -299,8 +302,11 @@ class CachedNutritionService: ObservableObject {
      * - Parameter pet: The pet to calculate requirements for
      * - Returns: Calculated nutritional requirements
      */
-    func calculateNutritionalRequirements(for pet: Pet) async throws -> PetNutritionalRequirements {
-        let requirements = PetNutritionalRequirements.calculate(for: pet)
+    func calculateNutritionalRequirements(for pet: Pet, weightGoal: WeightGoal? = nil) async throws -> PetNutritionalRequirements {
+        // Get active weight goal if not provided
+        let goal = weightGoal ?? CachedWeightTrackingService.shared.activeWeightGoal(for: pet.id)
+        
+        let requirements = PetNutritionalRequirements.calculate(for: pet, weightGoal: goal)
         
         // Cache using UnifiedCacheCoordinator
         if currentUserId != nil {
