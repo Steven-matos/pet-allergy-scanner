@@ -144,6 +144,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             await MainActor.run {
                 authState = .authenticated(finalUser)
             }
+            
+            // Start automatic token refresh after successful session restore
+            AutomaticTokenRefreshService.shared.start()
         } catch {
             await handleSessionRestorationFailure(error)
         }
@@ -248,10 +251,13 @@ class AuthService: ObservableObject, @unchecked Sendable {
             authState = .loading
             errorMessage = nil
         }
-        
+
         do {
             let authResponse = try await apiService.login(email: email, password: password)
             await handleAuthResponse(authResponse)
+            
+            // Start automatic token refresh after successful login
+            AutomaticTokenRefreshService.shared.start()
         } catch let apiError as APIError {
             await MainActor.run {
                 authState = .unauthenticated
@@ -278,6 +284,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
     /// Logout current user
     /// Clears authentication state and all user-related data
     func logout() async {
+        // Stop automatic token refresh
+        AutomaticTokenRefreshService.shared.stop()
+        
         // Track logout event
         PostHogAnalytics.trackUserLoggedOut()
         

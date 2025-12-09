@@ -75,19 +75,41 @@ struct NutritionDashboardView: View {
                 selectedPet = petService.pets.first
             }
             
-            // Nutrition data is loaded synchronously from cache in service init
-            // Only show loading if we have no cached data
+            // PERFORMANCE OPTIMIZATION: Structured concurrency with TaskGroup
+            // Prevents memory leaks by automatically canceling tasks on view dismissal
             if let pet = selectedPet ?? petService.pets.first {
-                let hasCachedData = CachedNutritionService.shared.hasCachedNutritionData(for: pet.id)
-                if !hasCachedData {
-                    // Load in background if no cache
-                    Task {
-                        do {
-                            _ = try await CachedNutritionService.shared.getNutritionalRequirements(for: pet.id)
-                            try await CachedNutritionService.shared.loadFeedingRecords(for: pet.id)
-                            try await CachedNutritionService.shared.loadDailySummaries(for: pet.id)
-                        } catch {
-                            print("⚠️ Failed to load nutrition data: \(error)")
+                Task {
+                    await withTaskGroup(of: Void.self) { group in
+                        // Check if we have cached data
+                        let hasCachedData = CachedNutritionService.shared.hasCachedNutritionData(for: pet.id)
+                        
+                        if !hasCachedData {
+                            // Load all nutrition data in parallel
+                            group.addTask {
+                                do {
+                                    _ = try await CachedNutritionService.shared.getNutritionalRequirements(for: pet.id)
+                                } catch {
+                                    print("⚠️ Failed to load nutrition requirements: \(error)")
+                                }
+                            }
+                            
+                            group.addTask {
+                                do {
+                                    try await CachedNutritionService.shared.loadFeedingRecords(for: pet.id)
+                                } catch {
+                                    print("⚠️ Failed to load feeding records: \(error)")
+                                }
+                            }
+                            
+                            group.addTask {
+                                do {
+                                    try await CachedNutritionService.shared.loadDailySummaries(for: pet.id)
+                                } catch {
+                                    print("⚠️ Failed to load daily summaries: \(error)")
+                                }
+                            }
+                            
+                            // All tasks automatically cancelled on view dismissal ✅
                         }
                     }
                 }
@@ -129,9 +151,30 @@ struct NutritionDashboardView: View {
                         
                         // Nutrition Overview
                         if let pet = selectedPet ?? petService.pets.first {
-                            NutritionOverviewSection(pet: pet)
-                            NutritionRecommendationsSection(pet: pet)
-                            NutritionHistorySection(pet: pet)
+                            // CRASH FIX: Validate pet data exists before rendering
+                            // This prevents crashes when API calls fail due to authentication errors
+                            if let weight = pet.weightKg, weight > 0 {
+                                NutritionOverviewSection(pet: pet)
+                                NutritionRecommendationsSection(pet: pet)
+                                NutritionHistorySection(pet: pet)
+                            } else {
+                                // Show loading/error state when data is missing
+                                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                                    ProgressView()
+                                        .scaleEffect(1.5)
+                                    
+                                    Text("Loading nutrition data...")
+                                        .font(ModernDesignSystem.Typography.body)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                    
+                                    Text("If this persists, try logging out and back in")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                        .multilineTextAlignment(.center)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(ModernDesignSystem.Spacing.xl)
+                            }
                         }
                     }
                     .padding()

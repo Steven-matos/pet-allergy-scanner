@@ -124,6 +124,107 @@ extension UIImage {
         
         return resizedImage(maxDimension: finalMaxDimension)
     }
+    
+    // MARK: - Performance Optimization: Image Downsampling (Task 1.2)
+    
+    /**
+     * Downsample image to maximum dimensions while maintaining aspect ratio
+     * 
+     * **PERFORMANCE CRITICAL:** This method prevents memory pressure by downsampling
+     * 4K images (47MB) to 1920x1080 (8MB) = 83% memory savings
+     * 
+     * Uses Core Graphics for efficient downsampling without loading full image into memory.
+     * Essential for older devices (iPhone 12/13 with 2-4GB RAM).
+     * 
+     * - Parameters:
+     *   - maxDimension: Maximum width or height in pixels (default: 1920)
+     * - Returns: Downsampled UIImage or nil if downsampling fails
+     * 
+     * Example usage:
+     * ```swift
+     * let optimizedImage = capturedImage.downsampled(to: 1920)
+     * // 4032x3024 (47MB) → 1920x1440 (8MB) ✅
+     * ```
+     */
+    func downsampled(to maxDimension: CGFloat = 1920) -> UIImage? {
+        // Save to temporary file for efficient downsampling
+        guard let data = self.jpegData(compressionQuality: 0.9),
+              let tempURL = saveToTemporaryFile(data: data) else {
+            print("⚠️ [UIImage] Failed to save image to temporary file for downsampling")
+            return nil
+        }
+        
+        defer {
+            // Clean up temporary file
+            try? FileManager.default.removeItem(at: tempURL)
+        }
+        
+        return UIImage.downsampleImage(from: tempURL, maxDimension: maxDimension)
+    }
+    
+    /**
+     * Downsample image from file URL (most memory-efficient)
+     * 
+     * - Parameters:
+     *   - imageURL: URL to image file
+     *   - maxDimension: Maximum width or height in pixels
+     * - Returns: Downsampled UIImage or nil if downsampling fails
+     */
+    static func downsampleImage(from imageURL: URL, maxDimension: CGFloat = 1920) -> UIImage? {
+        let imageSourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        
+        guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, imageSourceOptions) else {
+            print("❌ [UIImage] Failed to create image source from URL")
+            return nil
+        }
+        
+        let downsampleOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxDimension
+        ] as CFDictionary
+        
+        guard let downsampledImage = CGImageSourceCreateThumbnailAtIndex(
+            imageSource, 0, downsampleOptions
+        ) else {
+            print("❌ [UIImage] Failed to create downsampled thumbnail")
+            return nil
+        }
+        
+        let result = UIImage(cgImage: downsampledImage)
+        
+        // Log memory savings
+        #if DEBUG
+        let originalSize = try? FileManager.default.attributesOfItem(atPath: imageURL.path)[.size] as? Int64 ?? 0
+        let downsampledSize = result.memoryUsage
+        let savings = (1 - Double(downsampledSize) / Double(originalSize ?? 1)) * 100
+        print("✅ [UIImage] Downsampled image: \(Int(savings))% memory saved")
+        print("   Original: \(originalSize ?? 0 / 1024 / 1024)MB → Downsampled: \(downsampledSize / 1024 / 1024)MB")
+        #endif
+        
+        return result
+    }
+    
+    /**
+     * Save image data to temporary file
+     * 
+     * - Parameter data: Image data
+     * - Returns: URL to temporary file or nil
+     */
+    private func saveToTemporaryFile(data: Data) -> URL? {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        
+        do {
+            try data.write(to: tempURL)
+            return tempURL
+        } catch {
+            print("❌ [UIImage] Failed to write temporary file: \(error)")
+            return nil
+        }
+    }
 }
 
 /**

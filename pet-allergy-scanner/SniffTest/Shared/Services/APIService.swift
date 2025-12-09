@@ -65,7 +65,7 @@ class APIService: ObservableObject, @unchecked Sendable {
     }
     
     /// Get token expiry date
-    private var tokenExpiry: Date? {
+    var tokenExpiry: Date? {
         get async {
             if let expiry = _tokenExpiry {
                 return expiry
@@ -225,7 +225,7 @@ class APIService: ObservableObject, @unchecked Sendable {
     
     /// Refresh authentication token using refresh token
     /// This works even when access token is expired (up to 30 days)
-    private func refreshAuthToken() async throws {
+    func refreshAuthToken() async throws {
         // Prevent multiple simultaneous refresh attempts
         if isRefreshing {
             // Wait for existing refresh to complete
@@ -1328,9 +1328,27 @@ extension APIService {
         guard let url = URL(string: "\(baseURL)/pets/") else {
             throw APIError.invalidURL
         }
-        
+
         let request = await createRequest(url: url)
-        return try await performRequest(request, responseType: [Pet].self)
+        
+        // Get raw data first to check response format
+        do {
+            let (data, _) = try await urlSession.data(for: request)
+            
+            // Try to decode as array first
+            do {
+                let pets = try createJSONDecoder().decode([Pet].self, from: data)
+                return pets
+            } catch let DecodingError.typeMismatch(type, _) where type is [Any].Type {
+                // Fallback: API returned single object, wrap it in array
+                print("⚠️ [APIService] GET /pets/ returned single Pet object (not array), wrapping in array")
+                let singlePet = try createJSONDecoder().decode(Pet.self, from: data)
+                return [singlePet]
+            }
+        } catch {
+            // Handle network errors
+            throw error
+        }
     }
     
     /// Get specific pet

@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var hasSkippedOnboarding = false // Track if user skipped onboarding this session
     @StateObject private var orientationManager = OrientationManager()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showReAuthenticationAlert = false
     
     var body: some View {
         Group {
@@ -67,6 +68,18 @@ struct ContentView: View {
         .environmentObject(authService)
         .environmentObject(notificationManager)
         .environmentObject(orientationManager)
+        .onReceive(NotificationCenter.default.publisher(for: .userNeedsReAuthentication)) { _ in
+            showReAuthenticationAlert = true
+        }
+        .alert("Session Expired", isPresented: $showReAuthenticationAlert) {
+            Button("OK") {
+                Task {
+                    await authService.logout()
+                }
+            }
+        } message: {
+            Text("Your session has expired. Please log in again.")
+        }
           .onChange(of: scenePhase) { _, newPhase in
               SessionLifecycleManager.shared.handleScenePhase(newPhase)
               

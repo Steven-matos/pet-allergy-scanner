@@ -584,7 +584,7 @@ struct ScanDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                LazyVStack(spacing: ModernDesignSystem.Spacing.lg) {
                     // Scan Header
                     ScanDetailHeader(scan: scan)
                     

@@ -52,7 +52,7 @@ enum TrackerType: String, CaseIterable {
                     .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    LazyVStack(spacing: ModernDesignSystem.Spacing.lg) {
                         // Header Section
                         headerSection
                         

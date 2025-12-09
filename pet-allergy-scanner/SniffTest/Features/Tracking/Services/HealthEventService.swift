@@ -69,7 +69,10 @@ class HealthEventService: ObservableObject {
         // Try UnifiedCacheCoordinator (synchronous)
         let cacheKey = CacheKey.healthEvents.scoped(forPetId: petId)
         if let cached = cacheCoordinator.get([HealthEvent].self, forKey: cacheKey) {
-            healthEventsCache[petId] = cached
+            // Defer cache update to avoid publishing during view update
+            Task { @MainActor in
+                self.healthEventsCache[petId] = cached
+            }
             return cached
         }
         

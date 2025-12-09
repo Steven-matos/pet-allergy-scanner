@@ -17,11 +17,15 @@ struct SniffTestApp: App {
     private let petService = CachedPetService.shared
     private let notificationManager = NotificationManager.shared
     private let cacheCoordinator = UnifiedCacheCoordinator.shared
+    private let tokenRefreshService = AutomaticTokenRefreshService.shared
     
     init() {
         // Initialize cache coordinator on app launch
         // This sets up URLSession caching and lifecycle observers
         _ = cacheCoordinator
+        
+        // Initialize automatic token refresh service
+        _ = tokenRefreshService
     }
     
     var body: some Scene {
