@@ -100,10 +100,11 @@ async def get_food_analyses(
     await verify_pet_ownership(pet_id, current_user.id, supabase)
     
     # Get food analyses using query builder
+    # Note: food_analyses table only has pet_id, no user_id column
+    # Pet ownership is already verified above
     query_builder = QueryBuilderService(supabase, "food_analyses")
     result = await query_builder.with_filters({
-        "pet_id": pet_id,
-        "user_id": current_user.id
+        "pet_id": pet_id
     }).execute()
     
     # Handle empty response
