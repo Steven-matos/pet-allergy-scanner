@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 // MARK: - Trend Data Models
 
@@ -188,5 +189,111 @@ struct WeightCorrelationData: Codable {
     let correlation: Double
     let strength: String
     let interpretation: String
+}
+
+// MARK: - Nutritional Balance Breakdown Models
+
+/**
+ * Status of a macronutrient intake compared to recommendations
+ * 
+ * Defines color-coded ranges for nutritional balance assessment:
+ * - optimal: 90-110% (Green) - Within ideal range
+ * - slightlyLow: 80-89% (Yellow) - Slightly below recommended
+ * - slightlyHigh: 111-120% (Yellow) - Slightly above recommended
+ * - tooLow: <80% (Red/Orange) - Significantly below recommended
+ * - tooHigh: >120% (Red/Orange) - Significantly above recommended
+ */
+enum MacroStatus: String, Codable {
+    case optimal
+    case slightlyLow
+    case slightlyHigh
+    case tooLow
+    case tooHigh
+    
+    /**
+     * Color associated with this status
+     * Uses Trust & Nature Design System colors
+     */
+    var color: Color {
+        switch self {
+        case .optimal:
+            return ModernDesignSystem.Colors.primary
+        case .slightlyLow, .slightlyHigh:
+            return ModernDesignSystem.Colors.goldenYellow
+        case .tooLow, .tooHigh:
+            return ModernDesignSystem.Colors.warmCoral
+        }
+    }
+    
+    /**
+     * User-friendly display text for this status
+     */
+    var displayText: String {
+        switch self {
+        case .optimal:
+            return "Optimal"
+        case .slightlyLow:
+            return "Slightly Low"
+        case .slightlyHigh:
+            return "Slightly High"
+        case .tooLow:
+            return "Too Low"
+        case .tooHigh:
+            return "Too High"
+        }
+    }
+}
+
+/**
+ * Individual macronutrient data with context
+ * 
+ * Contains all information needed to display a single macronutrient's
+ * status, including actual vs. recommended values, visual indicators,
+ * and user-friendly explanatory text.
+ */
+struct MacroNutrientData: Codable {
+    let name: String              // "Protein", "Fat", "Fiber"
+    let actual: Double            // Actual percentage consumed
+    let recommended: Double       // Recommended percentage for pet
+    let percentage: Double        // (actual/recommended) * 100
+    let status: MacroStatus       // Color-coded status
+    let icon: String              // SF Symbol name for visualization
+    let contextText: String       // User-friendly explanation
+    
+    /**
+     * Accessibility label for VoiceOver
+     * Provides complete information about the macronutrient status
+     */
+    var accessibilityLabel: String {
+        "\(name): \(Int(percentage))% of recommended, status: \(status.displayText). \(contextText)"
+    }
+}
+
+/**
+ * Complete nutritional breakdown with all macros
+ * 
+ * Aggregates protein, fat, and fiber data into a single view model
+ * for display in the nutritional balance breakdown sheet.
+ * Includes overall score and flags for insufficient data scenarios.
+ */
+struct NutritionalBreakdown: Codable {
+    let overallScore: Double           // Overall balance score (0-100)
+    let protein: MacroNutrientData     // Protein breakdown
+    let fat: MacroNutrientData         // Fat breakdown
+    let fiber: MacroNutrientData       // Fiber breakdown
+    let hasInsufficientData: Bool      // True if <3 feeding records
+    
+    /**
+     * Complete accessibility description for VoiceOver
+     * Announces overall score followed by each macro's status
+     */
+    var accessibilityDescription: String {
+        """
+        Nutritional Balance: \(Int(overallScore))%. 
+        \(protein.accessibilityLabel). 
+        \(fat.accessibilityLabel). 
+        \(fiber.accessibilityLabel)
+        """
+    }
 }
 

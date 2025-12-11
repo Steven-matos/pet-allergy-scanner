@@ -27,23 +27,25 @@ struct TrackersView: View {
     @State private var selectedTracker: TrackerType = .health
     @State private var showingAddTracker = false
     @State private var lastAppearTime: Date?
-    @State private var onAppearTask: Task<Void, Never>?
+    @State private var cardEventCounts: [String: Int] = [:]
+    @State private var refreshTrigger = UUID()
     
-enum TrackerType: String, CaseIterable {
-    case health = "Health Events"
-    
-    var icon: String {
-        switch self {
-        case .health: return "heart.fill"
+    enum TrackerType: String, CaseIterable {
+        case health = "Health Events"
+        
+        var icon: String {
+            switch self {
+            case .health: return "heart.fill"
+            }
+        }
+        
+        var color: Color {
+            switch self {
+            case .health: return ModernDesignSystem.Colors.warning
+            }
         }
     }
     
-    var color: Color {
-        switch self {
-        case .health: return ModernDesignSystem.Colors.warning
-        }
-    }
-}
     
     var body: some View {
         NavigationView {
@@ -53,14 +55,20 @@ enum TrackerType: String, CaseIterable {
                 
                 ScrollView {
                     LazyVStack(spacing: ModernDesignSystem.Spacing.lg) {
-                        // Header Section
+                        // Header Section only (stable)
                         headerSection
                         
-                        // Quick Actions Grid
+                        // Quick Actions Grid (stable)
                         quickActionsGrid
                         
-                        // Tracker Cards
-                        trackerCardsSection
+                // Tracker Cards (shows cached event counts; no images)
+                        ForEach(petService.pets.prefix(3)) { pet in
+                            SimplePetCardStatic(
+                                pet: pet,
+                                eventCount: cardEventCounts[pet.id] ?? 0
+                            )
+                            .id("\(pet.id)-\(cardEventCounts[pet.id] ?? 0)")
+                        }
                     }
                     .padding(ModernDesignSystem.Spacing.lg)
                 }
@@ -71,55 +79,38 @@ enum TrackerType: String, CaseIterable {
             .toolbarColorScheme(.light, for: .navigationBar)
         }
         .onAppear {
-            // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
-            if TabNavigationCoordinator.shared.shouldBlockOperations() {
-                print("⏭️ TrackersView: Skipping onAppear - navigation cooldown active")
-                return
-            }
-            
-            // CRITICAL: Debounce rapid tab switches to prevent freezing and memory leaks
-            let now = Date()
-            if let lastAppear = lastAppearTime, now.timeIntervalSince(lastAppear) < 0.5 {
-                print("⏭️ TrackersView: Skipping onAppear (too soon after last appear: \(now.timeIntervalSince(lastAppear))s)")
-                return
-            }
-            lastAppearTime = now
-            
-            // CRITICAL: Cancel ALL existing tasks FIRST to prevent memory leaks
-            onAppearTask?.cancel()
-            onAppearTask = nil
-            
-            // CRITICAL: Longer delay to ensure previous view is completely gone
-            // This is essential for preventing freezes when switching rapidly
-            onAppearTask = Task(priority: .utility) { @MainActor in
-                try? await Task.sleep(nanoseconds: 400_000_000) // 0.4 seconds
-                guard !Task.isCancelled else { return }
-                
-                // Double-check coordinator after delay
-                if TabNavigationCoordinator.shared.shouldBlockOperations() {
-                    print("⏭️ TrackersView: Skipping operations after delay - cooldown still active")
-                    return
-                }
-                
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-                
-                // Track analytics (non-blocking)
-                Task.detached(priority: .utility) { @MainActor in
-                    PostHogAnalytics.trackScreenViewed(screenName: "trackers_view")
-                }
-                
-                // Load pets (cache-first, non-blocking)
-                petService.loadPets(forceRefresh: false)
-            }
+            // Reload counts every time view appears (including when returning from detail views)
+            loadEventCounts()
         }
-        .onDisappear {
-            // CRITICAL: Cancel task on disappear to prevent memory leaks
-            onAppearTask?.cancel()
-            onAppearTask = nil
+        .task(id: refreshTrigger) {
+            // Also reload when refresh is explicitly triggered
+            loadEventCounts()
         }
-        .sheet(isPresented: $showingAddTracker) {
+        .sheet(isPresented: $showingAddTracker, onDismiss: {
+            // Refresh counts when sheet is dismissed (event may have been added)
+            refreshTrigger = UUID()
+        }) {
             AddHealthEventView()
+        }
+    }
+    
+    // MARK: - Load Operations
+    
+    /**
+     * Load event counts for all pets asynchronously
+     */
+    private func loadEventCounts() {
+        Task.detached(priority: .utility) {
+            let pets = await MainActor.run { petService.pets.prefix(3) }
+            var counts: [String: Int] = [:]
+            for pet in pets {
+                let events = await MainActor.run { healthEventService.healthEvents(for: pet.id) }
+                counts[pet.id] = events.count
+                await Task.yield()
+            }
+            await MainActor.run {
+                cardEventCounts = counts
+            }
         }
     }
     
@@ -189,7 +180,7 @@ enum TrackerType: String, CaseIterable {
                 )
             } else {
                 ForEach(petService.pets.prefix(3)) { pet in
-                    PetHealthEventCard(pet: pet)
+                    SimplePetCardStatic(pet: pet, eventCount: cardEventCounts[pet.id] ?? 0)
                 }
             }
         }
@@ -239,110 +230,6 @@ struct QuickActionCard: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
-    }
-}
-
-// MARK: - Pet Health Event Card
-
-struct PetHealthEventCard: View {
-    let pet: Pet
-    @ObservedObject private var healthEventService = HealthEventService.shared
-    
-    var recentEvents: [HealthEvent] {
-        Array(healthEventService.healthEvents(for: pet.id).prefix(3))
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-            HStack {
-                AsyncImage(url: URL(string: pet.imageUrl ?? "")) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Image(systemName: "pawprint.fill")
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                }
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(pet.name)
-                        .font(ModernDesignSystem.Typography.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    Text("Health Events")
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                }
-                
-                Spacer()
-                
-            NavigationLink(destination: HealthEventListView(pet: pet)) {
-                Text("View Events")
-                    .font(ModernDesignSystem.Typography.body)
-                    .fontWeight(.medium)
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                            .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
-                    )
-            }
-            }
-            
-            if !recentEvents.isEmpty {
-                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                    ForEach(recentEvents) { event in
-                        HStack {
-                            Image(systemName: event.eventType.iconName)
-                                .foregroundColor(event.eventType.category.color)
-                                .font(.caption)
-                            
-                            Text(event.title)
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                .lineLimit(1)
-                            
-                            Spacer()
-                            
-                            Text(event.eventDate, style: .date)
-                                .font(ModernDesignSystem.Typography.caption2)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        }
-                    }
-                }
-                .padding(.top, ModernDesignSystem.Spacing.xs)
-            } else {
-                Text("No recent health events")
-                    .font(ModernDesignSystem.Typography.caption)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .padding(.top, ModernDesignSystem.Spacing.xs)
-            }
-        }
-        .padding(ModernDesignSystem.Spacing.md)
-        .background(ModernDesignSystem.Colors.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-        .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
-        )
-        .task {
-            // Load health events for this pet
-            do {
-                _ = try await healthEventService.getHealthEvents(for: pet.id)
-            } catch {
-                // Silently handle error - health events may not be available yet
-            }
-        }
     }
 }
 
@@ -414,6 +301,65 @@ struct AddTrackerSheet: View {
                 }
             )
         }
+    }
+}
+
+/// Minimal card to isolate layout issues (no images, no events)
+/// Fully static card: no events access, to avoid blocking UI
+struct SimplePetCardStatic: View {
+    let pet: Pet
+    let eventCount: Int
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pet.name)
+                        .font(ModernDesignSystem.Typography.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    
+                    Text(pet.breed ?? "Pet")
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                Spacer()
+                
+                if eventCount > 0 {
+                    NavigationLink(destination: HealthEventListView(pet: pet)) {
+                        Text("View Events")
+                            .font(ModernDesignSystem.Typography.body)
+                            .fontWeight(.medium)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                            .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                            .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                            .background(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                            )
+                    }
+                }
+            }
+            
+            Text("Events: \(eventCount)")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 

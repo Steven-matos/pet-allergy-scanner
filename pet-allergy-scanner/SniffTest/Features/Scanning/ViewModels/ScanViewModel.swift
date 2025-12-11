@@ -34,7 +34,7 @@ final class ScanViewModel {
     /// Unified scan state - replaces showingResults, showingPetSelection, showingProductFound, etc.
     var scanState: ScanState = .idle {
         didSet {
-            print("📊 [ScanViewModel] State transition: \(oldValue) → \(scanState)")
+            LoggingManager.debug("State transition: \(oldValue) → \(scanState)", category: .scanning)
         }
     }
     
@@ -129,7 +129,7 @@ final class ScanViewModel {
     func selectPet(_ pet: Pet) {
         selectedPet = pet
         scanState = .idle
-        print("✅ [ScanViewModel] Pet selected: \(pet.name)")
+        LoggingManager.debug("Pet selected: \(pet.name)", category: .scanning)
     }
     
     /**
@@ -139,7 +139,7 @@ final class ScanViewModel {
     func handleBarcodeDetected(_ barcode: BarcodeResult) {
         // Prevent barcode detection when sheet is already presented
         guard !scanState.isSheetPresented else {
-            print("⚠️ [ScanViewModel] Ignoring barcode - sheet already presented")
+            LoggingManager.debug("Ignoring barcode - sheet already presented", category: .scanning)
             return
         }
         
@@ -175,7 +175,7 @@ final class ScanViewModel {
         
         // PERFORMANCE CRITICAL: Downsample image before processing
         guard let optimizedImage = image.downsampled(to: 1920) else {
-            print("❌ [ScanViewModel] Failed to downsample image")
+            LoggingManager.error("Failed to downsample image", category: .scanning)
             toastMessage = .error("Failed to process image")
             scanState = .idle
             return
@@ -184,7 +184,7 @@ final class ScanViewModel {
         #if DEBUG
         let originalMemory = image.memoryUsage / 1024 / 1024
         let optimizedMemory = optimizedImage.memoryUsage / 1024 / 1024
-        print("📊 [ScanViewModel] Image optimized: \(originalMemory)MB → \(optimizedMemory)MB")
+        LoggingManager.debug("Image optimized: \(originalMemory)MB → \(optimizedMemory)MB", category: .scanning)
         #endif
         
         let result = await hybridScanService.performHybridScan(from: optimizedImage)
@@ -203,7 +203,7 @@ final class ScanViewModel {
      */
     func analyzeBarcode(_ barcode: BarcodeResult) async {
         do {
-            print("🔍 [ScanViewModel] Looking up barcode: \(barcode.value)")
+            LoggingManager.debug("Looking up barcode: \(barcode.value)", category: .scanning)
             let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
             
             if let product = product {
@@ -212,7 +212,7 @@ final class ScanViewModel {
                 scanState = .productNotFound
             }
         } catch {
-            print("❌ [ScanViewModel] Barcode lookup failed: \(error)")
+            LoggingManager.warning("Barcode lookup failed: \(error)", category: .scanning)
             scanState = .productNotFound
         }
     }

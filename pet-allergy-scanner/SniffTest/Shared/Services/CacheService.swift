@@ -76,6 +76,7 @@ enum CacheKey: String, CaseIterable {
     // Nutrition data
     case nutritionRequirements = "nutrition_requirements"
     case foodDatabase = "food_database"
+    case foodAnalyses = "food_analyses"
     case recentFoods = "recent_foods"
     case feedingRecords = "feeding_records"
     case dailySummaries = "daily_summaries"

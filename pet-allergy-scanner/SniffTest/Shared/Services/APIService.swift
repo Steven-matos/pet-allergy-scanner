@@ -1148,7 +1148,7 @@ class APIService: ObservableObject, @unchecked Sendable {
         // Don't treat food analysis 404s as permanently deleted
         // Food analyses may be missing temporarily or the ID might be incorrect
         // Feeding records reference them, so we should allow retry attempts
-        if path.contains("/nutrition/food-analysis/") {
+        if path.contains("/nutrition/analysis/food-analysis/") {
             // Just invalidate cache - don't mark as permanently deleted
             // This allows re-checking if the food analysis is recreated or ID is corrected
             if let resourceId = extractResourceId(from: path) {

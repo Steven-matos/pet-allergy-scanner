@@ -149,7 +149,7 @@ class NutritionService: ObservableObject {
     func loadFoodAnalyses(for petId: String) async throws {
         do {
             let analyses: [FoodNutritionalAnalysis] = try await apiService.get(
-                endpoint: "/nutrition/analyses/\(petId)",
+                endpoint: "/nutrition/analysis/analyses/\(petId)",
                 responseType: [FoodNutritionalAnalysis].self
             )
             
@@ -188,7 +188,7 @@ class NutritionService: ObservableObject {
             return record
             
         } catch {
-            print("Failed to record feeding: \(error)")
+            LoggingManager.error("Failed to record feeding: \(error)", category: .nutrition)
             throw error
         }
     }
@@ -213,7 +213,7 @@ class NutritionService: ObservableObject {
             }
             
         } catch {
-            print("Failed to load feeding records: \(error)")
+            LoggingManager.error("Failed to load feeding records: \(error)", category: .nutrition)
             throw error
         }
     }

@@ -423,7 +423,7 @@ class CachedNutritionService: ObservableObject {
     func loadFoodAnalyses(for petId: String) async throws {
         guard currentUserId != nil else { return }
         
-        let cacheKey = CacheKey.feedingRecords.scoped(forPetId: petId)
+        let cacheKey = CacheKey.foodAnalyses.scoped(forPetId: petId)
         
         // Try cache first (synchronous)
         if let cached = cacheCoordinator.get([FoodNutritionalAnalysis].self, forKey: cacheKey) {
@@ -440,7 +440,7 @@ class CachedNutritionService: ObservableObject {
         // Fallback to server
         do {
             let analyses: [FoodNutritionalAnalysis] = try await apiService.get(
-                endpoint: "/nutrition/analyses/\(petId)",
+                endpoint: "/nutrition/analysis/analyses/\(petId)",
                 responseType: [FoodNutritionalAnalysis].self
             )
             
@@ -489,7 +489,7 @@ class CachedNutritionService: ObservableObject {
         
         // Load from server
         let analysis: FoodNutritionalAnalysis = try await apiService.get(
-            endpoint: "/nutrition/food-analysis/\(analysisId)",
+            endpoint: "/nutrition/analysis/food-analysis/\(analysisId)",
             responseType: FoodNutritionalAnalysis.self
         )
         
@@ -716,7 +716,7 @@ class CachedNutritionService: ObservableObject {
                             self.cacheCoordinator.invalidate(forKey: cacheKey)
                             self.dailySummariesCache[petId] = []
                             self.objectWillChange.send()
-                            print("ℹ️ [CachedNutritionService] No daily summaries yet for pet \(petId) - no meals logged")
+                            LoggingManager.debug("No daily summaries yet for pet \(petId) - no meals logged", category: .nutrition)
                             // Don't track as error - this is expected when no meals exist
                         } else {
                             // Other errors - log but don't fail silently
@@ -749,7 +749,7 @@ class CachedNutritionService: ObservableObject {
                 cacheCoordinator.invalidate(forKey: cacheKey)
                 dailySummariesCache[petId] = []
                 objectWillChange.send()
-                print("ℹ️ [CachedNutritionService] No daily summaries yet for pet \(petId) - no meals logged")
+                LoggingManager.debug("No daily summaries yet for pet \(petId) - no meals logged", category: .nutrition)
                 // Don't throw error - empty state is valid
                 return
             }

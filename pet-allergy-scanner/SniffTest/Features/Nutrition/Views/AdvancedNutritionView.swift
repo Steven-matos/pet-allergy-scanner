@@ -656,7 +656,7 @@ struct AdvancedNutritionView: View {
                    case .serverError(let statusCode) = apiError,
                    statusCode == 404 {
                     // For daily summaries, 404 is normal when no meals exist - don't show error
-                    print("ℹ️ [AdvancedNutritionView] No daily summaries yet - no meals logged (404 is normal)")
+                    LoggingManager.debug("No daily summaries yet - no meals logged (404 is normal)", category: .nutrition)
                 // CRITICAL: Only update state if view is still alive
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
@@ -1293,7 +1293,7 @@ struct AdvancedAnalyticsView: View {
     private func calculateConsistencyScore(feedingRecords: [FeedingRecord]) -> Double {
         // Need at least 2 records to calculate consistency
         guard feedingRecords.count >= 2 else {
-            print("⚠️ [calculateConsistencyScore] Not enough records: \(feedingRecords.count), need at least 2")
+            LoggingManager.debug("Not enough records for consistency score: \(feedingRecords.count)", category: .nutrition)
             return 0.0
         }
         
@@ -1316,7 +1316,7 @@ struct AdvancedAnalyticsView: View {
         let consistency = Double(daysWithFeedings.count) / Double(totalDays)
         let score = consistency * 100
         
-        print("✅ [calculateConsistencyScore] Score: \(score)% (\(daysWithFeedings.count) days with feedings out of \(totalDays) total days)")
+        LoggingManager.debug("Consistency score: \(score)%", category: .nutrition)
         
         return score
     }

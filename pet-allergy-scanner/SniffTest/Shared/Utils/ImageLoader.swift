@@ -31,8 +31,6 @@ class ImageLoader: ObservableObject {
     
     /// Load image from URL (local or remote) with memory optimization
     func loadImage() {
-        print("🔍 ImageLoader: Loading image from URL: \(url)")
-        
         // Check cache first
         if let cachedImage = imageCache.image(forKey: url) {
             self.image = cachedImage
@@ -41,10 +39,8 @@ class ImageLoader: ObservableObject {
         
         // Check if it's a remote URL
         if url.hasPrefix("http://") || url.hasPrefix("https://") {
-            print("🔍 ImageLoader: Loading remote image")
             loadRemoteImage()
         } else {
-            print("🔍 ImageLoader: Loading local image")
             loadLocalImage()
         }
     }
@@ -183,16 +179,13 @@ extension RemoteImageView {
 /// Convenience initializer for user profile images
 extension RemoteImageView {
     init(userImageUrl: String?, contentMode: ContentMode = .fill) {
-        print("🔍 RemoteImageView: User image URL: \(userImageUrl ?? "nil")")
         if let imageUrl = userImageUrl, !imageUrl.isEmpty {
-            print("🔍 RemoteImageView: Using provided image URL")
             self.init(
                 url: imageUrl,
                 placeholder: Image(systemName: "person.circle.fill"),
                 contentMode: contentMode
             )
         } else {
-            print("🔍 RemoteImageView: Using placeholder (no image URL)")
             self.init(
                 url: "",
                 placeholder: Image(systemName: "person.circle.fill"),

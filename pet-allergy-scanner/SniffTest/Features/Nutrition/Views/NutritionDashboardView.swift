@@ -97,7 +97,7 @@ struct NutritionDashboardView: View {
                                 do {
                                     try await CachedNutritionService.shared.loadFeedingRecords(for: pet.id)
                                 } catch {
-                                    print("⚠️ Failed to load feeding records: \(error)")
+                                    LoggingManager.warning("Failed to load feeding records: \(error)", category: .nutrition)
                                 }
                             }
                             

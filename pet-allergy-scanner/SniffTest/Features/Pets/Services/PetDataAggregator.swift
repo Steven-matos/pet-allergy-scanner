@@ -79,10 +79,10 @@ class PetDataAggregator {
         do {
             try await nutritionService.loadFeedingRecords(for: petId, days: days, forceRefresh: forceRefresh)
             let records = nutritionService.feedingRecords.filter { $0.petId == petId }
-            print("📄 [PDF] Loaded \(records.count) feeding records for pet \(petId)")
+            LoggingManager.debug("Loaded \(records.count) feeding records for pet \(petId)", category: .general)
             return records
         } catch {
-            print("⚠️ [PDF] Failed to load feeding records: \(error)")
+            LoggingManager.warning("Failed to load feeding records: \(error)", category: .general)
             // Return empty array instead of throwing to allow PDF generation with partial data
             return []
         }
@@ -100,7 +100,7 @@ class PetDataAggregator {
         let foodAnalysisIds = Set(feedingRecords.map { $0.foodAnalysisId })
         
         if foodAnalysisIds.isEmpty {
-            print("📄 [PDF] No food analysis IDs found in feeding records")
+            LoggingManager.debug("No food analysis IDs found in feeding records", category: .general)
             return []
         }
         

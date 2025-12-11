@@ -21,7 +21,8 @@ struct SniffTestApp: App {
     
     init() {
         // Initialize cache coordinator on app launch
-        // This sets up URLSession caching and lifecycle observers
+        // This automatically checks cache version and clears stale data
+        // Also sets up URLSession caching and lifecycle observers
         _ = cacheCoordinator
         
         // Initialize automatic token refresh service

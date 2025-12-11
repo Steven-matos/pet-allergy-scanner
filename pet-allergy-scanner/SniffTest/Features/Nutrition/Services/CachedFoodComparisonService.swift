@@ -640,7 +640,7 @@ class CachedFoodComparisonService: ObservableObject {
                 }
                 
                 let response = try await apiService.get(
-                    endpoint: "/advanced-nutrition/comparisons?limit=20",
+                    endpoint: "/advanced-nutrition/comparisons/?limit=20",
                     responseType: [ComparisonListItem].self
                 )
                 

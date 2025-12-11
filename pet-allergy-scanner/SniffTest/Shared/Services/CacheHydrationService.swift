@@ -303,7 +303,7 @@ final class CacheHydrationService {
             } catch {
                 // Log but don't fail - individual pet data load failures are non-critical
                 // New pets may not have data yet, which is expected
-                print("⚠️ Failed to load feeding logs for pet \(pet.id): \(error.localizedDescription)")
+                LoggingManager.debug("Failed to load feeding logs for pet: \(error.localizedDescription)", category: .cache)
             }
         }
         currentStep += 1.0

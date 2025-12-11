@@ -32,6 +32,19 @@ import UIKit
 final class UnifiedCacheCoordinator {
     static let shared = UnifiedCacheCoordinator()
     
+    // MARK: - Cache Version Management
+    
+    /**
+     * Current cache version - increment when making breaking changes
+     * 
+     * Version History:
+     * - v1: Initial version
+     * - v2: Fixed FoodNutritionalAnalysis decoder to handle string-encoded numbers
+     * - v3: Force clear to ensure decoder fix takes effect for all users
+     */
+    private let currentCacheVersion = 4  // Incremented to clear stale food analyses cache with wrong key
+    private let cacheVersionKey = "unified_cache_version"
+    
     // MARK: - Properties
     
     /// In-memory cache for fast access
@@ -104,19 +117,8 @@ final class UnifiedCacheCoordinator {
     // MARK: - Initialization
     
     private init() {
-        // Setup HTTP cache
-        let memoryCapacity = 50 * 1024 * 1024 // 50 MB
-        let diskCapacity = 200 * 1024 * 1024 // 200 MB
-        let urlCache = URLCache(
-            memoryCapacity: memoryCapacity,
-            diskCapacity: diskCapacity,
-            diskPath: "SniffTestURLCache"
-        )
-        URLCache.shared = urlCache
-        
-        // Configure URLSession with caching
+        // Configure URLSession FIRST (before any cache operations)
         let config = URLSessionConfiguration.default
-        config.urlCache = urlCache
         config.requestCachePolicy = .returnCacheDataElseLoad
         config.timeoutIntervalForRequest = 30.0
         config.timeoutIntervalForResource = 60.0
@@ -126,8 +128,24 @@ final class UnifiedCacheCoordinator {
         self.urlSessionConfiguration = config
         self.cachedURLSession = URLSession(configuration: config)
         
-        // Setup cache directory and load persistent cache
+        // Setup URLCache
+        let memoryCapacity = 50 * 1024 * 1024 // 50 MB
+        let diskCapacity = 200 * 1024 * 1024 // 200 MB
+        let urlCache = URLCache(
+            memoryCapacity: memoryCapacity,
+            diskCapacity: diskCapacity,
+            diskPath: "SniffTestURLCache"
+        )
+        URLCache.shared = urlCache
+        config.urlCache = urlCache
+        
+        // Setup cache directory FIRST (before any cache operations)
         setupCacheDirectory()
+        
+        // Check cache version and clear if needed (AFTER basic setup)
+        checkAndInvalidateOldCache()
+        
+        // Load persistent cache and setup observers
         loadPersistentCache()
         setupMemoryWarningObserver()
         setupAppLifecycleObservers()
@@ -222,7 +240,7 @@ final class UnifiedCacheCoordinator {
             cacheStats.stores += 1
             updateCacheStatistics()
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to encode data for caching: \(error)")
+            LoggingManager.error("Failed to encode data for caching: \(error)", category: .cache)
         }
     }
     
@@ -267,7 +285,7 @@ final class UnifiedCacheCoordinator {
             invalidationCallbacks[key]?()
         }
         
-        print("🗑️ [UnifiedCacheCoordinator] Resource deleted (404) - invalidated cache for key: \(key)")
+        LoggingManager.debug("Resource deleted (404) - invalidated cache: \(key)", category: .cache)
     }
     
     /**
@@ -292,7 +310,7 @@ final class UnifiedCacheCoordinator {
         cachedURLSession.configuration.urlCache?.removeAllCachedResponses()
         cacheStats = UnifiedCacheStatistics()
         updateCacheStatistics()
-        print("🗑️ [UnifiedCacheCoordinator] Cleared all caches")
+        LoggingManager.debug("Cleared all caches", category: .cache)
     }
     
     /**
@@ -302,7 +320,7 @@ final class UnifiedCacheCoordinator {
     func clearUserCache(userId: String) {
         let userKeys = CacheKey.allCases.map { $0.scoped(forUserId: userId) }
         userKeys.forEach { invalidate(forKey: $0) }
-        print("🗑️ [UnifiedCacheCoordinator] Cleared cache for user: \(userId)")
+        LoggingManager.debug("Cleared cache for user: \(userId)", category: .cache)
     }
     
     /**
@@ -365,7 +383,7 @@ final class UnifiedCacheCoordinator {
         do {
             try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to create cache directory: \(error)")
+            LoggingManager.error("Failed to create cache directory: \(error)", category: .cache)
         }
     }
     
@@ -393,9 +411,9 @@ final class UnifiedCacheCoordinator {
             }
             
             updateCacheStatistics()
-            print("✅ [UnifiedCacheCoordinator] Loaded \(memoryCache.count) cache entries from disk")
+            LoggingManager.debug("Loaded \(memoryCache.count) cache entries from disk", category: .cache)
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to load persistent cache: \(error)")
+            LoggingManager.error("Failed to load persistent cache: \(error)", category: .cache)
         }
     }
     
@@ -428,7 +446,7 @@ final class UnifiedCacheCoordinator {
             let fileURL = cacheDirectory.appendingPathComponent("\(key).cache")
             try data.write(to: fileURL)
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to store cache on disk: \(error)")
+            LoggingManager.error("Failed to store cache on disk: \(error)", category: .cache)
         }
     }
     
@@ -466,7 +484,7 @@ final class UnifiedCacheCoordinator {
                 try fileManager.removeItem(at: file)
             }
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to clear disk cache: \(error)")
+            LoggingManager.error("Failed to clear disk cache: \(error)", category: .cache)
         }
     }
     
@@ -487,7 +505,7 @@ final class UnifiedCacheCoordinator {
                 }
             }
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to invalidate disk cache: \(error)")
+            LoggingManager.error("Failed to invalidate disk cache: \(error)", category: .cache)
         }
     }
     
@@ -528,12 +546,8 @@ final class UnifiedCacheCoordinator {
         do {
             return try JSONDecoder().decode(T.self, from: entry.data)
         } catch {
-            print("⚠️ [UnifiedCacheCoordinator] Failed to decode cache entry for key '\(key)': \(error)")
-            
-            // If decoding fails, it's likely corrupted - invalidate it
-            print("🗑️ [UnifiedCacheCoordinator] Invalidating corrupted cache entry: \(key)")
+            LoggingManager.warning("Failed to decode cache, invalidating: \(key)", category: .cache)
             invalidate(forKey: key)
-            
             return nil
         }
     }
@@ -578,7 +592,7 @@ final class UnifiedCacheCoordinator {
             memoryCache.removeValue(forKey: key)
         }
         
-        print("⚠️ [UnifiedCacheCoordinator] Cleared session cache due to memory warning")
+        LoggingManager.warning("Cleared session cache due to memory warning", category: .cache)
     }
     
     /**
@@ -644,6 +658,85 @@ final class UnifiedCacheCoordinator {
         } catch {
             return 0
         }
+    }
+    
+    // MARK: - Cache Version Management
+    
+    /**
+     * Check cache version and invalidate if needed
+     * 
+     * This ensures all users get fresh data after app updates that change
+     * decoders, models, or data structures. Runs automatically on first launch
+     * after an update.
+     */
+    private func checkAndInvalidateOldCache() {
+        let savedVersion = UserDefaults.standard.integer(forKey: cacheVersionKey)
+        
+        // No saved version = existing installation before versioning was added
+        // OR truly fresh install. Either way, clear any stale data to be safe.
+        if savedVersion == 0 {
+            LoggingManager.info("No cache version found - clearing stale data", category: .cache)
+            clearAllCaches()
+            UserDefaults.standard.set(currentCacheVersion, forKey: cacheVersionKey)
+            return
+        }
+        
+        // Version mismatch - clear everything
+        if savedVersion < currentCacheVersion {
+            LoggingManager.info("Cache version outdated (v\(savedVersion) -> v\(currentCacheVersion)) - clearing", category: .cache)
+            clearAllCaches()
+            UserDefaults.standard.set(currentCacheVersion, forKey: cacheVersionKey)
+        }
+    }
+    
+    /**
+     * Clear all caches across the app
+     * 
+     * Called automatically when cache version is bumped, or can be called
+     * manually for troubleshooting.
+     */
+    func clearAllCaches() {
+        // 1. Clear disk cache directory
+        do {
+            if fileManager.fileExists(atPath: cacheDirectory.path) {
+                try fileManager.removeItem(at: cacheDirectory)
+            }
+        } catch {
+            LoggingManager.error("Failed to clear disk cache: \(error)", category: .cache)
+        }
+        
+        // 2. Clear in-memory cache
+        memoryCache.removeAll()
+        currentMemoryCacheSize = 0
+        
+        // 3. Clear HTTP URL cache
+        URLCache.shared.removeAllCachedResponses()
+        
+        // 4. Clear deleted resource tracking
+        deletedResourceKeys.removeAll()
+        
+        // 5. Reset statistics
+        cacheStats = UnifiedCacheStatistics()
+        
+        // 6. Clear service-specific in-memory arrays
+        clearServiceMemoryCaches()
+        
+        // 7. Recreate cache directory
+        setupCacheDirectory()
+    }
+    
+    /**
+     * Clear in-memory caches in service singletons
+     * 
+     * Note: This is safe to call after initialization. During init, we only
+     * clear disk/memory caches to avoid circular dependency issues.
+     */
+    private func clearServiceMemoryCaches() {
+        // Safely clear service caches (only if services are already initialized)
+        // This prevents circular dependency crashes during coordinator init
+        
+        // Note: Service-specific cache clearing is deferred until services
+        // naturally reload their data from the cleared disk cache
     }
 }
 

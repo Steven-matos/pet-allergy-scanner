@@ -51,7 +51,7 @@ class StorageService: ObservableObject {
         let optimizedResult: OptimizedImageResult
         do {
             optimizedResult = try ImageOptimizer.optimizeForUpload(image: image)
-            print("📸 \(imageType.capitalized) image optimized: \(optimizedResult.summary)")
+            LoggingManager.debug("\(imageType.capitalized) image optimized: \(optimizedResult.summary)", category: .general)
         } catch {
             throw StorageError.optimizationFailed(error.localizedDescription)
         }
@@ -167,8 +167,7 @@ class StorageService: ObservableObject {
         request.setValue("true", forHTTPHeaderField: "x-upsert") // Allow overwriting existing files
         request.httpBody = data
         
-        print("📤 Uploading image to: \(uploadURL.absoluteString)")
-        print("📊 Image size: \(data.count / 1024)KB")
+        LoggingManager.debug("Uploading image (\(data.count / 1024)KB) to: \(uploadURL.absoluteString)", category: .general)
         
         let (responseData, response) = try await URLSession.shared.data(for: request)
         
@@ -201,7 +200,7 @@ class StorageService: ObservableObject {
             throw StorageError.uploadFailed(errorMessage)
         }
         
-        print("✅ Image uploaded successfully")
+        LoggingManager.debug("Image uploaded successfully", category: .general)
         return path
     }
     
@@ -286,13 +285,13 @@ class StorageService: ObservableObject {
             if oldUrl.contains(Configuration.supabaseURL) {
                 do {
                     try await deleteImage(path: oldUrl, bucket: bucket)
-                    print("🗑️ Old \(imageType) image deleted: \(oldUrl)")
+                    LoggingManager.debug("Old \(imageType) image deleted: \(oldUrl)", category: .general)
                 } catch {
-                    print("⚠️ Failed to delete old image (continuing with upload): \(error)")
+                    LoggingManager.warning("Failed to delete old image: \(error)", category: .general)
                     // Continue with upload even if deletion fails
                 }
             } else {
-                print("ℹ️ Old image is local file, skipping deletion: \(oldUrl)")
+                LoggingManager.debug("Old image is local file, skipping deletion", category: .general)
             }
         }
         

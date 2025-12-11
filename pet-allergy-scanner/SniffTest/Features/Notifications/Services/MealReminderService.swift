@@ -88,7 +88,7 @@ class MealReminderService: NSObject, ObservableObject {
     func checkAndSendMealReminders() async {
         guard isEnabled else { return }
         
-        print("🍽️ Checking for meal logs today...")
+        LoggingManager.debug("Checking for meal logs today", category: .notifications)
         
         let today = Date()
         
@@ -96,7 +96,7 @@ class MealReminderService: NSObject, ObservableObject {
         let pets = petService.pets
         
         guard !pets.isEmpty else {
-            print("⚠️ No pets found - skipping meal reminder check")
+            LoggingManager.debug("No pets found - skipping meal reminder check", category: .notifications)
             return
         }
         
@@ -106,20 +106,20 @@ class MealReminderService: NSObject, ObservableObject {
             do {
                 _ = try await feedingService.getFeedingRecords(for: pet.id, days: 7)
             } catch {
-                print("⚠️ Failed to load feeding records for \(pet.name): \(error)")
+                LoggingManager.warning("Failed to load feeding records: \(error)", category: .notifications)
             }
             
             // Get feeding records for today
             let todayRecords = feedingService.getFeedingRecordsForDate(for: pet.id, date: today)
             
-            print("📊 \(pet.name): \(todayRecords.count) meal(s) logged today")
+            LoggingManager.debug("\(pet.name): \(todayRecords.count) meal(s) logged today", category: .notifications)
             
             // If no meals logged today, send reminder
             if todayRecords.isEmpty {
-                print("⚠️ No meals logged today for \(pet.name) - sending reminder")
+                LoggingManager.debug("No meals logged today for \(pet.name) - sending reminder", category: .notifications)
                 await sendMealReminder(for: pet)
             } else {
-                print("✅ Meals logged today for \(pet.name) - no reminder needed")
+                LoggingManager.debug("Meals logged today for \(pet.name) - no reminder needed", category: .notifications)
             }
         }
     }
@@ -166,9 +166,9 @@ class MealReminderService: NSObject, ObservableObject {
         
         notificationCenter.add(request) { error in
             if let error = error {
-                print("❌ Failed to schedule daily meal reminder check: \(error)")
+                LoggingManager.error("Failed to schedule daily meal reminder check: \(error)", category: .notifications)
             } else {
-                print("✅ Scheduled daily meal reminder check at \(hour):\(minute)")
+                LoggingManager.debug("Scheduled daily meal reminder check at \(hour):\(minute)", category: .notifications)
             }
         }
     }
@@ -189,7 +189,7 @@ class MealReminderService: NSObject, ObservableObject {
      * - Parameter pet: The pet to send reminder for
      */
     private func sendMealReminder(for pet: Pet) async {
-        print("📱 Sending meal reminder for \(pet.name)")
+        LoggingManager.debug("Sending meal reminder for \(pet.name)", category: .notifications)
         
         // Create local notification
         let content = UNMutableNotificationContent()
@@ -213,9 +213,9 @@ class MealReminderService: NSObject, ObservableObject {
         
         do {
             try await notificationCenter.add(request)
-            print("✅ Local meal reminder sent for \(pet.name)")
+            LoggingManager.debug("Local meal reminder sent for \(pet.name)", category: .notifications)
         } catch {
-            print("❌ Failed to send local meal reminder: \(error)")
+            LoggingManager.error("Failed to send local meal reminder: \(error)", category: .notifications)
         }
         
         // Also send push notification if available
@@ -240,13 +240,13 @@ class MealReminderService: NSObject, ObservableObject {
             
             do {
                 try await pushNotificationService.sendPushNotification(payload: payload, deviceToken: deviceToken)
-                print("✅ Push meal reminder sent for \(pet.name)")
+                LoggingManager.debug("Push meal reminder sent for \(pet.name)", category: .notifications)
             } catch {
-                print("❌ Failed to send push meal reminder for \(pet.name): \(error)")
+                LoggingManager.error("Failed to send push meal reminder: \(error)", category: .notifications)
                 // Continue - local notification was already sent
             }
         } else {
-            print("⚠️ Push notifications not available for meal reminder - local notification sent only")
+            LoggingManager.debug("Push notifications not available - local notification sent only", category: .notifications)
         }
     }
     

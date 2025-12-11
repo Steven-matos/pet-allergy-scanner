@@ -64,7 +64,6 @@ struct MainTabView: View {
         // iOS 18.6.2 Fix: Use tint instead of accentColor for better compatibility
         .tint(ModernDesignSystem.Colors.tabBarActive)
         .onChange(of: selectedTab) { oldValue, newValue in
-            // Record tab change in coordinator for cooldown management
             navigationCoordinator.recordTabChange(fromTab: oldValue, toTab: newValue)
         }
         .task {

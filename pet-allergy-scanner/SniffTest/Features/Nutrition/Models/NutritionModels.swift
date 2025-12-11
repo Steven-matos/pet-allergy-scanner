@@ -415,6 +415,7 @@ struct FoodNutritionalAnalysis: Codable, Identifiable {
     /**
      * Custom decoder to handle missing fields in old cached data
      * Provides default values for missing required fields
+     * Also handles string-encoded numbers from backend
      */
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -425,12 +426,55 @@ struct FoodNutritionalAnalysis: Codable, Identifiable {
         brand = try container.decodeIfPresent(String.self, forKey: .brand)
         
         // Handle missing calories_per_100g in old cached data
-        caloriesPer100g = try container.decodeIfPresent(Double.self, forKey: .caloriesPer100g) ?? 0.0
+        // Try to decode as Double first, then as String and convert
+        if let caloriesDouble = try? container.decode(Double.self, forKey: .caloriesPer100g) {
+            caloriesPer100g = caloriesDouble
+        } else if let caloriesString = try? container.decode(String.self, forKey: .caloriesPer100g),
+                  let caloriesDouble = Double(caloriesString) {
+            caloriesPer100g = caloriesDouble
+        } else {
+            caloriesPer100g = 0.0
+        }
         
-        proteinPercentage = try container.decodeIfPresent(Double.self, forKey: .proteinPercentage) ?? 0.0
-        fatPercentage = try container.decodeIfPresent(Double.self, forKey: .fatPercentage) ?? 0.0
-        fiberPercentage = try container.decodeIfPresent(Double.self, forKey: .fiberPercentage) ?? 0.0
-        moisturePercentage = try container.decodeIfPresent(Double.self, forKey: .moisturePercentage) ?? 0.0
+        // Handle protein percentage (can be Double or String)
+        if let proteinDouble = try? container.decode(Double.self, forKey: .proteinPercentage) {
+            proteinPercentage = proteinDouble
+        } else if let proteinString = try? container.decode(String.self, forKey: .proteinPercentage),
+                  let proteinDouble = Double(proteinString) {
+            proteinPercentage = proteinDouble
+        } else {
+            proteinPercentage = 0.0
+        }
+        
+        // Handle fat percentage (can be Double or String)
+        if let fatDouble = try? container.decode(Double.self, forKey: .fatPercentage) {
+            fatPercentage = fatDouble
+        } else if let fatString = try? container.decode(String.self, forKey: .fatPercentage),
+                  let fatDouble = Double(fatString) {
+            fatPercentage = fatDouble
+        } else {
+            fatPercentage = 0.0
+        }
+        
+        // Handle fiber percentage (can be Double or String)
+        if let fiberDouble = try? container.decode(Double.self, forKey: .fiberPercentage) {
+            fiberPercentage = fiberDouble
+        } else if let fiberString = try? container.decode(String.self, forKey: .fiberPercentage),
+                  let fiberDouble = Double(fiberString) {
+            fiberPercentage = fiberDouble
+        } else {
+            fiberPercentage = 0.0
+        }
+        
+        // Handle moisture percentage (can be Double or String)
+        if let moistureDouble = try? container.decode(Double.self, forKey: .moisturePercentage) {
+            moisturePercentage = moistureDouble
+        } else if let moistureString = try? container.decode(String.self, forKey: .moisturePercentage),
+                  let moistureDouble = Double(moistureString) {
+            moisturePercentage = moistureDouble
+        } else {
+            moisturePercentage = 0.0
+        }
         
         ingredients = try container.decodeIfPresent([String].self, forKey: .ingredients) ?? []
         allergens = try container.decodeIfPresent([String].self, forKey: .allergens) ?? []
@@ -651,7 +695,6 @@ struct FeedingRecord: Codable, Identifiable {
         
         // Check if calories key exists in the container
         let hasCaloriesKey = container.contains(.calories)
-        print("🔍 [FeedingRecord] Decoding record \(id) - calories key exists: \(hasCaloriesKey)")
         
         // Strategy 1: Try decoding as String first (most common from database)
         // Database returns "calories":"29.54" as a string
@@ -660,13 +703,9 @@ struct FeedingRecord: Codable, Identifiable {
             if let caloriesValue = Double(caloriesString) {
                 decodedCalories = caloriesValue
                 decodedSuccessfully = true
-                print("✅ [FeedingRecord] Decoded calories from string '\(caloriesString)' -> \(caloriesValue) for record \(id)")
-            } else {
-                print("⚠️ [FeedingRecord] Failed to convert calories string '\(caloriesString)' to Double for record \(id)")
             }
         } catch {
             // Not a string - try other strategies
-            print("🔍 [FeedingRecord] Calories is not a string for record \(id), trying number decode")
         }
         
         // Strategy 2: If string decode failed, try as Double
@@ -675,10 +714,8 @@ struct FeedingRecord: Codable, Identifiable {
                 let caloriesNumber = try container.decode(Double.self, forKey: .calories)
                 decodedCalories = caloriesNumber
                 decodedSuccessfully = true
-                print("✅ [FeedingRecord] Decoded calories from number: \(caloriesNumber) for record \(id)")
             } catch {
                 // Not a number - try optional
-                print("🔍 [FeedingRecord] Calories is not a number for record \(id), trying optional decode")
             }
         }
         
@@ -688,36 +725,29 @@ struct FeedingRecord: Codable, Identifiable {
                 if let caloriesValue = try container.decodeIfPresent(Double.self, forKey: .calories) {
                     decodedCalories = caloriesValue
                     decodedSuccessfully = true
-                    print("✅ [FeedingRecord] Decoded calories from optional: \(caloriesValue) for record \(id)")
-                } else {
-                    print("⚠️ [FeedingRecord] Calories is null (optional decode returned nil) for record \(id)")
                 }
             } catch {
-                print("⚠️ [FeedingRecord] Optional decode failed for record \(id): \(error)")
+                // Continue to strategy 4
             }
         }
         
         // Strategy 4: If still not decoded, check if key exists but is null
         if !decodedSuccessfully {
             if hasCaloriesKey {
-                // Key exists - check if it's null
+                // Key exists - check if it's null or use default
                 if (try? container.decodeNil(forKey: .calories)) == true {
-                    print("⚠️ [FeedingRecord] Calories key exists but is null for record \(id), using default 0.0")
                     decodedCalories = 0.0
                 } else {
                     // Key exists but all decoding strategies failed
-                    print("❌ [FeedingRecord] Calories key exists but all decoding strategies failed for record \(id), using default 0.0")
                     decodedCalories = 0.0
                 }
             } else {
                 // Key doesn't exist at all in JSON response
-                print("❌ [FeedingRecord] Calories key MISSING from JSON response for record \(id), using default 0.0")
                 decodedCalories = 0.0
             }
         }
         
         calories = decodedCalories
-        print("📊 [FeedingRecord] Final decoded calories for record \(id): \(calories)")
     }
     
     /**

@@ -160,7 +160,7 @@ class FeedingLogService: ObservableObject {
                 totalCalories += calories
             } catch {
                 // Log error but continue with other records
-                print("Error calculating calories for record \(record.id): \(error)")
+                LoggingManager.warning("Error calculating calories for record: \(error)", category: .nutrition)
             }
         }
         
@@ -272,7 +272,7 @@ class FeedingLogService: ObservableObject {
             dailySummaries[petId] = summary
         } catch {
             // Summary might not exist yet, which is fine
-            print("Could not update daily summary: \(error)")
+            LoggingManager.warning("Could not update daily summary: \(error)", category: .nutrition)
         }
     }
     
@@ -282,7 +282,7 @@ class FeedingLogService: ObservableObject {
      */
     private func getFoodAnalysis(for foodAnalysisId: String) async throws -> FoodNutritionalAnalysis {
         return try await apiService.get(
-            endpoint: "/nutrition/food-analysis/\(foodAnalysisId)",
+            endpoint: "/nutrition/analysis/food-analysis/\(foodAnalysisId)",
             responseType: FoodNutritionalAnalysis.self
         )
     }

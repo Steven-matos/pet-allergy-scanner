@@ -150,7 +150,7 @@ extension UIImage {
         // Save to temporary file for efficient downsampling
         guard let data = self.jpegData(compressionQuality: 0.9),
               let tempURL = saveToTemporaryFile(data: data) else {
-            print("⚠️ [UIImage] Failed to save image to temporary file for downsampling")
+            LoggingManager.warning("Failed to save image to temporary file for downsampling", category: .general)
             return nil
         }
         
@@ -174,7 +174,7 @@ extension UIImage {
         let imageSourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         
         guard let imageSource = CGImageSourceCreateWithURL(imageURL as CFURL, imageSourceOptions) else {
-            print("❌ [UIImage] Failed to create image source from URL")
+            LoggingManager.error("Failed to create image source from URL", category: .general)
             return nil
         }
         
@@ -188,7 +188,7 @@ extension UIImage {
         guard let downsampledImage = CGImageSourceCreateThumbnailAtIndex(
             imageSource, 0, downsampleOptions
         ) else {
-            print("❌ [UIImage] Failed to create downsampled thumbnail")
+            LoggingManager.error("Failed to create downsampled thumbnail", category: .general)
             return nil
         }
         
@@ -199,7 +199,7 @@ extension UIImage {
         let originalSize = try? FileManager.default.attributesOfItem(atPath: imageURL.path)[.size] as? Int64 ?? 0
         let downsampledSize = result.memoryUsage
         let savings = (1 - Double(downsampledSize) / Double(originalSize ?? 1)) * 100
-        print("✅ [UIImage] Downsampled image: \(Int(savings))% memory saved")
+        LoggingManager.debug("Downsampled image: \(Int(savings))% memory saved", category: .general)
         print("   Original: \(originalSize ?? 0 / 1024 / 1024)MB → Downsampled: \(downsampledSize / 1024 / 1024)MB")
         #endif
         
@@ -221,7 +221,7 @@ extension UIImage {
             try data.write(to: tempURL)
             return tempURL
         } catch {
-            print("❌ [UIImage] Failed to write temporary file: \(error)")
+            LoggingManager.error("Failed to write temporary file: \(error)", category: .general)
             return nil
         }
     }

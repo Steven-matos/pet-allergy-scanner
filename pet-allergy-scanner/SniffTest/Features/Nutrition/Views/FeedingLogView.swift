@@ -97,7 +97,7 @@ struct FeedingLogView: View {
         .onAppear {
             // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
             if TabNavigationCoordinator.shared.shouldBlockOperations() {
-                print("⏭️ FeedingLogView: Skipping onAppear - navigation cooldown active")
+                LoggingManager.debug("Skipping onAppear - navigation cooldown active", category: .nutrition)
                 return
             }
             
@@ -180,7 +180,7 @@ struct FeedingLogView: View {
         let timeoutTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
             if isLoading {
-                print("⚠️ Feeding log save timeout - resetting isLoading")
+                LoggingManager.warning("Feeding log save timeout - resetting isLoading", category: .nutrition)
                 isLoading = false
             }
         }

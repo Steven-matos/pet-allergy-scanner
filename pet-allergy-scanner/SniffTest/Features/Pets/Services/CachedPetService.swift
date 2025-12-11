@@ -63,7 +63,7 @@ final class CachedPetService {
         let cacheKey = CacheKey.pets.scoped(forUserId: userId)
         if let cachedPets = cacheCoordinator.get([Pet].self, forKey: cacheKey) {
             self.pets = cachedPets
-            print("✅ Loaded \(cachedPets.count) pet(s) from cache on init")
+            LoggingManager.debug("Loaded \(cachedPets.count) pet(s) from cache on init", category: .pets)
         }
     }
     
@@ -100,7 +100,7 @@ final class CachedPetService {
                     let petIds = cachedPets.map { $0.id }
                     SettingsManager.shared.validateDefaultPetId(against: petIds)
 
-                    print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+                    LoggingManager.debug("Loaded \(cachedPets.count) pet(s) from cache", category: .pets)
 
                     // Trigger background refresh if cache is stale
                     refreshPetsInBackground()
@@ -148,7 +148,7 @@ final class CachedPetService {
                     let petIds = cachedPets.map { $0.id }
                     SettingsManager.shared.validateDefaultPetId(against: petIds)
                 }
-                print("✅ Loaded \(cachedPets.count) pet(s) from cache")
+                LoggingManager.debug("Loaded \(cachedPets.count) pet(s) from cache", category: .pets)
 
                 // Trigger background refresh if cache is stale
                 refreshPetsInBackground()
@@ -178,7 +178,7 @@ final class CachedPetService {
                 // Update cache
                 await updatePetsCache()
 
-                print("✅ Loaded \(loadedPets.count) pet(s) from server")
+                LoggingManager.debug("Loaded \(loadedPets.count) pet(s) from server", category: .pets)
                 return loadedPets
             
         } catch let apiError as APIError {
@@ -257,7 +257,6 @@ final class CachedPetService {
                         var updatedPets = self.pets
                         updatedPets[index] = updatedPet
                         self.pets = updatedPets  // Reassign entire array to trigger observation
-                        print("✅ [updatePet] Updated pet in array - weight: \(updatedPet.weightKg ?? 0) kg")
                     }
                     self.isLoading = false
                 }
@@ -298,12 +297,9 @@ final class CachedPetService {
                 var updatedPets = self.pets
                 updatedPets[index] = updatedPet
                 self.pets = updatedPets  // Reassign entire array to trigger observation
-                print("✅ [refreshPet] Refreshed pet from server - weight: \(updatedPet.weightKg ?? 0) kg")
-                print("   Old weight in array: \(self.pets[index].weightKg ?? 0) kg")
             } else {
                 // Pet not in array, add it
                 self.pets.append(updatedPet)
-                print("✅ [refreshPet] Added pet to array - weight: \(updatedPet.weightKg ?? 0) kg")
             }
         }
         
@@ -326,9 +322,9 @@ final class CachedPetService {
                     // Delete the pet's image from Supabase Storage
                     do {
                         try await StorageService.shared.deletePetImage(path: imageUrl)
-                        print("🗑️ Pet image deleted from Supabase: \(imageUrl)")
+                        LoggingManager.debug("Pet image deleted: \(imageUrl)", category: .pets)
                     } catch {
-                        print("⚠️ Failed to delete pet image: \(error)")
+                        LoggingManager.warning("Failed to delete pet image: \(error)", category: .pets)
                         // Continue with pet deletion even if image deletion fails
                     }
                 }
@@ -420,7 +416,7 @@ final class CachedPetService {
                 let cacheKey = CacheKey.petDetails.scoped(forPetId: id)
                 cacheCoordinator.handleResourceDeleted(forKey: cacheKey)
             }
-            print("❌ Failed to fetch pet from server: \(error)")
+            LoggingManager.error("Failed to fetch pet from server: \(error)", category: .pets)
             return nil
         }
     }
@@ -458,19 +454,19 @@ final class CachedPetService {
                 // Invalidate user-related caches
                 invalidateUserCaches()
                 
-                print("✅ Onboarding completed successfully")
+                LoggingManager.debug("Onboarding completed successfully", category: .pets)
                 
             } catch APIError.authenticationError {
                 // Authentication error during onboarding completion
                 // This could happen if the token is invalid or expired
                 // Don't fail the entire flow - the pet was created successfully
-                print("⚠️ Authentication error during onboarding completion - pet was created successfully")
+                LoggingManager.warning("Auth error during onboarding - pet created successfully", category: .pets)
                 
                 // Try to refresh the user data anyway to get the latest state
                 await AuthService.shared.refreshCurrentUser()
                 
             } catch {
-                print("❌ Failed to update onboarded status: \(error)")
+                LoggingManager.error("Failed to update onboarded status: \(error)", category: .pets)
                 
                 // Try to refresh the user data anyway to get the latest state
                 await AuthService.shared.refreshCurrentUser()
@@ -499,7 +495,7 @@ final class CachedPetService {
                 invalidateUserCaches()
                 
             } catch {
-                print("Failed to reset onboarded status: \(error)")
+                LoggingManager.error("Failed to reset onboarded status: \(error)", category: .pets)
             }
         }
     }
@@ -621,7 +617,7 @@ final class CachedPetService {
             .sink { [weak self] _ in
                 Task { @MainActor in
                     self?.clearPets()
-                    print("🔄 Cleared pets data after logout")
+                    LoggingManager.debug("Cleared pets data after logout", category: .pets)
                 }
             }
             .store(in: &cancellables)
@@ -631,7 +627,7 @@ final class CachedPetService {
             .sink { [weak self] _ in
                 Task { @MainActor in
                     self?.loadPets(forceRefresh: false)
-                    print("🔄 Reloading pets after login")
+                    LoggingManager.debug("Reloading pets after login", category: .pets)
                 }
             }
             .store(in: &cancellables)
@@ -647,7 +643,7 @@ final class CachedPetService {
                     guard let self = self else { return }
                     
                     if self.currentUserId != nil && self.pets.isEmpty {
-                        print("🔄 App became active with no pets in memory - loading from cache")
+                        LoggingManager.debug("App became active - loading pets from cache", category: .pets)
                         self.loadPets(forceRefresh: false)
                     }
                 }

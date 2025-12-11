@@ -39,6 +39,7 @@ struct NutritionalTrendsView: View {
     @State private var showingFeedingLog = false
     @State private var showingCalorieGoalSheet: Pet?
     @State private var showingPaywall = false
+    @State private var showingBreakdownSheet = false
     @State private var recentMeals: [FeedingRecord] = []
     
     private var selectedPet: Pet? {
@@ -96,6 +97,13 @@ struct NutritionalTrendsView: View {
         }
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
+        }
+        .sheet(isPresented: $showingBreakdownSheet) {
+            if let pet = selectedPet {
+                NutritionalBalanceBreakdownSheet(petId: pet.id)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+            }
         }
         .sheet(isPresented: $gatekeeper.showingUpgradePrompt) {
             UpgradePromptView(
@@ -203,6 +211,14 @@ struct NutritionalTrendsView: View {
                 // Summary Cards
                 summaryCardsSection(for: pet)
                 
+                // Nutritional Balance Summary Card (tappable)
+                NutritionalBalanceSummaryCard(
+                    score: trendsService.nutritionalBalanceScore(for: pet.id),
+                    onTap: {
+                        showingBreakdownSheet = true
+                    }
+                )
+                
                 // Log Meal Section - Button and Recent Meals List
                 logMealSection
                 
@@ -226,17 +242,6 @@ struct NutritionalTrendsView: View {
                 if !limitedMacronutrientTrends.isEmpty {
                     MacronutrientTrendsChart(
                         trends: limitedMacronutrientTrends,
-                        petName: pet.name
-                    )
-                }
-                
-                // Feeding Patterns Chart
-                let feedingPatterns = trendsService.feedingPatterns(for: pet.id)
-                let limitedFeedingPatterns = Array(feedingPatterns.prefix(maxPoints))
-                
-                if !limitedFeedingPatterns.isEmpty {
-                    FeedingPatternsChart(
-                        patterns: limitedFeedingPatterns,
                         petName: pet.name
                     )
                 }
@@ -484,7 +489,7 @@ struct NutritionalTrendsView: View {
                         recentMeals = []
                     }
                     
-                    print("📊 Loaded \(recentMeals.count) meals for pet \(pet.id)")
+                    LoggingManager.debug("Loaded \(recentMeals.count) meals for pet \(pet.id)", category: .nutrition)
                 }
             } catch {
                 // Handle errors gracefully
@@ -492,12 +497,12 @@ struct NutritionalTrendsView: View {
                    case .serverError(let statusCode) = apiError {
                     if statusCode == 404 {
                         // Resource deleted - cache already invalidated by service
-                        print("⚠️ Recent meals resource deleted (404) - cache invalidated")
+                        LoggingManager.debug("Recent meals resource deleted (404) - cache invalidated", category: .nutrition)
                     } else {
-                        print("❌ Failed to load recent meals: HTTP \(statusCode)")
+                        LoggingManager.warning("Failed to load recent meals: HTTP \(statusCode)", category: .nutrition)
                     }
                 } else {
-                    print("❌ Failed to load recent meals: \(error.localizedDescription)")
+                    LoggingManager.error("Failed to load recent meals: \(error)", category: .nutrition)
                 }
                 
                 // On error, try to show cached data if available
@@ -506,7 +511,7 @@ struct NutritionalTrendsView: View {
                         let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
                         let recentCached = cachedMeals.filter { $0.feedingTime >= sevenDaysAgo }
                         recentMeals = recentCached.isEmpty ? cachedMeals.sorted { $0.feedingTime > $1.feedingTime } : recentCached.sorted { $0.feedingTime > $1.feedingTime }
-                        print("📊 Using cached meals (\(recentMeals.count)) due to error")
+                        LoggingManager.debug("Using cached meals (\(recentMeals.count)) due to error", category: .nutrition)
                     }
                 }
             }
@@ -537,11 +542,11 @@ struct NutritionalTrendsView: View {
                     // Show all meals even if older than 7 days
                     recentMeals = allMeals.sorted { $0.feedingTime > $1.feedingTime }
                 }
-                print("📊 Background refresh: Loaded \(recentMeals.count) meals for pet \(petId)")
+                LoggingManager.debug("Background refresh: Loaded \(recentMeals.count) meals", category: .nutrition)
             }
         } catch {
             // Silent failure for background refresh
-            print("⚠️ Background refresh of recent meals failed: \(error.localizedDescription)")
+            LoggingManager.debug("Background refresh of recent meals failed: \(error)", category: .nutrition)
         }
     }
     
@@ -850,6 +855,8 @@ struct CalorieTrendsChart: View {
     let petName: String
     
     @State private var isChartReady = false
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
     
     // Limit data points for older devices
     private var chartData: [CalorieTrend] {
@@ -857,11 +864,45 @@ struct CalorieTrendsChart: View {
         return Array(trends.prefix(maxPoints))
     }
     
+    // Adaptive chart height
+    private var chartHeight: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        let baseHeight: CGFloat
+        
+        if screenHeight < 700 {
+            baseHeight = 200
+        } else if screenHeight < 850 {
+            baseHeight = 220
+        } else {
+            baseHeight = 240
+        }
+        
+        if dynamicTypeSize >= .xxxLarge {
+            return baseHeight + 40
+        }
+        
+        return baseHeight
+    }
+    
+    // Gradient opacity (dark mode adaptive)
+    private var gradientOpacity: Double {
+        colorScheme == .dark ? 0.4 : 0.2
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Calorie Trends")
-                .font(ModernDesignSystem.Typography.title3)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            // Title with icon
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: "flame.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                    .font(.title3)
+                    .accessibilityHidden(true)
+                
+                Text("Calorie Trends")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+            }
             
             if #available(iOS 16.0, *) {
                 if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
@@ -871,15 +912,24 @@ struct CalorieTrendsChart: View {
                             y: .value("Calories", trend.calories)
                         )
                         .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
-                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 2 : 2))
+                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 2 : 3))
                         
-                        // AreaMark disabled on older devices for performance
+                        // AreaMark with gradient
                         if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
                             AreaMark(
                                 x: .value("Date", trend.date),
                                 y: .value("Calories", trend.calories)
                             )
-                            .foregroundStyle(ModernDesignSystem.Colors.goldenYellow.opacity(0.2))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [
+                                        ModernDesignSystem.Colors.goldenYellow,
+                                        ModernDesignSystem.Colors.goldenYellow.opacity(gradientOpacity)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
                         }
                         
                         if let target = trend.target {
@@ -888,39 +938,42 @@ struct CalorieTrendsChart: View {
                                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [5]))
                         }
                     }
-                    .frame(height: 200)
+                    .frame(height: chartHeight)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day, count: 7)) { _ in
                             AxisValueLabel(format: .dateTime.month().day())
+                                .font(ModernDesignSystem.Typography.caption)
                         }
                     }
                     .chartYAxis {
-                        AxisMarks { value in
+                        AxisMarks(position: .leading) { value in
                             AxisValueLabel {
                                 if let calories = value.as(Double.self) {
                                     Text("\(Int(calories)) kcal")
+                                        .font(ModernDesignSystem.Typography.caption)
+                                        .minimumScaleFactor(0.8)
                                 }
                             }
                         }
                     }
+                    .accessibilityLabel("Calorie trends chart showing daily calorie intake over time")
                 } else {
                     ProgressView()
-                        .frame(height: 200)
+                        .frame(height: chartHeight)
                 }
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Calorie trends chart requires iOS 16+")
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .frame(height: 200)
+                    .frame(height: chartHeight)
             }
         }
         .onAppear {
-            // Defer chart rendering on older devices to prevent freezing
             if DevicePerformanceHelper.shouldDeferChartRendering {
                 Task { @MainActor in
                     await Task.yield()
-                    try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                    try? await Task.sleep(nanoseconds: 200_000_000)
                     if !Task.isCancelled {
                         isChartReady = true
                     }
@@ -937,10 +990,12 @@ struct CalorieTrendsChart: View {
         )
         .cornerRadius(ModernDesignSystem.CornerRadius.medium)
         .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
+            color: colorScheme == .dark
+                ? ModernDesignSystem.Shadows.medium.color.opacity(0.3)
+                : ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
         )
     }
 }
@@ -950,6 +1005,8 @@ struct MacronutrientTrendsChart: View {
     let petName: String
     
     @State private var isChartReady = false
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
     
     // Limit data points for older devices
     private var chartData: [MacronutrientTrend] {
@@ -957,73 +1014,117 @@ struct MacronutrientTrendsChart: View {
         return Array(trends.prefix(maxPoints))
     }
     
+    // Adaptive chart height
+    private var chartHeight: CGFloat {
+        let screenHeight = UIScreen.main.bounds.height
+        let baseHeight: CGFloat
+        
+        if screenHeight < 700 {
+            baseHeight = 200
+        } else if screenHeight < 850 {
+            baseHeight = 220
+        } else {
+            baseHeight = 240
+        }
+        
+        if dynamicTypeSize >= .xxxLarge {
+            return baseHeight + 40
+        }
+        
+        return baseHeight
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            Text("Macronutrient Trends")
-                .font(ModernDesignSystem.Typography.title3)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            // Title with icon
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(.title3)
+                    .accessibilityHidden(true)
+                
+                Text("Macronutrient Trends")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .accessibilityAddTraits(.isHeader)
+            }
+            
+            // Simplified legend with color dots
+            HStack(spacing: ModernDesignSystem.Spacing.lg) {
+                simpleLegendItem(color: ModernDesignSystem.Colors.warmCoral, label: "Protein")
+                simpleLegendItem(color: ModernDesignSystem.Colors.primary, label: "Fat")
+                if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
+                    simpleLegendItem(color: ModernDesignSystem.Colors.goldenYellow, label: "Fiber")
+                }
+            }
             
             if #available(iOS 16.0, *) {
                 if isChartReady || !DevicePerformanceHelper.shouldDeferChartRendering {
                     Chart(chartData) { trend in
+                        // Protein - clean line only
                         LineMark(
                             x: .value("Date", trend.date),
                             y: .value("Protein", trend.protein)
                         )
                         .foregroundStyle(ModernDesignSystem.Colors.warmCoral)
-                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 1.5 : 2))
+                        .lineStyle(StrokeStyle(lineWidth: 3))
+                        .symbol(.circle)
                         
+                        // Fat - clean line only
                         LineMark(
                             x: .value("Date", trend.date),
                             y: .value("Fat", trend.fat)
                         )
                         .foregroundStyle(ModernDesignSystem.Colors.primary)
-                        .lineStyle(StrokeStyle(lineWidth: DevicePerformanceHelper.shouldUseSimplifiedCharts ? 1.5 : 2))
+                        .lineStyle(StrokeStyle(lineWidth: 3))
+                        .symbol(.circle)
                         
-                        // Fiber line only if not simplified (reduce complexity on older devices)
+                        // Fiber line only if not simplified
                         if !DevicePerformanceHelper.shouldUseSimplifiedCharts {
                             LineMark(
                                 x: .value("Date", trend.date),
                                 y: .value("Fiber", trend.fiber)
                             )
                             .foregroundStyle(ModernDesignSystem.Colors.goldenYellow)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .lineStyle(StrokeStyle(lineWidth: 3))
+                            .symbol(.circle)
                         }
                     }
-                    .frame(height: 200)
+                    .frame(height: chartHeight)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: .day, count: 7)) { _ in
                             AxisValueLabel(format: .dateTime.month().day())
                         }
                     }
                     .chartYAxis {
-                        AxisMarks { value in
+                        AxisMarks(position: .leading) { value in
                             AxisValueLabel {
                                 if let grams = value.as(Double.self) {
-                                    Text("\(grams, specifier: "%.0f") g")
+                                    Text("\(grams, specifier: "%.0f")g")
+                                        .font(ModernDesignSystem.Typography.caption)
                                 }
                             }
                         }
                     }
-                    .chartLegend(position: .top)
+                    .chartLegend(.hidden) // Hide default legend, use custom
+                    .accessibilityLabel("Macronutrient trends showing protein, fat, and fiber intake over time")
                 } else {
                     ProgressView()
-                        .frame(height: 200)
+                        .frame(height: chartHeight)
                 }
             } else {
                 // Fallback for iOS 15 and earlier
                 Text("Macronutrient trends chart requires iOS 16+")
                     .font(ModernDesignSystem.Typography.subheadline)
                     .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .frame(height: 200)
+                    .frame(height: chartHeight)
             }
         }
         .onAppear {
-            // Defer chart rendering on older devices to prevent freezing
             if DevicePerformanceHelper.shouldDeferChartRendering {
                 Task { @MainActor in
                     await Task.yield()
-                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds (staggered for multiple charts)
+                    try? await Task.sleep(nanoseconds: 300_000_000)
                     if !Task.isCancelled {
                         isChartReady = true
                     }
@@ -1040,11 +1141,28 @@ struct MacronutrientTrendsChart: View {
         )
         .cornerRadius(ModernDesignSystem.CornerRadius.medium)
         .shadow(
-            color: ModernDesignSystem.Shadows.small.color,
-            radius: ModernDesignSystem.Shadows.small.radius,
-            x: ModernDesignSystem.Shadows.small.x,
-            y: ModernDesignSystem.Shadows.small.y
+            color: colorScheme == .dark
+                ? ModernDesignSystem.Shadows.medium.color.opacity(0.3)
+                : ModernDesignSystem.Shadows.medium.color,
+            radius: ModernDesignSystem.Shadows.medium.radius,
+            x: ModernDesignSystem.Shadows.medium.x,
+            y: ModernDesignSystem.Shadows.medium.y
         )
+    }
+    
+    // MARK: - Simplified Legend Item
+    
+    @ViewBuilder
+    private func simpleLegendItem(color: Color, label: String) -> some View {
+        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+            Circle()
+                .fill(color)
+                .frame(width: 10, height: 10)
+            
+            Text(label)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
     }
 }
 
@@ -1624,23 +1742,11 @@ struct MealRow: View {
         // First try: Use calories from API response if available and > 0
         // Since calories is now non-optional, check if it's > 0 to determine if it's valid
         if meal.calories > 0 {
-            print("✅ [MealRow] Using API calories: \(meal.calories) for meal \(meal.id)")
             return meal.calories
-        }
-        
-        // Debug: Log if API calories are 0
-        if meal.calories == 0 {
-            print("⚠️ [MealRow] API returned 0 calories for meal \(meal.id), will calculate from food analysis")
         }
         
         // Second try: Get food analysis by ID
         var analysis = nutritionService.getFoodAnalysis(by: meal.foodAnalysisId)
-        
-        if analysis != nil {
-            print("✅ [MealRow] Found food analysis by ID: \(analysis!.foodName) (calories_per_100g: \(analysis!.caloriesPer100g))")
-        } else {
-            print("⚠️ [MealRow] Food analysis not found by ID: \(meal.foodAnalysisId) for meal \(meal.id)")
-        }
         
         // Third try: If not found by ID, try to find by food name (case-insensitive match)
         // This uses the same improved fallback logic we added to trends service
@@ -1650,23 +1756,14 @@ struct MealRow: View {
                 $0.petId == meal.petId &&
                 $0.foodName.localizedCaseInsensitiveContains(foodName)
             })
-            
-            if analysis != nil {
-                print("✅ [MealRow] Found food analysis by name match: \(analysis!.foodName) (ID: \(analysis!.id), calories_per_100g: \(analysis!.caloriesPer100g))")
-            } else {
-                print("⚠️ [MealRow] Food analysis not found by name: '\(foodName)' for meal \(meal.id)")
-                print("   Available food analyses: \(nutritionService.foodAnalyses.filter { $0.petId == meal.petId }.map { $0.foodName })")
-            }
         }
         
         // Calculate calories from analysis if found
         if let analysis = analysis {
             let calculatedCalories = meal.calculateCaloriesConsumed(from: analysis)
-            print("✅ [MealRow] Calculated calories: \(calculatedCalories) for meal \(meal.id) (amount: \(meal.amountGrams)g, calories_per_100g: \(analysis.caloriesPer100g))")
             return calculatedCalories
         }
         
-        print("❌ [MealRow] No calories available for meal \(meal.id) - no API calories and no food analysis found")
         return nil
     }
     
@@ -1752,9 +1849,9 @@ struct MealRow: View {
                 Task {
                     do {
                         try await nutritionService.loadFoodAnalyses(for: meal.petId)
-                        print("✅ [MealRow] Loaded food analyses for pet \(meal.petId) - \(nutritionService.foodAnalyses.filter { $0.petId == meal.petId }.count) analyses available")
+                        LoggingManager.debug("Loaded food analyses for pet \(meal.petId)", category: .nutrition)
                     } catch {
-                        print("⚠️ [MealRow] Failed to load food analyses: \(error.localizedDescription)")
+                        LoggingManager.warning("Failed to load food analyses: \(error)", category: .nutrition)
                     }
                 }
             }
@@ -1799,13 +1896,422 @@ struct MealRow: View {
                     isDeleting = false
                     // Show error to user
                     let errorMessage = error.localizedDescription
-                    print("❌ Failed to delete meal: \(errorMessage)")
+                    LoggingManager.error("Failed to delete meal: \(errorMessage)", category: .nutrition)
                     deleteError = errorMessage
                     // Re-show the alert with error message
                     showingDeleteAlert = true
                 }
             }
         }
+    }
+}
+
+// MARK: - Nutritional Balance Breakdown Components
+
+/**
+ * Nutritional Balance Summary Card
+ * 
+ * Tappable card that displays overall nutritional balance score
+ * Opens bottom sheet with detailed breakdown when tapped
+ */
+struct NutritionalBalanceSummaryCard: View {
+    let score: Double
+    let onTap: () -> Void
+    
+    @Environment(\.colorScheme) var colorScheme
+    private let haptics = UIImpactFeedbackGenerator(style: .light)
+    
+    var body: some View {
+        Button(action: {
+            haptics.impactOccurred()
+            onTap()
+        }) {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                HStack {
+                    Image(systemName: "leaf.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                    
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Nutritional Balance")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        
+                        HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
+                            Text("\(Int(score))")
+                                .font(ModernDesignSystem.Typography.title2)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("%")
+                                .font(ModernDesignSystem.Typography.caption)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(spacing: ModernDesignSystem.Spacing.xs) {
+                        Text("Tap for details")
+                            .font(ModernDesignSystem.Typography.caption2)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        Image(systemName: "chevron.right")
+                            .font(ModernDesignSystem.Typography.caption)
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    }
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .shadow(
+                color: colorScheme == .dark
+                    ? ModernDesignSystem.Shadows.medium.color.opacity(0.3)
+                    : ModernDesignSystem.Shadows.medium.color,
+                radius: ModernDesignSystem.Shadows.medium.radius,
+                x: ModernDesignSystem.Shadows.medium.x,
+                y: ModernDesignSystem.Shadows.medium.y
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .accessibilityLabel("Nutritional Balance: \(Int(score))%. Tap to view detailed breakdown")
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/**
+ * Nutritional Balance Breakdown Sheet
+ * 
+ * Bottom sheet that displays detailed breakdown of protein, fat, and fiber
+ * with color-coded status indicators and contextual explanations
+ */
+struct NutritionalBalanceBreakdownSheet: View {
+    let petId: String
+    
+    @StateObject private var trendsService = CachedNutritionalTrendsService.shared
+    @StateObject private var nutritionService = CachedNutritionService.shared
+    @StateObject private var feedingLogService = FeedingLogService.shared
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    @State private var showFeedingLog = false
+    @State private var isLoadingData = false
+    @State private var breakdown: NutritionalBreakdown?
+    @State private var dataLoadTimestamp: Date = Date()
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    if let breakdown = breakdown, !breakdown.hasInsufficientData {
+                        // Overall Score
+                        overallScoreCard(score: breakdown.overallScore)
+                        
+                        // Macro Breakdown
+                        VStack(spacing: ModernDesignSystem.Spacing.md) {
+                            macroProgressBar(data: breakdown.protein)
+                            macroProgressBar(data: breakdown.fat)
+                            macroProgressBar(data: breakdown.fiber)
+                        }
+                        
+                        // Educational Info
+                        educationalCard
+                    } else {
+                        // Empty State
+                        emptyStateView
+                    }
+                }
+                .padding(ModernDesignSystem.Spacing.lg)
+            }
+            .background(ModernDesignSystem.Colors.background)
+            .navigationTitle("Nutritional Balance")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .sheet(isPresented: $showFeedingLog) {
+                FeedingLogView()
+            }
+            .task {
+                await loadNutritionalData()
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(breakdown?.accessibilityDescription ?? "Nutritional balance requires more data")
+    }
+    
+    // MARK: - Overall Score Card
+    
+    @ViewBuilder
+    private func overallScoreCard(score: Double) -> some View {
+        VStack(spacing: ModernDesignSystem.Spacing.md) {
+            Text("Overall Score")
+                .font(ModernDesignSystem.Typography.title3)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            Text("\(Int(score))%")
+                .font(.system(size: 48, weight: .bold, design: .rounded))
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+            
+            Text("Based on protein, fat, and fiber intake compared to veterinary recommendations")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Macro Progress Bar
+    
+    @ViewBuilder
+    private func macroProgressBar(data: MacroNutrientData) -> some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            // Header with icon and name
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: data.icon)
+                    .font(ModernDesignSystem.Typography.body)
+                    .foregroundColor(data.status.color)
+                    .frame(width: 24)
+                
+                Text(data.name)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                // Status badge
+                Text(data.status.displayText)
+                    .font(ModernDesignSystem.Typography.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
+                    .background(data.status.color)
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+            }
+            
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                        .fill(ModernDesignSystem.Colors.borderPrimary.opacity(0.2))
+                        .frame(height: 8)
+                    
+                    // Foreground (clamped to 100% visually)
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                        .fill(data.status.color)
+                        .frame(
+                            width: geometry.size.width * min(data.percentage / 100.0, 1.0),
+                            height: 8
+                        )
+                }
+            }
+            .frame(height: 8)
+            
+            // Values and context
+            HStack {
+                Text("\(Int(data.percentage))% of recommended")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                
+                Spacer()
+            }
+            
+            Text(data.contextText)
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .accessibilityValue(data.accessibilityLabel)
+    }
+    
+    // MARK: - Educational Card
+    
+    private var educationalCard: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+            HStack {
+                Image(systemName: "info.circle.fill")
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .font(.title3)
+                
+                Text("What This Means")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                educationalRow(
+                    color: ModernDesignSystem.Colors.primary,
+                    title: "Optimal (90-110%)",
+                    description: "Your pet's intake is within the ideal range"
+                )
+                
+                educationalRow(
+                    color: ModernDesignSystem.Colors.goldenYellow,
+                    title: "Slightly Off (80-120%)",
+                    description: "Close to recommended, minor adjustments may help"
+                )
+                
+                educationalRow(
+                    color: ModernDesignSystem.Colors.warmCoral,
+                    title: "Needs Attention (<80% or >120%)",
+                    description: "Consult your veterinarian for dietary guidance"
+                )
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+    
+    @ViewBuilder
+    private func educationalRow(color: Color, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+            Circle()
+                .fill(color)
+                .frame(width: 12, height: 12)
+                .padding(.top, 4)
+            
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(title)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(description)
+                    .font(ModernDesignSystem.Typography.caption2)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+    
+    // MARK: - Empty State
+    
+    // MARK: - Data Loading
+    
+    /**
+     * Load nutritional data for the pet
+     * 
+     * Fetches feeding records, food analyses, and nutritional requirements
+     */
+    private func loadNutritionalData() async {
+        isLoadingData = true
+        defer { isLoadingData = false }
+        
+        do {
+            print("🔄 [BreakdownSheet] Loading data for pet: \(petId)")
+            
+            // Load all required data in parallel for better performance
+            // Use withThrowingTaskGroup for Void-returning functions
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await self.nutritionService.loadFeedingRecords(for: self.petId, days: 30)
+                }
+                group.addTask {
+                    try await self.nutritionService.loadFoodAnalyses(for: self.petId)
+                }
+                group.addTask {
+                    _ = try await self.nutritionService.getNutritionalRequirements(for: self.petId)
+                }
+                
+                // Wait for all tasks to complete
+                try await group.waitForAll()
+            }
+            
+            print("✅ [BreakdownSheet] Data loaded successfully")
+            print("   📊 Food analyses count: \(nutritionService.foodAnalyses.count)")
+            LoggingManager.debug("Feeding records count: \(nutritionService.feedingRecords.count)", category: .nutrition)
+            
+            // Calculate breakdown AFTER data is loaded and update state
+            await MainActor.run {
+                self.breakdown = trendsService.getNutritionalBreakdown(for: petId)
+                self.dataLoadTimestamp = Date() // Trigger view update
+            }
+            
+            // Debug: Check what we got
+            if let breakdown = breakdown {
+                print("📊 [BreakdownSheet] Score: \(breakdown.overallScore)%, Protein: \(breakdown.protein.percentage)%, Fat: \(breakdown.fat.percentage)%, Fiber: \(breakdown.fiber.percentage)%")
+            } else {
+                print("⚠️ [BreakdownSheet] No breakdown data available after calculation")
+            }
+        } catch {
+            print("❌ [BreakdownSheet] Failed to load data: \(error)")
+        }
+    }
+    
+    // MARK: - Empty State
+    
+    private var emptyStateView: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.lg) {
+            Image(systemName: "fork.knife.circle")
+                .font(.system(size: 60))
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+            
+            Text("Log Meals to Track Balance")
+                .font(ModernDesignSystem.Typography.title2)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            
+            Text("We need at least 3 logged meals to calculate your pet's nutritional balance")
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            Button(action: {
+                showFeedingLog = true
+            }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Log First Meal")
+                }
+                .font(ModernDesignSystem.Typography.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                .padding(.vertical, ModernDesignSystem.Spacing.md)
+                .background(ModernDesignSystem.Colors.buttonPrimary)
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityHint("Opens meal logging screen")
+            
+            Text("Nutritional balance compares your pet's protein, fat, and fiber intake against veterinary recommendations")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, ModernDesignSystem.Spacing.sm)
+        }
+        .padding(ModernDesignSystem.Spacing.xl)
     }
 }
 
@@ -1850,6 +2356,23 @@ struct VeterinaryDisclaimerView: View {
 }
 
 // MARK: - Data Models
+
+
+// MARK: - Data Models
+
+// MARK: - View Extensions
+
+extension View {
+    /// Applies a modifier conditionally
+    @ViewBuilder
+    func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
 
 
 #Preview {

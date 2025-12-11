@@ -310,6 +310,9 @@ struct AddHealthEventView: View {
                 }
             }
         }
+        .onAppear {
+            print("🐛 DEBUG [AddHealthEventView:appear]")
+        }
     }
     
     // MARK: - Event Type Section

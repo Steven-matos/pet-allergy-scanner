@@ -260,6 +260,257 @@ class CachedNutritionalTrendsService: ObservableObject {
     }
     
     /**
+     * Get detailed nutritional breakdown for a pet
+     * 
+     * Provides comprehensive breakdown of protein, fat, and fiber intake
+     * compared to recommendations, including color-coded status and contextual text.
+     * 
+     * - Parameter petId: The pet's ID
+     * - Returns: NutritionalBreakdown with macro details, or nil if insufficient data
+     * - Note: Requires at least 3 feeding records to generate meaningful breakdown
+     */
+    func getNutritionalBreakdown(for petId: String) -> NutritionalBreakdown? {
+        let nutritionService = CachedNutritionService.shared
+        let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
+        
+        LoggingManager.debug("Breakdown - Pet: \(petId), Feeding records: \(feedingRecords.count)", category: .nutrition)
+        
+        // Get nutritional requirements first
+        guard let requirements = nutritionService.nutritionalRequirements(for: petId),
+              requirements.dailyCalories > 0 else {
+            print("❌ [Breakdown] No nutritional requirements found for pet \(petId)")
+            // Return breakdown with insufficient data flag
+            return NutritionalBreakdown(
+                overallScore: 0.0,
+                protein: MacroNutrientData(
+                    name: "Protein",
+                    actual: 0,
+                    recommended: 0,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "leaf.fill",
+                    contextText: "Unable to load nutritional requirements"
+                ),
+                fat: MacroNutrientData(
+                    name: "Fat",
+                    actual: 0,
+                    recommended: 0,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "bolt.fill",
+                    contextText: "Unable to load nutritional requirements"
+                ),
+                fiber: MacroNutrientData(
+                    name: "Fiber",
+                    actual: 0,
+                    recommended: 0,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "leaf",
+                    contextText: "Unable to load nutritional requirements"
+                ),
+                hasInsufficientData: true
+            )
+        }
+        
+        print("✅ [Breakdown] Found requirements - Protein: \(requirements.proteinPercentage)%, Fat: \(requirements.fatPercentage)%, Fiber: \(requirements.fiberPercentage)%")
+        
+        // Check for insufficient data (minimum 1 feeding record - reduced from 3 for better UX)
+        // Show partial data even with limited records to give users immediate feedback
+        guard !feedingRecords.isEmpty else {
+            LoggingManager.debug("No feeding records found for breakdown", category: .nutrition)
+            return NutritionalBreakdown(
+                overallScore: 0.0,
+                protein: MacroNutrientData(
+                    name: "Protein",
+                    actual: 0,
+                    recommended: requirements.proteinPercentage,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "leaf.fill",
+                    contextText: "Start logging meals to track protein intake"
+                ),
+                fat: MacroNutrientData(
+                    name: "Fat",
+                    actual: 0,
+                    recommended: requirements.fatPercentage,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "bolt.fill",
+                    contextText: "Start logging meals to track fat intake"
+                ),
+                fiber: MacroNutrientData(
+                    name: "Fiber",
+                    actual: 0,
+                    recommended: requirements.fiberPercentage,
+                    percentage: 0,
+                    status: .tooLow,
+                    icon: "leaf",
+                    contextText: "Start logging meals to track fiber intake"
+                ),
+                hasInsufficientData: true
+            )
+        }
+        
+        // Calculate actual macro percentages from feeding records
+        var totalProteinG = 0.0
+        var totalFatG = 0.0
+        var totalFiberG = 0.0
+        var totalWeightG = 0.0
+        
+        for record in feedingRecords {
+            print("   🔍 [Breakdown] Record \(record.id): foodAnalysisId=\(record.foodAnalysisId), foodName=\(record.foodName ?? "nil")")
+            
+            // Get food analysis
+            var analysis: FoodNutritionalAnalysis? = nutritionService.getFoodAnalysis(by: record.foodAnalysisId)
+            
+            print("   🔍 [Breakdown] Lookup by ID '\(record.foodAnalysisId)': \(analysis != nil ? "FOUND" : "NOT FOUND")")
+            
+            // Fallback: try to find by food name
+            if analysis == nil, let foodName = record.foodName {
+                analysis = nutritionService.foodAnalyses.first(where: {
+                    $0.petId == petId &&
+                    $0.foodName.localizedCaseInsensitiveContains(foodName)
+                })
+                print("   🔍 [Breakdown] Fallback lookup by name '\(foodName)': \(analysis != nil ? "FOUND (ID: \(analysis!.id))" : "NOT FOUND")")
+            }
+            
+            guard let analysis = analysis else {
+                print("⚠️ [Breakdown] No analysis found for record \(record.id), foodAnalysisId: \(record.foodAnalysisId), foodName: \(record.foodName ?? "none")")
+                totalWeightG += record.amountGrams
+                continue
+            }
+            
+            print("✅ [Breakdown] Found analysis for record \(record.id): \(analysis.foodName)")
+            print("   📊 [Breakdown] Macro %: Protein: \(analysis.proteinPercentage)%, Fat: \(analysis.fatPercentage)%, Fiber: \(analysis.fiberPercentage)%")
+            print("   📊 [Breakdown] Amount: \(record.amountGrams)g")
+            
+            // Calculate macros for this feeding
+            // Note: analysis stores percentages, convert to grams based on amount
+            let proteinG = (analysis.proteinPercentage / 100.0) * record.amountGrams
+            let fatG = (analysis.fatPercentage / 100.0) * record.amountGrams
+            let fiberG = (analysis.fiberPercentage / 100.0) * record.amountGrams
+            
+            print("   📊 [Breakdown] Calculated grams: Protein: \(proteinG)g, Fat: \(fatG)g, Fiber: \(fiberG)g")
+            
+            totalProteinG += proteinG
+            totalFatG += fatG
+            totalFiberG += fiberG
+            totalWeightG += record.amountGrams
+        }
+        
+        print("📊 [Breakdown] Totals - Protein: \(totalProteinG)g, Fat: \(totalFatG)g, Fiber: \(totalFiberG)g, Weight: \(totalWeightG)g")
+        
+        // Calculate percentages (as percentage of total food weight)
+        let actualProteinPercent = totalWeightG > 0 ? (totalProteinG / totalWeightG) * 100.0 : 0.0
+        let actualFatPercent = totalWeightG > 0 ? (totalFatG / totalWeightG) * 100.0 : 0.0
+        let actualFiberPercent = totalWeightG > 0 ? (totalFiberG / totalWeightG) * 100.0 : 0.0
+        
+        print("📊 [Breakdown] Actual %: Protein: \(actualProteinPercent)%, Fat: \(actualFatPercent)%, Fiber: \(actualFiberPercent)%")
+        
+        // Get recommended percentages
+        let recommendedProtein = requirements.proteinPercentage
+        let recommendedFat = requirements.fatPercentage
+        let recommendedFiber = requirements.fiberPercentage
+        
+        // Calculate comparison percentages (actual/recommended * 100)
+        let proteinComparison = recommendedProtein > 0 ? (actualProteinPercent / recommendedProtein) * 100.0 : 0.0
+        let fatComparison = recommendedFat > 0 ? (actualFatPercent / recommendedFat) * 100.0 : 0.0
+        let fiberComparison = recommendedFiber > 0 ? (actualFiberPercent / recommendedFiber) * 100.0 : 0.0
+        
+        // Calculate status for each macro
+        let proteinStatus = calculateMacroStatus(percentage: proteinComparison)
+        let fatStatus = calculateMacroStatus(percentage: fatComparison)
+        let fiberStatus = calculateMacroStatus(percentage: fiberComparison)
+        
+        // Generate context text
+        let proteinContext = generateContextText(macro: "Protein", status: proteinStatus, percentage: proteinComparison)
+        let fatContext = generateContextText(macro: "Fat", status: fatStatus, percentage: fatComparison)
+        let fiberContext = generateContextText(macro: "Fiber", status: fiberStatus, percentage: fiberComparison)
+        
+        // Calculate overall score (average of the three macro scores)
+        let overallScore = (proteinComparison + fatComparison + fiberComparison) / 3.0
+        let clampedScore = max(0.0, min(100.0, overallScore))
+        
+        return NutritionalBreakdown(
+            overallScore: clampedScore,
+            protein: MacroNutrientData(
+                name: "Protein",
+                actual: actualProteinPercent,
+                recommended: recommendedProtein,
+                percentage: proteinComparison,
+                status: proteinStatus,
+                icon: "leaf.fill",
+                contextText: proteinContext
+            ),
+            fat: MacroNutrientData(
+                name: "Fat",
+                actual: actualFatPercent,
+                recommended: recommendedFat,
+                percentage: fatComparison,
+                status: fatStatus,
+                icon: "bolt.fill",
+                contextText: fatContext
+            ),
+            fiber: MacroNutrientData(
+                name: "Fiber",
+                actual: actualFiberPercent,
+                recommended: recommendedFiber,
+                percentage: fiberComparison,
+                status: fiberStatus,
+                icon: "leaf",
+                contextText: fiberContext
+            ),
+            hasInsufficientData: false
+        )
+    }
+    
+    /**
+     * Calculate macro status based on comparison percentage
+     * - Parameter percentage: Actual as percentage of recommended (e.g., 105 = 105% of recommended)
+     * - Returns: Color-coded status
+     */
+    private func calculateMacroStatus(percentage: Double) -> MacroStatus {
+        switch percentage {
+        case 90...110:
+            return .optimal
+        case 80..<90:
+            return .slightlyLow
+        case 110..<120:
+            return .slightlyHigh
+        case ..<80:
+            return .tooLow
+        default: // >120
+            return .tooHigh
+        }
+    }
+    
+    /**
+     * Generate user-friendly context text for a macro status
+     * - Parameters:
+     *   - macro: Macronutrient name ("Protein", "Fat", "Fiber")
+     *   - status: Current status
+     *   - percentage: Comparison percentage
+     * - Returns: Contextual explanation text
+     */
+    private func generateContextText(macro: String, status: MacroStatus, percentage: Double) -> String {
+        let diff = abs(percentage - 100)
+        
+        switch status {
+        case .optimal:
+            return "\(macro) is optimal for your pet's health"
+        case .slightlyLow:
+            return "\(macro) is \(Int(diff))% below recommended"
+        case .slightlyHigh:
+            return "\(macro) is \(Int(diff))% above recommended"
+        case .tooLow:
+            return "\(macro) is significantly low - consider increasing intake"
+        case .tooHigh:
+            return "\(macro) is significantly high - consider reducing intake"
+        }
+    }
+    
+    /**
      * Get total weight change for a pet
      * - Parameter petId: The pet's ID
      * - Returns: Total weight change in kg
@@ -686,15 +937,12 @@ class CachedNutritionalTrendsService: ObservableObject {
      */
     @MainActor
     private func calculateDerivedMetrics(for petId: String) async {
-        print("🔄 [calculateDerivedMetrics] Starting calculation for pet \(petId)")
-        
         // Ensure food analyses are loaded before calculating
         let nutritionService = CachedNutritionService.shared
         do {
             try await nutritionService.loadFoodAnalyses(for: petId)
-            print("✅ [calculateDerivedMetrics] Food analyses loaded for calculation")
         } catch {
-            print("⚠️ [calculateDerivedMetrics] Failed to load food analyses: \(error.localizedDescription)")
+            LoggingManager.debug("Failed to load food analyses: \(error.localizedDescription)", category: .nutrition)
         }
         
         // Calculate average daily calories
@@ -707,21 +955,19 @@ class CachedNutritionalTrendsService: ObservableObject {
             // This ensures we show data even if trends haven't been generated yet
             let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
             
-            print("📊 [calculateDerivedMetrics] No calorie trends data, calculating from \(feedingRecords.count) feeding records")
+            LoggingManager.debug("Calculating metrics from \(feedingRecords.count) feeding records", category: .nutrition)
             
             if !feedingRecords.isEmpty {
                 // Collect unique food analysis IDs from feeding records
                 let foodAnalysisIds = Set(feedingRecords.compactMap { $0.foodAnalysisId })
-                print("📊 [calculateDerivedMetrics] Need to load \(foodAnalysisIds.count) unique food analyses: \(foodAnalysisIds)")
                 
                 // Load missing food analyses by their IDs
                 for analysisId in foodAnalysisIds {
                     if nutritionService.getFoodAnalysis(by: analysisId) == nil {
-                        print("🔄 [calculateDerivedMetrics] Loading missing food analysis: \(analysisId)")
                         do {
                             _ = try await nutritionService.loadFoodAnalysis(by: analysisId)
                         } catch {
-                            print("⚠️ [calculateDerivedMetrics] Failed to load food analysis \(analysisId): \(error.localizedDescription)")
+                            LoggingManager.debug("Failed to load food analysis \(analysisId): \(error.localizedDescription)", category: .nutrition)
                         }
                     }
                 }
@@ -730,25 +976,14 @@ class CachedNutritionalTrendsService: ObservableObject {
                 var totalCalories: Double = 0
                 var recordCount = 0
                 
-                // Debug: Check available food analyses
-                let allAnalyses = nutritionService.foodAnalyses.filter { $0.petId == petId }
-                print("📊 [calculateDerivedMetrics] Available food analyses after loading: \(allAnalyses.count)")
-                for analysis in allAnalyses {
-                    print("   - Analysis ID: \(analysis.id), Food: \(analysis.foodName)")
-                }
-                
                 for record in feedingRecords {
-                    print("🔍 [calculateDerivedMetrics] Checking record \(record.id) with foodAnalysisId: \(record.foodAnalysisId)")
-                    
                     // Try to get calories from record first (if API provided it)
                     var recordCalories: Double? = nil
                     if record.calories > 0 {
                         recordCalories = record.calories
-                        print("✅ [calculateDerivedMetrics] Using API-provided calories: \(record.calories) for record \(record.id)")
                     } else if let analysis = nutritionService.getFoodAnalysis(by: record.foodAnalysisId) {
                         // Fallback to calculating from food analysis
                         recordCalories = record.calculateCaloriesConsumed(from: analysis)
-                        print("✅ [calculateDerivedMetrics] Calculated calories from analysis: \(recordCalories ?? 0) for record \(record.id), food: \(analysis.foodName)")
                     } else {
                         // Food analysis not found - try to find by food name as fallback
                         if let foodName = record.foodName {
@@ -758,12 +993,7 @@ class CachedNutritionalTrendsService: ObservableObject {
                                 $0.foodName.localizedCaseInsensitiveContains(foodName)
                             }) {
                                 recordCalories = record.calculateCaloriesConsumed(from: matchingAnalysis)
-                                print("✅ [calculateDerivedMetrics] Found food analysis by name match: \(matchingAnalysis.foodName) (ID: \(matchingAnalysis.id)), calculated calories: \(recordCalories ?? 0)")
-                            } else {
-                                print("⚠️ [calculateDerivedMetrics] No calories available for record \(record.id) - no API calories, no food analysis found for ID: \(record.foodAnalysisId), and no match by name: \(foodName)")
                             }
-                        } else {
-                            print("⚠️ [calculateDerivedMetrics] No calories available for record \(record.id) - no API calories, no food analysis found for ID: \(record.foodAnalysisId), and no food name to match")
                         }
                     }
                     
@@ -783,12 +1013,10 @@ class CachedNutritionalTrendsService: ObservableObject {
                     let avgCalories = daysCount > 0 ? totalCalories / daysCount : 0
                     averageDailyCaloriesCache[petId] = avgCalories
                     objectWillChange.send()
-                    print("✅ [calculateDerivedMetrics] Average daily calories calculated: \(avgCalories) kcal from \(recordCount) records over \(Int(daysCount)) days")
                 } else {
                     // No records with valid food analysis - set to 0
                     averageDailyCaloriesCache[petId] = 0.0
                     objectWillChange.send()
-                    print("⚠️ [calculateDerivedMetrics] No records with valid food analysis for average calories")
                 }
             } else {
                 averageDailyCaloriesCache[petId] = 0.0
@@ -832,34 +1060,26 @@ class CachedNutritionalTrendsService: ObservableObject {
             let feedingRecords = nutritionService.feedingRecords.filter { $0.petId == petId }
             
             if !feedingRecords.isEmpty {
-                print("🔄 [calculateDerivedMetrics] Calculating nutritional balance for pet \(petId) with \(feedingRecords.count) feeding records")
+                LoggingManager.debug("Calculating nutritional balance with \(feedingRecords.count) records", category: .nutrition)
                 
                 // Get nutritional requirements for compatibility assessment
                 // First check cache, then try to load if missing
                 var requirements = nutritionService.nutritionalRequirements(for: petId)
                 
-                print("📊 [calculateDerivedMetrics] Initial requirements check: \(requirements != nil ? "found" : "nil"), calories=\(requirements?.dailyCalories ?? 0)")
-                
                 // If no requirements in cache OR requirements are zeros, load them (this will auto-create if missing)
                 if requirements == nil || (requirements?.dailyCalories == 0.0 && requirements?.proteinPercentage == 0.0) {
-                    print("🔄 [calculateDerivedMetrics] Requirements missing or zeros - loading/creating for pet \(petId)")
-                    
                     // Try to load/create requirements synchronously in this async context
                     // This is called from loadTrendsFromServer which is already async
                     do {
                         requirements = try await nutritionService.getNutritionalRequirements(for: petId)
-                        print("✅ [calculateDerivedMetrics] Requirements loaded: calories=\(requirements?.dailyCalories ?? 0), protein=\(requirements?.proteinPercentage ?? 0)")
                         
                         // If still zeros after loading, check cache again (auto-creation might have just completed)
                         if requirements?.dailyCalories == 0.0 && requirements?.proteinPercentage == 0.0 {
-                            print("⚠️ [calculateDerivedMetrics] Requirements still zeros after load - checking cache again...")
                             // Small delay to allow auto-creation to complete
                             try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
                             requirements = nutritionService.nutritionalRequirements(for: petId)
-                            print("📊 [calculateDerivedMetrics] Re-checked requirements from cache: calories=\(requirements?.dailyCalories ?? 0)")
                         }
                     } catch {
-                        print("⚠️ [calculateDerivedMetrics] Failed to load/create requirements: \(error.localizedDescription)")
                         nutritionalBalanceScoresCache[petId] = 0.0
                         return
                     }
@@ -867,7 +1087,6 @@ class CachedNutritionalTrendsService: ObservableObject {
                 
                 // We should now have valid requirements - calculate compatibility scores
                 if let req = requirements, req.dailyCalories > 0 {
-                    print("✅ [calculateDerivedMetrics] Using requirements: calories=\(req.dailyCalories), protein=\(req.proteinPercentage)")
                     var compatibilityScores: [Double] = []
                     
                     for record in feedingRecords {
@@ -880,17 +1099,11 @@ class CachedNutritionalTrendsService: ObservableObject {
                                 $0.petId == petId && 
                                 $0.foodName.localizedCaseInsensitiveContains(foodName)
                             })
-                            if analysis != nil {
-                                print("✅ [calculateDerivedMetrics] Found food analysis by name match for record \(record.id): \(analysis!.foodName) (ID: \(analysis!.id))")
-                            }
                         }
                         
                         if let analysis = analysis {
                             let compatibility = analysis.assessCompatibility(with: req)
                             compatibilityScores.append(compatibility.score)
-                            print("📊 [calculateDerivedMetrics] Record \(record.id): compatibility score=\(compatibility.score)")
-                        } else {
-                            print("⚠️ [calculateDerivedMetrics] No food analysis found for record \(record.id) (ID: \(record.foodAnalysisId), name: \(record.foodName ?? "unknown"))")
                         }
                     }
                     
@@ -900,19 +1113,15 @@ class CachedNutritionalTrendsService: ObservableObject {
                         let average = total / Double(compatibilityScores.count)
                         nutritionalBalanceScoresCache[petId] = average
                         objectWillChange.send()
-                        print("✅ [calculateDerivedMetrics] Nutritional balance calculated: \(average)% from \(compatibilityScores.count) records")
-                        print("   - Compatibility scores: \(compatibilityScores)")
                     } else {
-                        print("⚠️ [calculateDerivedMetrics] No compatibility scores calculated - no food analyses available")
                         nutritionalBalanceScoresCache[petId] = 0.0
                         objectWillChange.send()
                     }
                 } else {
-                    print("⚠️ [calculateDerivedMetrics] No valid requirements available (calories=\(requirements?.dailyCalories ?? 0))")
                     nutritionalBalanceScoresCache[petId] = 0.0
                 }
             } else {
-                print("⚠️ [calculateDerivedMetrics] No feeding records for pet \(petId)")
+                LoggingManager.debug("No feeding records for pet \(petId)", category: .nutrition)
                 nutritionalBalanceScoresCache[petId] = 0.0
             }
         }

@@ -83,7 +83,7 @@ struct ScanView: View {
     private func safePresentSheet(_ binding: Binding<Bool>) -> Bool {
         // If any sheet is already presented, don't present a new one
         guard !isAnySheetPresented else {
-            print("⚠️ [SCAN_VIEW] Cannot present sheet - another sheet is already being presented")
+            LoggingManager.debug("Cannot present sheet - another sheet already presented", category: .scanning)
             return false
         }
         
@@ -93,16 +93,12 @@ struct ScanView: View {
     
     // MARK: - Helper to present scan result sheet with async/await
     private func presentScanResult(_ scan: Scan) async {
-        print("🔍 [SCAN_VIEW] presentScanResult called with scan: \(scan.id)")
-        print("🔍 [SCAN_VIEW] Scan result available: \(scan.result != nil)")
-        if let result = scan.result {
-            print("🔍 [SCAN_VIEW] Scan result ingredients: \(result.ingredientsFound.count)")
-        }
+        LoggingManager.debug("Presenting scan result: \(scan.id)", category: .scanning)
         
         // Check if we can present the sheet
         await MainActor.run {
             guard !isAnySheetPresented else {
-                print("⚠️ [SCAN_VIEW] Cannot present scan results - another sheet is already being presented")
+                LoggingManager.debug("Cannot present scan - another sheet already presented", category: .scanning)
                 return
             }
         }
@@ -110,12 +106,10 @@ struct ScanView: View {
         // Set loading state immediately
         isPreparingScanResult = true
         scanDataReady = false
-        print("🔍 [SCAN_VIEW] Setting isPreparingScanResult to true")
         
         // Present loading sheet first
         await MainActor.run {
             showingResults = true
-            print("🔍 [SCAN_VIEW] Showing loading sheet")
         }
         
         do {
@@ -129,22 +123,16 @@ struct ScanView: View {
                 sheetScanData = validatedScan
                 scanResult = validatedScan
                 
-                print("🔍 [SCAN_VIEW] ✅ Scan data validated and ready")
-                print("🔍 [SCAN_VIEW] pendingScanResult set to: \(pendingScanResult?.id ?? "nil")")
-                print("🔍 [SCAN_VIEW] sheetScanData set to: \(sheetScanData?.id ?? "nil")")
-                print("🔍 [SCAN_VIEW] scanResult set to: \(scanResult?.id ?? "nil")")
-                
                 // Clear loading state - the sheet will now show the results
                 isPreparingScanResult = false
                 scanDataReady = true
-                print("🔍 [SCAN_VIEW] Loading state cleared - data is ready")
             }
             
             // Small delay to ensure UI state updates are processed
             try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
             
         } catch {
-            print("❌ [SCAN_VIEW] Failed to validate scan data: \(error.localizedDescription)")
+            LoggingManager.error("Failed to validate scan data: \(error)", category: .scanning)
             // Keep loading state true to show error view
             await MainActor.run {
                 isPreparingScanResult = true
@@ -157,16 +145,13 @@ struct ScanView: View {
      * This ensures we have complete data before presenting results
      */
     private func waitForScanData(_ scan: Scan) async throws -> Scan {
-        print("🔍 [SCAN_VIEW] Waiting for scan data validation...")
-        
         // If scan already has result, validate it
         if scan.result != nil {
-            print("🔍 [SCAN_VIEW] Scan already has result, validating...")
             return try await validateScanData(scan)
         }
         
         // If scan doesn't have result yet, wait for it to be loaded
-        print("🔍 [SCAN_VIEW] Scan doesn't have result yet, waiting for completion...")
+        LoggingManager.debug("Waiting for scan completion", category: .scanning)
         
         // Poll for scan completion with timeout
         let maxAttempts = 30 // 30 seconds timeout
@@ -176,15 +161,12 @@ struct ScanView: View {
             // Check if scan has been updated with result
             if let updatedScan = scanService.getScan(id: scan.id),
                updatedScan.result != nil {
-                print("🔍 [SCAN_VIEW] Scan result loaded after \(attempts) attempts")
                 return try await validateScanData(updatedScan)
             }
             
             // Wait 1 second before next attempt
             try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
             attempts += 1
-            
-            print("🔍 [SCAN_VIEW] Waiting for scan result... attempt \(attempts)/\(maxAttempts)")
         }
         
         throw ScanError.timeout("Scan analysis timed out")
@@ -194,8 +176,6 @@ struct ScanView: View {
      * Validate that scan data is complete and ready for presentation
      */
     private func validateScanData(_ scan: Scan) async throws -> Scan {
-        print("🔍 [SCAN_VIEW] Validating scan data...")
-        
         guard let result = scan.result else {
             throw ScanError.invalidData("Scan result is nil")
         }
@@ -205,10 +185,7 @@ struct ScanView: View {
             throw ScanError.invalidData("No ingredients found in scan result")
         }
         
-        print("🔍 [SCAN_VIEW] ✅ Scan data validation passed")
-        print("🔍 [SCAN_VIEW] Ingredients found: \(result.ingredientsFound.count)")
-        print("🔍 [SCAN_VIEW] Unsafe ingredients: \(result.unsafeIngredients.count)")
-        print("🔍 [SCAN_VIEW] Safe ingredients: \(result.safeIngredients.count)")
+        LoggingManager.debug("Scan validated - \(result.ingredientsFound.count) ingredients found", category: .scanning)
         
         return scan
     }
