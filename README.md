@@ -11,6 +11,7 @@ A comprehensive iOS application with FastAPI backend for scanning and analyzing 
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Server Setup](#server-setup)
+- [Website Setup](#website-setup)
 - [iOS App Setup](#ios-app-setup)
 - [API Documentation](#api-documentation)
 - [Database Schema](#database-schema)
@@ -18,9 +19,19 @@ A comprehensive iOS application with FastAPI backend for scanning and analyzing 
 - [Development](#development)
 - [Testing](#testing)
 - [Deployment](#deployment)
+- [Environment Variables](#environment-variables-reference)
+- [Known Issues](#known-issues--important-notes)
+- [Version History](#version-history)
 - [Contributing](#contributing)
+- [Support & Resources](#support--resources)
 
 ## Overview
+
+**SniffTest** is a comprehensive pet food safety and nutrition tracking platform consisting of three main components:
+
+1. **iOS App** (Swift/SwiftUI) - Native mobile app for scanning and tracking
+2. **FastAPI Backend** (Python) - RESTful API with comprehensive features
+3. **Next.js Website** (TypeScript/React) - Landing page and legal documentation
 
 SniffTest helps pet owners make informed decisions about their pets' food by:
 
@@ -113,12 +124,23 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   iOS App       │    │   FastAPI       │    │   Supabase      │
 │   (SwiftUI)     │◄──►│   Backend       │◄──►│   Database      │
-│                 │    │                 │    │                 │
-│ • Camera/OCR    │    │ • REST API      │    │ • PostgreSQL    │
-│ • Pet Profiles  │    │ • Authentication│    │ • Row Level     │
-│ • Scan Results  │    │ • Ingredient    │    │   Security      │
-│ • Favorites     │    │   Analysis      │    │ • Real-time     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+│                 │    │   (Railway)     │    │                 │
+│ • Camera/OCR    │    │                 │    │ • PostgreSQL    │
+│ • Pet Profiles  │    │ • REST API      │    │ • Row Level     │
+│ • Scan Results  │    │ • Authentication│    │   Security      │
+│ • Nutrition     │    │ • Ingredient    │    │ • Real-time     │
+│ • Health Events │    │   Analysis      │    │ • Storage       │
+└─────────────────┘    │ • Nutrition     │    └─────────────────┘
+                       │ • Subscriptions │
+┌─────────────────┐    │ • GDPR/MFA      │
+│   Website       │    │ • Push Notifs   │
+│   (Next.js)     │◄──►│                 │
+│                 │    └─────────────────┘
+│ • Landing Page  │
+│ • Terms/Privacy │
+│ • Waitlist      │
+│ • Support       │
+└─────────────────┘
 ```
 
 ### iOS App Architecture (MVVM + Combine)
@@ -259,19 +281,45 @@ app/
 ├── core/
 │   ├── config.py              # Configuration and settings management
 │   ├── database/              # Database connection and pooling
+│   │   ├── client.py         # Supabase client initialization
+│   │   └── __init__.py
 │   ├── security/              # Security utilities and JWT validation
+│   │   ├── jwt_handler.py    # JWT token validation and parsing
+│   │   ├── auth_enhancements.py  # Enhanced auth features
+│   │   └── __init__.py
 │   ├── middleware/            # Core middleware implementations
+│   │   ├── security.py       # Security headers middleware
+│   │   ├── audit.py          # Audit logging middleware
+│   │   ├── request_limits.py # Request size and rate limiting
+│   │   ├── query_monitoring.py  # Database query monitoring
+│   │   └── __init__.py
 │   └── validation/            # Request validation schemas
+│       ├── input_validator.py    # Input validation utilities
+│       ├── file_validator.py     # File upload validation
+│       ├── security_patterns.py  # Security pattern matching
+│       └── __init__.py
 ├── models/
-│   ├── user.py               # User data models with onboarding support
-│   ├── pet.py                # Pet data models with birthday tracking
-│   ├── ingredient.py         # Ingredient analysis and safety models
-│   ├── scan.py               # Scan processing and result models
-│   ├── nutrition.py          # Nutritional data models
-│   ├── advanced_nutrition.py # Weight tracking and analytics models
-│   ├── food_items.py         # Food database models
-│   ├── calorie_goals.py      # Calorie goal tracking models
-│   └── health_event.py       # Health event tracking models
+│   ├── core/                  # Core data models
+│   │   ├── user.py           # User models with onboarding
+│   │   ├── pet.py            # Pet models with birthday tracking
+│   │   ├── subscription.py   # Subscription models
+│   │   ├── waitlist.py       # Waitlist models
+│   │   └── __init__.py
+│   ├── health/                # Health-related models
+│   │   ├── health_event.py   # Health event tracking
+│   │   ├── medication_reminder.py  # Medication reminders
+│   │   └── __init__.py
+│   ├── nutrition/             # Nutrition models
+│   │   ├── nutrition.py      # Core nutrition models
+│   │   ├── advanced_nutrition.py  # Advanced analytics
+│   │   ├── food_items.py     # Food database models
+│   │   ├── calorie_goals.py  # Calorie goal tracking
+│   │   ├── nutritional_standards.py  # Dietary standards
+│   │   └── __init__.py
+│   └── scanning/              # Scanning models
+│       ├── ingredient.py     # Ingredient analysis models
+│       ├── scan.py           # Scan processing models
+│       └── __init__.py
 ├── api/v1/
 │   ├── auth/                 # Authentication and user management
 │   ├── pets/                 # Pet CRUD operations and management
@@ -301,28 +349,62 @@ app/
 │   ├── data_quality.py       # Data quality assessment endpoints
 │   └── images/               # Image processing and optimization
 ├── services/
-│   ├── gdpr_service.py       # Data export and deletion services
-│   ├── mfa_service.py        # MFA implementation and management
-│   ├── push_notification_service.py # APNs integration
-│   ├── monitoring.py         # Analytics and performance monitoring
-│   ├── nutritional_calculator.py # Nutritional calculations
-│   ├── nutritional_trends_service.py # Trend analysis
-│   ├── food_comparison_service.py # Food comparison logic
-│   ├── weight_tracking_service.py # Weight tracking service
-│   ├── advanced_analytics_service.py # AI-powered insights
-│   ├── health_event_service.py # Health event management
-│   ├── medication_reminder_service.py # Medication reminder scheduling
-│   ├── subscription_service.py # Subscription verification and management
-│   ├── revenuecat_service.py # RevenueCat integration service
-│   └── data_quality_service.py # Data quality assessment service
-├── middleware/
-│   ├── security.py           # Security headers and protection
-│   ├── audit.py              # Comprehensive audit logging
-│   └── request_limits.py      # Multi-tier rate limiting
+│   ├── analytics/            # Analytics services
+│   │   ├── advanced_analytics_service.py  # AI-powered insights
+│   │   ├── health_analytics_service.py    # Health trend analysis
+│   │   ├── pattern_analytics_service.py   # Pattern detection
+│   │   ├── recommendation_service.py      # Personalized recommendations
+│   │   ├── trend_analytics_service.py     # Trend analysis
+│   │   └── __init__.py
+│   ├── health/               # Health services
+│   │   ├── health_event_service.py       # Health event management
+│   │   ├── medication_reminder_service.py # Medication scheduling
+│   │   └── __init__.py
+│   ├── nutrition/            # Nutrition services
+│   │   ├── nutritional_calculator.py     # Nutritional calculations
+│   │   ├── nutritional_trends_service.py # Nutrition trends
+│   │   ├── food_comparison_service.py    # Food comparison
+│   │   ├── weight_tracking_service.py    # Weight tracking
+│   │   └── __init__.py
+│   ├── subscription/         # Subscription services
+│   │   ├── subscription_service.py           # Subscription management
+│   │   ├── subscription_checker.py           # Subscription verification
+│   │   ├── revenuecat_service.py            # RevenueCat integration
+│   │   ├── revenuecat_api_service.py        # RevenueCat API calls
+│   │   ├── revenuecat_subscription_service.py # RC subscription logic
+│   │   ├── revenuecat_webhook_service.py    # Webhook handling
+│   │   └── __init__.py
+│   ├── gdpr_service.py       # GDPR compliance (export/deletion)
+│   ├── mfa_service.py        # Multi-factor authentication
+│   ├── push_notification_service.py # APNs push notifications
+│   ├── monitoring.py         # System monitoring and health checks
+│   ├── data_quality_service.py # Data quality assessment
+│   ├── image_optimizer.py    # Image processing and optimization
+│   ├── storage_service.py    # File storage management
+│   └── __init__.py
+├── shared/                    # Shared utilities and patterns
+│   ├── decorators/           # Reusable decorators
+│   │   ├── error_handler.py  # Error handling decorator
+│   │   └── __init__.py
+│   ├── repositories/         # Repository pattern implementations
+│   │   ├── base_repository.py # Base repository class
+│   │   └── __init__.py
+│   ├── services/             # Shared service utilities
+│   │   ├── cache_service.py  # Caching utilities
+│   │   ├── database_operation_service.py # DB operations
+│   │   ├── query_builder_service.py # Query building
+│   │   ├── pagination_service.py # Pagination utilities
+│   │   ├── response_utils.py # Response formatting
+│   │   ├── supabase_auth_service.py # Auth helpers
+│   │   ├── user_data_service.py # User data utilities
+│   │   ├── validation_service.py # Validation helpers
+│   │   └── [15+ more utilities]
+│   └── utils/
+│       └── async_supabase.py # Async Supabase utilities
 └── utils/
     ├── error_handling.py     # Centralized error management
-    ├── security.py           # Security utilities and validation
-    └── logging_config.py     # Structured logging configuration
+    ├── logging_config.py     # Structured logging configuration
+    └── test_logging.py       # Logging tests
 ```
 
 ## Tech Stack
@@ -339,20 +421,57 @@ app/
 
 ### Backend Server
 - **Language**: Python 3.9+
-- **Framework**: FastAPI 0.104+
+- **Framework**: FastAPI 0.115.6
 - **Database**: PostgreSQL via Supabase
-- **Authentication**: JWT with Supabase Auth
-- **Validation**: Pydantic v2
-- **Security**: Multiple middleware layers
-- **Testing**: pytest with async support
-- **Deployment**: ASGI with Uvicorn
+- **Authentication**: JWT with Supabase Auth (PyJWT 2.10+)
+- **Validation**: Pydantic v2.12+
+- **Security**: Multi-layer middleware stack
+- **Testing**: pytest 8.4+ with async support
+- **Deployment**: ASGI with Uvicorn 0.37+
+- **Supabase SDK**: 2.9.1 (pinned for stability)
+
+### Website
+- **Framework**: Next.js 16.0.9
+- **Language**: TypeScript 5.6
+- **Styling**: Tailwind CSS 3.4
+- **React**: 19.0.0
+- **Icons**: Lucide React, React Icons
 
 ### Infrastructure
 - **Database**: Supabase (PostgreSQL)
 - **Authentication**: Supabase Auth
 - **Storage**: Supabase Storage
-- **Real-time**: Supabase Realtime
-- **Hosting**: Vercel/Railway/Heroku ready
+- **Real-time**: Supabase Realtime 2.22.0
+- **Hosting**: Railway (Backend), Vercel-ready (Website)
+- **Rate Limiting**: Redis 5.0+ (optional, falls back to in-memory)
+
+### Key Dependencies & Versions
+
+#### Backend (Python)
+- **FastAPI**: 0.115.6 (pinned for stability)
+- **Supabase**: 2.9.1 (exact version, 2.22.0+ has breaking changes)
+- **Pydantic**: 2.12+ (data validation)
+- **PyJWT**: 2.10+ (JWT tokens, replaces python-jose)
+- **Pillow**: 11.0+ (image processing)
+- **SQLAlchemy**: 2.0.44+ (ORM features)
+- **Uvicorn**: 0.37+ (ASGI server)
+- **pytest**: 8.4+ (testing framework)
+
+**Note**: Dependencies are carefully pinned for compatibility. FastAPI 0.115.6 has starlette version constraints that prevent upgrading to newer versions with CVE fixes. Mitigation middleware is in place for known vulnerabilities.
+
+#### iOS (Swift)
+- **Swift**: 5.9+
+- **SwiftUI**: Native framework
+- **iOS**: 17.0+ minimum deployment target
+- **Combine**: Reactive programming
+- **AVFoundation**: Camera and OCR
+
+#### Website (TypeScript/React)
+- **Next.js**: 16.0.9
+- **React**: 19.0.0
+- **TypeScript**: 5.6
+- **Tailwind CSS**: 3.4
+- **Lucide React**: 0.548.0 (icons)
 
 ## Trust & Nature Color Scheme
 
@@ -448,12 +567,16 @@ static let lightGray = Color(red: 0.878, green: 0.878, blue: 0.878)
 - **macOS**: 13.0+ (for iOS development)
 - **Xcode**: 15.0+
 - **Python**: 3.9+
-- **Node.js**: 18+ (for tooling)
+- **Node.js**: 18+ (required for website)
+- **npm**: 9+ (included with Node.js)
 - **Git**: Latest version
 
 ### Accounts Required
-- **Apple Developer Account**: For iOS app distribution
-- **Supabase Account**: For backend services
+- **Apple Developer Account**: For iOS app distribution (paid)
+- **Supabase Account**: For backend services (free tier available)
+- **RevenueCat Account**: For subscription management (optional)
+- **Railway Account**: For backend hosting (optional, free tier available)
+- **Vercel Account**: For website hosting (optional, free tier available)
 - **GitHub Account**: For version control
 
 ## Quick Start
@@ -470,17 +593,24 @@ cd server
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp env.example .env
-# Edit .env with your Supabase credentials
+# Create .env file with your Supabase credentials
 python start.py
 ```
 
 ### 3. iOS App Setup (5 minutes)
 ```bash
-cd SniffTest
+cd pet-allergy-scanner
 open SniffTest.xcodeproj
 # Update API_BASE_URL in Info.plist
-# Build and run in Xcode
+# Build and run in Xcode (Cmd + R)
+```
+
+### 4. Website Setup (Optional - 3 minutes)
+```bash
+cd website
+npm install
+npm run dev
+# Visit http://localhost:3000
 ```
 
 ## Server Setup
@@ -581,6 +711,15 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+**Key Dependencies:**
+- FastAPI 0.115.6 (pinned for stability)
+- Supabase 2.9.1 (exact version for compatibility)
+- Pydantic 2.12+ (validation)
+- PyJWT 2.10+ (authentication)
+- Pillow 11.0+ (image processing)
+- pytest 8.4+ (testing)
+- uvicorn 0.37+ (ASGI server)
+
 ### 4. Run the Server
 
 ```bash
@@ -675,6 +814,56 @@ The server automatically adds security headers:
 - **Authentication endpoints**: 5 requests/minute per IP
 - **Headers**: Rate limit information included in responses
 
+## Website Setup
+
+The project includes a Next.js landing page with support pages for terms, privacy, and waitlist functionality.
+
+### 1. Install Dependencies
+
+```bash
+cd website
+npm install
+```
+
+### 2. Development Server
+
+```bash
+npm run dev
+```
+
+The website will be available at `http://localhost:3000`
+
+### 3. Build for Production
+
+```bash
+npm run build
+npm start
+```
+
+### Website Structure
+
+```
+website/
+├── app/
+│   ├── page.tsx              # Landing page
+│   ├── layout.tsx            # Root layout
+│   ├── privacy/page.tsx      # Privacy policy
+│   ├── terms/page.tsx        # Terms of service
+│   └── support/              # Support pages
+├── components/               # Reusable React components
+├── contexts/                 # React contexts (waitlist)
+├── lib/                      # Utilities
+└── public/                   # Static assets
+```
+
+### Key Features
+- **Landing Page**: Modern, responsive design showcasing app features
+- **Legal Pages**: Privacy policy and terms of service
+- **Support**: Help and support resources
+- **Waitlist**: Pre-launch email signup system
+- **SEO**: Built-in sitemap and robots.txt
+- **Responsive**: Mobile-first design with Tailwind CSS
+
 ## iOS App Setup
 
 ### 1. Xcode Configuration
@@ -686,13 +875,16 @@ The server automatically adds security headers:
    ```
 
 2. **Update API Configuration**:
-   - Open `Info.plist`
-   - Current settings:
-     - **Bundle ID**: `com.snifftest.app`
-     - **Version**: `1.0.0` (Pre-release)
-     - **API_BASE_URL**: `https://snifftest-api-production.up.railway.app/api/v1`
-     - **Supabase URL**: `https://oxjywpearruxtnysoyuf.supabase.co`
-   - For local development, change `API_BASE_URL` to `http://localhost:8000/api/v1`
+   - Open `Info.plist` in Xcode
+   - **Current Production Settings**:
+     - Bundle ID: `com.snifftest.app`
+     - Version: `1.0.0` (Pre-release)
+     - API_BASE_URL: `https://snifftest-api-production.up.railway.app/api/v1`
+     - Supabase URL: `https://oxjywpearruxtnysoyuf.supabase.co`
+   - **For Local Development**:
+     - Change `API_BASE_URL` to `http://localhost:8000/api/v1`
+     - Ensure backend server is running locally
+     - Use iOS Simulator (physical devices require HTTPS)
 
 3. **Configure Signing**:
    - Select your development team
@@ -732,7 +924,15 @@ All colors maintain 4.5:1 contrast ratio for accessibility compliance.
 
 ## API Documentation
 
-Complete API reference is available in [API_DOCS.md](API_DOCS.md).
+Complete API reference is available in **[API_DOCS.md](API_DOCS.md)**.
+
+### Interactive API Documentation
+
+The FastAPI backend provides interactive API documentation:
+
+- **Swagger UI**: `http://localhost:8000/docs` (development)
+- **ReDoc**: `http://localhost:8000/redoc` (alternative documentation)
+- **Production Docs**: `https://snifftest-api-production.up.railway.app/docs` (when DEBUG=true)
 
 ### Quick API Overview
 
@@ -841,120 +1041,398 @@ See `database_schemas/01_complete_database_schema.sql` for complete schema.
 - **macOS**: 13.0+ (for iOS development)
 - **Xcode**: 15.0+
 - **Python**: 3.9+
+- **Node.js**: 18+ (for website)
 - **Supabase Account**: For backend services
 
-### Quick Start
-1. **Clone Repository**: `git clone <repo-url>`
-2. **Backend Setup**: `cd server && pip install -r requirements.txt`
-3. **iOS Setup**: Open `pet-allergy-scanner.xcodeproj` in Xcode
-4. **Configure**: Update API URLs and Supabase credentials
-5. **Run**: Start server with `python start.py` and build iOS app
+### Development Setup
+1. **Clone Repository**: `git clone <repo-url> && cd SniffTest`
+2. **Backend Setup**: 
+   ```bash
+   cd server
+   python -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   # Create .env file with credentials
+   python start.py
+   ```
+3. **Website Setup** (optional):
+   ```bash
+   cd website
+   npm install
+   npm run dev
+   ```
+4. **iOS Setup**: 
+   ```bash
+   cd pet-allergy-scanner
+   open SniffTest.xcodeproj
+   # Update API_BASE_URL in Info.plist
+   # Cmd + R to run
+   ```
+
+### Development Workflow
+- **Backend**: Hot reload enabled in development mode
+- **Website**: Next.js hot reload on save
+- **iOS**: Xcode live previews for SwiftUI components
+- **API Testing**: Use Swagger UI at `http://localhost:8000/docs`
+
+### Repository Organization
+
+This is a **monorepo** containing three main applications:
+
+- **`server/`** - Python FastAPI backend (deployed to Railway)
+- **`pet-allergy-scanner/`** - iOS app (Swift/SwiftUI)
+- **`website/`** - Next.js landing page (deployable to Vercel)
+
+Each component is independently deployable but shares common design patterns and data models through the Supabase backend.
 
 ### Project Structure
 ```
 SniffTest/
-├── server/                 # FastAPI backend
-│   ├── app/               # Application code
-│   ├── tests/             # Backend tests
-│   └── requirements.txt   # Python dependencies
-├── SniffTest/             # iOS app
-│   ├── Views/             # SwiftUI views
-│   ├── Models/            # Data models
-│   ├── Services/          # API & business logic
-│   └── Utils/             # Utilities
-└── API_DOCS.md           # Complete API reference
+├── server/                     # FastAPI backend
+│   ├── app/                   # Application code
+│   │   ├── api/v1/           # API v1 endpoints
+│   │   │   ├── auth/         # Authentication
+│   │   │   ├── pets/         # Pet management
+│   │   │   ├── scanning/     # Ingredient scanning
+│   │   │   ├── nutrition/    # Nutrition tracking
+│   │   │   ├── advanced_nutrition/ # Analytics & trends
+│   │   │   ├── food_management/  # Food database
+│   │   │   ├── health_events/    # Health tracking
+│   │   │   ├── medication_reminders/ # Medication scheduling
+│   │   │   ├── subscriptions/    # Subscription management
+│   │   │   ├── notifications/    # Push notifications
+│   │   │   ├── mfa/          # Multi-factor auth
+│   │   │   ├── gdpr/         # GDPR compliance
+│   │   │   ├── monitoring/   # System monitoring
+│   │   │   ├── waitlist/     # Waitlist management
+│   │   │   └── data_quality.py # Data quality endpoints
+│   │   ├── core/             # Config, security, middleware
+│   │   ├── models/           # Pydantic models (organized by domain)
+│   │   ├── services/         # Business logic (organized by domain)
+│   │   ├── shared/           # Shared utilities & patterns
+│   │   └── utils/            # General utilities
+│   ├── database_schemas/     # Database migration scripts
+│   ├── scripts/              # Utility scripts
+│   │   ├── admin/            # Admin tools
+│   │   ├── database/         # DB maintenance
+│   │   ├── deployment/       # Deployment helpers
+│   │   └── testing/          # Test utilities
+│   ├── tests/                # Backend tests
+│   ├── importing/            # Data import utilities
+│   ├── standardizor/         # Data standardization tools
+│   ├── requirements.txt      # Python dependencies
+│   ├── requirements-lock.txt # Locked dependency versions
+│   ├── Procfile             # Railway deployment config
+│   └── railway.toml         # Railway configuration
+├── pet-allergy-scanner/      # iOS app (Swift/SwiftUI)
+│   ├── SniffTest/           # Source code
+│   │   ├── Features/        # Feature modules (Auth, Scanning, Pets, etc.)
+│   │   ├── Shared/          # Shared components
+│   │   ├── Utils/           # Utilities
+│   │   └── Assets.xcassets/ # App icons, images, colors
+│   └── SniffTest.xcodeproj  # Xcode project
+├── website/                  # Next.js landing page
+│   ├── app/                 # Next.js 14+ app directory
+│   │   ├── page.tsx         # Landing page
+│   │   ├── layout.tsx       # Root layout
+│   │   ├── privacy/         # Privacy policy
+│   │   ├── terms/           # Terms of service
+│   │   └── support/         # Support pages
+│   ├── components/          # React components
+│   ├── contexts/            # React contexts
+│   ├── lib/                 # Utility libraries
+│   ├── public/              # Static assets
+│   ├── package.json         # Node dependencies
+│   ├── tailwind.config.ts   # Tailwind configuration
+│   └── tsconfig.json        # TypeScript config
+├── images/                  # Project documentation images
+└── .cursor/                 # Cursor AI rules and settings
+    └── rules/               # Project-specific coding rules
 ```
 
 ### Testing
-- **Backend**: `pytest tests/ -v`
-- **iOS**: `Cmd + U` in Xcode
-- **Security**: `python security_audit.py`
+
+#### Backend (FastAPI)
+```bash
+cd server
+pytest tests/ -v                    # Run all tests
+pytest tests/unit/ -v               # Unit tests only
+pytest tests/notifications/ -v      # Notification tests
+python -m pytest --cov=app         # With coverage
+```
+
+#### iOS App (Swift)
+- **Unit Tests**: `Cmd + U` in Xcode
+- **UI Tests**: Configure and run UI test targets
+- **Test Plans**: Use Xcode test plans for organized testing
+
+#### Website (Next.js)
+```bash
+cd website
+npm run lint                       # ESLint checks
+npm run build                      # Build verification
+```
+
+#### Security & Quality
+```bash
+cd server
+pip-audit                          # Security vulnerability scan
+python scripts/deployment/check-deployment-ready.py  # Deployment readiness
+```
 
 ### Utility Scripts
-The `server/scripts/` directory contains utility scripts for deployment, maintenance, and database operations:
 
-- **Deployment**: `railway_start.py`, `test_config.py`, `check-deployment-ready.py`
-- **Database**: `analyze_database_tables.py`, `cleanup_database.py`, `setup_test_data.py`
-- **Security**: `fix_function_search_path_security.sql`, `fix_auth_user_grant_error.sql`
-- **Admin**: `set_premium_account.py`, `generate-railway-vars.py`
+The `server/scripts/` directory contains utility scripts organized by category:
 
-See `server/scripts/README.md` for detailed usage instructions.
+#### Deployment Scripts (`scripts/deployment/`)
+- `railway_start.py` - Production startup script for Railway
+- `check-deployment-ready.py` - Validates deployment readiness
+- `generate-railway-vars.py` - Generates Railway environment variables
+- `pre_production_check.py` - Pre-deployment validation checklist
+
+#### Database Scripts (`scripts/database/`)
+- `analyze_database_tables.py` - Analyzes database structure and performance
+- `cleanup_database.py` - Database maintenance and cleanup
+- `backfill_nutritional_trends.py` - Backfills nutritional trend data
+- `fix_function_search_path_security.sql` - Security hardening for DB functions
+- `fix_auth_user_grant_error.sql` - Authentication error diagnostics
+- `create_debug_function.sql` - Debug utilities for troubleshooting
+
+#### Admin Scripts (`scripts/admin/`)
+- `set_premium_account.py` - Grant premium access to users
+
+#### Testing Scripts (`scripts/testing/`)
+- `setup_test_data.py` - Populates test data for development
+- `test_config.py` - Tests configuration settings
+- `test_health_endpoint.py` - Validates health endpoints
+- `test_jwt_debug.py` - JWT token debugging utilities
+
+See `server/scripts/dev/README.md` and `PRE_PRODUCTION_CHECKLIST.md` for detailed usage.
 
 ## Deployment
 
-### Backend
+### Backend (FastAPI)
 
 #### Production (Railway)
 - **API URL**: `https://snifftest-api-production.up.railway.app`
 - **Health Check**: `https://snifftest-api-production.up.railway.app/health`
 - **Interactive Docs**: `https://snifftest-api-production.up.railway.app/docs` (when DEBUG=true)
 - **Platform**: Railway deployment with automatic HTTPS
+- **Configuration**: Uses `Procfile` and `railway.toml`
 
 #### Development
-- **Local Server**: `python start.py`
+- **Local Server**: `python start.py` (in `/workspace/server/`)
 - **API URL**: `http://localhost:8000/api/v1`
 - **Docs**: `http://localhost:8000/docs`
+- **Port**: 8000 (configurable)
 
 #### Deployment Options
 - **Railway**: Currently deployed ✅
 - **Vercel**: Serverless deployment ready
 - **Heroku**: Platform as a Service ready
-- **Docker**: Included Dockerfile and docker-compose.yml
+- **Docker**: Containerized deployment ready
+
+### Website (Next.js)
+
+#### Production
+- **Vercel**: Recommended (optimized for Next.js)
+  ```bash
+  cd website
+  vercel --prod
+  ```
+- **Other Platforms**: Compatible with any Node.js hosting
+  ```bash
+  npm run build
+  npm start
+  ```
+
+#### Development
+- **Local Server**: `npm run dev` (in `/workspace/website/`)
+- **URL**: `http://localhost:3000`
+- **Hot Reload**: Enabled by default
 
 ### iOS App
 - **Development**: Xcode simulator or device
 - **API Configuration**: Update `API_BASE_URL` in `Info.plist`
   - Development: `http://localhost:8000/api/v1`
   - Production: `https://snifftest-api-production.up.railway.app/api/v1`
+- **Bundle ID**: `com.snifftest.app`
 - **Distribution**: TestFlight for beta testing
 - **App Store**: Production release via App Store Connect
 
+### Deployment Checklist
+- [ ] Configure environment variables for all services
+- [ ] Set up Supabase project and database schema
+- [ ] Configure CORS origins for your domains
+- [ ] Set up APNs certificates for push notifications
+- [ ] Configure RevenueCat for subscriptions (optional)
+- [ ] Test API health endpoints
+- [ ] Verify database migrations
+- [ ] Run security audit: `pip-audit` in server directory
+
 ## Contributing
 
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
+We welcome contributions! Please follow these guidelines:
+
+### Development Workflow
+1. **Fork** the repository
+2. **Create** feature branch: `git checkout -b feature/amazing-feature`
+3. **Make** your changes following code style guidelines
+4. **Test** your changes thoroughly
+5. **Commit** with clear messages: `git commit -m 'Add amazing feature'`
+6. **Push** to your fork: `git push origin feature/amazing-feature`
+7. **Open** a Pull Request with detailed description
+
+### Code Style Guidelines
+- **Python**: Follow PEP 8, use type hints, async/await patterns
+- **Swift**: Follow Swift API Design Guidelines, use SwiftUI best practices
+- **TypeScript**: Use ESLint config, prefer functional components
+- **Documentation**: Update README and inline comments for changes
+- **Testing**: Add tests for new features
+
+### Before Submitting PR
+- [ ] Code follows project style guidelines (SOLID, DRY, KISS principles)
+- [ ] All tests pass (`pytest` for backend, Xcode tests for iOS)
+- [ ] No linter errors (`eslint` for website, SwiftLint for iOS)
+- [ ] Documentation updated if needed
+- [ ] Security considerations addressed
+- [ ] Files kept under 500 lines (split into modules if needed)
 
 ---
 
+## Known Issues & Important Notes
+
+### Security & Dependencies
+- **FastAPI Version Constraint**: Currently pinned to 0.115.6 due to dependency chain (httpx 0.27.2 → postgrest 0.17.2 → supabase 2.9.1). This prevents upgrading to starlette 0.49.1+ which includes CVE-2025-62727 (Range header ReDoS) fix.
+  - **Mitigation**: `RangeHeaderValidationMiddleware` validates/rejects problematic Range headers
+  - **TODO**: Upgrade when supabase SDK supports newer versions
+
+### iOS Compatibility
+- **iOS 18.6.2**: All interactive elements, form inputs, and navigation issues resolved as of December 2025
+- **Minimum iOS**: 17.0+ required for SwiftUI features
+
+### Deployment
+- **Railway**: Backend deployed with optimized logging (access logs disabled to avoid rate limits)
+- **Supabase**: All RLS policies optimized and security linter warnings resolved (2025-11-26)
+
 ## Version History
 
-### v1.0
-- Enhanced nutrition tracking with feeding logs
-- Calorie goals and weight management
-- Food database with barcode scanning
-- Advanced nutritional analytics and insights
-- Food comparison feature
-- Health trend analysis
-- Multi-pet nutrition insights
-- Medication reminders and scheduling system
-- Subscription management (App Store & RevenueCat integration)
-- Waitlist signup for pre-launch users
-- **NEW**: Data quality assessment endpoints for food items
-- **NEW**: RevenueCat webhook integration for real-time subscription updates
-- **IMPROVED**: Authentication system with robust JWT validation
-- **IMPROVED**: Row Level Security (RLS) policy enforcement
-- **IMPROVED**: Trailing slash routing support across all endpoints
-- **IMPROVED**: Error handling and debugging capabilities
-- **IMPROVED**: Service role integration for system operations
-- **NEW**: Database function security hardening (function search path fixes)
-- **NEW**: Security fix scripts for database functions (`fix_function_search_path_security.sql`)
-- **NEW**: Device tokens temp table for anonymous device registration
-- **IMPROVED**: Database performance optimizations with optimized RLS patterns
-- **IMPROVED**: All Supabase linter security warnings resolved
-- Bug fixes and performance improvements
-- Major nutrition feature release
-- Comprehensive food database integration
-- Advanced analytics dashboard
-- Weight tracking system
+### v1.0.0 (Current - December 2025)
+
+#### Latest Updates (December 2025)
+- **iOS 18.6.2 Compatibility**: Fixed interactive elements, form inputs, and navigation freezes
+- **Nutritional Data**: Enhanced feeding record calculations and consistency
+- **Weight Calculations**: Improved veterinary weight tracking accuracy
+- **Website Performance**: Optimized Next.js 16.0.9 landing page
+- **Dependencies**: Updated to Next.js 16.0.9, urllib3 2.6.0 for security patches
+
+#### Core Features
+- **Nutrition Tracking**: Complete feeding logs, calorie goals, and weight management
+- **Food Database**: Searchable database with barcode scanning and nutritional info
+- **Advanced Analytics**: AI-powered nutritional insights and health trend analysis
+- **Food Comparison**: Side-by-side comparison of multiple pet foods
+- **Multi-Pet Support**: Track nutrition and health across all pets
+- **Medication Reminders**: Comprehensive scheduling system with customizable frequencies
+- **Subscription System**: Full App Store & RevenueCat integration with webhook support
+- **Waitlist**: Pre-launch email signup system with notification queue
+- **Data Quality**: Assessment endpoints for food item quality and improvement recommendations
+
+#### Security & Infrastructure
+- **Authentication**: Robust JWT validation with multi-strategy support
+- **Database Security**: Row Level Security (RLS) with optimized performance patterns
+- **Function Hardening**: All SECURITY DEFINER functions secured against search path injection
+- **Supabase Linter**: All security warnings resolved (as of 2025-11-26)
+- **Device Tokens**: Anonymous device registration for push notifications
+- **Trailing Slash Support**: Consistent routing across all API endpoints
+- **Error Handling**: Enhanced debugging with comprehensive error messages
+
+#### Technical Stack
+- **iOS**: Swift 5.9+, SwiftUI, iOS 17.0+
+- **Backend**: Python 3.9+, FastAPI 0.115.6, Uvicorn 0.37+
+- **Database**: Supabase 2.9.1, PostgreSQL with RLS
+- **Website**: Next.js 16.0.9, React 19.0.0, TypeScript 5.6
+- **Deployment**: Railway (API), Vercel-ready (Website)
+
+## Environment Variables Reference
+
+### Required Variables (Backend)
+```bash
+# Supabase
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+SUPABASE_JWT_SECRET=your_jwt_secret
+
+# Security
+SECRET_KEY=your_secret_key_min_32_chars
+ALGORITHM=HS256
+
+# Database
+DATABASE_URL=postgresql://...
+```
+
+### Optional Variables
+```bash
+# Push Notifications
+APNS_KEY_ID=your_key_id
+APNS_TEAM_ID=your_team_id
+APNS_BUNDLE_ID=com.snifftest.app
+APNS_PRIVATE_KEY=your_private_key_p8
+
+# RevenueCat (Subscriptions)
+REVENUECAT_API_KEY=your_api_key
+REVENUECAT_WEBHOOK_SECRET=your_webhook_secret
+
+# Redis (Rate Limiting)
+REDIS_URL=redis://localhost:6379
+
+# Environment
+ENVIRONMENT=development|staging|production
+DEBUG=true|false
+LOG_LEVEL=INFO|DEBUG|WARNING|ERROR
+```
+
+See the [Server Setup](#server-setup) section for complete `.env` file example.
+
+## Support & Resources
+
+### Documentation
+- **README**: This file - comprehensive project overview
+- **API Documentation**: [API_DOCS.md](API_DOCS.md) - complete API reference
+- **Scripts README**: `server/scripts/dev/README.md` - utility scripts guide
+- **Pre-Production Checklist**: `server/scripts/deployment/PRE_PRODUCTION_CHECKLIST.md`
+
+### Getting Help
+- **Issues**: Report bugs or request features via GitHub Issues
+- **Support Page**: Website support section for user-facing help
+- **Health Endpoint**: `GET /health` - API health check and status
+
+### Useful Commands
+```bash
+# Backend
+cd server
+python start.py                    # Start server
+pytest tests/ -v                   # Run tests
+pip-audit                          # Security scan
+
+# iOS
+cd pet-allergy-scanner
+open SniffTest.xcodeproj          # Open in Xcode
+# Cmd + B to build, Cmd + R to run
+
+# Website
+cd website
+npm run dev                        # Development server
+npm run build                      # Production build
+npm run lint                       # Run linter
+```
 
 ---
 
 **Built with ❤️ for pet owners everywhere**
 
-*Last updated: November 2025*
+*Last updated: December 12, 2025*
 *iOS App Version: 1.0.0 (Pre-release)*
 *API Version: 1.0.0*
+*Website Version: 1.0.0*
 *Database Schema: Updated 2025-11-26 with security hardening*
