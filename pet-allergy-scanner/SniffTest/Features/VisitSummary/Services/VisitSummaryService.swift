@@ -28,7 +28,7 @@ final class VisitSummaryService: ObservableObject {
     // MARK: - Dependencies
     
     private let nutritionService = CachedNutritionService.shared
-    private let scanService = CachedScanService.shared
+    private let feedingLogService = FeedingLogService.shared
     private let healthEventService = HealthEventService.shared
     private let medicationService = MedicationReminderService.shared
     
@@ -100,7 +100,8 @@ final class VisitSummaryService: ObservableObject {
     
     /**
      * Fetch food changes within the date range
-     * Analyzes scan history to identify food additions, removals, and switches
+     * Analyzes feeding log history to identify foods actually fed to the pet
+     * Uses feeding logs (not scans) as they represent what the pet actually ate
      */
     private func fetchFoodChanges(
         for pet: Pet,
@@ -108,65 +109,67 @@ final class VisitSummaryService: ObservableObject {
     ) async throws -> [FoodChangeEntry] {
         let startDate = dateRange.startDate()
         
-        // Get scans for this pet
-        let scans = await scanService.getScansForPetWithFallback(petId: pet.id)
+        // Get feeding records for this pet (actual food fed, not just scanned)
+        let feedingRecords = try await feedingLogService.getFeedingRecords(
+            for: pet.id,
+            days: dateRange.rawValue
+        )
         
-        // Filter to date range and completed scans
-        let relevantScans = scans.filter { scan in
-            scan.createdAt >= startDate && scan.status == .completed
-        }.sorted { $0.createdAt < $1.createdAt }
+        // Filter to date range and sort chronologically
+        let relevantRecords = feedingRecords.filter { record in
+            record.feedingTime >= startDate
+        }.sorted { $0.feedingTime < $1.feedingTime }
         
-        // Convert scans to food change entries
+        // Convert feeding records to food change entries
+        // Track unique foods to show first occurrence as "added" and subsequent as "switched"
         var foodChanges: [FoodChangeEntry] = []
         var seenFoods: Set<String> = []
         
-        for scan in relevantScans {
-            guard let result = scan.result else { continue }
-            
-            let foodName = result.productName ?? "Unknown Food"
+        for record in relevantRecords {
+            let foodName = record.foodName ?? "Unknown Food"
             let normalizedName = foodName.lowercased()
             
             // Determine if this is a new food or existing
             let changeType: FoodChangeType = seenFoods.contains(normalizedName) ? .switched : .added
             seenFoods.insert(normalizedName)
             
-            // Identify flagged ingredients
+            // Check food name against pet's known sensitivities
             var flaggedIngredients: [FlaggedIngredient] = []
-            
-            // Add unsafe ingredients
-            for ingredient in result.unsafeIngredients {
-                flaggedIngredients.append(FlaggedIngredient(
-                    name: ingredient,
-                    reason: "Identified as potentially unsafe",
-                    severity: .unsafe
-                ))
-            }
-            
-            // Check against pet's known sensitivities
             for sensitivity in pet.knownSensitivities {
                 let sensitivityLower = sensitivity.lowercased()
-                for ingredient in result.ingredientsFound {
-                    if ingredient.lowercased().contains(sensitivityLower) {
-                        flaggedIngredients.append(FlaggedIngredient(
-                            name: ingredient,
-                            reason: "Known sensitivity: \(sensitivity)",
-                            severity: .knownSensitivity
-                        ))
-                    }
+                if foodName.lowercased().contains(sensitivityLower) {
+                    flaggedIngredients.append(FlaggedIngredient(
+                        name: sensitivity,
+                        reason: "Food contains known sensitivity",
+                        severity: .knownSensitivity
+                    ))
                 }
             }
             
             foodChanges.append(FoodChangeEntry(
-                date: scan.createdAt,
+                date: record.feedingTime,
                 foodName: foodName,
-                brand: result.brand,
+                brand: record.foodBrand,
                 changeType: changeType,
                 flaggedIngredients: flaggedIngredients,
-                scanId: scan.id
+                scanId: nil
             ))
         }
         
-        return foodChanges.sorted { $0.date > $1.date }
+        // Return unique foods only (first occurrence of each food)
+        // to show what foods were introduced during the period
+        var uniqueFoodChanges: [FoodChangeEntry] = []
+        var addedFoods: Set<String> = []
+        
+        for change in foodChanges {
+            let normalizedName = change.foodName.lowercased()
+            if !addedFoods.contains(normalizedName) {
+                addedFoods.insert(normalizedName)
+                uniqueFoodChanges.append(change)
+            }
+        }
+        
+        return uniqueFoodChanges.sorted { $0.date > $1.date }
     }
     
     /**
@@ -176,7 +179,7 @@ final class VisitSummaryService: ObservableObject {
         for pet: Pet,
         dateRange: VisitSummaryDateRange
     ) async throws -> WeightTrendData {
-        let startDate = dateRange.startDate()
+        // Reserved for future weight history query using dateRange.startDate()
         
         // Load feeding records to get weight history
         // Weight updates are tracked through pet profile updates
@@ -239,26 +242,21 @@ final class VisitSummaryService: ObservableObject {
      * Fetch active medications for the pet
      */
     private func fetchActiveMedications(for pet: Pet) async throws -> [ActiveMedication] {
-        do {
-            let reminders = try await medicationService.getReminders(for: pet.id)
-            
-            return reminders
-                .filter { $0.isCurrentlyActive }
-                .map { reminder in
-                    ActiveMedication(
-                        id: reminder.id,
-                        name: reminder.medicationName,
-                        dosage: reminder.dosage,
-                        frequency: reminder.frequency.displayName,
-                        startDate: reminder.startDate,
-                        endDate: reminder.endDate,
-                        isOngoing: reminder.endDate == nil
-                    )
-                }
-        } catch {
-            LoggingManager.warning("Failed to fetch medications: \(error)", category: .general)
-            return []
-        }
+        let reminders = medicationService.getMedicationReminders(for: pet.id)
+        
+        return reminders
+            .filter { $0.isCurrentlyActive }
+            .map { reminder in
+                ActiveMedication(
+                    id: reminder.id,
+                    name: reminder.medicationName,
+                    dosage: reminder.dosage,
+                    frequency: reminder.frequency.displayName,
+                    startDate: reminder.startDate,
+                    endDate: reminder.endDate,
+                    isOngoing: reminder.endDate == nil
+                )
+            }
     }
     
     /**

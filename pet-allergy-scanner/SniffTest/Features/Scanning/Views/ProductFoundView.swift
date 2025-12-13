@@ -309,7 +309,7 @@ struct IngredientsCard: View {
             
             // Ingredients list
             VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                ForEach(displayedIngredients, id: \.self) { ingredient in
+                ForEach(Array(displayedIngredients.enumerated()), id: \.offset) { index, ingredient in
                     HStack(spacing: ModernDesignSystem.Spacing.xs) {
                         Circle()
                             .fill(ModernDesignSystem.Colors.primary)
@@ -363,7 +363,7 @@ struct AllergensCard: View {
             
             // Allergen tags
             FlowLayout(spacing: ModernDesignSystem.Spacing.xs) {
-                ForEach(allergens, id: \.self) { allergen in
+                ForEach(Array(allergens.enumerated()), id: \.offset) { index, allergen in
                     Text(allergen)
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -575,7 +575,7 @@ struct AdditivesCard: View {
             
             // Additive tags
             FlowLayout(spacing: ModernDesignSystem.Spacing.xs) {
-                ForEach(additives, id: \.self) { additive in
+                ForEach(Array(additives.enumerated()), id: \.offset) { index, additive in
                     Text(additive)
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -626,7 +626,7 @@ struct VitaminsCard: View {
             
             // Vitamin tags
             FlowLayout(spacing: ModernDesignSystem.Spacing.xs) {
-                ForEach(vitamins, id: \.self) { vitamin in
+                ForEach(Array(vitamins.enumerated()), id: \.offset) { index, vitamin in
                     Text(vitamin)
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
@@ -677,7 +677,7 @@ struct MineralsCard: View {
             
             // Mineral tags
             FlowLayout(spacing: ModernDesignSystem.Spacing.xs) {
-                ForEach(minerals, id: \.self) { mineral in
+                ForEach(Array(minerals.enumerated()), id: \.offset) { index, mineral in
                     Text(mineral)
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)

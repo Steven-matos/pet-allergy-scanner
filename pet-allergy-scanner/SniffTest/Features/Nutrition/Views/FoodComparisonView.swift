@@ -626,55 +626,73 @@ struct FoodComparisonView: View {
             
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(results.foods) { food in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(food.foodName)
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                            
-                            Spacer()
-                            
-                            Text("\(food.ingredients.count) ingredients")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        if !food.ingredients.isEmpty {
-                            FlowLayout(spacing: 4) {
-                                ForEach(food.ingredients, id: \.self) { ingredient in
-                                    // Check if this ingredient matches pet's sensitivities
-                                    let isPetSensitive = food.petAllergyWarnings?.contains(ingredient) ?? false
-                                    
-                                    Text(ingredient)
-                                        .font(.caption2)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(isPetSensitive ? Color.red.opacity(0.15) : Color(.systemGray6))
-                                        .foregroundColor(isPetSensitive ? .red : .primary)
-                                        .cornerRadius(4)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .stroke(isPetSensitive ? Color.red : Color.clear, lineWidth: 1)
-                                        )
-                                }
-                            }
-                        } else {
-                            Text("No ingredient information available")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                                .italic()
-                        }
-                    }
-                    .padding(12)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(food.hasPetAllergyWarning ? Color.red.opacity(0.3) : Color(.systemGray5), lineWidth: 1)
-                    )
+                    ingredientFoodCard(food)
                 }
             }
         }
+    }
+    
+    /// Single food card showing ingredients
+    @ViewBuilder
+    private func ingredientFoodCard(_ food: FoodAnalysis) -> some View {
+        let hasWarning = food.hasPetAllergyWarning
+        
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(food.foodName)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("\(food.ingredients.count) ingredients")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            
+            ingredientsList(food)
+        }
+        .padding(12)
+        .background(Color(.systemBackground))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(hasWarning ? Color.red.opacity(0.3) : Color(.systemGray5), lineWidth: 1)
+        )
+    }
+    
+    /// Ingredients list or empty message
+    @ViewBuilder
+    private func ingredientsList(_ food: FoodAnalysis) -> some View {
+        if !food.ingredients.isEmpty {
+            FlowLayout(spacing: 4) {
+                ForEach(Array(food.ingredients.enumerated()), id: \.offset) { index, ingredient in
+                    ingredientTag(ingredient, warnings: food.petAllergyWarnings)
+                }
+            }
+        } else {
+            Text("No ingredient information available")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .italic()
+        }
+    }
+    
+    /// Single ingredient tag with sensitivity highlighting
+    private func ingredientTag(_ ingredient: String, warnings: [String]?) -> some View {
+        let isPetSensitive = warnings?.contains(ingredient) ?? false
+        
+        return Text(ingredient)
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(isPetSensitive ? Color.red.opacity(0.15) : Color(.systemGray6))
+            .foregroundColor(isPetSensitive ? .red : .primary)
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isPetSensitive ? Color.red : Color.clear, lineWidth: 1)
+            )
     }
     
     /// Standalone allergen analysis section
@@ -695,21 +713,7 @@ struct FoodComparisonView: View {
     /// (e.g., chicken, beef, dairy, grains, corn, soy, wheat)
     private func allergenAnalysisContent(_ results: FoodComparisonResults) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 8) {
-                Text("Common Sensitivity Triggers")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                
-                Spacer()
-                
-                Button(action: {
-                    showingSensitivityInfo = true
-                }) {
-                    Image(systemName: "info.circle")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+            allergenAnalysisHeader
             
             Text("Based on OpenPetFoodFacts database. Tap info for details.")
                 .font(.caption2)
@@ -718,55 +722,90 @@ struct FoodComparisonView: View {
             
             LazyVStack(spacing: 8) {
                 ForEach(results.foods) { food in
-                    let commonTriggers = findCommonTriggers(in: food.ingredients)
-                    
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(food.foodName)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                            
-                            if !commonTriggers.isEmpty {
-                                FlowLayout(spacing: 4) {
-                                    ForEach(commonTriggers, id: \.self) { sensitivity in
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .font(.caption2)
-                                                .foregroundColor(.orange)
-                                            
-                                            Text(sensitivity)
-                                                .font(.caption2)
-                                        }
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.orange.opacity(0.1))
-                                        .cornerRadius(4)
-                                    }
-                                }
-                            } else {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption2)
-                                        .foregroundColor(.green)
-                                    
-                                    Text("No common sensitivity triggers found")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(12)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(commonTriggers.isEmpty ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
-                    )
+                    allergenFoodCard(food)
                 }
             }
         }
+    }
+    
+    /// Header for allergen analysis section
+    private var allergenAnalysisHeader: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text("Common Sensitivity Triggers")
+                .font(.subheadline)
+                .fontWeight(.medium)
+            
+            Spacer()
+            
+            Button(action: { showingSensitivityInfo = true }) {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    /// Single food card for allergen analysis
+    @ViewBuilder
+    private func allergenFoodCard(_ food: FoodAnalysis) -> some View {
+        let commonTriggers = findCommonTriggers(in: food.ingredients)
+        let hasTriggers = !commonTriggers.isEmpty
+        
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(food.foodName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                
+                allergenTriggersList(commonTriggers)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Color(.systemBackground))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(hasTriggers ? Color.orange.opacity(0.3) : Color.green.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    /// List of allergen triggers or success message
+    @ViewBuilder
+    private func allergenTriggersList(_ triggers: [String]) -> some View {
+        if !triggers.isEmpty {
+            FlowLayout(spacing: 4) {
+                ForEach(Array(triggers.enumerated()), id: \.offset) { index, sensitivity in
+                    allergenTriggerTag(sensitivity)
+                }
+            }
+        } else {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundColor(.green)
+                
+                Text("No common sensitivity triggers found")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    /// Single allergen trigger tag
+    private func allergenTriggerTag(_ sensitivity: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .foregroundColor(.orange)
+            
+            Text(sensitivity)
+                .font(.caption2)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Color.orange.opacity(0.1))
+        .cornerRadius(4)
     }
     
     /// Helper function to highlight best/worst values in comparison
@@ -804,7 +843,7 @@ struct FoodComparisonView: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
             
             LazyVStack(spacing: ModernDesignSystem.Spacing.sm) {
-                ForEach(results.recommendations, id: \.self) { recommendation in
+                ForEach(Array(results.recommendations.enumerated()), id: \.offset) { index, recommendation in
                     HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
                         Image(systemName: "lightbulb.fill")
                             .font(ModernDesignSystem.Typography.caption)

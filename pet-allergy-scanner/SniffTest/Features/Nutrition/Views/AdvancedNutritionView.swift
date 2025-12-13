@@ -1856,7 +1856,7 @@ struct AnalyticsSummaryCard: View {
 
 /**
  * Health Insights model matching backend API response
- * Decodes JSON from /api/v1/advanced-nutrition/analytics/health-insights/{pet_id}
+ * Decodes JSON from /advanced-nutrition/analytics/health-insights/{pet_id}
  */
 struct HealthInsights: Codable {
     let petId: String
@@ -2015,7 +2015,7 @@ struct NutritionalRecommendation: Codable {
 
 /**
  * Nutritional Patterns model matching backend API response
- * Decodes JSON from /api/v1/advanced-nutrition/analytics/patterns/{pet_id}
+ * Decodes JSON from /advanced-nutrition/analytics/patterns/{pet_id}
  */
 struct NutritionalPatterns: Codable {
     let petId: String
@@ -2072,7 +2072,7 @@ class AdvancedAnalyticsService: ObservableObject {
         }
         
         do {
-            let endpoint = "/api/v1/advanced-nutrition/analytics/health-insights/\(petId)"
+            let endpoint = "/advanced-nutrition/analytics/health-insights/\(petId)"
             let insights = try await apiService.get(
                 endpoint: endpoint,
                 responseType: HealthInsights.self
@@ -2099,7 +2099,7 @@ class AdvancedAnalyticsService: ObservableObject {
         }
         
         do {
-            let endpoint = "/api/v1/advanced-nutrition/analytics/patterns/\(petId)"
+            let endpoint = "/advanced-nutrition/analytics/patterns/\(petId)"
             let patterns = try await apiService.get(
                 endpoint: endpoint,
                 responseType: NutritionalPatterns.self

@@ -39,9 +39,9 @@ struct VisitSummaryView: View {
                 } else if let summary = service.currentSummary {
                     SummaryContentView(summary: summary, selectedDateRange: $selectedDateRange)
                 } else if let error = service.errorMessage {
-                    ErrorView(message: error, onRetry: loadSummary)
+                    VisitSummaryErrorView(message: error, onRetry: loadSummary)
                 } else {
-                    EmptyStateView(onGenerate: loadSummary)
+                    VisitSummaryEmptyStateView(onGenerate: loadSummary)
                 }
             }
             .background(ModernDesignSystem.Colors.softCream)
@@ -645,7 +645,7 @@ private struct LoadingView: View {
     }
 }
 
-private struct ErrorView: View {
+private struct VisitSummaryErrorView: View {
     let message: String
     let onRetry: () -> Void
     
@@ -671,7 +671,7 @@ private struct ErrorView: View {
     }
 }
 
-private struct EmptyStateView: View {
+private struct VisitSummaryEmptyStateView: View {
     let onGenerate: () -> Void
     
     var body: some View {
@@ -698,8 +698,8 @@ private struct EmptyStateView: View {
 
 // MARK: - Flow Layout
 
-/// Simple flow layout for tags
-struct FlowLayout: Layout {
+/// Simple flow layout for tags (private to avoid conflict with global FlowLayout)
+private struct VisitSummaryFlowLayout: Layout {
     var spacing: CGFloat
     
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
