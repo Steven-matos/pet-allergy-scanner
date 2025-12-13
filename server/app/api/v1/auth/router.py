@@ -532,13 +532,8 @@ async def reset_password(request: Request):
                 detail="Email is required"
             )
         
-        # Validate email format
-        validator = InputValidator()
-        if not validator.is_valid_email(email):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid email format"
-            )
+        # Validate and sanitize email (raises HTTPException if invalid)
+        email = InputValidator.validate_email(email)
         
         supabase = get_supabase_client()
         
