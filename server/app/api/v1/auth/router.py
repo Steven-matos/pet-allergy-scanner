@@ -577,6 +577,95 @@ async def reset_password(request: Request):
         )
 
 
+@router.post("/update-password/")
+async def update_password(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Update password for authenticated user (after password reset flow)
+    
+    Requires valid access token from password reset email link.
+    
+    Args:
+        request: FastAPI request object containing new password
+        credentials: JWT token from password reset link
+        
+    Returns:
+        Success message
+        
+    Raises:
+        HTTPException: If update fails
+    """
+    try:
+        if not credentials:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+        
+        # Parse request body
+        body = await request.json()
+        new_password = body.get("password")
+        
+        if not new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password is required"
+            )
+        
+        # Validate password strength
+        validator = InputValidator()
+        try:
+            validator.validate_password(new_password)
+        except HTTPException as e:
+            raise e
+        
+        # Use authenticated client to update password
+        from app.shared.services.supabase_auth_service import SupabaseAuthService
+        
+        supabase = SupabaseAuthService.create_authenticated_client(
+            access_token=credentials.credentials,
+            refresh_token=None
+        )
+        
+        # Update the user's password via Supabase Auth
+        try:
+            supabase.auth.update_user({"password": new_password})
+        except Exception as update_error:
+            error_str = str(update_error).lower()
+            logger.error(f"Password update error: {update_error}")
+            
+            if "weak" in error_str or "strength" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Password does not meet strength requirements"
+                )
+            
+            if "expired" in error_str or "invalid" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Password reset link has expired. Please request a new one."
+                )
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update password. Please try again."
+            )
+        
+        logger.info("Password updated successfully")
+        return {"message": "Password updated successfully. Please log in with your new password."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password update error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during password update"
+        )
+
+
 @router.post("/refresh/")
 async def refresh_token(
     request: Request,
