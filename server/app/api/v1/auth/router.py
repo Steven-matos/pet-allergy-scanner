@@ -507,6 +507,81 @@ async def update_user_profile(
             detail="Internal server error updating user profile"
         )
 
+@router.post("/reset-password/")
+async def reset_password(request: Request):
+    """
+    Send password reset email to user
+    
+    Args:
+        request: FastAPI request object containing email
+        
+    Returns:
+        Success message
+        
+    Raises:
+        HTTPException: If reset fails
+    """
+    try:
+        # Parse request body
+        body = await request.json()
+        email = body.get("email")
+        
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email is required"
+            )
+        
+        # Validate email format
+        validator = InputValidator()
+        if not validator.is_valid_email(email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email format"
+            )
+        
+        supabase = get_supabase_client()
+        
+        # Send password reset email via Supabase Auth
+        # Note: Supabase will handle the case where email doesn't exist
+        # (it won't reveal whether an account exists for security)
+        try:
+            # Use SniffTest URL scheme for iOS app deep linking
+            supabase.auth.reset_password_email(
+                email,
+                options={
+                    "redirect_to": "SniffTest://auth/callback?type=recovery"
+                }
+            )
+        except Exception as reset_error:
+            error_str = str(reset_error).lower()
+            logger.error(f"Password reset error: {reset_error}")
+            
+            # Check for rate limit
+            if "rate limit" in error_str or "429" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many reset attempts. Please try again later.",
+                    headers={"Retry-After": "60"}
+                )
+            
+            # For security, don't reveal if email exists or not
+            # Just return success message
+            pass
+        
+        # Always return success to prevent email enumeration attacks
+        return {"message": "If an account exists with this email, a password reset link has been sent."}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password reset error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during password reset"
+        )
+
+
 @router.post("/refresh/")
 async def refresh_token(
     request: Request,
