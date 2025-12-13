@@ -18,6 +18,7 @@ RETURNS TABLE (
     created_at TIMESTAMP WITH TIME ZONE
 ) 
 SECURITY DEFINER
+SET search_path = ''
 LANGUAGE plpgsql
 AS $$
 BEGIN
@@ -31,7 +32,7 @@ BEGIN
         fr.notes,
         fr.calories,
         fr.created_at
-    FROM feeding_records fr
+    FROM public.feeding_records fr
     WHERE fr.pet_id = p_pet_id
     ORDER BY fr.created_at DESC
     LIMIT 10;
