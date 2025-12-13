@@ -18,6 +18,9 @@ struct ScanResultView: View {
     @State private var sensitivityError: String?
     @State private var hasAttemptedSensitivityLoad = false
     
+    // MARK: - Guidance Engine Integration (Gap #1)
+    @State private var healthGuidance: [HealthGuidance] = []
+    
     init(scan: Scan, onDismissAll: (() -> Void)? = nil) {
         self.scan = scan
         self.onDismissAll = onDismissAll
@@ -27,6 +30,19 @@ struct ScanResultView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: ModernDesignSystem.Spacing.xl) {
+                    // MARK: - Health Guidance Cards (Gap #1)
+                    if !healthGuidance.isEmpty {
+                        HealthGuidanceStack(
+                            guidanceItems: healthGuidance,
+                            onDismiss: { guidanceId in
+                                Task { @MainActor in
+                                    GuidanceEngine.shared.dismiss(guidanceId: guidanceId)
+                                    healthGuidance.removeAll { $0.id == guidanceId }
+                                }
+                            }
+                        )
+                    }
+                    
                     if let result = scan.result {
                         // Ingredients Analysis
                         if !result.ingredientsFound.isEmpty {
@@ -103,6 +119,9 @@ struct ScanResultView: View {
                     print("🔍 ScanResultView: Ingredients found: \(result.ingredientsFound.count)")
                     print("🔍 ScanResultView: Unsafe ingredients: \(result.unsafeIngredients.count)")
                     print("🔍 ScanResultView: Safe ingredients: \(result.safeIngredients.count)")
+                    
+                    // MARK: - Trigger Guidance Engine (Gap #1)
+                    loadHealthGuidance(for: result)
                 } else {
                     print("⚠️ ScanResultView: No scan result available")
                 }
@@ -124,6 +143,26 @@ struct ScanResultView: View {
     }
     
     // MARK: - Private Methods
+    
+    /**
+     * Load health guidance based on scan results (Gap #1)
+     * Triggers the GuidanceEngine to generate contextual prompts
+     */
+    private func loadHealthGuidance(for result: ScanResult) {
+        Task { @MainActor in
+            let hasUnsafe = !result.unsafeIngredients.isEmpty
+            let hasCaution = result.overallSafety == "caution"
+            
+            let guidance = GuidanceEngine.shared.evaluate(event: .scanSaved(
+                hasUnsafeIngredients: hasUnsafe,
+                hasCautionIngredients: hasCaution && !hasUnsafe,
+                productName: result.productName
+            ))
+            
+            healthGuidance = guidance
+            print("🎯 ScanResultView: Loaded \(guidance.count) guidance items")
+        }
+    }
     
     /**
      * Load sensitivity assessment for the current scan

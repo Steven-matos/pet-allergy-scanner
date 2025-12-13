@@ -188,6 +188,7 @@ struct PetCardView: View {
     @State private var exportErrorMessage: String?
     @State private var pdfURL: URL?
     @State private var showShareSheet = false
+    @State private var showingVisitSummary = false
     
     /// Get current weight for the pet - prefers fresh weight from weight service over cached pet.weightKg
     /// This ensures we always show the most up-to-date weight
@@ -384,34 +385,62 @@ struct PetCardView: View {
                     }
                 }
                 
-                // Export for Vet Button
-                Button(action: {
-                    Task {
-                        await exportForVet()
-                    }
-                }) {
-                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
-                        if isExportingPDF {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                .scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "doc.text.fill")
+                // Vet Actions Row - Visit Summary and Export PDF
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    // Visit Summary Button
+                    Button(action: { showingVisitSummary = true }) {
+                        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                            Image(systemName: "doc.text.magnifyingglass")
                                 .font(ModernDesignSystem.Typography.subheadline)
+                            Text("Summary")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
                         }
-                        Text(isExportingPDF ? "Generating PDF..." : "Export for Vet")
-                            .font(ModernDesignSystem.Typography.subheadline)
-                            .fontWeight(.semibold)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                                .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                        )
                     }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                    .background(ModernDesignSystem.Colors.primary)
-                    .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    .accessibilityLabel("View visit summary for \(pet.name)")
+                    .accessibilityHint("Opens a vet-readable health summary")
+                    
+                    // Export for Vet Button
+                    Button(action: {
+                        Task {
+                            await exportForVet()
+                        }
+                    }) {
+                        HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                            if isExportingPDF {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "doc.text.fill")
+                                    .font(ModernDesignSystem.Typography.subheadline)
+                            }
+                            Text(isExportingPDF ? "Exporting..." : "Export PDF")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                        .background(ModernDesignSystem.Colors.primary)
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    }
+                    .disabled(isExportingPDF)
+                    .accessibilityLabel("Export pet data for veterinarian")
+                    .accessibilityHint("Generates a PDF document with pet health information")
                 }
-                .disabled(isExportingPDF)
-                .accessibilityLabel("Export pet data for veterinarian")
-                .accessibilityHint("Generates a PDF document with pet health information")
+                .sheet(isPresented: $showingVisitSummary) {
+                    VisitSummaryView(pet: pet)
+                }
                 .sheet(isPresented: $showShareSheet) {
                     if let pdfURL = pdfURL {
                         ShareSheet(activityItems: [pdfURL])
