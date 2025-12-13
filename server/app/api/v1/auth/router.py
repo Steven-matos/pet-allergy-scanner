@@ -636,6 +636,13 @@ async def update_password(
             error_str = str(update_error).lower()
             logger.error(f"Password update error: {update_error}")
             
+            # Check for same password error
+            if "same" in error_str or "different" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="New password must be different from your current password."
+                )
+            
             if "weak" in error_str or "strength" in error_str:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
