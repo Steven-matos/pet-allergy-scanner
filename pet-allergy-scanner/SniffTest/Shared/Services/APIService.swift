@@ -1048,6 +1048,14 @@ class APIService: ObservableObject, @unchecked Sendable {
                     }
                     throw APIError.serverError(httpResponse.statusCode)
                 case 500...599:
+                    // Try to extract error message from 5xx responses too
+                    if let errorResponse = try? createJSONDecoder().decode(APIErrorResponse.self, from: data) {
+                        throw APIError.serverMessage(errorResponse.message)
+                    }
+                    if let errorDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let errorMessage = (errorDict["error"] as? String) ?? (errorDict["detail"] as? String) {
+                        throw APIError.serverMessage(errorMessage)
+                    }
                     throw APIError.serverError(httpResponse.statusCode)
                 default:
                     throw APIError.unknownError
@@ -1257,7 +1265,54 @@ extension APIService {
         return try await performRequest(request, responseType: AuthResponse.self)
     }
     
-    /// Reset password for user
+    /// Sign in with Apple ID token
+    /// - Parameters:
+    ///   - idToken: The identity token from Apple Sign-In
+    ///   - nonce: The nonce used during Apple Sign-In (unhashed)
+    ///   - fullName: Optional user's full name (only available on first sign-in)
+    ///   - email: Optional user's email (only available on first sign-in)
+    /// - Returns: AuthResponse containing access token and user data
+    func signInWithApple(
+        idToken: String,
+        nonce: String,
+        fullName: PersonNameComponents? = nil,
+        email: String? = nil
+    ) async throws -> AuthResponse {
+        guard let url = URL(string: "\(baseURL)/auth/apple/") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = await createRequest(url: url, method: "POST")
+        
+        // Build request payload
+        var appleAuthData: [String: Any] = [
+            "id_token": idToken,
+            "nonce": nonce
+        ]
+        
+        // Include optional user data if available
+        if let email = email {
+            appleAuthData["email"] = email
+        }
+        if let fullName = fullName {
+            if let givenName = fullName.givenName {
+                appleAuthData["first_name"] = givenName
+            }
+            if let familyName = fullName.familyName {
+                appleAuthData["last_name"] = familyName
+            }
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: appleAuthData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        return try await performRequest(request, responseType: AuthResponse.self)
+    }
+    
+    /// Reset password for user (sends reset email)
     func resetPassword(email: String) async throws {
         guard let url = URL(string: "\(baseURL)/auth/reset-password/") else {
             throw APIError.invalidURL
@@ -1268,6 +1323,25 @@ extension APIService {
         let resetData = ["email": email]
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: resetData)
+        } catch {
+            throw APIError.encodingError
+        }
+        
+        let _: EmptyResponse = try await performRequest(request, responseType: EmptyResponse.self)
+    }
+    
+    /// Update password for authenticated user (after clicking reset link)
+    /// - Parameter newPassword: The new password to set
+    func updatePassword(newPassword: String) async throws {
+        guard let url = URL(string: "\(baseURL)/auth/update-password/") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = await createRequest(url: url, method: "POST")
+        
+        let passwordData = ["password": newPassword]
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: passwordData)
         } catch {
             throw APIError.encodingError
         }

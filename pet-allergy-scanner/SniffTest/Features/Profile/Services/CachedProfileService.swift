@@ -245,8 +245,8 @@ class CachedProfileService: ObservableObject {
             // User signed in, load profile data
             currentUser = user
             await loadUserProfileData()
-        case .unauthenticated:
-            // User signed out, clear cache
+        case .unauthenticated, .pendingPasswordReset:
+            // User signed out or resetting password, clear cache
             clearCache()
         case .loading, .initializing:
             // Still loading, do nothing

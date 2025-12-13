@@ -18,6 +18,8 @@ enum AuthState: Equatable {
     case authenticated(User)
     /// User is not authenticated
     case unauthenticated
+    /// User clicked password reset link and needs to set new password
+    case pendingPasswordReset
     
     /// Convenience property to check if authenticated
     var isAuthenticated: Bool {
@@ -45,12 +47,21 @@ enum AuthState: Equatable {
         }
     }
     
+    /// Check if pending password reset
+    var isPendingPasswordReset: Bool {
+        if case .pendingPasswordReset = self {
+            return true
+        }
+        return false
+    }
+    
     /// Custom equality implementation
     static func == (lhs: AuthState, rhs: AuthState) -> Bool {
         switch (lhs, rhs) {
         case (.initializing, .initializing),
              (.loading, .loading),
-             (.unauthenticated, .unauthenticated):
+             (.unauthenticated, .unauthenticated),
+             (.pendingPasswordReset, .pendingPasswordReset):
             return true
         case (.authenticated(let lhsUser), .authenticated(let rhsUser)):
             return lhsUser.id == rhsUser.id && lhsUser.onboarded == rhsUser.onboarded
@@ -71,6 +82,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
     private let apiService = APIService.shared
     private lazy var cacheHydrationService = CacheHydrationService.shared
     
+    /// Token stored separately for password reset flow to avoid triggering session restoration
+    private var pendingPasswordResetToken: String?
+    
     /// Convenience computed properties for backward compatibility
     var isAuthenticated: Bool { authState.isAuthenticated }
     var currentUser: User? { authState.user }
@@ -80,6 +94,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
         // Attempt to restore existing auth token and user session
         // Token is persisted securely using Keychain inside APIService
         Task { @MainActor in
+            // Skip session restore if we're in password reset flow
+            guard authState != .pendingPasswordReset else { return }
+            
             if await apiService.hasAuthToken {
                 await restoreUserSession()
             } else {
@@ -97,6 +114,12 @@ class AuthService: ObservableObject, @unchecked Sendable {
     
     /// Restore user session from stored token
     private func restoreUserSession() async {
+        // CRITICAL: Never restore session during password reset flow
+        guard authState != .pendingPasswordReset else {
+            print("AuthService: Skipping session restore - password reset in progress")
+            return
+        }
+        
         await MainActor.run {
             authState = .loading
         }
@@ -155,6 +178,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
     /// Resume or refresh the authenticated session when the app returns to the foreground.
     /// - Parameter forceRefresh: When true, bypasses the staleness interval (used after app updates).
     func resumeSessionIfNeeded(forceRefresh: Bool = false) async {
+        // Skip session operations if we're in password reset flow
+        guard authState != .pendingPasswordReset else { return }
+        
         if case .authenticated = authState {
             await refreshSessionIfNeeded(force: forceRefresh)
             // Also check subscription status and refresh profile if user is bypass/premium
@@ -272,6 +298,64 @@ class AuthService: ObservableObject, @unchecked Sendable {
             await MainActor.run {
                 authState = .unauthenticated
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+    
+    /// Sign in with Apple
+    /// Orchestrates the Apple Sign-In flow by:
+    /// 1. Presenting the Apple Sign-In sheet
+    /// 2. Sending the identity token to the backend
+    /// 3. Processing the authentication response
+    /// - Parameter appleSignInService: The Apple Sign-In service instance
+    func signInWithApple(using appleSignInService: AppleSignInService) async {
+        await MainActor.run {
+            authState = .loading
+            errorMessage = nil
+        }
+        
+        do {
+            // Step 1: Get Apple credentials
+            let appleCredential = try await appleSignInService.signIn()
+            
+            // Step 2: Exchange Apple token with backend
+            let authResponse = try await apiService.signInWithApple(
+                idToken: appleCredential.identityToken,
+                nonce: appleCredential.nonce,
+                fullName: appleCredential.fullName,
+                email: appleCredential.email
+            )
+            
+            // Step 3: Handle the authentication response (same as regular login)
+            await handleAuthResponse(authResponse)
+            
+            // Start automatic token refresh after successful login
+            AutomaticTokenRefreshService.shared.start()
+            
+            // Track Apple Sign-In in PostHog
+            if let user = authState.user {
+                PostHogAnalytics.trackUserLoggedIn(userId: user.id, role: user.role.rawValue)
+            }
+            
+        } catch let appleError as AppleSignInError {
+            await MainActor.run {
+                authState = .unauthenticated
+                // Don't show error message for user cancellation
+                if case .userCancelled = appleError {
+                    errorMessage = nil
+                } else {
+                    errorMessage = appleError.localizedDescription
+                }
+            }
+        } catch let apiError as APIError {
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = apiError.localizedDescription
+            }
+        } catch {
+            await MainActor.run {
+                authState = .unauthenticated
+                errorMessage = "Failed to sign in with Apple. Please try again."
             }
         }
     }
@@ -563,36 +647,60 @@ class AuthService: ObservableObject, @unchecked Sendable {
     }
     
     /// Handle password reset from URL redirect
+    /// Shows the set new password view instead of logging user in directly
     func handlePasswordReset(accessToken: String) {
-        print("AuthService: Handling password reset")
+        print("AuthService: Handling password reset - showing set new password view")
         
-        Task {
-            // Store the token for password reset flow
-            await apiService.setAuthToken(accessToken)
+        // CRITICAL: Set state FIRST before storing token to prevent race condition
+        // Store token separately to avoid triggering session restoration
+        authState = .pendingPasswordReset
+        pendingPasswordResetToken = accessToken
+        
+        print("AuthService: Password reset token stored, awaiting new password")
+    }
+    
+    /// Update user password after password reset
+    /// Called from SetNewPasswordView after user enters new password
+    /// - Parameter newPassword: The new password to set
+    func updatePassword(newPassword: String) async throws {
+        print("AuthService: Updating password")
+        
+        guard let resetToken = pendingPasswordResetToken else {
+            throw NSError(domain: "AuthService", code: 401, userInfo: [
+                NSLocalizedDescriptionKey: "Password reset session expired. Please request a new reset link."
+            ])
+        }
+        
+        // Temporarily set the token just for the update call
+        await apiService.setAuthToken(resetToken)
+        
+        do {
+            try await apiService.updatePassword(newPassword: newPassword)
             
+            // Clear tokens after successful password update
+            pendingPasswordResetToken = nil
+            await apiService.clearAuthToken()
+            
+            // After password update, redirect to login
             await MainActor.run {
-                authState = .loading
+                authState = .unauthenticated
+                errorMessage = nil
             }
             
-            do {
-                let user = try await apiService.getCurrentUser()
-                
-                // Hydrate all caches before transitioning to authenticated state
-                await cacheHydrationService.hydrateAllCaches()
-                cacheAuthenticatedUser(user)
-                
-                await MainActor.run {
-                    authState = .authenticated(user)
-                }
-                
-                // Post login notification for services to reload their data
-                NotificationCenter.default.post(name: .userDidLogin, object: nil)
-                
-                print("AuthService: Password reset token validated")
-            } catch {
-                print("AuthService: Password reset validation failed - \(error)")
-                await logout()
-            }
+            print("AuthService: Password updated successfully, user redirected to login")
+        } catch {
+            // Clear the temp token on failure
+            await apiService.clearAuthToken()
+            throw error
+        }
+    }
+    
+    /// Cancel password reset and return to login
+    func cancelPasswordReset() async {
+        print("AuthService: Cancelling password reset")
+        pendingPasswordResetToken = nil
+        await MainActor.run {
+            authState = .unauthenticated
         }
     }
     

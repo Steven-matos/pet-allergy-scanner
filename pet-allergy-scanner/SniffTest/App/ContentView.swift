@@ -62,6 +62,10 @@ struct ContentView: View {
             case .unauthenticated:
                 // User is not authenticated
                 AuthenticationView()
+                
+            case .pendingPasswordReset:
+                // User clicked password reset link and needs to set new password
+                SetNewPasswordView()
             }
         }
         .dismissKeyboardOnTap()

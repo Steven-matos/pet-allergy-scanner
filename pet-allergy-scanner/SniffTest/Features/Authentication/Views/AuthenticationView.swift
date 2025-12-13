@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AuthenticationServices
 
 /**
  * Authentication View - Trust & Nature Design System Compliant
@@ -58,6 +59,7 @@ struct AuthenticationView: View {
     
     @FocusState private var focusedField: Field?
     @StateObject private var keyboardManager = KeyboardAvoidanceManager()
+    @StateObject private var appleSignInService = AppleSignInService()
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -544,7 +546,7 @@ struct AuthenticationView: View {
             // Main submit button
             Button(action: handleSubmit) {
                 HStack(spacing: ModernDesignSystem.Spacing.sm) {
-                    if authService.isLoading {
+                    if authService.isLoading && !appleSignInService.isAuthenticating {
                         ProgressView()
                             .scaleEffect(0.8)
                             .tint(ModernDesignSystem.Colors.textOnPrimary)
@@ -566,9 +568,72 @@ struct AuthenticationView: View {
             }
             .disabled(authService.isLoading || !isFormValid)
             
+            // Divider with "or" text
+            orDividerSection
+            
+            // Sign in with Apple button
+            appleSignInButton
+            
             // MFA Token Field (shown when MFA is required)
             if isMFARequired {
                 mfaSection
+            }
+        }
+    }
+    
+    // MARK: - Or Divider Section
+    
+    private var orDividerSection: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            Rectangle()
+                .fill(ModernDesignSystem.Colors.borderPrimary)
+                .frame(height: 1)
+            
+            Text("or")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            Rectangle()
+                .fill(ModernDesignSystem.Colors.borderPrimary)
+                .frame(height: 1)
+        }
+        .padding(.vertical, ModernDesignSystem.Spacing.sm)
+    }
+    
+    // MARK: - Apple Sign-In Button
+    
+    private var appleSignInButton: some View {
+        SignInWithAppleButton(
+            onRequest: { request in
+                // Configure the Apple Sign-In request
+                request.requestedScopes = [.fullName, .email]
+            },
+            onCompletion: { _ in
+                // Note: We handle the completion through AppleSignInService instead
+                // This callback is required but we use our own async flow
+            }
+        )
+        .signInWithAppleButtonStyle(.black)
+        .frame(height: 50)
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .disabled(authService.isLoading || appleSignInService.isAuthenticating)
+        .overlay {
+            // Custom tap handler to use our AppleSignInService
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleAppleSignIn()
+                }
+        }
+        .overlay {
+            // Show loading indicator when authenticating with Apple
+            if appleSignInService.isAuthenticating {
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .fill(Color.black.opacity(0.7))
+                    .overlay {
+                        ProgressView()
+                            .tint(.white)
+                    }
             }
         }
     }
@@ -676,6 +741,16 @@ struct AuthenticationView: View {
                     lastName: lastName.isEmpty ? nil : lastName
                 )
             }
+        }
+    }
+    
+    /// Handle Sign in with Apple button tap
+    private func handleAppleSignIn() {
+        // Dismiss keyboard before showing Apple Sign-In sheet
+        focusedField = nil
+        
+        Task {
+            await authService.signInWithApple(using: appleSignInService)
         }
     }
     
