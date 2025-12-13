@@ -313,6 +313,176 @@ async def login_user(login_data: UserLogin):
             detail="Internal server error during login"
         )
 
+
+@router.post("/apple/", response_model=dict)
+async def sign_in_with_apple(request: Request):
+    """
+    Sign in with Apple using the identity token from iOS
+    
+    Exchanges the Apple ID token for a Supabase session.
+    This endpoint handles both new user registration and existing user login.
+    
+    Args:
+        request: FastAPI request containing:
+            - id_token: The identity token from Apple Sign-In (JWT)
+            - nonce: The nonce used during Apple Sign-In (unhashed)
+            - email: Optional user email (only on first sign-in)
+            - first_name: Optional user's first name (only on first sign-in)
+            - last_name: Optional user's last name (only on first sign-in)
+        
+    Returns:
+        Dictionary with access token, refresh token, and user data
+        
+    Raises:
+        HTTPException: If authentication fails
+    """
+    try:
+        # Parse request body
+        body = await request.json()
+        id_token = body.get("id_token")
+        nonce = body.get("nonce")
+        email = body.get("email")
+        first_name = body.get("first_name")
+        last_name = body.get("last_name")
+        
+        if not id_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Apple ID token is required"
+            )
+        
+        if not nonce:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nonce is required for Apple Sign-In"
+            )
+        
+        supabase = get_supabase_client()
+        
+        try:
+            # Use Supabase's sign_in_with_id_token for Apple authentication
+            # This method verifies the Apple ID token and creates/retrieves the user
+            auth_response = supabase.auth.sign_in_with_id_token({
+                "provider": "apple",
+                "token": id_token,
+                "nonce": nonce
+            })
+        except Exception as auth_error:
+            error_str = str(auth_error).lower()
+            logger.error(f"Apple Sign-In auth error: {auth_error}")
+            
+            # Check for specific Apple auth errors
+            if "invalid" in error_str or "token" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid Apple ID token. Please try signing in again."
+                )
+            if "nonce" in error_str:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid nonce. Please try signing in again."
+                )
+            
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Apple Sign-In failed. Please try again."
+            )
+        
+        # Validate auth response
+        if not auth_response.user or not auth_response.session:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Apple Sign-In failed - no session returned"
+            )
+        
+        user = auth_response.user
+        session = auth_response.session
+        user_metadata = user.user_metadata or {}
+        
+        # Update user metadata if name was provided (only available on first sign-in)
+        if first_name or last_name:
+            try:
+                update_data = {}
+                if first_name:
+                    update_data["first_name"] = first_name
+                if last_name:
+                    update_data["last_name"] = last_name
+                
+                if update_data:
+                    # Use service role to update user metadata
+                    from app.shared.services.supabase_auth_service import SupabaseAuthService
+                    service_supabase = SupabaseAuthService.create_service_role_client()
+                    
+                    # Update users table
+                    from app.shared.utils.async_supabase import execute_async
+                    await execute_async(
+                        lambda: service_supabase.table("users")
+                            .update(update_data)
+                            .eq("id", user.id)
+                            .execute()
+                    )
+            except Exception as update_error:
+                # Log but don't fail - name update is optional
+                logger.warning(f"Failed to update Apple user name: {update_error}")
+        
+        # Ensure user exists in public.users table
+        try:
+            from app.shared.services.user_data_service import UserDataService
+            
+            user_service = UserDataService()
+            # Use get_user_by_id with create_if_not_exists to ensure user record exists
+            await user_service.get_user_by_id(
+                user.id,
+                create_if_not_exists=True,
+                auth_metadata={
+                    "email": user.email,
+                    "user_metadata": {
+                        "first_name": first_name or user_metadata.get("first_name"),
+                        "last_name": last_name or user_metadata.get("last_name"),
+                        "apple_user": True
+                    }
+                }
+            )
+        except Exception as ensure_error:
+            logger.warning(f"Failed to ensure Apple user exists: {ensure_error}")
+        
+        # Get merged user data
+        user_data = await get_merged_user_data(user.id, {
+            "email": user.email,
+            "user_metadata": user_metadata,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        })
+        
+        # Track successful Apple Sign-In
+        ip_address = request.client.host if hasattr(request, 'client') and request.client else None
+        AuthSecurityService.clear_failed_attempts(user.email or user.id)
+        AuthEventTracker.track_auth_success(
+            user_data.id,
+            method="apple_sign_in",
+            ip_address=ip_address
+        )
+        
+        logger.info(f"Apple Sign-In successful for user: {user.id}")
+        
+        return {
+            "access_token": session.access_token,
+            "refresh_token": session.refresh_token,
+            "token_type": "Bearer",
+            "expires_in": session.expires_in,
+            "user": user_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Apple Sign-In error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during Apple Sign-In"
+        )
+
+
 @router.post("/logout/")
 async def logout_user(
     request: Request,
