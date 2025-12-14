@@ -19,6 +19,13 @@ import SwiftUI
  * - Dismissible (respects user autonomy)
  * - Passive insights, not demands
  * - Trust & Nature design system compliant
+ *
+ * Enhanced Features:
+ * - Spring entrance animation for smooth appearance
+ * - Visual monitoring progress indicator
+ * - Haptic feedback on dismiss
+ * - Swipe-to-dismiss gesture
+ * - Enhanced icon with background circle
  */
 struct HealthGuidanceCard: View {
     let guidance: HealthGuidance
@@ -27,6 +34,11 @@ struct HealthGuidanceCard: View {
     
     @State private var isExpanded: Bool = false
     @State private var isVisible: Bool = true
+    @State private var hasAppeared: Bool = false
+    @State private var dragOffset: CGFloat = 0
+    
+    /// Threshold for swipe-to-dismiss gesture
+    private let dismissThreshold: CGFloat = 100
     
     init(
         guidance: HealthGuidance,
@@ -43,12 +55,8 @@ struct HealthGuidanceCard: View {
             VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
                 // Header with icon, title, and dismiss button
                 HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.md) {
-                    // Icon
-                    Image(systemName: guidance.icon)
-                        .font(.system(size: 24))
-                        .foregroundColor(iconColor)
-                        .frame(width: 32, height: 32)
-                        .accessibilityLabel("Guidance icon")
+                    // Enhanced icon with background circle
+                    iconWithBackground
                     
                     // Title and message
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
@@ -67,29 +75,23 @@ struct HealthGuidanceCard: View {
                     
                     // Dismiss button (if dismissable)
                     if guidance.dismissable {
-                        Button(action: dismissWithAnimation) {
+                        Button(action: dismissWithHaptic) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                                .frame(width: 24, height: 24)
+                                .frame(width: 28, height: 28)
+                                .background(
+                                    Circle()
+                                        .fill(ModernDesignSystem.Colors.textSecondary.opacity(0.1))
+                                )
                         }
                         .accessibilityLabel("Dismiss guidance")
                     }
                 }
                 
-                // Monitoring period badge (if applicable)
+                // Visual monitoring progress indicator (if applicable)
                 if let days = guidance.monitoringDays {
-                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 12))
-                        Text("Monitor for \(days) days")
-                            .font(ModernDesignSystem.Typography.caption)
-                    }
-                    .foregroundColor(ModernDesignSystem.Colors.primary)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.sm)
-                    .padding(.vertical, ModernDesignSystem.Spacing.xs)
-                    .background(ModernDesignSystem.Colors.primary.opacity(0.1))
-                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                    MonitoringProgressView(totalDays: days, guidanceType: guidance.guidanceType)
                 }
                 
                 // Expandable action items (if available)
@@ -118,6 +120,21 @@ struct HealthGuidanceCard: View {
             .background(backgroundColor)
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .overlay(
+                // Gradient accent on left edge
+                HStack {
+                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                        .fill(
+                            LinearGradient(
+                                colors: [iconColor, iconColor.opacity(0.5)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 4)
+                    Spacer()
+                }
+            )
+            .overlay(
                 RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                     .stroke(borderColor, lineWidth: 1)
             )
@@ -127,14 +144,38 @@ struct HealthGuidanceCard: View {
                 x: ModernDesignSystem.Shadows.small.x,
                 y: ModernDesignSystem.Shadows.small.y
             )
-            .transition(.asymmetric(
-                insertion: .scale(scale: 0.95).combined(with: .opacity),
-                removal: .scale(scale: 0.95).combined(with: .opacity)
-            ))
+            // Swipe-to-dismiss gesture
+            .offset(x: dragOffset)
+            .opacity(Double(1 - (abs(dragOffset) / (dismissThreshold * 2))))
+            .gesture(
+                guidance.dismissable ? swipeToDismissGesture : nil
+            )
+            // Spring entrance animation
+            .scaleEffect(hasAppeared ? 1.0 : 0.92)
+            .opacity(hasAppeared ? 1.0 : 0)
+            .onAppear {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.75)) {
+                    hasAppeared = true
+                }
+            }
         }
     }
     
     // MARK: - Subviews
+    
+    /// Enhanced icon with background circle for better visual weight
+    private var iconWithBackground: some View {
+        ZStack {
+            Circle()
+                .fill(iconColor.opacity(0.15))
+                .frame(width: 44, height: 44)
+            
+            Image(systemName: guidance.icon)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(iconColor)
+        }
+        .accessibilityLabel("Guidance icon")
+    }
     
     /// Individual action item row
     private func actionItemRow(_ item: String) -> some View {
@@ -154,6 +195,25 @@ struct HealthGuidanceCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+    
+    // MARK: - Gestures
+    
+    /// Swipe-to-dismiss drag gesture
+    private var swipeToDismissGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                dragOffset = value.translation.width
+            }
+            .onEnded { value in
+                if abs(value.translation.width) > dismissThreshold {
+                    dismissWithHaptic()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        dragOffset = 0
+                    }
+                }
+            }
     }
     
     // MARK: - Computed Properties
@@ -214,14 +274,107 @@ struct HealthGuidanceCard: View {
     
     // MARK: - Actions
     
-    /// Dismiss with animation
-    private func dismissWithAnimation() {
+    /// Dismiss with haptic feedback and animation
+    private func dismissWithHaptic() {
+        // Trigger haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        
         withAnimation(.easeOut(duration: 0.2)) {
             isVisible = false
         }
         // Delay callback to allow animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             onDismiss()
+        }
+    }
+}
+
+// MARK: - Monitoring Progress View
+
+/**
+ * MonitoringProgressView - Visual timeline for monitoring periods
+ * Shows how many days to monitor with a progress-style indicator
+ */
+private struct MonitoringProgressView: View {
+    let totalDays: Int
+    let guidanceType: GuidanceType
+    
+    /// Number of days elapsed (for future enhancement with persistence)
+    private var daysElapsed: Int { 0 }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+            HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 14))
+                    .foregroundColor(progressColor)
+                
+                Text("Monitor for \(totalDays) days")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                Text("Day \(daysElapsed + 1) of \(totalDays)")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            // Progress bar with day markers
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    // Background track
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(ModernDesignSystem.Colors.borderPrimary.opacity(0.3))
+                        .frame(height: 6)
+                    
+                    // Progress fill
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(
+                            LinearGradient(
+                                colors: [progressColor, progressColor.opacity(0.7)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: max(geometry.size.width * progressPercentage, 20), height: 6)
+                    
+                    // Day markers
+                    HStack(spacing: 0) {
+                        ForEach(0..<totalDays, id: \.self) { day in
+                            Circle()
+                                .fill(day <= daysElapsed ? progressColor : ModernDesignSystem.Colors.borderPrimary.opacity(0.5))
+                                .frame(width: 8, height: 8)
+                            
+                            if day < totalDays - 1 {
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(height: 8)
+        }
+        .padding(ModernDesignSystem.Spacing.sm)
+        .background(progressColor.opacity(0.08))
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+    }
+    
+    /// Progress percentage based on days elapsed
+    private var progressPercentage: CGFloat {
+        CGFloat(daysElapsed + 1) / CGFloat(totalDays)
+    }
+    
+    /// Progress color based on guidance type
+    private var progressColor: Color {
+        switch guidanceType {
+        case .monitoring: return ModernDesignSystem.Colors.primary
+        case .logging: return ModernDesignSystem.Colors.goldenYellow
+        case .celebration: return ModernDesignSystem.Colors.safe
+        case .awareness: return ModernDesignSystem.Colors.warmCoral
+        case .reminder: return ModernDesignSystem.Colors.primary
         }
     }
 }

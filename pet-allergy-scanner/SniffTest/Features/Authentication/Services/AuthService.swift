@@ -395,12 +395,21 @@ class AuthService: ObservableObject, @unchecked Sendable {
     }
     
     /// Update current user profile
-    func updateProfile(username: String?, firstName: String?, lastName: String?, imageUrl: String? = nil) async {
+    /// - Parameters:
+    ///   - username: New username (optional)
+    ///   - firstName: New first name (optional)
+    ///   - lastName: New last name (optional)
+    ///   - imageUrl: New image URL (optional)
+    ///   - showLoadingState: If false, skips setting authState to .loading (prevents UI reset during onboarding)
+    func updateProfile(username: String?, firstName: String?, lastName: String?, imageUrl: String? = nil, showLoadingState: Bool = true) async {
         guard case .authenticated(let currentUser) = authState else { return }
         
-        await MainActor.run {
-            authState = .loading
-            errorMessage = nil
+        // Only show loading state if requested - prevents UI reset during onboarding
+        if showLoadingState {
+            await MainActor.run {
+                authState = .loading
+                errorMessage = nil
+            }
         }
         
         let userUpdate = UserUpdate(
@@ -415,14 +424,19 @@ class AuthService: ObservableObject, @unchecked Sendable {
         do {
             let user = try await apiService.updateUser(userUpdate)
             cacheAuthenticatedUser(user)
-            await MainActor.run {
-                authState = .authenticated(user)
+            // Only update authState if we showed loading, otherwise silently update cache
+            if showLoadingState {
+                await MainActor.run {
+                    authState = .authenticated(user)
+                }
             }
         } catch {
-            // Restore previous state on error
-            await MainActor.run {
-                authState = .authenticated(currentUser)
-                errorMessage = error.localizedDescription
+            // Restore previous state on error (only if we changed it)
+            if showLoadingState {
+                await MainActor.run {
+                    authState = .authenticated(currentUser)
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }

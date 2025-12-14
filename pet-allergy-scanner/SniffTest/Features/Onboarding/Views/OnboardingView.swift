@@ -38,6 +38,23 @@ struct OnboardingView: View {
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
+    // Profile setup state (for Apple Sign-In users without name)
+    @State private var userFirstName = ""
+    @State private var userLastName = ""
+    @State private var userUsername = ""
+    @State private var isSavingProfile = false
+    @State private var showProfileNameError = false
+    
+    // Feature tour state
+    @State private var showFeatureTour = false
+    @State private var featureTourIndex = 0
+    
+    /// Check if user needs profile setup (missing first name from Apple Sign-In)
+    private var needsProfileSetup: Bool {
+        guard let user = authService.currentUser else { return false }
+        return user.firstName == nil || user.firstName?.isEmpty == true
+    }
+    
     // Computed property to check if user should skip paywall
     private var shouldSkipPaywall: Bool {
         guard let user = authService.currentUser else { return false }
@@ -45,7 +62,15 @@ struct OnboardingView: View {
         return user.role == .premium || user.bypassSubscription
     }
     
-    private let totalSteps = 5
+    /// Total steps dynamically calculated based on whether profile setup is needed
+    private var totalSteps: Int {
+        needsProfileSetup ? 6 : 5
+    }
+    
+    /// Step offset to account for optional profile setup step
+    private var stepOffset: Int {
+        needsProfileSetup ? 1 : 0
+    }
     
     var body: some View {
         NavigationStack {
@@ -65,27 +90,33 @@ struct OnboardingView: View {
                             welcomeStep
                                 .tag(0)
                             
-                            // Step 2: Basic Pet Info
+                            // Step 2: Profile Setup (only if user doesn't have name from Apple Sign-In)
+                            if needsProfileSetup {
+                                profileSetupStep
+                                    .tag(1)
+                            }
+                            
+                            // Step 2/3: Basic Pet Info
                             basicInfoStep
-                                .tag(1)
+                                .tag(1 + stepOffset)
                             
-                            // Step 3: Physical Info
+                            // Step 3/4: Physical Info
                             physicalInfoStep
-                                .tag(2)
+                                .tag(2 + stepOffset)
                             
-                            // Step 4: Allergies & Vet Info
+                            // Step 4/5: Allergies & Vet Info
                             allergiesAndVetStep
-                                .tag(3)
+                                .tag(3 + stepOffset)
                             
-                        // Step 5: Premium Subscription (skip if user is premium)
-                        if shouldSkipPaywall {
-                            // Show a completion step instead of paywall for premium users
-                            completionStep
-                                .tag(4)
-                        } else {
-                            paywallStep
-                                .tag(4)
-                        }
+                            // Step 5/6: Premium Subscription (skip if user is premium)
+                            if shouldSkipPaywall {
+                                // Show a completion step instead of paywall for premium users
+                                completionStep
+                                    .tag(4 + stepOffset)
+                            } else {
+                                paywallStep
+                                    .tag(4 + stepOffset)
+                            }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
                         .animation(.easeInOut, value: currentStep)
@@ -99,8 +130,12 @@ struct OnboardingView: View {
                                 if !canProceedFromStep(oldValue) {
                                     // Show validation error and reset
                                     withAnimation {
-                                        if oldValue == 1 {
-                                            // Pet name validation failed (applies to both dog and cat routes)
+                                        // Profile setup step validation
+                                        if needsProfileSetup && oldValue == 1 {
+                                            showProfileNameError = true
+                                        }
+                                        // Pet name validation (step 1 without profile, step 2 with profile)
+                                        else if oldValue == (1 + stepOffset) {
                                             showNameValidationError = true
                                             isNameFieldFocused = true
                                         }
@@ -111,11 +146,20 @@ struct OnboardingView: View {
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                                         withAnimation {
                                             showNameValidationError = false
+                                            showProfileNameError = false
                                         }
                                     }
                                 } else {
                                     // Validation passed, hide any errors
                                     showNameValidationError = false
+                                    showProfileNameError = false
+                                    
+                                    // Save profile when moving from profile setup step
+                                    if needsProfileSetup && oldValue == 1 {
+                                        Task {
+                                            await saveUserProfile()
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -227,11 +271,30 @@ struct OnboardingView: View {
                             } else {
                                 // Validate before moving forward
                                 if canProceed {
+                                    // Save profile when moving from profile setup step
+                                    if needsProfileSetup && currentStep == 1 {
+                                        await saveUserProfile()
+                                    }
+                                    
                                     withAnimation {
                                         currentStep += 1
                                         showNameValidationError = false
+                                        showProfileNameError = false
                                     }
-                                } else if currentStep == 1 {
+                                } else if needsProfileSetup && currentStep == 1 {
+                                    // Show validation error for profile first name
+                                    withAnimation {
+                                        showProfileNameError = true
+                                    }
+                                    
+                                    // Auto-hide after 2 seconds
+                                    Task { @MainActor in
+                                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        withAnimation {
+                                            showProfileNameError = false
+                                        }
+                                    }
+                                } else if currentStep == (1 + stepOffset) {
                                     // Show validation error for pet name
                                     withAnimation {
                                         showNameValidationError = true
@@ -251,7 +314,7 @@ struct OnboardingView: View {
                     }) {
                         ZStack {
                             Text(buttonText)
-                                .opacity(isCreatingPet ? 0 : 1)
+                                .opacity(isCreatingPet || isSavingProfile ? 0 : 1)
                             
                             if isCreatingPet {
                                 HStack(spacing: ModernDesignSystem.Spacing.sm) {
@@ -259,6 +322,15 @@ struct OnboardingView: View {
                                         .scaleEffect(0.8)
                                         .tint(ModernDesignSystem.Colors.textOnPrimary)
                                     Text("Creating...")
+                                        .font(ModernDesignSystem.Typography.bodyEmphasized)
+                                        .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
+                                }
+                            } else if isSavingProfile {
+                                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                        .tint(ModernDesignSystem.Colors.textOnPrimary)
+                                    Text("Saving...")
                                         .font(ModernDesignSystem.Typography.bodyEmphasized)
                                         .foregroundColor(ModernDesignSystem.Colors.textOnPrimary)
                                 }
@@ -273,8 +345,8 @@ struct OnboardingView: View {
                         RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
                             .fill(ModernDesignSystem.Colors.primary)
                     )
-                    .disabled((!canProceed && currentStep != 4) || isCreatingPet)
-                    .opacity(((!canProceed && currentStep != 4) || isCreatingPet) ? 0.5 : 1.0)
+                    .disabled((!canProceed && currentStep != (4 + stepOffset)) || isCreatingPet || isSavingProfile)
+                    .opacity(((!canProceed && currentStep != (4 + stepOffset)) || isCreatingPet || isSavingProfile) ? 0.5 : 1.0)
                 }
                 .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                 .padding(.vertical, ModernDesignSystem.Spacing.md)
@@ -336,7 +408,65 @@ struct OnboardingView: View {
             }
             .padding(.horizontal, ModernDesignSystem.Spacing.lg)
             
+            // Feature tour button
+            Button(action: {
+                showFeatureTour = true
+            }) {
+                HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14))
+                    Text("Take a Feature Tour")
+                        .font(ModernDesignSystem.Typography.subheadline)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(ModernDesignSystem.Colors.primary)
+            }
+            .padding(.top, ModernDesignSystem.Spacing.sm)
+            
             Spacer()
+        }
+        .fullScreenCover(isPresented: $showFeatureTour) {
+            OnboardingFeatureTourView(
+                currentIndex: $featureTourIndex,
+                onComplete: {
+                    showFeatureTour = false
+                    // Move to next step after tour
+                    withAnimation {
+                        currentStep += 1
+                    }
+                }
+            )
+        }
+    }
+    
+    /// Profile setup step for collecting user's name (shown when Apple Sign-In didn't provide it)
+    private var profileSetupStep: some View {
+        ProfileSetupView(
+            firstName: $userFirstName,
+            lastName: $userLastName,
+            username: $userUsername
+        )
+        .onChange(of: userFirstName) { _, _ in
+            showProfileNameError = false
+        }
+        .overlay {
+            if isSavingProfile {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                    .overlay {
+                        VStack(spacing: ModernDesignSystem.Spacing.md) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .tint(.white)
+                            Text("Saving profile...")
+                                .font(ModernDesignSystem.Typography.body)
+                                .foregroundColor(.white)
+                        }
+                        .padding(ModernDesignSystem.Spacing.xl)
+                        .background(ModernDesignSystem.Colors.primary.opacity(0.9))
+                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+                    }
+            }
         }
     }
     
@@ -769,18 +899,48 @@ struct OnboardingView: View {
         ]
     }
     
+    /// Check if first name is valid for profile setup
+    private var isUserFirstNameValid: Bool {
+        userFirstName.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+    }
+    
+    /// Check if username is valid (if provided)
+    private var isUserUsernameValid: Bool {
+        userUsername.isEmpty || InputValidator.isValidUsername(userUsername)
+    }
+    
     private var canProceed: Bool {
         switch currentStep {
         case 0:
             return true // Welcome step
         case 1:
-            // For cat route, ensure name is valid before proceeding
-            return !name.isEmpty && name.count >= 2 // Basic info step - pet name required
+            if needsProfileSetup {
+                // Profile setup step - first name required
+                return isUserFirstNameValid && isUserUsernameValid
+            } else {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            }
         case 2:
-            return true // Physical info step (all optional)
+            if needsProfileSetup {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            } else {
+                return true // Physical info step (all optional)
+            }
         case 3:
-            return true // Allergies and vet step (all optional)
+            if needsProfileSetup {
+                return true // Physical info step (all optional)
+            } else {
+                return true // Allergies and vet step (all optional)
+            }
         case 4:
+            if needsProfileSetup {
+                return true // Allergies and vet step (all optional)
+            } else {
+                return true // Paywall/completion step (always proceed)
+            }
+        case 5:
             return true // Paywall/completion step (always proceed)
         default:
             return false
@@ -795,12 +955,33 @@ struct OnboardingView: View {
         case 0:
             return true // Welcome step
         case 1:
-            return !name.isEmpty && name.count >= 2 // Basic info step - pet name required
+            if needsProfileSetup {
+                // Profile setup step - first name required
+                return isUserFirstNameValid && isUserUsernameValid
+            } else {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            }
         case 2:
-            return true // Physical info step (all optional)
+            if needsProfileSetup {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            } else {
+                return true // Physical info step (all optional)
+            }
         case 3:
-            return true // Allergies and vet step (all optional)
+            if needsProfileSetup {
+                return true // Physical info step (all optional)
+            } else {
+                return true // Allergies and vet step (all optional)
+            }
         case 4:
+            if needsProfileSetup {
+                return true // Allergies and vet step (all optional)
+            } else {
+                return true // Paywall step (always proceed)
+            }
+        case 5:
             return true // Paywall step (always proceed)
         default:
             return false
@@ -834,6 +1015,34 @@ struct OnboardingView: View {
             // No subscription selected - just create pet
             createPet(shouldDismissOnboarding: false)
         }
+    }
+    
+    /// Save user profile with first name, last name, and optional username
+    /// Called when transitioning from profile setup step
+    /// Uses silent profile update (showLoadingState: false) to prevent UI reset during onboarding
+    private func saveUserProfile() async {
+        isSavingProfile = true
+        
+        defer {
+            Task { @MainActor in
+                isSavingProfile = false
+            }
+        }
+        
+        let trimmedFirstName = userFirstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLastName = userLastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedUsername = userUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Use showLoadingState: false to prevent authState from changing to .loading
+        // This prevents ContentView from resetting the OnboardingView and losing the current step
+        await authService.updateProfile(
+            username: trimmedUsername.isEmpty ? nil : trimmedUsername,
+            firstName: trimmedFirstName.isEmpty ? nil : trimmedFirstName,
+            lastName: trimmedLastName.isEmpty ? nil : trimmedLastName,
+            showLoadingState: false
+        )
+        
+        print("✅ User profile saved: firstName=\(trimmedFirstName), lastName=\(trimmedLastName), username=\(trimmedUsername.isEmpty ? "nil" : trimmedUsername)")
     }
     
     private func validateForm() {

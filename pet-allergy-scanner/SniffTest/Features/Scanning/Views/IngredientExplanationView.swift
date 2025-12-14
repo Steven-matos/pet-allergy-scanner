@@ -21,6 +21,12 @@ import SwiftUI
  * - Clear reasoning (not absolute)
  * - Actionable guidance (what to do)
  *
+ * Enhanced Features (Gap #3):
+ * - Dog/cat visual indicators with safety badges
+ * - Species severity comparison display
+ * - Personalized pet context when available
+ * - Per-species safety status
+ *
  * Examples of calm language:
  * - "Common allergen in dogs" (not "DANGEROUS!")
  * - "Unsafe for cats only" (not "TOXIC!")
@@ -32,6 +38,12 @@ struct IngredientExplanationView: View {
     let safetyLevel: IngredientSafety
     let confidenceLevel: Double?
     
+    /// Optional species compatibility for enhanced species display
+    var speciesCompatibility: SpeciesCompatibility?
+    
+    /// Optional current pet for personalized context
+    var currentPet: Pet?
+    
     @State private var isExpanded: Bool = false
     
     var body: some View {
@@ -39,8 +51,18 @@ struct IngredientExplanationView: View {
             // Header with ingredient name and safety badge
             headerSection
             
+            // Species safety badges
+            if speciesCompatibility != nil || currentPet != nil {
+                speciesSafetySection
+            }
+            
             // Why flagged section
             explanationSection
+            
+            // Personalized pet alert (if applicable)
+            if let pet = currentPet, isPetAffected(pet) {
+                personalizedPetAlert(for: pet)
+            }
             
             // Expandable details
             if isExpanded {
@@ -99,6 +121,49 @@ struct IngredientExplanationView: View {
         }
     }
     
+    // MARK: - Species Safety Section
+    
+    /// Enhanced species safety display with dog/cat visual indicators
+    private var speciesSafetySection: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            Text("Species Safety")
+                .font(ModernDesignSystem.Typography.caption)
+                .fontWeight(.medium)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            HStack(spacing: ModernDesignSystem.Spacing.lg) {
+                // Dog safety badge
+                SpeciesSafetyBadge(
+                    species: .dog,
+                    safetyStatus: dogSafetyStatus,
+                    isHighlighted: currentPet?.species == .dog
+                )
+                
+                // Cat safety badge
+                SpeciesSafetyBadge(
+                    species: .cat,
+                    safetyStatus: catSafetyStatus,
+                    isHighlighted: currentPet?.species == .cat
+                )
+            }
+            
+            // Species comparison note (if different safety levels)
+            if let comparison = speciesSeverityComparison {
+                HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 12))
+                    Text(comparison)
+                        .font(ModernDesignSystem.Typography.caption)
+                }
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .padding(.top, ModernDesignSystem.Spacing.xs)
+            }
+        }
+        .padding(ModernDesignSystem.Spacing.sm)
+        .background(ModernDesignSystem.Colors.borderPrimary.opacity(0.1))
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+    }
+    
     // MARK: - Explanation Section
     
     private var explanationSection: some View {
@@ -109,8 +174,8 @@ struct IngredientExplanationView: View {
                 .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             
-            // Species context (if not obvious)
-            if explanation.speciesContext != "Suitable for both dogs and cats." {
+            // Species context (if not obvious and no species safety section shown)
+            if speciesCompatibility == nil && explanation.speciesContext != "Suitable for both dogs and cats." {
                 HStack(spacing: ModernDesignSystem.Spacing.xs) {
                     Image(systemName: "pawprint.fill")
                         .font(.system(size: 12))
@@ -120,6 +185,37 @@ struct IngredientExplanationView: View {
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
             }
         }
+    }
+    
+    // MARK: - Personalized Pet Alert
+    
+    /// Shows a personalized alert when the ingredient affects the user's pet
+    private func personalizedPetAlert(for pet: Pet) -> some View {
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(alertColorForPet(pet))
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Applies to \(pet.name)")
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(personalizedMessageForPet(pet))
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            }
+            
+            Spacer()
+        }
+        .padding(ModernDesignSystem.Spacing.sm)
+        .background(alertColorForPet(pet).opacity(0.1))
+        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .stroke(alertColorForPet(pet).opacity(0.3), lineWidth: 1)
+        )
     }
     
     // MARK: - Details Section
@@ -173,6 +269,83 @@ struct IngredientExplanationView: View {
                     .font(.system(size: 12))
             }
             .foregroundColor(ModernDesignSystem.Colors.primary)
+        }
+    }
+    
+    // MARK: - Species Safety Helpers
+    
+    /// Determine dog safety status based on species compatibility
+    private var dogSafetyStatus: SpeciesSafetyStatus {
+        guard let compatibility = speciesCompatibility else {
+            return safetyLevel == .safe ? .safe : (safetyLevel == .unsafe ? .unsafe : .caution)
+        }
+        
+        switch compatibility {
+        case .both: return safetyLevel == .safe ? .safe : .caution
+        case .dogOnly: return .safe
+        case .catOnly: return .unsafe
+        case .neither: return .unsafe
+        }
+    }
+    
+    /// Determine cat safety status based on species compatibility
+    private var catSafetyStatus: SpeciesSafetyStatus {
+        guard let compatibility = speciesCompatibility else {
+            return safetyLevel == .safe ? .safe : (safetyLevel == .unsafe ? .unsafe : .caution)
+        }
+        
+        switch compatibility {
+        case .both: return safetyLevel == .safe ? .safe : .caution
+        case .catOnly: return .safe
+        case .dogOnly: return .unsafe
+        case .neither: return .unsafe
+        }
+    }
+    
+    /// Generate species severity comparison text when applicable
+    private var speciesSeverityComparison: String? {
+        guard dogSafetyStatus != catSafetyStatus else { return nil }
+        
+        if dogSafetyStatus == .unsafe && catSafetyStatus != .unsafe {
+            return "More concerning for dogs than cats"
+        } else if catSafetyStatus == .unsafe && dogSafetyStatus != .unsafe {
+            return "More concerning for cats than dogs"
+        } else if dogSafetyStatus == .caution && catSafetyStatus == .safe {
+            return "Dogs may be more sensitive than cats"
+        } else if catSafetyStatus == .caution && dogSafetyStatus == .safe {
+            return "Cats may be more sensitive than dogs"
+        }
+        return nil
+    }
+    
+    /// Check if the current pet is affected by this ingredient
+    private func isPetAffected(_ pet: Pet) -> Bool {
+        let status = pet.species == .dog ? dogSafetyStatus : catSafetyStatus
+        return status != .safe
+    }
+    
+    /// Get alert color for personalized pet message
+    private func alertColorForPet(_ pet: Pet) -> Color {
+        let status = pet.species == .dog ? dogSafetyStatus : catSafetyStatus
+        switch status {
+        case .safe: return ModernDesignSystem.Colors.safe
+        case .caution: return ModernDesignSystem.Colors.goldenYellow
+        case .unsafe: return ModernDesignSystem.Colors.warmCoral
+        }
+    }
+    
+    /// Generate personalized message for the pet
+    private func personalizedMessageForPet(_ pet: Pet) -> String {
+        let status = pet.species == .dog ? dogSafetyStatus : catSafetyStatus
+        let speciesName = pet.species == .dog ? "dogs" : "cats"
+        
+        switch status {
+        case .safe:
+            return "This ingredient is generally safe for \(speciesName)."
+        case .caution:
+            return "Monitor \(pet.name) for any reactions after consuming this."
+        case .unsafe:
+            return "This ingredient may not be suitable for \(speciesName). Consider alternatives."
         }
     }
     
@@ -237,6 +410,95 @@ struct IngredientExplanationView: View {
         case 0.5..<0.7: return "Low confidence"
         default: return "Very low"
         }
+    }
+}
+
+// MARK: - Species Safety Status
+
+/// Safety status for a specific species
+enum SpeciesSafetyStatus {
+    case safe
+    case caution
+    case unsafe
+    
+    var icon: String {
+        switch self {
+        case .safe: return "checkmark.circle.fill"
+        case .caution: return "exclamationmark.circle.fill"
+        case .unsafe: return "xmark.circle.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .safe: return ModernDesignSystem.Colors.safe
+        case .caution: return ModernDesignSystem.Colors.goldenYellow
+        case .unsafe: return ModernDesignSystem.Colors.warmCoral
+        }
+    }
+    
+    var label: String {
+        switch self {
+        case .safe: return "Safe"
+        case .caution: return "Monitor"
+        case .unsafe: return "Avoid"
+        }
+    }
+}
+
+// MARK: - Species Safety Badge
+
+/**
+ * SpeciesSafetyBadge - Visual indicator showing safety status per species
+ * Shows dog or cat icon with checkmark/X safety indicator
+ */
+struct SpeciesSafetyBadge: View {
+    let species: PetSpecies
+    let safetyStatus: SpeciesSafetyStatus
+    var isHighlighted: Bool = false
+    
+    var body: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.sm) {
+            // Species icon
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: species == .dog ? "dog.fill" : "cat.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(isHighlighted ? safetyStatus.color : ModernDesignSystem.Colors.textSecondary)
+                
+                // Safety indicator overlay
+                Image(systemName: safetyStatus.icon)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(safetyStatus.color)
+                    .background(
+                        Circle()
+                            .fill(ModernDesignSystem.Colors.softCream)
+                            .frame(width: 14, height: 14)
+                    )
+                    .offset(x: 4, y: 4)
+            }
+            
+            // Label
+            VStack(alignment: .leading, spacing: 0) {
+                Text(species == .dog ? "Dogs" : "Cats")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(safetyStatus.label)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(safetyStatus.color)
+            }
+        }
+        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
+        .padding(.vertical, ModernDesignSystem.Spacing.xs)
+        .background(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .fill(isHighlighted ? safetyStatus.color.opacity(0.1) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .stroke(isHighlighted ? safetyStatus.color.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
     }
 }
 
@@ -399,10 +661,29 @@ struct IngredientWithExplanation: View {
 
 #if DEBUG
 struct IngredientExplanationView_Previews: PreviewProvider {
+    /// Sample pet for personalized previews
+    static var sampleDog: Pet {
+        Pet(
+            id: "preview-dog",
+            userId: "user",
+            name: "Buddy",
+            species: .dog,
+            breed: "Golden Retriever",
+            birthday: nil,
+            weightKg: 30,
+            imageUrl: nil,
+            knownSensitivities: [],
+            vetName: nil,
+            vetPhone: nil,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+    
     static var previews: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Safe ingredient
+                // Safe ingredient with species badges
                 IngredientExplanationView(
                     ingredientName: "Chicken",
                     explanation: IngredientExplanation(
@@ -413,10 +694,11 @@ struct IngredientExplanationView_Previews: PreviewProvider {
                         severity: .safe
                     ),
                     safetyLevel: .safe,
-                    confidenceLevel: 0.95
+                    confidenceLevel: 0.95,
+                    speciesCompatibility: .both
                 )
                 
-                // Caution ingredient
+                // Caution ingredient with personalized pet context
                 IngredientExplanationView(
                     ingredientName: "Wheat",
                     explanation: IngredientExplanation(
@@ -427,10 +709,12 @@ struct IngredientExplanationView_Previews: PreviewProvider {
                         severity: .moderate
                     ),
                     safetyLevel: .caution,
-                    confidenceLevel: 0.75
+                    confidenceLevel: 0.75,
+                    speciesCompatibility: .both,
+                    currentPet: sampleDog
                 )
                 
-                // Unsafe ingredient
+                // Dog-only unsafe ingredient (shows species comparison)
                 IngredientExplanationView(
                     ingredientName: "Xylitol",
                     explanation: IngredientExplanation(
@@ -441,8 +725,29 @@ struct IngredientExplanationView_Previews: PreviewProvider {
                         severity: .concern
                     ),
                     safetyLevel: .unsafe,
-                    confidenceLevel: 0.98
+                    confidenceLevel: 0.98,
+                    speciesCompatibility: .catOnly,
+                    currentPet: sampleDog
                 )
+                
+                // Species safety badges standalone preview
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                    Text("Species Safety Badges")
+                        .font(ModernDesignSystem.Typography.title3)
+                    
+                    HStack(spacing: ModernDesignSystem.Spacing.lg) {
+                        SpeciesSafetyBadge(species: .dog, safetyStatus: .safe, isHighlighted: true)
+                        SpeciesSafetyBadge(species: .cat, safetyStatus: .caution)
+                    }
+                    
+                    HStack(spacing: ModernDesignSystem.Spacing.lg) {
+                        SpeciesSafetyBadge(species: .dog, safetyStatus: .unsafe, isHighlighted: true)
+                        SpeciesSafetyBadge(species: .cat, safetyStatus: .safe)
+                    }
+                }
+                .padding()
+                .background(ModernDesignSystem.Colors.softCream)
+                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             }
             .padding()
         }

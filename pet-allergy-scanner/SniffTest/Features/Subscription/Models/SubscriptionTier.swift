@@ -116,16 +116,22 @@ class SubscriptionGatekeeper: ObservableObject {
     }
     
     /// Get the current user's subscription tier
-    /// Checks bypass_subscription flag first, then RevenueCat subscription status, then backend user role
+    /// Checks global bypass first, then user bypass_subscription flag, then RevenueCat, then backend role
     /// This ensures users with bypass flag or premium role get access even if RevenueCat isn't synced
     var currentTier: SubscriptionTier {
-        // First check if user has bypass_subscription flag (highest priority)
+        // FREE APP MODE: Bypass all subscription checks when enabled globally
+        // Toggle Configuration.subscriptionBypassEnabled to false when ready to monetize
+        if Configuration.subscriptionBypassEnabled {
+            return .premium
+        }
+        
+        // Check if user has bypass_subscription flag (highest priority for individual users)
         // This allows admin accounts to bypass all subscription checks
         if let user = authService.currentUser, user.bypassSubscription {
             return .premium
         }
         
-        // Second check RevenueCat subscription status (primary source of truth for regular users)
+        // Check RevenueCat subscription status (primary source of truth for regular users)
         if subscriptionProvider.hasActiveSubscription {
             return .premium
         }

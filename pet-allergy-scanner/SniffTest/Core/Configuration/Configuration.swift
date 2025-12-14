@@ -52,6 +52,14 @@ struct Configuration {
         Bundle.main.object(forInfoDictionaryKey: "REVENUECAT_ENTITLEMENT_ID") as? String ?? "pro_user"
     }
     
+    // MARK: - Subscription Configuration
+    
+    /// When true, all users get premium access (free app mode)
+    /// Set to false to re-enable subscription requirements
+    static var subscriptionBypassEnabled: Bool {
+        return true  // Toggle to false when ready to monetize
+    }
+    
     // MARK: - PostHog Configuration
     
     /// PostHog API key for analytics tracking
@@ -152,6 +160,7 @@ extension Configuration {
             "allowedImageTypes": allowedImageTypes,
             "hasRevenueCatAPIKey": !revenueCatAPIKey.isEmpty,
             "revenueCatEntitlementID": revenueCatEntitlementID,
+            "subscriptionBypassEnabled": subscriptionBypassEnabled,
             "hasPostHogAPIKey": !postHogAPIKey.isEmpty,
             "postHogHost": postHogHost
         ]
