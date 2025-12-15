@@ -51,10 +51,12 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 - 🧠 **AI-Powered Analysis**: Intelligent ingredient safety assessment with species-specific logic
 - 🐕 **Pet Profiles**: Complete pet management with birthday tracking and age calculation
 - 📊 **Safety Reports**: Detailed ingredient analysis with personalized recommendations
-- 💾 **Offline Support**: Core scanning features work without internet connection
+- 💾 **Offline Support**: Core scanning features work without internet connection with intelligent caching
 - 🥗 **Nutrition Tracking**: Comprehensive feeding logs, calorie goals, and nutritional analysis
 - ⚖️ **Weight Management**: Track pet weight trends and set health goals
 - 📱 **Food Database**: Searchable database with barcode lookup and nutritional info
+- 📋 **Trackers Hub**: Centralized health event tracking and management
+- 🏥 **Visit Summaries**: One-tap vet-readable health summaries for veterinary visits
 
 ### User Experience & Onboarding
 - 🎯 **Guided Onboarding**: Step-by-step pet profile creation for new users
@@ -111,12 +113,16 @@ The application uses AI-powered ingredient analysis with comprehensive databases
 
 ### Advanced Features
 - 💳 **Subscription Management**: Premium features with App Store & RevenueCat integration
+  - **Free Tier**: 5 scans/day, 1 pet, 5 scan history limit
+  - **Premium Tier**: Unlimited scans, unlimited pets, unlimited history, health tracking, analytics, trends
 - 📧 **Waitlist System**: Pre-launch email signup and notification system
 - 💊 **Medication Tracking**: Comprehensive medication reminder scheduling
 - 🌍 **Localization Ready**: Multi-language support infrastructure
-- 📊 **Analytics**: User behavior tracking and performance monitoring
+- 📊 **Analytics**: PostHog integration for user behavior tracking and performance monitoring
 - 🔧 **Settings Management**: Comprehensive app configuration options
 - 🧪 **Testing Suite**: Complete unit and integration test coverage
+- 💾 **Intelligent Caching**: Multi-layer caching system with automatic sync and memory optimization
+- 🏥 **Vet Visit Summaries**: Generate comprehensive health summaries for veterinary visits (30/60/90 day ranges)
 
 ## Architecture
 
@@ -226,9 +232,21 @@ Features/
 │       ├── NotificationService.swift     # Notification API
 │       ├── PushNotificationService.swift # APNs integration
 │       └── NotificationSettingsManager.swift # Settings persistence
-├── History/
-│   └── Views/
-│       └── HistoryView.swift             # Scan history
+├── Tracking/
+│   ├── Views/
+│   │   ├── TrackersView.swift            # Central tracking hub (replaces History)
+│   │   └── [Health event tracking views]
+│   ├── Services/
+│   │   └── HealthEventService.swift      # Health event management
+│   └── Models/
+│       └── [Health tracking models]
+├── VisitSummary/
+│   ├── Views/
+│   │   └── VisitSummaryView.swift        # Vet-readable health summaries
+│   ├── Services/
+│   │   └── VisitSummaryService.swift    # Summary generation
+│   └── Models/
+│       └── VisitSummaryModels.swift      # Summary data models
 ├── Onboarding/
 │   └── Views/
 │       └── OnboardingView.swift          # First-time user flow
@@ -236,8 +254,22 @@ Features/
 │   └── Services/
 │       └── WeightUnitPreferenceService.swift # Unit preferences
 ├── Subscription/
+│   ├── Views/
+│   │   ├── SubscriptionView.swift       # Premium features
+│   │   ├── PaywallView.swift            # Subscription purchase UI
+│   │   └── SubscriptionBlockerView.swift # Feature gating
+│   ├── Services/
+│   │   └── RevenueCatSubscriptionProvider.swift # RevenueCat integration
+│   ├── ViewModels/
+│   │   └── SubscriptionViewModel.swift  # Subscription state management
+│   └── Models/
+│       ├── SubscriptionTier.swift       # Free/Premium tier definitions
+│       └── SubscriptionProduct.swift    # Product models
+├── Guidance/
+│   ├── Services/
+│   │   └── GuidanceEngine.swift         # Health guidance logic
 │   └── Views/
-│       └── SubscriptionView.swift        # Premium features
+│       └── HealthGuidanceCard.swift     # Guidance UI components
 └── Help/
     └── Views/
         └── HelpSupportView.swift         # Support resources
@@ -250,29 +282,51 @@ Shared/
 │   └── Ingredient.swift               # Ingredient analysis model
 ├── Services/
 │   ├── APIService.swift               # Backend communication
-│   ├── CacheManager.swift             # Data caching and persistence
+│   ├── CacheManager.swift             # Legacy cache manager
+│   ├── UnifiedCacheCoordinator.swift  # Centralized cache coordination
+│   ├── CacheFirstDataLoader.swift     # Cache-first data loading
+│   ├── CacheServerSyncService.swift   # Background sync service
+│   ├── CacheAnalyticsService.swift    # Cache performance analytics
+│   ├── EnhancedCacheManager.swift     # Enhanced caching with memory optimization
+│   ├── ObservableCacheManager.swift   # Observable cache state
+│   ├── MultiCacheService.swift        # Multi-layer caching
 │   ├── GDPRService.swift              # Data export/deletion
 │   ├── MonitoringService.swift        # Analytics and performance
-│   ├── ImageProcessingService.swift   # Image optimization
+│   ├── MemoryEfficientImageProcessor.swift # Optimized image processing
 │   ├── NetworkMonitor.swift           # Network connectivity
 │   ├── SupabaseService.swift          # Supabase integration
-│   └── URLHandler.swift               # Deep linking and URL handling
+│   ├── URLHandler.swift               # Deep linking and URL handling
+│   ├── AutomaticTokenRefreshService.swift # Token refresh automation
+│   └── PetSensitivityService.swift    # Pet sensitivity management
 ├── Utils/
 │   ├── ModernDesignSystem.swift       # Trust & Nature design system
-│   ├── AnalyticsManager.swift         # User behavior tracking
-│   ├── SecurityManager.swift          # Security utilities
-│   ├── SecureDataManager.swift        # Encrypted data management
-│   ├── CertificatePinning.swift       # SSL certificate pinning
 │   ├── HapticFeedback.swift           # Tactile feedback
 │   ├── InputValidator.swift           # Form validation
-│   └── LocalizationHelper.swift       # Internationalization
+│   ├── LocalizationHelper.swift       # Internationalization
+│   ├── ImageOptimizer.swift           # Image optimization utilities
+│   ├── ImageLoader.swift              # Efficient image loading
+│   ├── Debouncer.swift                # Debouncing utilities
+│   ├── DevicePerformanceHelper.swift  # Performance optimization
+│   ├── iOS18Compatibility.swift       # iOS 18 compatibility fixes
+│   ├── KeyboardManager.swift          # Keyboard handling
+│   ├── OrientationManager.swift       # Orientation management
+│   ├── SettingsManager.swift          # Settings persistence
+│   └── SystemWarningSuppressionHelper.swift # Console noise reduction
 └── Views/
     ├── CommonComponents.swift         # Reusable UI components
     ├── LoadingView.swift              # Loading states
     ├── EmptyStateView.swift           # Empty state UI
     ├── ErrorView.swift                # Error displays
     ├── ConfirmationDialog.swift       # Confirmation modals
-    └── ToastView.swift                # Toast notifications
+    ├── ToastView.swift                # Toast notifications
+    ├── MainTabView.swift              # Main tab navigation
+    ├── CacheHydrationProgressView.swift # Cache loading UI
+    ├── GDPRView.swift                 # GDPR compliance UI
+    ├── LegalViews.swift               # Legal documentation views
+    ├── ModernSwiftUIAnimations.swift  # Animation utilities
+    ├── ModernSwiftUIConcurrency.swift # Concurrency helpers
+    ├── NutritionComponents.swift      # Nutrition UI components
+    └── SafeTextField.swift            # Secure text input
 ```
 
 ### Backend Architecture
@@ -431,11 +485,11 @@ app/
 - **Supabase SDK**: 2.9.1 (pinned for stability)
 
 ### Website
-- **Framework**: Next.js 16.0.9
-- **Language**: TypeScript 5.6
-- **Styling**: Tailwind CSS 3.4
+- **Framework**: Next.js 16.0.10
+- **Language**: TypeScript 5.6.0
+- **Styling**: Tailwind CSS 3.4.0
 - **React**: 19.0.0
-- **Icons**: Lucide React, React Icons
+- **Icons**: Lucide React 0.548.0, React Icons 5.5.0
 
 ### Infrastructure
 - **Database**: Supabase (PostgreSQL)
@@ -444,6 +498,8 @@ app/
 - **Real-time**: Supabase Realtime 2.22.0
 - **Hosting**: Railway (Backend), Vercel-ready (Website)
 - **Rate Limiting**: Redis 5.0+ (optional, falls back to in-memory)
+- **Analytics**: PostHog (user behavior tracking)
+- **Subscriptions**: RevenueCat (subscription management)
 
 ### Key Dependencies & Versions
 
@@ -467,11 +523,12 @@ app/
 - **AVFoundation**: Camera and OCR
 
 #### Website (TypeScript/React)
-- **Next.js**: 16.0.9
+- **Next.js**: 16.0.10
 - **React**: 19.0.0
-- **TypeScript**: 5.6
-- **Tailwind CSS**: 3.4
+- **TypeScript**: 5.6.0
+- **Tailwind CSS**: 3.4.0
 - **Lucide React**: 0.548.0 (icons)
+- **React Icons**: 5.5.0 (additional icons)
 
 ## Trust & Nature Color Scheme
 
@@ -940,8 +997,18 @@ The FastAPI backend provides interactive API documentation:
 - **Pet Management**: CRUD operations for pet profiles
 - **Scan Processing**: Ingredient analysis and safety assessment
 - **Nutrition API**: Comprehensive nutrition tracking and analysis
-- **Food Management**: Searchable food database with barcode lookup
+  - `/nutrition/analysis` - Food analysis endpoints
+  - `/nutrition/feeding` - Feeding log endpoints
+  - `/nutrition/goals` - Calorie goal endpoints
+  - `/nutrition/requirements` - Nutritional requirements
+  - `/nutrition/summaries` - Daily nutrition summaries
+  - `/nutrition/advanced` - Advanced analytics and insights
 - **Advanced Nutrition**: Weight tracking, trends, and food comparisons
+  - `/advanced-nutrition/weight` - Weight tracking endpoints
+  - `/advanced-nutrition/trends` - Nutritional trends
+  - `/advanced-nutrition/comparisons` - Food comparison endpoints
+  - `/advanced-nutrition/analytics` - Health insights and patterns
+- **Food Management**: Searchable food database with barcode lookup
 - **Health Events**: Pet health tracking and medical event logging
 - **Medication Reminders**: Schedule and track pet medications
 - **Subscriptions**: App Store and RevenueCat subscription management with webhook support
@@ -987,6 +1054,7 @@ Built on **Supabase (PostgreSQL)** with Row Level Security (RLS) for data protec
 | `subscriptions` | User subscriptions | Premium subscription management (App Store & RevenueCat) |
 | `waitlist` | Email waitlist | Pre-launch email signups |
 | `data_quality` | Data quality | Food item quality assessment and analysis |
+| `visit_summaries` | Vet summaries | Generated health summaries for veterinary visits |
 
 ### Key Features
 - **Row Level Security**: Users can only access their own data
@@ -1259,6 +1327,8 @@ See `server/scripts/dev/README.md` and `PRE_PRODUCTION_CHECKLIST.md` for detaile
 - **Bundle ID**: `com.snifftest.app`
 - **Distribution**: TestFlight for beta testing
 - **App Store**: Production release via App Store Connect
+- **Analytics**: PostHog integration (configure via `POSTHOG_API_KEY` in Info.plist)
+- **Subscriptions**: RevenueCat integration (configure via `REVENUECAT_PUBLIC_SDK_KEY` in Info.plist)
 
 ### Deployment Checklist
 - [ ] Configure environment variables for all services
@@ -1323,8 +1393,13 @@ We welcome contributions! Please follow these guidelines:
 - **iOS 18.6.2 Compatibility**: Fixed interactive elements, form inputs, and navigation freezes
 - **Nutritional Data**: Enhanced feeding record calculations and consistency
 - **Weight Calculations**: Improved veterinary weight tracking accuracy
-- **Website Performance**: Optimized Next.js 16.0.9 landing page
-- **Dependencies**: Updated to Next.js 16.0.9, urllib3 2.6.0 for security patches
+- **Website Performance**: Optimized Next.js 16.0.10 landing page
+- **Dependencies**: Updated to Next.js 16.0.10, urllib3 2.6.0 for security patches
+- **TrackersView**: Replaced HistoryView with centralized tracking hub for health events
+- **Visit Summaries**: Added vet-readable health summary generation feature
+- **PostHog Analytics**: Integrated PostHog for comprehensive user behavior tracking
+- **Enhanced Caching**: Multi-layer caching system with automatic sync and memory optimization
+- **Subscription Tiers**: Defined free (5 scans/day, 1 pet) and premium (unlimited) tiers
 
 #### Core Features
 - **Nutrition Tracking**: Complete feeding logs, calorie goals, and weight management
@@ -1350,8 +1425,10 @@ We welcome contributions! Please follow these guidelines:
 - **iOS**: Swift 5.9+, SwiftUI, iOS 17.0+
 - **Backend**: Python 3.9+, FastAPI 0.115.6, Uvicorn 0.37+
 - **Database**: Supabase 2.9.1, PostgreSQL with RLS
-- **Website**: Next.js 16.0.9, React 19.0.0, TypeScript 5.6
+- **Website**: Next.js 16.0.10, React 19.0.0, TypeScript 5.6.0
 - **Deployment**: Railway (API), Vercel-ready (Website)
+- **Analytics**: PostHog (user behavior tracking)
+- **Subscriptions**: RevenueCat (subscription management)
 
 ## Environment Variables Reference
 
@@ -1382,6 +1459,10 @@ APNS_PRIVATE_KEY=your_private_key_p8
 # RevenueCat (Subscriptions)
 REVENUECAT_API_KEY=your_api_key
 REVENUECAT_WEBHOOK_SECRET=your_webhook_secret
+
+# PostHog (Analytics) - Optional
+POSTHOG_API_KEY=your_posthog_api_key
+POSTHOG_HOST=https://us.i.posthog.com
 
 # Redis (Rate Limiting)
 REDIS_URL=redis://localhost:6379
@@ -1431,8 +1512,9 @@ npm run lint                       # Run linter
 
 **Built with ❤️ for pet owners everywhere**
 
-*Last updated: December 12, 2025*
+*Last updated: December 2025*
 *iOS App Version: 1.0.0 (Pre-release)*
 *API Version: 1.0.0*
 *Website Version: 1.0.0*
 *Database Schema: Updated 2025-11-26 with security hardening*
+*Next.js: 16.0.10 | React: 19.0.0 | TypeScript: 5.6.0*
