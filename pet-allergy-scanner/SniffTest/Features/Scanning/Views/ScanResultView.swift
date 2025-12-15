@@ -120,6 +120,14 @@ struct ScanResultView: View {
                     print("🔍 ScanResultView: Unsafe ingredients: \(result.unsafeIngredients.count)")
                     print("🔍 ScanResultView: Safe ingredients: \(result.safeIngredients.count)")
                     
+                    // Track report viewed
+                    Task { @MainActor in
+                        PostHogAnalytics.trackReportViewed(
+                            reportType: "safety",
+                            unsafeIngredientCount: result.unsafeIngredients.count
+                        )
+                    }
+                    
                     // MARK: - Trigger Guidance Engine (Gap #1)
                     loadHealthGuidance(for: result)
                 } else {

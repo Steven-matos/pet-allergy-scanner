@@ -309,6 +309,22 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             // Track premium upgrade if subscription just became active
             if hasActiveSubscription && !wasSubscribedBefore {
                 let tier = determineTier(from: product.id)
+                
+                // Track purchase succeeded
+                // Note: storeProduct is private, use public price property
+                // Get price from package.storeProduct which is accessible
+                let priceDecimal = product.package.storeProduct.price
+                let price = NSDecimalNumber(decimal: priceDecimal).doubleValue
+                // priceLocale is unavailable in iOS, use default currency
+                let currencyCode = "USD" // Default to USD since priceLocale is unavailable
+                PostHogAnalytics.trackPurchaseSucceeded(
+                    productId: product.id,
+                    revenue: price,
+                    currency: currencyCode,
+                    isTrial: false // RevenueCat handles trial detection separately
+                )
+                
+                // Track premium upgrade
                 PostHogAnalytics.trackPremiumUpgrade(tier: tier, productId: product.id)
             }
             
@@ -318,7 +334,10 @@ final class RevenueCatSubscriptionProvider: NSObject, SubscriptionProviding {
             errorMessage = "Purchase failed. Please try again."
             
             // Track analytics
-            PostHogAnalytics.trackPaymentFailed(productId: product.id, error: error.localizedDescription)
+            PostHogAnalytics.trackPurchaseFailed(
+                productId: product.id,
+                errorCode: (error as NSError).code.description
+            )
             
             return .failed(error)
         }

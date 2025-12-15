@@ -77,6 +77,19 @@ final class SubscriptionViewModel: ObservableObject {
             return
         }
         
+        // Track checkout started
+        // Note: storeProduct is private, use public price property via package
+        let priceDecimal = product.package.storeProduct.price
+        let price = NSDecimalNumber(decimal: priceDecimal).doubleValue
+        let period = determinePeriod(from: product.id)
+        PostHogAnalytics.trackCheckoutStarted(
+            productId: product.id,
+            price: price,
+            period: period
+        )
+        
+        // Track paywall CTA tapped
+        PostHogAnalytics.trackPaywallCTATapped(cta: "subscribe")
         
         let result = await subscriptionProvider.purchase(product)
         
@@ -231,6 +244,20 @@ final class SubscriptionViewModel: ObservableObject {
     func selectProduct(_ product: SubscriptionProduct) {
         selectedProductID = product.id
         HapticFeedback.light()
+    }
+    
+    /// Determine subscription period from product ID
+    /// - Parameter productId: Product ID
+    /// - Returns: Period string ("week", "month", "year")
+    private func determinePeriod(from productId: String) -> String {
+        if productId.contains("weekly") || productId.contains("week") {
+            return "week"
+        } else if productId.contains("monthly") || productId.contains("month") {
+            return "month"
+        } else if productId.contains("yearly") || productId.contains("year") {
+            return "year"
+        }
+        return "month" // Default
     }
 }
 

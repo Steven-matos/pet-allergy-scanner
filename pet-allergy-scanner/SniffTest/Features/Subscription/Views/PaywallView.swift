@@ -45,9 +45,10 @@ struct PaywallView: View {
             .background(ModernDesignSystem.Colors.background)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
-                // Track analytics - determine source from context if available
-                let source = "unknown" // Could be enhanced to track where paywall was triggered from
-                PostHogAnalytics.trackPaywallViewed(source: source)
+                // Track analytics - determine placement from context
+                // Placement could be "scan_limit", "feature_gate", "settings"
+                let placement = "feature_gate" // Default, can be enhanced based on trigger context
+                PostHogAnalytics.trackPaywallViewed(placement: placement, variant: nil)
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

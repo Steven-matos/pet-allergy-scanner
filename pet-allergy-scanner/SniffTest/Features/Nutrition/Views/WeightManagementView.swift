@@ -1785,7 +1785,7 @@ struct WeightEntryView: View {
                 
                 // Track analytics - convert to kg for tracking
                 let weightInKg = unitService.convertToKg(weightValue)
-                PostHogAnalytics.trackWeightRecorded(petId: pet.id, weightKg: weightInKg)
+                PostHogAnalytics.trackWeightRecordAdded(petId: pet.id, weightKg: weightInKg, source: "manual")
                 
                 await MainActor.run {
                     // Store the record ID for undo functionality

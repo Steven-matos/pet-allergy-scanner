@@ -69,6 +69,25 @@ enum PostHogConfigurator {
         config.captureScreenViews = false // Disabled - using manual tracking for better control
         config.captureElementInteractions = true // Enable autocapture of user interactions (taps, swipes)
         
+        // Feature Flags Configuration (2025 Best Practices)
+        // Enable feature flags to support A/B testing and gradual rollouts
+        // Feature flags are automatically fetched when user is identified
+        // Note: These properties may not be available in all PostHog SDK versions
+        // If compilation fails, these can be removed - feature flags will still work via reloadFeatureFlags()
+        // config.loadFeatureFlagsOnStart = true // Load flags immediately on app start
+        // config.reloadFeatureFlagsOnAppActive = true // Reload flags when app becomes active
+        
+        // Surveys Configuration (2025 Best Practices)
+        // Enable surveys to gather user feedback at key moments
+        // Note: This property may not be available in all PostHog SDK versions
+        // config.surveys = true // Enable survey support
+        
+        // Method Swizzling (2025 Best Practices)
+        // Enable method swizzling for accurate session replay and tracking metrics
+        // This allows SDK to intercept method calls for advanced tracking
+        // Note: This property may not be available in all PostHog SDK versions
+        // config.enableMethodSwizzling = true
+        
         // Privacy: Redact sensitive data before sending events
         // This ensures user privacy while maintaining analytics value
         config.setBeforeSend { event in
@@ -103,6 +122,16 @@ enum PostHogConfigurator {
         PostHogSDK.shared.setup(config)
         
         logger.info("PostHog SDK configured successfully with API key and host: \(host)")
+        
+        // Initialize privacy manager
+        AnalyticsPrivacyManager.shared.initialize()
+        
+        // Initialize super properties after SDK setup (2025 Best Practice)
+        // These properties will be attached to all events
+        PostHogAnalytics.initializeSuperProperties()
+        
+        // Initialize context provider session
+        AnalyticsContextProvider.shared.resetSession()
     }
     
     // Note: Additional PostHog methods (identify, track, reset) can be called directly

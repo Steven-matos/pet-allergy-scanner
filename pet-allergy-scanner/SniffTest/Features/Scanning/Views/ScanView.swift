@@ -199,6 +199,10 @@ struct ScanView: View {
                     onBarcodeDetected: handleBarcodeDetection,
                     onCameraControllerReady: { controller in
                         cameraController = controller
+                        // Sync flash state when controller is ready
+                        if controller.hasFlashHardware() {
+                            isFlashOn = controller.isFlashEnabled()
+                        }
                     }
                 )
                 .ignoresSafeArea(.all)
@@ -219,17 +223,51 @@ struct ScanView: View {
                         // Top controls: Flash button on left, History button on right
                         HStack {
                             // Flash toggle button on the left
-                            Button(action: {
-                                if let controller = cameraController {
-                                    isFlashOn = controller.toggleFlash()
+                            // Always show button if camera controller exists, let toggleFlash handle availability
+                            if cameraController != nil {
+                                Button(action: {
+                                    // Provide haptic feedback
+                                    HapticFeedback.light()
+                                    
+                                    guard let controller = cameraController else {
+                                        print("⚠️ Flash toggle failed: Camera controller is nil")
+                                        return
+                                    }
+                                    
+                                    // Check if flash hardware exists
+                                    guard controller.hasFlashHardware() else {
+                                        print("⚠️ Flash toggle failed: Device does not have flash hardware")
+                                        return
+                                    }
+                                    
+                                    // Check if flash is currently available before toggling
+                                    guard controller.isFlashCurrentlyAvailable() else {
+                                        print("⚠️ Flash toggle failed: Flash is not currently available (device may be too hot)")
+                                        return
+                                    }
+                                    
+                                    // Toggle flash on camera controller
+                                    let newFlashState = controller.toggleFlash()
+                                    
+                                    // Update state with animation
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        isFlashOn = newFlashState
+                                    }
+                                    
+                                    // Log for debugging if toggle failed
+                                    if !newFlashState && isFlashOn {
+                                        print("⚠️ Flash toggle returned false - flash may not be available on this device")
+                                    }
+                                }) {
+                                    Image(systemName: isFlashOn ? "bolt.fill" : "bolt.slash.fill")
+                                        .font(ModernDesignSystem.Typography.title3)
+                                        .foregroundColor(isFlashOn ? .yellow : .white)
+                                        .padding(ModernDesignSystem.Spacing.md)
+                                        .background(Color.black.opacity(0.3))
+                                        .clipShape(Circle())
                                 }
-                            }) {
-                                Image(systemName: isFlashOn ? "bolt.fill" : "bolt.slash.fill")
-                                    .font(ModernDesignSystem.Typography.title3)
-                                    .foregroundColor(isFlashOn ? .yellow : .white)
-                                    .padding(ModernDesignSystem.Spacing.md)
-                                    .background(Color.black.opacity(0.3))
-                                    .clipShape(Circle())
+                                .disabled(cameraController == nil || !(cameraController?.isFlashCurrentlyAvailable() ?? true))
+                                .opacity((cameraController?.isFlashCurrentlyAvailable() ?? true) ? 1.0 : 0.5)
                             }
                             
                             Spacer()
@@ -727,7 +765,7 @@ struct ScanView: View {
         .onAppear {
             // Track analytics (non-blocking)
             Task.detached(priority: .utility) { @MainActor in
-            PostHogAnalytics.trackScanViewOpened()
+                PostHogAnalytics.trackScanStarted(mode: "camera")
             }
             checkCameraPermission()
             // Don't resume camera here - it will be handled when sheets are dismissed
@@ -807,9 +845,16 @@ struct ScanView: View {
                 hybridScanResult = result
                 if let barcode = result.barcode {
                     detectedBarcode = barcode
-                    PostHogAnalytics.trackImageCaptured(hasBarcode: true)
+                    PostHogAnalytics.trackScanCaptureSucceeded(mode: "camera", imageSource: "camera")
+                    PostHogAnalytics.trackBarcodeDetected(barcodeType: barcode.type, barcodePresent: true)
                 } else {
-                    PostHogAnalytics.trackImageCaptured(hasBarcode: false)
+                    PostHogAnalytics.trackScanCaptureSucceeded(mode: "camera", imageSource: "camera")
+                }
+                
+                // Track OCR extraction if text was extracted
+                let ocrText = result.ocrText
+                if !ocrText.isEmpty {
+                    PostHogAnalytics.trackOCRExtracted(textLength: ocrText.count, confidenceAvg: nil)
                 }
             }
         }
@@ -855,11 +900,17 @@ struct ScanView: View {
     
     private func analyzeDetectedBarcode(_ barcode: BarcodeResult) {
         Task {
-            // Look up product in database
-            do {
-                print("🔍 [BARCODE_LOOKUP] Searching for barcode: '\(barcode.value)'")
-                print("🔍 [BARCODE_LOOKUP] Barcode type: \(barcode.type), confidence: \(barcode.confidence)")
-                let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
+                // Track food database lookup
+                PostHogAnalytics.trackFoodDatabaseLookup(method: "barcode", hit: false) // Will update if found
+                
+                // Look up product in database
+                do {
+                    print("🔍 [BARCODE_LOOKUP] Searching for barcode: '\(barcode.value)'")
+                    print("🔍 [BARCODE_LOOKUP] Barcode type: \(barcode.type), confidence: \(barcode.confidence)")
+                    let product = try await APIService.shared.lookupProductByBarcode(barcode.value)
+                    
+                    // Update food database lookup result
+                    PostHogAnalytics.trackFoodDatabaseLookup(method: "barcode", hit: product != nil)
                 
                 await MainActor.run {
                     // Ensure no other sheet is presented before showing product sheets
@@ -965,6 +1016,16 @@ struct ScanView: View {
             imageData: imageData
         )
         
+        // Track analysis requested
+        let analysisStartTime = Date()
+        let analysisType: String
+        if apiScanMethod == .barcode {
+            analysisType = "ingredients" // Barcode lookup primarily for ingredients
+        } else {
+            analysisType = "both" // OCR/hybrid can analyze both
+        }
+        PostHogAnalytics.trackAnalysisRequested(analysisType: analysisType)
+        
         scanService.analyzeScan(analysisRequest) { scan in
             Task { @MainActor in
                 print("🔍 [SCAN_ANALYSIS] Analysis completed, setting scan result")
@@ -987,13 +1048,46 @@ struct ScanView: View {
                 // Use async/await to ensure data is fully loaded
                 await presentScanResult(scan)
                 
-                // Track successful scan completion
+                // Calculate timing
+                let analysisDuration = Date().timeIntervalSince(analysisStartTime)
+                let durationMsTotal = Int(analysisDuration * 1000)
+                
+                // Track successful scan completion with comprehensive metrics
                 if let result = scan.result {
                     PostHogAnalytics.trackScanCompleted(
                         scanId: scan.id,
+                        status: "success",
+                        durationMsTotal: durationMsTotal,
+                        durationMsOCR: nil, // OCR timing tracked separately if needed
+                        durationMsBackend: durationMsTotal, // Backend includes analysis time
                         hasAllergens: !result.unsafeIngredients.isEmpty,
                         allergenCount: result.unsafeIngredients.count,
                         productFound: foundProduct != nil
+                    )
+                    
+                    // Track analysis succeeded
+                    PostHogAnalytics.trackAnalysisSucceeded(
+                        unsafeIngredientCount: result.unsafeIngredients.count,
+                        allergenMatchCount: result.unsafeIngredients.count, // Assuming all unsafe are allergens
+                        species: pet.species.rawValue,
+                        hasRecommendations: false // ScanResult doesn't have recommendations property
+                    )
+                } else {
+                    // Track failed analysis
+                    PostHogAnalytics.trackAnalysisFailed(
+                        stage: "backend",
+                        errorCode: "unknown",
+                        errorDomain: "scan_analysis"
+                    )
+                    PostHogAnalytics.trackScanCompleted(
+                        scanId: scan.id,
+                        status: "failed",
+                        durationMsTotal: durationMsTotal,
+                        durationMsOCR: nil,
+                        durationMsBackend: durationMsTotal,
+                        hasAllergens: false,
+                        allergenCount: 0,
+                        productFound: false
                     )
                 }
                 

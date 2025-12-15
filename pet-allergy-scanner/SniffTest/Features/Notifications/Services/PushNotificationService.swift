@@ -73,6 +73,10 @@ class PushNotificationService: NSObject, ObservableObject {
     /// Request push notification permissions and register for remote notifications
     /// - Returns: Boolean indicating if permission was granted
     func requestPushNotificationPermission() async -> Bool {
+        // Track permission prompted
+        await MainActor.run {
+            PostHogAnalytics.trackPushPermissionPrompted()
+        }
         do {
             // Request authorization for push notifications
             let granted = try await UNUserNotificationCenter.current().requestAuthorization(
@@ -80,6 +84,11 @@ class PushNotificationService: NSObject, ObservableObject {
             )
             
             isAuthorized = granted
+            
+            // Track permission result
+            await MainActor.run {
+                PostHogAnalytics.trackPushPermissionResult(status: granted ? "granted" : "denied")
+            }
             
             if granted {
                 // Register for remote notifications to get device token

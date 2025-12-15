@@ -560,8 +560,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
             await RevenueCatConfigurator.identifyUser(freshUser.id)
             
             // Identify user with PostHog and get pet count
-            let petsCount = CachedPetService.shared.pets.count
-            PostHogAnalytics.identifyUser(freshUser, petsCount: petsCount)
+            let pets = CachedPetService.shared.pets
+            let petsCount = pets.count
+            PostHogAnalytics.identifyUser(freshUser, petsCount: petsCount, pets: pets)
             PostHogAnalytics.trackUserLoggedIn(userId: freshUser.id, role: freshUser.role.rawValue)
             
             // Only run auto-onboarding check if user is not already onboarded
@@ -626,8 +627,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await RevenueCatConfigurator.identifyUser(user.id)
                 
                 // Identify user with PostHog
-                let petsCount = CachedPetService.shared.pets.count
-                PostHogAnalytics.identifyUser(user, petsCount: petsCount)
+                let pets = CachedPetService.shared.pets
+                let petsCount = pets.count
+                PostHogAnalytics.identifyUser(user, petsCount: petsCount, pets: pets)
                 PostHogAnalytics.trackUserLoggedIn(userId: user.id, role: user.role.rawValue)
                 
                 // Only run auto-onboarding check if user is not already onboarded
@@ -738,8 +740,9 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await RevenueCatConfigurator.identifyUser(user.id)
                 
                 // Identify user with PostHog
-                let petsCount = CachedPetService.shared.pets.count
-                PostHogAnalytics.identifyUser(user, petsCount: petsCount)
+                let pets = CachedPetService.shared.pets
+                let petsCount = pets.count
+                PostHogAnalytics.identifyUser(user, petsCount: petsCount, pets: pets)
                 PostHogAnalytics.trackUserLoggedIn(userId: user.id, role: user.role.rawValue)
                 
                 // Only run auto-onboarding check if user is not already onboarded

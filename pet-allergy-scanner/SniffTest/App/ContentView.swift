@@ -33,6 +33,8 @@ struct ContentView: View {
                             // Track analytics (safe - onAppear is on MainActor)
                             Task { @MainActor in
                                 PostHogAnalytics.trackScreenViewed(screenName: "main_tab_view")
+                                // Track app opened if this is the first appearance
+                                PostHogAnalytics.trackAppOpened(isFirstLaunch: false)
                             }
                             
                             // CRITICAL: Load all critical cached data synchronously on app launch
@@ -91,11 +93,12 @@ struct ContentView: View {
               Task { @MainActor in
                   switch newPhase {
                   case .active:
-                      PostHogAnalytics.trackScreenViewed(screenName: "app_became_active")
+                      PostHogAnalytics.trackAppForegrounded()
                   case .background:
-                      PostHogAnalytics.trackScreenViewed(screenName: "app_entered_background")
+                      PostHogAnalytics.trackAppBackgrounded()
                   case .inactive:
-                      PostHogAnalytics.trackScreenViewed(screenName: "app_became_inactive")
+                      // Inactive is a transitional state, don't track separately
+                      break
                   @unknown default:
                       break
                   }

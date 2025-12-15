@@ -214,10 +214,12 @@ struct FeedingLogView: View {
                 try await feedingService.logFeeding(feedingRecord)
                 
                 // Track analytics
-                PostHogAnalytics.trackFeedingLogged(
+                PostHogAnalytics.trackFeedingLogAdded(
                     petId: pet.id,
                     foodId: food.id,
-                    amountGrams: amountInGrams
+                    amountGrams: amountInGrams,
+                    mealType: nil,
+                    calories: nil
                 )
                 
                 await MainActor.run {

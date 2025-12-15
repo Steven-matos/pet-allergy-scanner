@@ -83,6 +83,10 @@ struct OnboardingView: View {
                             .tint(ModernDesignSystem.Colors.primary)
                             .padding(.horizontal, ModernDesignSystem.Spacing.lg)
                             .padding(.top, ModernDesignSystem.Spacing.sm)
+                            .onAppear {
+                                // Track onboarding started
+                                PostHogAnalytics.trackOnboardingStarted()
+                            }
                         
                         // Step content
                         TabView(selection: $currentStep) {
@@ -124,6 +128,25 @@ struct OnboardingView: View {
                         // iOS 18.6.2 Fix: Don't use .disabled on TabView - it blocks ALL interactions including TextFields
                         // Swipe prevention is handled by onChange validation logic above
                         .onChange(of: currentStep) { oldValue, newValue in
+                            // Track onboarding step viewed
+                            let stepName: String
+                            switch newValue {
+                            case 0:
+                                stepName = "welcome"
+                            case 1 where needsProfileSetup:
+                                stepName = "profile_setup"
+                            case 1 where !needsProfileSetup, 2 where needsProfileSetup:
+                                stepName = "add_pet"
+                            case 2 where !needsProfileSetup, 3 where needsProfileSetup:
+                                stepName = "pet_details"
+                            case 3 where !needsProfileSetup, 4 where needsProfileSetup:
+                                stepName = "permissions"
+                            case 4 where !needsProfileSetup, 5 where needsProfileSetup:
+                                stepName = "first_scan_prompt"
+                            default:
+                                stepName = "unknown"
+                            }
+                            PostHogAnalytics.trackOnboardingStepViewed(step: stepName)
                             // Prevent swiping forward if validation fails
                             if newValue > oldValue {
                                 // User is trying to move forward
@@ -1067,6 +1090,7 @@ struct OnboardingView: View {
     /// Create pet and mark onboarding as complete
     /// - Parameter shouldDismissOnboarding: If true, calls onSkip() after successful pet creation to dismiss onboarding
     private func createPet(shouldDismissOnboarding: Bool = false) {
+        let onboardingStartTime = Date() // Track onboarding completion time
         isCreatingPet = true
         
         // Convert weight to kg for storage (backend expects kg)
@@ -1118,6 +1142,12 @@ struct OnboardingView: View {
             await MainActor.run {
                 if petService.errorMessage == nil {
                     // Pet created successfully - mark onboarding as complete
+                    // Track onboarding completed
+                    let timeToComplete = Date().timeIntervalSince(onboardingStartTime)
+                    PostHogAnalytics.trackOnboardingCompleted(
+                        timeToCompleteSec: timeToComplete,
+                        petsCount: petService.pets.count
+                    )
                     petService.completeOnboarding()
                     
                     // If user skipped paywall, dismiss onboarding view immediately

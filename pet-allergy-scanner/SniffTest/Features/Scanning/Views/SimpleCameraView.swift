@@ -192,27 +192,71 @@ class SimpleCameraViewController: UIViewController {
     }
     
     /**
+     * Check if flash hardware is available on the current device
+     * - Returns: True if device has torch hardware, false otherwise
+     */
+    func hasFlashHardware() -> Bool {
+        guard let device = captureDevice else { return false }
+        return device.hasTorch
+    }
+    
+    /**
+     * Check if flash is currently available (hardware exists and is not disabled)
+     * - Returns: True if flash/torch is currently available, false otherwise
+     */
+    func isFlashCurrentlyAvailable() -> Bool {
+        guard let device = captureDevice else { return false }
+        return device.hasTorch && device.isTorchAvailable
+    }
+    
+    /**
      * Toggle camera flash on/off
      * - Returns: True if flash is now on, false if off
      */
     func toggleFlash() -> Bool {
-        guard let device = captureDevice, device.hasTorch else {
+        guard let device = captureDevice else {
+            print("⚠️ Flash toggle failed: No capture device available")
             return false
         }
         
+        guard device.hasTorch else {
+            print("⚠️ Flash toggle failed: Device does not have torch capability")
+            return false
+        }
+        
+        // Check if torch is available (may be unavailable if device is too hot, in use by another app, etc.)
+        guard device.isTorchAvailable else {
+            print("⚠️ Flash toggle failed: Torch is not available (device may be too hot or in use)")
+            return false
+        }
+        
+        // Flash control can work even if session is paused, but we need the device to be configured
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             
             if isFlashOn {
+                // Turn flash off
                 device.torchMode = .off
                 isFlashOn = false
+                print("✅ Flash turned OFF")
             } else {
+                // Check if torch mode is supported
+                guard device.isTorchModeSupported(.on) else {
+                    print("⚠️ Flash toggle failed: Torch mode ON is not supported")
+                    return false
+                }
+                
+                // Turn flash on with full brightness
                 try device.setTorchModeOn(level: 1.0)
                 isFlashOn = true
+                print("✅ Flash turned ON")
             }
         } catch {
             print("⚠️ Failed to toggle flash: \(error.localizedDescription)")
+            print("⚠️ Error details: \(error)")
+            // Reset state on error
+            isFlashOn = false
             return false
         }
         

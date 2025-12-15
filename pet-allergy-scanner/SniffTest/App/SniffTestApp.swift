@@ -66,6 +66,33 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         // Clear badge on app launch
         PushNotificationService.shared.clearBadge()
+        
+        // Track app installation (first launch only)
+        // Check if this is first launch
+        let isFirstLaunch = !UserDefaults.standard.bool(forKey: "has_launched_before")
+        if isFirstLaunch {
+            UserDefaults.standard.set(true, forKey: "has_launched_before")
+            UserDefaults.standard.synchronize()
+            Task { @MainActor in
+                PostHogAnalytics.trackAppInstalled()
+            }
+        }
+        
+        // Track app opened (every launch)
+        Task { @MainActor in
+            // Calculate time since last launch
+            let lastLaunchTime = UserDefaults.standard.object(forKey: "last_launch_time") as? Date
+            let timeSinceLastLaunch = lastLaunchTime.map { Date().timeIntervalSince($0) }
+            
+            PostHogAnalytics.trackAppOpened(
+                isFirstLaunch: isFirstLaunch,
+                timeSinceLastLaunch: timeSinceLastLaunch
+            )
+            
+            // Update last launch time
+            UserDefaults.standard.set(Date(), forKey: "last_launch_time")
+            UserDefaults.standard.synchronize()
+        }
 
         return true
     }
@@ -74,6 +101,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Clear badge when app becomes active
         PushNotificationService.shared.clearBadge()
+        
+        // Track app foregrounded
+        Task { @MainActor in
+            PostHogAnalytics.trackAppForegrounded()
+        }
     }
     
     /// Handle URL opening (fallback for deep links)

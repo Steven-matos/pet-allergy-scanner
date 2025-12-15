@@ -30,11 +30,30 @@ class CameraPermissionService: @unchecked Sendable {
     /// Request camera permission from the user (modern async/await)
     /// - Returns: The authorization status after request
     func requestCameraPermission() async -> AVAuthorizationStatus {
+        // Track permission prompted
+        await MainActor.run {
+            PostHogAnalytics.trackScanPermissionPrompted(permission: "camera")
+        }
+        
         _ = await AVCaptureDevice.requestAccess(for: .video)
         
         // Update status on main actor
         await MainActor.run {
             updateAuthorizationStatus()
+            
+            // Track permission result
+            let statusString: String
+            switch authorizationStatus {
+            case .authorized:
+                statusString = "granted"
+            case .denied, .restricted:
+                statusString = "denied"
+            case .notDetermined:
+                statusString = "denied" // Shouldn't happen after request, but handle it
+            @unknown default:
+                statusString = "denied"
+            }
+            PostHogAnalytics.trackScanPermissionResult(permission: "camera", status: statusString)
             
             // Provide haptic feedback based on permission result
             if authorizationStatus == .authorized {

@@ -220,8 +220,25 @@ final class CachedPetService {
                     self.isLoading = false
                 }
                 
-                // Track pet creation
-                PostHogAnalytics.trackPetCreated(petId: newPet.id, species: newPet.species.rawValue)
+                // Track pet creation with group identification (2025 Best Practice)
+                // Calculate age in months from birthday if available
+                let ageMonths: Int? = {
+                    guard let birthday = newPet.birthday else { return nil }
+                    let calendar = Calendar.current
+                    let now = Date()
+                    let ageComponents = calendar.dateComponents([.month], from: birthday, to: now)
+                    return ageComponents.month
+                }()
+                
+                PostHogAnalytics.trackPetCreated(
+                    petId: newPet.id,
+                    species: newPet.species.rawValue,
+                    petName: newPet.name,
+                    hasSensitivities: !newPet.knownSensitivities.isEmpty,
+                    ageMonths: ageMonths,
+                    weightKg: newPet.weightKg,
+                    breed: newPet.breed
+                )
                 PostHogAnalytics.updatePetCount(self.pets.count)
                 
                 // Update cache
@@ -261,8 +278,31 @@ final class CachedPetService {
                     self.isLoading = false
                 }
                 
-                // Track pet update
-                PostHogAnalytics.trackPetUpdated(petId: updatedPet.id, species: updatedPet.species.rawValue)
+                // Track pet update with group identification (2025 Best Practice)
+                // Determine which fields changed
+                let oldPet = self.pets.first { $0.id == updatedPet.id }
+                var fieldsChanged: [String] = []
+                if let oldPet = oldPet {
+                    if oldPet.name != updatedPet.name { fieldsChanged.append("name") }
+                    if oldPet.breed != updatedPet.breed { fieldsChanged.append("breed") }
+                    if oldPet.birthday != updatedPet.birthday { fieldsChanged.append("birthday") }
+                    if oldPet.weightKg != updatedPet.weightKg { fieldsChanged.append("weight_kg") }
+                    if oldPet.activityLevel != updatedPet.activityLevel { fieldsChanged.append("activity_level") }
+                    if oldPet.knownSensitivities != updatedPet.knownSensitivities { fieldsChanged.append("known_sensitivities") }
+                    if oldPet.vetName != updatedPet.vetName { fieldsChanged.append("vet_name") }
+                    if oldPet.vetPhone != updatedPet.vetPhone { fieldsChanged.append("vet_phone") }
+                }
+                
+                PostHogAnalytics.trackPetUpdated(
+                    petId: updatedPet.id,
+                    species: updatedPet.species.rawValue,
+                    petName: updatedPet.name,
+                    fieldsChanged: fieldsChanged.isEmpty ? nil : fieldsChanged,
+                    ageMonths: updatedPet.ageMonths,
+                    weightKg: updatedPet.weightKg,
+                    breed: updatedPet.breed,
+                    hasSensitivities: !updatedPet.knownSensitivities.isEmpty
+                )
                 
                 // Update cache
                 await updatePetsCache()
