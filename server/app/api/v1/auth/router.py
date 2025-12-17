@@ -618,15 +618,16 @@ async def update_user_profile(
         # Update the users table directly with service role
         if update_data:
             # Convert field names to match database schema
+            # Only include fields that are not None to prevent clearing existing values
             db_update = {}
-            if "first_name" in update_data:
+            if "first_name" in update_data and update_data["first_name"] is not None:
                 db_update["first_name"] = update_data["first_name"]
-            if "last_name" in update_data:
+            if "last_name" in update_data and update_data["last_name"] is not None:
                 db_update["last_name"] = update_data["last_name"]
-            if "username" in update_data:
+            if "username" in update_data and update_data["username"] is not None:
                 db_update["username"] = update_data["username"]
             # Role updates must go through centralized role manager
-            if "role" in update_data:
+            if "role" in update_data and update_data["role"] is not None:
                 from app.shared.services.user_role_manager import UserRoleManager
                 role_manager = UserRoleManager(supabase)
                 new_role = UserRole(update_data["role"]) if isinstance(update_data["role"], str) else update_data["role"]
@@ -637,9 +638,9 @@ async def update_user_profile(
                 )
                 # Remove role from db_update since it's handled by role manager
                 update_data.pop("role", None)
-            if "onboarded" in update_data:
+            if "onboarded" in update_data and update_data["onboarded"] is not None:
                 db_update["onboarded"] = update_data["onboarded"]
-            if "image_url" in update_data:
+            if "image_url" in update_data and update_data["image_url"] is not None:
                 db_update["image_url"] = update_data["image_url"]
             
             if db_update:
