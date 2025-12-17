@@ -17,11 +17,12 @@ struct ProfileSetupView: View {
     @Binding var firstName: String
     @Binding var lastName: String
     @Binding var username: String
+    @Binding var showFirstNameError: Bool
+    @Binding var firstNameShimmy: Bool
     
     // MARK: - State
     
     @FocusState private var focusedField: Field?
-    @State private var showFirstNameError = false
     
     /// Field identifiers for focus management
     private enum Field: Hashable {
@@ -81,33 +82,39 @@ struct ProfileSetupView: View {
                         .focused($focusedField, equals: .firstName)
                         .background(
                             showFirstNameError ?
-                                Color(hex: "#FFF3E0") :
+                                Color.red.opacity(0.1) : // Light red background for validation error
                                 Color.clear
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
                                 .stroke(
                                     showFirstNameError ?
-                                        Color(hex: "#FFB300") :
+                                        Color.red : // Red border for validation error
                                         Color.clear,
                                     lineWidth: showFirstNameError ? 2 : 0
                                 )
                         )
+                        .offset(x: firstNameShimmy ? 10 : -10)
+                        .animation(.spring(response: 0.08, dampingFraction: 0.4), value: firstNameShimmy)
+                        .onAppear {
+                            firstNameShimmy = false
+                        }
                         .animation(.easeInOut(duration: 0.3), value: showFirstNameError)
                         .onSubmit {
                             focusedField = .lastName
                         }
                         .onChange(of: firstName) { _, _ in
                             showFirstNameError = false
+                            firstNameShimmy = false
                         }
                     
                     if showFirstNameError {
                         HStack(spacing: ModernDesignSystem.Spacing.xs) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(Color(hex: "#FFB300"))
+                                .foregroundColor(.red)
                             Text("First name is required (at least 2 characters)")
                                 .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(Color(hex: "#FFB300"))
+                                .foregroundColor(.red)
                         }
                     }
                 }
@@ -173,7 +180,23 @@ struct ProfileSetupView: View {
     func validateAndShowErrors() -> Bool {
         if !isFirstNameValid {
             showFirstNameError = true
+            firstNameShimmy = true
             focusedField = .firstName
+            
+            // Trigger shimmy animation sequence
+            Task { @MainActor in
+                // First shake right
+                firstNameShimmy = true
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Then shake left
+                firstNameShimmy = false
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Shake right again
+                firstNameShimmy = true
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Return to center
+                firstNameShimmy = false
+            }
             
             // Auto-hide error after 2 seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
@@ -191,7 +214,9 @@ struct ProfileSetupView: View {
     ProfileSetupView(
         firstName: .constant(""),
         lastName: .constant(""),
-        username: .constant("")
+        username: .constant(""),
+        showFirstNameError: .constant(false),
+        firstNameShimmy: .constant(false)
     )
 }
 

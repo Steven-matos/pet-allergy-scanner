@@ -38,12 +38,25 @@ struct OnboardingView: View {
     @StateObject private var unitService = WeightUnitPreferenceService.shared
     @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
+    // MEMORY OPTIMIZATION: Track all tasks to cancel on view disappear
+    @State private var animationTasks: [Task<Void, Never>] = []
+    @State private var validationTasks: [Task<Void, Never>] = []
+    @State private var dispatchWorkItems: [DispatchWorkItem] = []
+    
+    // Track if profile setup was shown initially (for back button logic)
+    // This allows users to go back to profile setup even after it's completed
+    @State private var profileSetupWasShown = false
+    
     // Profile setup state (for Apple Sign-In users without name)
     @State private var userFirstName = ""
     @State private var userLastName = ""
     @State private var userUsername = ""
     @State private var isSavingProfile = false
     @State private var showProfileNameError = false
+    
+    // Animation state for validation feedback
+    @State private var nameFieldShimmy = false
+    @State private var profileNameFieldShimmy = false
     
     // Feature tour state
     @State private var showFeatureTour = false
@@ -57,19 +70,35 @@ struct OnboardingView: View {
     
     // Computed property to check if user should skip paywall
     private var shouldSkipPaywall: Bool {
+        // Skip paywall if app is in free mode (subscription bypass enabled)
+        if Configuration.subscriptionBypassEnabled {
+            return true
+        }
         guard let user = authService.currentUser else { return false }
         // Skip paywall if user has premium role or bypass subscription flag
         return user.role == .premium || user.bypassSubscription
     }
     
-    /// Total steps dynamically calculated based on whether profile setup is needed
+    /// Total steps dynamically calculated based on whether profile setup is needed and if paywall should be shown
+    /// Feature tour (5 screens) + profile setup (0-1) + pet info (3) + paywall/completion (1) = 9-10 steps
+    /// Uses profileSetupWasShown to keep step count consistent even after profile is saved
     private var totalSteps: Int {
-        needsProfileSetup ? 6 : 5
+        let featureTourSteps = 5 // Feature tour screens
+        let profileSetupSteps = profileSetupWasShown ? 1 : 0
+        let petInfoSteps = 3 // Basic info, physical info, allergies & vet
+        let finalStep = 1 // Paywall or completion
+        
+        return featureTourSteps + profileSetupSteps + petInfoSteps + finalStep
     }
     
     /// Step offset to account for optional profile setup step
+    /// Feature tour is always 5 steps, so offset starts at 5
+    /// Uses profileSetupWasShown to keep step structure consistent even after profile is saved
     private var stepOffset: Int {
-        needsProfileSetup ? 1 : 0
+        let featureTourSteps = 5
+        // If profile setup was shown initially, keep it in the step structure
+        // This allows users to navigate back to it even after completion
+        return featureTourSteps + (profileSetupWasShown ? 1 : 0)
     }
     
     var body: some View {
@@ -78,7 +107,11 @@ struct OnboardingView: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         // Progress indicator
-                        ProgressView(value: Double(currentStep + 1), total: Double(totalSteps))
+                        // MEMORY OPTIMIZATION: Clamp progress value to valid range to prevent out-of-bounds warning
+                        ProgressView(
+                            value: Double(min(max(currentStep + 1, 0), max(totalSteps, 1))),
+                            total: Double(max(totalSteps, 1))
+                        )
                             .progressViewStyle(LinearProgressViewStyle())
                             .tint(ModernDesignSystem.Colors.primary)
                             .padding(.horizontal, ModernDesignSystem.Spacing.lg)
@@ -86,40 +119,61 @@ struct OnboardingView: View {
                             .onAppear {
                                 // Track onboarding started
                                 PostHogAnalytics.trackOnboardingStarted()
+                                
+                                // Track if profile setup was shown initially
+                                // This allows users to go back to it even after completion
+                                profileSetupWasShown = needsProfileSetup
                             }
                         
                         // Step content
                         TabView(selection: $currentStep) {
-                            // Step 1: Welcome
-                            welcomeStep
+                            // Step 1: Feature Tour Screen 1 - Ingredient Scanning
+                            featureTourScreen1
                                 .tag(0)
                             
-                            // Step 2: Profile Setup (only if user doesn't have name from Apple Sign-In)
-                            if needsProfileSetup {
+                            // Step 2: Feature Tour Screen 2 - Health Tracking
+                            featureTourScreen2
+                                .tag(1)
+                            
+                            // Step 3: Feature Tour Screen 3 - Vet Visit Ready
+                            featureTourScreen3
+                                .tag(2)
+                            
+                            // Step 4: Feature Tour Screen 4 - Safety Explanations
+                            featureTourScreen4
+                                .tag(3)
+                            
+                            // Step 5: Feature Tour Screen 5 - Timeline Clarity
+                            featureTourScreen5
+                                .tag(4)
+                            
+                            // Step 6: Profile Setup (show if needed OR if it was shown initially)
+                            // This allows users to go back to profile setup even after completing it
+                            if needsProfileSetup || profileSetupWasShown {
                                 profileSetupStep
-                                    .tag(1)
+                                    .tag(5)
                             }
                             
-                            // Step 2/3: Basic Pet Info
+                            // Step 6/7: Basic Pet Info
                             basicInfoStep
-                                .tag(1 + stepOffset)
+                                .tag(5 + stepOffset)
                             
-                            // Step 3/4: Physical Info
+                            // Step 7/8: Physical Info
                             physicalInfoStep
-                                .tag(2 + stepOffset)
+                                .tag(6 + stepOffset)
                             
-                            // Step 4/5: Allergies & Vet Info
+                            // Step 8/9: Allergies & Vet Info
                             allergiesAndVetStep
-                                .tag(3 + stepOffset)
+                                .tag(7 + stepOffset)
                             
-                            // Step 5/6: Premium Subscription (skip if user is premium)
+                            // Step 9/10: Premium Subscription (skip if app is free or user is premium)
                             if shouldSkipPaywall {
-                                // Show a completion step instead of paywall for premium users
+                                // Show a completion step instead of paywall for premium users or free app
                                 completionStep
-                                    .tag(4 + stepOffset)
+                                    .tag(8 + stepOffset)
                             } else {
                                 paywallStep
-                                    .tag(4 + stepOffset)
+                                    .tag(8 + stepOffset)
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -131,18 +185,20 @@ struct OnboardingView: View {
                             // Track onboarding step viewed
                             let stepName: String
                             switch newValue {
-                            case 0:
-                                stepName = "welcome"
-                            case 1 where needsProfileSetup:
+                            case 0...4:
+                                // Feature tour screens
+                                let featureNames = ["feature_scan", "feature_tracking", "feature_vet", "feature_safety", "feature_timeline"]
+                                stepName = featureNames[newValue]
+                            case 5 where needsProfileSetup:
                                 stepName = "profile_setup"
-                            case 1 where !needsProfileSetup, 2 where needsProfileSetup:
+                            case 5 where !needsProfileSetup, 6 where needsProfileSetup:
                                 stepName = "add_pet"
-                            case 2 where !needsProfileSetup, 3 where needsProfileSetup:
+                            case 6 where !needsProfileSetup, 7 where needsProfileSetup:
                                 stepName = "pet_details"
-                            case 3 where !needsProfileSetup, 4 where needsProfileSetup:
-                                stepName = "permissions"
-                            case 4 where !needsProfileSetup, 5 where needsProfileSetup:
-                                stepName = "first_scan_prompt"
+                            case 7 where !needsProfileSetup, 8 where needsProfileSetup:
+                                stepName = "allergies_vet"
+                            case 8 where !needsProfileSetup, 9 where needsProfileSetup:
+                                stepName = shouldSkipPaywall ? "completion" : "paywall"
                             default:
                                 stepName = "unknown"
                             }
@@ -151,37 +207,90 @@ struct OnboardingView: View {
                             if newValue > oldValue {
                                 // User is trying to move forward
                                 if !canProceedFromStep(oldValue) {
+                                    // Haptic feedback for validation error
+                                    HapticFeedback.error()
+                                    
                                     // Show validation error and reset
                                     withAnimation {
                                         // Profile setup step validation
-                                        if needsProfileSetup && oldValue == 1 {
+                                        if needsProfileSetup && oldValue == 5 {
                                             showProfileNameError = true
+                                            profileNameFieldShimmy = true
                                         }
-                                        // Pet name validation (step 1 without profile, step 2 with profile)
-                                        else if oldValue == (1 + stepOffset) {
+                                        // Pet name validation
+                                        else if oldValue == (5 + stepOffset) {
                                             showNameValidationError = true
                                             isNameFieldFocused = true
+                                            nameFieldShimmy = true
                                         }
                                         currentStep = oldValue
                                     }
                                     
+                                    // Trigger shimmy animation sequence
+                                    // MEMORY OPTIMIZATION: Store task for cancellation
+                                    let animationTask = Task { @MainActor in
+                                        guard !Task.isCancelled else { return }
+                                        if needsProfileSetup && oldValue == 5 {
+                                            // First shake right
+                                            profileNameFieldShimmy = true
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Then shake left
+                                            profileNameFieldShimmy = false
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Shake right again
+                                            profileNameFieldShimmy = true
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Return to center
+                                            profileNameFieldShimmy = false
+                                        } else if oldValue == (5 + stepOffset) {
+                                            // First shake right
+                                            nameFieldShimmy = true
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Then shake left
+                                            nameFieldShimmy = false
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Shake right again
+                                            nameFieldShimmy = true
+                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                            guard !Task.isCancelled else { return }
+                                            // Return to center
+                                            nameFieldShimmy = false
+                                        }
+                                    }
+                                    animationTasks.append(animationTask)
+                                    
                                     // Auto-hide validation error after 2 seconds
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                    // MEMORY OPTIMIZATION: Store work item for cancellation
+                                    // Note: OnboardingView is a struct, so no weak reference needed
+                                    let workItem = DispatchWorkItem {
                                         withAnimation {
                                             showNameValidationError = false
                                             showProfileNameError = false
                                         }
                                     }
+                                    dispatchWorkItems.append(workItem)
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: workItem)
                                 } else {
                                     // Validation passed, hide any errors
                                     showNameValidationError = false
                                     showProfileNameError = false
+                                    nameFieldShimmy = false
+                                    profileNameFieldShimmy = false
                                     
                                     // Save profile when moving from profile setup step
-                                    if needsProfileSetup && oldValue == 1 {
-                                        Task {
+                                    if needsProfileSetup && oldValue == 5 {
+                                        // MEMORY OPTIMIZATION: Store task for cancellation
+                                        // Note: OnboardingView is a struct, so no weak reference needed
+                                        let profileTask = Task { @MainActor in
+                                            guard !Task.isCancelled else { return }
                                             await saveUserProfile()
                                         }
+                                        validationTasks.append(profileTask)
                                     }
                                 }
                             }
@@ -194,42 +303,66 @@ struct OnboardingView: View {
                 .onChange(of: isNameFieldFocused) { _, isFocused in
                     if isFocused {
                         // Scroll to the name field when it gets focus
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // MEMORY OPTIMIZATION: Store work item for cancellation
+                        // Note: ScrollViewProxy is a struct, so no weak reference needed
+                        let workItem = DispatchWorkItem {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo("nameField", anchor: UnitPoint.center)
                             }
                         }
+                        dispatchWorkItems.append(workItem)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
                     }
                 }
                 .onChange(of: isBreedFieldFocused) { _, isFocused in
                     if isFocused {
                         // Scroll to the breed field when it gets focus
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // MEMORY OPTIMIZATION: Store work item for cancellation
+                        // Note: ScrollViewProxy is a struct, so no weak reference needed
+                        let workItem = DispatchWorkItem {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo("breedField", anchor: UnitPoint.center)
                             }
                         }
+                        dispatchWorkItems.append(workItem)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
                     }
                 }
                 .onChange(of: isWeightFieldFocused) { _, isFocused in
                     if isFocused {
                         // Scroll to the weight field when it gets focus
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // MEMORY OPTIMIZATION: Store work item for cancellation
+                        // Note: ScrollViewProxy is a struct, so no weak reference needed
+                        let workItem = DispatchWorkItem {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 proxy.scrollTo("weightField", anchor: UnitPoint.center)
                             }
                         }
+                        dispatchWorkItems.append(workItem)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
                     }
+                }
+                .onDisappear {
+                    // MEMORY OPTIMIZATION: Cancel all tasks and work items to prevent memory leaks
+                    animationTasks.forEach { $0.cancel() }
+                    animationTasks.removeAll()
+                    validationTasks.forEach { $0.cancel() }
+                    validationTasks.removeAll()
+                    dispatchWorkItems.forEach { $0.cancel() }
+                    dispatchWorkItems.removeAll()
+                    
+                    // Clear pet image from memory when view disappears
+                    petImage = nil
                 }
             }
             .safeAreaInset(edge: .bottom) {
                 // Navigation buttons using modern SwiftUI bottom placement
                 HStack(spacing: ModernDesignSystem.Spacing.md) {
-                    // Back/Skip button - 1/3 width
+                    // Back button - 1/3 width (only show if not on first step)
                     if currentStep > 0 {
                         Button("Back") {
                             withAnimation {
-                                currentStep -= 1
+                                currentStep = getPreviousStep(from: currentStep)
                             }
                         }
                         .font(ModernDesignSystem.Typography.body)
@@ -242,29 +375,17 @@ struct OnboardingView: View {
                         )
                     }
                     
-                    // Skip button (only show on first step or paywall step) - 1/3 width
-                    if currentStep == 0 {
+                    // Skip button (only show on paywall step) - 1/3 width
+                    if currentStep == (8 + stepOffset) && !shouldSkipPaywall {
+                        // Skip paywall button (only show if not premium user and app is not free)
                         // iOS 18 compatible: Button action properly isolated
                         Button("Skip for now") {
-                            Task { @MainActor in
-                                onSkip()
-                            }
-                        }
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                                .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.3), lineWidth: 1)
-                        )
-                    } else if currentStep == 4 && !shouldSkipPaywall {
-                        // Skip paywall button (only show if not premium user)
-                        // iOS 18 compatible: Button action properly isolated
-                        Button("Skip for now") {
-                            Task { @MainActor in
+                            // MEMORY OPTIMIZATION: Store task for cancellation
+                            let skipTask = Task { @MainActor in
+                                guard !Task.isCancelled else { return }
                                 createPet(shouldDismissOnboarding: true)
                             }
+                            validationTasks.append(skipTask)
                         }
                         .font(ModernDesignSystem.Typography.body)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
@@ -280,8 +401,14 @@ struct OnboardingView: View {
                     // Next/Complete/Subscribe button - 2/3 width
                     // iOS 18 compatible: Button action properly isolated to MainActor
                     Button(action: {
-                        Task { @MainActor in
-                            if currentStep == totalSteps - 1 {
+                        // MEMORY OPTIMIZATION: Store task for cancellation
+                        // Note: OnboardingView is a struct, so no weak reference needed
+                        let buttonTask = Task { @MainActor in
+                            guard !Task.isCancelled else { return }
+                            // Check if we're on the final step (paywall or completion)
+                            // The final step tag is (8 + stepOffset)
+                            let isFinalStep = currentStep == (8 + stepOffset) || currentStep == totalSteps - 1
+                            if isFinalStep {
                                 // On paywall step (or completion step for premium users)
                                 if shouldSkipPaywall {
                                     // Premium user - just create pet and complete onboarding
@@ -294,46 +421,126 @@ struct OnboardingView: View {
                             } else {
                                 // Validate before moving forward
                                 if canProceed {
-                                    // Save profile when moving from profile setup step
-                                    if needsProfileSetup && currentStep == 1 {
-                                        await saveUserProfile()
-                                    }
+                                    // Haptic feedback for successful navigation
+                                    HapticFeedback.selection()
                                     
-                                    withAnimation {
-                                        currentStep += 1
-                                        showNameValidationError = false
-                                        showProfileNameError = false
+                                    // Save profile when moving from profile setup step
+                                    if needsProfileSetup && currentStep == 5 {
+                                        await saveUserProfile()
+                                        // Note: profileSetupWasShown is already set in onAppear
+                                        // This ensures the profile setup step remains in the TabView
+                                        // so users can go back to it if needed
+                                        // After saving profile, needsProfileSetup becomes false
+                                        // This changes the TabView structure (removes profile setup step)
+                                        // We need to navigate to basic pet info step (tag = 5 + stepOffset)
+                                        // After saving, stepOffset = 5, so tag = 10
+                                        // Wait for SwiftUI to update the view structure first
+                                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                                        await MainActor.run {
+                                            // Now stepOffset should be 5 (needsProfileSetup is false)
+                                            // Basic pet info tag is 5 + stepOffset = 5 + 5 = 10
+                                            withAnimation {
+                                                currentStep = 5 + stepOffset
+                                                showNameValidationError = false
+                                                showProfileNameError = false
+                                                nameFieldShimmy = false
+                                                profileNameFieldShimmy = false
+                                            }
+                                        }
+                                    } else {
+                                        withAnimation {
+                                            currentStep += 1
+                                            showNameValidationError = false
+                                            showProfileNameError = false
+                                            nameFieldShimmy = false
+                                            profileNameFieldShimmy = false
+                                        }
                                     }
-                                } else if needsProfileSetup && currentStep == 1 {
+                                } else if needsProfileSetup && currentStep == 5 {
                                     // Show validation error for profile first name
+                                    HapticFeedback.error()
                                     withAnimation {
                                         showProfileNameError = true
+                                        profileNameFieldShimmy = true
                                     }
                                     
+                                    // Trigger shimmy animation sequence
+                                    // MEMORY OPTIMIZATION: Store task for cancellation
+                                    let animationTask = Task { @MainActor in
+                                        guard !Task.isCancelled else { return }
+                                        // First shake right
+                                        profileNameFieldShimmy = true
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Then shake left
+                                        profileNameFieldShimmy = false
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Shake right again
+                                        profileNameFieldShimmy = true
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Return to center
+                                        profileNameFieldShimmy = false
+                                    }
+                                    animationTasks.append(animationTask)
+                                    
                                     // Auto-hide after 2 seconds
-                                    Task { @MainActor in
+                                    // MEMORY OPTIMIZATION: Store task for cancellation
+                                    let hideTask = Task { @MainActor in
+                                        guard !Task.isCancelled else { return }
                                         try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        guard !Task.isCancelled else { return }
                                         withAnimation {
                                             showProfileNameError = false
                                         }
                                     }
-                                } else if currentStep == (1 + stepOffset) {
+                                    animationTasks.append(hideTask)
+                                } else if currentStep == (5 + stepOffset) {
                                     // Show validation error for pet name
+                                    HapticFeedback.error()
                                     withAnimation {
                                         showNameValidationError = true
                                         isNameFieldFocused = true
+                                        nameFieldShimmy = true
                                     }
                                     
+                                    // Trigger shimmy animation sequence
+                                    // MEMORY OPTIMIZATION: Store task for cancellation
+                                    let animationTask = Task { @MainActor in
+                                        guard !Task.isCancelled else { return }
+                                        // First shake right
+                                        nameFieldShimmy = true
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Then shake left
+                                        nameFieldShimmy = false
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Shake right again
+                                        nameFieldShimmy = true
+                                        try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                        guard !Task.isCancelled else { return }
+                                        // Return to center
+                                        nameFieldShimmy = false
+                                    }
+                                    animationTasks.append(animationTask)
+                                    
                                     // Auto-hide after 2 seconds
-                                    Task { @MainActor in
+                                    // MEMORY OPTIMIZATION: Store task for cancellation
+                                    let hideTask = Task { @MainActor in
+                                        guard !Task.isCancelled else { return }
                                         try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                        guard !Task.isCancelled else { return }
                                         withAnimation {
                                             showNameValidationError = false
                                         }
                                     }
+                                    animationTasks.append(hideTask)
                                 }
                             }
                         }
+                        validationTasks.append(buttonTask)
                     }) {
                         ZStack {
                             Text(buttonText)
@@ -399,67 +606,74 @@ struct OnboardingView: View {
     
     // MARK: - Step Views
     
-    private var welcomeStep: some View {
-        VStack(spacing: ModernDesignSystem.Spacing.xl) {
-            Spacer()
-            
-            // Welcome illustration
-            VStack(spacing: ModernDesignSystem.Spacing.lg) {
-                Text("Welcome to SniffTest!")
-                    .font(ModernDesignSystem.Typography.largeTitle)
-                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    .multilineTextAlignment(.center)
-
-                Image("Illustrations/welcome")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 300, height: 300)
-                
-                Text("Let's set up your first pet profile to get started with ingredient scanning and safety monitoring.")
-                    .font(ModernDesignSystem.Typography.body)
-                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
-            }
-            
-            // Features preview
-            VStack(spacing: ModernDesignSystem.Spacing.md) {
-                FeatureRow(icon: "camera.viewfinder", title: "Scan Ingredients", description: "Use your camera to scan pet food labels")
-                FeatureRow(icon: "chart.bar.fill", title: "Nutrition Tracking", description: "Monitor feeding, calories, and health trends")
-                FeatureRow(icon: "exclamationmark.triangle", title: "Allergy Alerts", description: "Get instant warnings about harmful ingredients")
-                FeatureRow(icon: "heart.fill", title: "Pet Safety", description: "Keep your furry friends healthy and happy")
-            }
-            .padding(.horizontal, ModernDesignSystem.Spacing.lg)
-            
-            // Feature tour button
-            Button(action: {
-                showFeatureTour = true
-            }) {
-                HStack(spacing: ModernDesignSystem.Spacing.sm) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14))
-                    Text("Take a Feature Tour")
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .fontWeight(.medium)
-                }
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-            }
-            .padding(.top, ModernDesignSystem.Spacing.sm)
-            
-            Spacer()
-        }
-        .fullScreenCover(isPresented: $showFeatureTour) {
-            OnboardingFeatureTourView(
-                currentIndex: $featureTourIndex,
-                onComplete: {
-                    showFeatureTour = false
-                    // Move to next step after tour
-                    withAnimation {
-                        currentStep += 1
-                    }
-                }
-            )
-        }
+    /// Feature Tour Screen 1: Ingredient Scanning
+    private var featureTourScreen1: some View {
+        FeatureScreenView(
+            icon: "camera.viewfinder",
+            title: "Scan Any Pet Food",
+            description: "Point your camera at ingredients lists. We'll instantly identify what's safe and what's not for your pet.",
+            highlights: [
+                "Barcode and OCR scanning",
+                "Instant ingredient analysis",
+                "Database of 10,000+ ingredients"
+            ]
+        )
+    }
+    
+    /// Feature Tour Screen 2: Health Tracking
+    private var featureTourScreen2: some View {
+        FeatureScreenView(
+            icon: "chart.line.uptrend.xyaxis",
+            title: "Track Health Over Time",
+            description: "Log feedings, weight, and health events. Build a complete picture of your pet's wellness journey.",
+            highlights: [
+                "Daily feeding logs",
+                "Weight trends & goals",
+                "Health event timeline"
+            ]
+        )
+    }
+    
+    /// Feature Tour Screen 3: Vet Visit Ready
+    private var featureTourScreen3: some View {
+        FeatureScreenView(
+            icon: "stethoscope",
+            title: "Vet Visit Ready",
+            description: "Generate one-tap summaries with food history, weight trends, and medications. Give your vet clarity, not confusion.",
+            highlights: [
+                "30/60/90 day summaries",
+                "Food change history",
+                "Medication tracking"
+            ]
+        )
+    }
+    
+    /// Feature Tour Screen 4: Safety Explanations
+    private var featureTourScreen4: some View {
+        FeatureScreenView(
+            icon: "exclamationmark.shield",
+            title: "Clear Safety Explanations",
+            description: "Every flagged ingredient explains WHY it's flagged, for WHICH species, and at WHAT confidence level.",
+            highlights: [
+                "Calm, not alarming",
+                "Species-specific info",
+                "Actionable guidance"
+            ]
+        )
+    }
+    
+    /// Feature Tour Screen 5: Timeline Clarity
+    private var featureTourScreen5: some View {
+        FeatureScreenView(
+            icon: "clock.arrow.circlepath",
+            title: "Your Pet's Timeline",
+            description: "Owners forget timelines. Vets distrust memory. SniffTest remembers everything so you don't have to.",
+            highlights: [
+                "Complete food history",
+                "Health event records",
+                "Never lose data"
+            ]
+        )
     }
     
     /// Profile setup step for collecting user's name (shown when Apple Sign-In didn't provide it)
@@ -467,10 +681,13 @@ struct OnboardingView: View {
         ProfileSetupView(
             firstName: $userFirstName,
             lastName: $userLastName,
-            username: $userUsername
+            username: $userUsername,
+            showFirstNameError: $showProfileNameError,
+            firstNameShimmy: $profileNameFieldShimmy
         )
         .onChange(of: userFirstName) { _, _ in
             showProfileNameError = false
+            profileNameFieldShimmy = false
         }
         .overlay {
             if isSavingProfile {
@@ -523,6 +740,17 @@ struct OnboardingView: View {
                         )
                         Spacer()
                     }
+                    .onChange(of: petImage) { oldValue, newValue in
+                        // MEMORY OPTIMIZATION: Immediately optimize image when selected to reduce memory usage
+                        if let newImage = newValue {
+                            // Optimize image to max 2MB to prevent memory issues
+                            let optimizedImage = newImage.optimizeForMemory(maxMemoryUsage: 2_097_152)
+                            if optimizedImage !== newImage {
+                                // Only update if optimization changed the image
+                                petImage = optimizedImage
+                            }
+                        }
+                    }
                 }
 
                 // Pet name
@@ -536,32 +764,38 @@ struct OnboardingView: View {
                         .modernInputField()
                         .background(
                             showNameValidationError ? 
-                                Color(hex: "#FFF3E0") : // Light amber background for validation
+                                Color.red.opacity(0.1) : // Light red background for validation error
                                 Color.clear
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
                                 .stroke(
                                     showNameValidationError ? 
-                                        Color(hex: "#FFB300") : // Amber border for validation
+                                        Color.red : // Red border for validation error
                                         Color.clear, 
                                     lineWidth: showNameValidationError ? 2 : 0
                                 )
                         )
+                        .offset(x: nameFieldShimmy ? 10 : -10)
+                        .animation(.spring(response: 0.08, dampingFraction: 0.4), value: nameFieldShimmy)
+                        .onAppear {
+                            nameFieldShimmy = false
+                        }
                         .animation(.easeInOut(duration: 0.3), value: showNameValidationError)
                         .onChange(of: name) { _, _ in
                             validateForm()
                             showNameValidationError = false
+                            nameFieldShimmy = false
                         }
                         .id("nameField")
                     
                     if showNameValidationError {
                         HStack(spacing: ModernDesignSystem.Spacing.xs) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(Color(hex: "#FFB300"))
+                                .foregroundColor(.red)
                             Text("Pet name is required and must be at least 2 characters")
                                 .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(Color(hex: "#FFB300"))
+                                .foregroundColor(.red)
                         }
                     } else if validationErrors.contains(where: { $0.contains("name") }) {
                         Text(validationErrors.first(where: { $0.contains("name") }) ?? "")
@@ -934,38 +1168,57 @@ struct OnboardingView: View {
     
     private var canProceed: Bool {
         switch currentStep {
-        case 0:
-            return true // Welcome step
-        case 1:
+        case 0...4:
+            // Feature tour screens - always proceed
+            return true
+        case 5:
             if needsProfileSetup {
                 // Profile setup step - first name required
                 return isUserFirstNameValid && isUserUsernameValid
             } else {
-                // Basic pet info step - pet name required
+                // Basic pet info step - pet name required (when profile setup wasn't shown)
                 return !name.isEmpty && name.count >= 2
             }
-        case 2:
+        case 6:
             if needsProfileSetup {
                 // Basic pet info step - pet name required
                 return !name.isEmpty && name.count >= 2
             } else {
                 return true // Physical info step (all optional)
             }
-        case 3:
+        case 7:
             if needsProfileSetup {
                 return true // Physical info step (all optional)
             } else {
                 return true // Allergies and vet step (all optional)
             }
-        case 4:
+        case 8:
             if needsProfileSetup {
                 return true // Allergies and vet step (all optional)
             } else {
                 return true // Paywall/completion step (always proceed)
             }
-        case 5:
+        case 9:
             return true // Paywall/completion step (always proceed)
         default:
+            // Handle steps that use stepOffset (after profile setup is saved)
+            // Basic pet info step tag is (5 + stepOffset)
+            if currentStep == (5 + stepOffset) {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            }
+            // Physical info step tag is (6 + stepOffset) - all optional
+            if currentStep == (6 + stepOffset) {
+                return true
+            }
+            // Allergies and vet step tag is (7 + stepOffset) - all optional
+            if currentStep == (7 + stepOffset) {
+                return true
+            }
+            // Paywall/completion step tag is (8 + stepOffset) - always proceed
+            if currentStep == (8 + stepOffset) {
+                return true
+            }
             return false
         }
     }
@@ -975,38 +1228,57 @@ struct OnboardingView: View {
     /// - Returns: True if validation passes for that step
     private func canProceedFromStep(_ step: Int) -> Bool {
         switch step {
-        case 0:
-            return true // Welcome step
-        case 1:
+        case 0...4:
+            // Feature tour screens - always proceed
+            return true
+        case 5:
             if needsProfileSetup {
                 // Profile setup step - first name required
                 return isUserFirstNameValid && isUserUsernameValid
             } else {
-                // Basic pet info step - pet name required
+                // Basic pet info step - pet name required (when profile setup wasn't shown)
                 return !name.isEmpty && name.count >= 2
             }
-        case 2:
+        case 6:
             if needsProfileSetup {
                 // Basic pet info step - pet name required
                 return !name.isEmpty && name.count >= 2
             } else {
                 return true // Physical info step (all optional)
             }
-        case 3:
+        case 7:
             if needsProfileSetup {
                 return true // Physical info step (all optional)
             } else {
                 return true // Allergies and vet step (all optional)
             }
-        case 4:
+        case 8:
             if needsProfileSetup {
                 return true // Allergies and vet step (all optional)
             } else {
                 return true // Paywall step (always proceed)
             }
-        case 5:
+        case 9:
             return true // Paywall step (always proceed)
         default:
+            // Handle steps that use stepOffset (after profile setup is saved)
+            // Basic pet info step tag is (5 + stepOffset)
+            if step == (5 + stepOffset) {
+                // Basic pet info step - pet name required
+                return !name.isEmpty && name.count >= 2
+            }
+            // Physical info step tag is (6 + stepOffset) - all optional
+            if step == (6 + stepOffset) {
+                return true
+            }
+            // Allergies and vet step tag is (7 + stepOffset) - all optional
+            if step == (7 + stepOffset) {
+                return true
+            }
+            // Paywall/completion step tag is (8 + stepOffset) - always proceed
+            if step == (8 + stepOffset) {
+                return true
+            }
             return false
         }
     }
@@ -1022,18 +1294,64 @@ struct OnboardingView: View {
     
     // MARK: - Methods
     
+    /// Get the previous step number, accounting for dynamic step structure
+    /// Handles the case where profile setup step is removed after saving
+    /// - Parameter currentStep: The current step number
+    /// - Returns: The previous step number
+    private func getPreviousStep(from currentStep: Int) -> Int {
+        // Feature tour steps (0-4): just decrement
+        if currentStep <= 4 {
+            return max(0, currentStep - 1)
+        }
+        
+        // If we're on basic pet info step (5 + stepOffset)
+        // After profile setup is saved, needsProfileSetup becomes false
+        // So stepOffset changes from 6 to 5, and basic pet info tag is 10
+        // Going back from basic pet info:
+        // - If profile setup was shown initially, go back to profile setup (step 5)
+        // - If profile setup was never shown, go to last feature tour (step 4)
+        if currentStep == (5 + stepOffset) {
+            if profileSetupWasShown {
+                // Go back to profile setup step (step 5)
+                return 5
+            } else {
+                // Go back to last feature tour screen (step 4)
+                return 4
+            }
+        }
+        
+        // If we're on profile setup step (step 5) and it still exists
+        if currentStep == 5 && needsProfileSetup {
+            // Go back to last feature tour screen (step 4)
+            return 4
+        }
+        
+        // For all other steps, just decrement
+        // But we need to handle the case where we might skip over removed steps
+        let previousStep = currentStep - 1
+        
+        // If previous step would be 5 and profile setup doesn't exist, skip to 4
+        if previousStep == 5 && !needsProfileSetup {
+            return 4
+        }
+        
+        return previousStep
+    }
+    
     /// Handle paywall action - subscribe if product selected, otherwise just create pet
     private func handlePaywallAction() {
         if subscriptionViewModel.selectedProductID != nil {
             // User selected a subscription plan - try to purchase
-            Task {
+            // MEMORY OPTIMIZATION: Store task for cancellation
+            let paywallTask = Task { @MainActor in
+                guard !Task.isCancelled else { return }
                 await subscriptionViewModel.purchaseSubscription()
+                guard !Task.isCancelled else { return }
                 // After purchase attempt (success or failure), create the pet
                 // The pet creation should happen regardless of subscription status
-                await MainActor.run {
-                    createPet(shouldDismissOnboarding: false)
-                }
+                createPet(shouldDismissOnboarding: false)
             }
+            validationTasks.append(paywallTask)
         } else {
             // No subscription selected - just create pet
             createPet(shouldDismissOnboarding: false)
@@ -1056,16 +1374,48 @@ struct OnboardingView: View {
         let trimmedLastName = userLastName.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedUsername = userUsername.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // Validate that first name is provided (required)
+        guard !trimmedFirstName.isEmpty else {
+            print("❌ User profile save failed: First name is required")
+            await MainActor.run {
+                showProfileNameError = true
+            }
+            return
+        }
+        
         // Use showLoadingState: false to prevent authState from changing to .loading
         // This prevents ContentView from resetting the OnboardingView and losing the current step
         await authService.updateProfile(
             username: trimmedUsername.isEmpty ? nil : trimmedUsername,
-            firstName: trimmedFirstName.isEmpty ? nil : trimmedFirstName,
+            firstName: trimmedFirstName,
             lastName: trimmedLastName.isEmpty ? nil : trimmedLastName,
             showLoadingState: false
         )
         
-        print("✅ User profile saved: firstName=\(trimmedFirstName), lastName=\(trimmedLastName), username=\(trimmedUsername.isEmpty ? "nil" : trimmedUsername)")
+        // Check for errors first
+        if let errorMessage = authService.errorMessage {
+            print("❌ User profile save failed: \(errorMessage)")
+            await MainActor.run {
+                showProfileNameError = true
+            }
+            return
+        }
+        
+        // Refresh user profile to get the updated user from the server
+        // This ensures we have the latest data including the saved profile
+        // CRITICAL: This updates authState, but we're about to navigate away anyway
+        await authService.refreshUserProfile(forceRefresh: true)
+        
+        // Verify the profile was saved
+        if let updatedUser = authService.currentUser,
+           updatedUser.firstName == trimmedFirstName {
+            print("✅ User profile saved successfully: firstName=\(updatedUser.firstName ?? "nil"), lastName=\(updatedUser.lastName ?? "nil"), username=\(updatedUser.username ?? "nil")")
+        } else {
+            print("⚠️ User profile save may have failed - firstName mismatch")
+            await MainActor.run {
+                showProfileNameError = true
+            }
+        }
     }
     
     private func validateForm() {
@@ -1097,7 +1447,9 @@ struct OnboardingView: View {
         let weightInKg = weightKg != nil ? unitService.convertToKg(weightKg!) : nil
         
         // Create the pet with image upload
-        Task {
+        // MEMORY OPTIMIZATION: Store task for cancellation
+        let createPetTask = Task { @MainActor in
+            guard !Task.isCancelled else { return }
             var imageUrl: String? = nil
             
             // Upload pet image if provided
@@ -1135,35 +1487,58 @@ struct OnboardingView: View {
             petService.createPet(petCreate)
             
             // Wait for the pet creation to complete by monitoring the service state
-            while petService.isLoading {
+            // Add timeout to prevent infinite loop
+            var waitCount = 0
+            let maxWaitCount = 100 // 10 seconds max wait (100 * 0.1s)
+            while petService.isLoading && waitCount < maxWaitCount {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                waitCount += 1
+                guard !Task.isCancelled else { return }
             }
             
             await MainActor.run {
-                if petService.errorMessage == nil {
-                    // Pet created successfully - mark onboarding as complete
+                if petService.errorMessage == nil && !petService.isLoading {
+                    // Pet created successfully - verify it's in the pets array
+                    let createdPet = petService.pets.first(where: { $0.name == name })
+                    if createdPet != nil {
+                        print("✅ Pet created successfully: \(name) (ID: \(createdPet!.id))")
+                    } else {
+                        print("⚠️ Pet creation reported success but pet not found in array")
+                    }
+                    
                     // Track onboarding completed
                     let timeToComplete = Date().timeIntervalSince(onboardingStartTime)
                     PostHogAnalytics.trackOnboardingCompleted(
                         timeToCompleteSec: timeToComplete,
                         petsCount: petService.pets.count
                     )
+                    
+                    // Mark onboarding as complete FIRST (updates user.onboarded in database)
+                    // This ensures the user is marked as onboarded before dismissing
                     petService.completeOnboarding()
                     
-                    // If user skipped paywall, dismiss onboarding view immediately
-                    if shouldDismissOnboarding {
-                        onSkip()
+                    // Wait a moment for completeOnboarding to finish
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+                        
+                        // Then dismiss the onboarding view
+                        if shouldDismissOnboarding {
+                            onSkip()
+                        }
+                        
+                        print("✅ Onboarding flow complete - user onboarded and pet created")
                     }
-                    
-                    // Even if onboarding completion fails, the pet was created successfully
-                    // The user can proceed to the main app
-                    print("✅ Pet created successfully - onboarding flow complete")
                 } else {
-                    print("❌ Pet creation failed: \(petService.errorMessage ?? "Unknown error")")
+                    let errorMsg = petService.errorMessage ?? "Unknown error"
+                    print("❌ Pet creation failed: \(errorMsg)")
+                    if petService.isLoading {
+                        print("⚠️ Pet creation still loading after timeout")
+                    }
                 }
                 isCreatingPet = false
             }
         }
+        validationTasks.append(createPetTask)
     }
     
     // MARK: - Helper Functions
@@ -1335,6 +1710,97 @@ struct OnboardingPricingCard: View {
                 )
         )
         .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+}
+
+// MARK: - Feature Screen View Component
+
+/// Individual feature screen display for onboarding flow
+private struct FeatureScreenView: View {
+    let icon: String
+    let title: String
+    let description: String
+    let highlights: [String]
+    
+    @State private var hasAppeared = false
+    
+    var body: some View {
+        VStack(spacing: ModernDesignSystem.Spacing.xl) {
+            Spacer()
+            
+            // Icon with animated background
+            ZStack {
+                // Background circle
+                Circle()
+                    .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                    .frame(width: 140, height: 140)
+                    .scaleEffect(hasAppeared ? 1.0 : 0.8)
+                
+                // Icon
+                Image(systemName: icon)
+                    .font(.system(size: 56, weight: .medium))
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .scaleEffect(hasAppeared ? 1.0 : 0.6)
+            }
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: hasAppeared)
+            
+            // Title
+            Text(title)
+                .font(ModernDesignSystem.Typography.largeTitle)
+                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                .multilineTextAlignment(.center)
+                .opacity(hasAppeared ? 1.0 : 0)
+                .offset(y: hasAppeared ? 0 : 20)
+                .animation(.easeOut(duration: 0.4).delay(0.1), value: hasAppeared)
+            
+            // Description
+            Text(description)
+                .font(ModernDesignSystem.Typography.body)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(4)
+                .padding(.horizontal, ModernDesignSystem.Spacing.xl)
+                .opacity(hasAppeared ? 1.0 : 0)
+                .offset(y: hasAppeared ? 0 : 20)
+                .animation(.easeOut(duration: 0.4).delay(0.2), value: hasAppeared)
+            
+            // Highlights
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                ForEach(Array(highlights.enumerated()), id: \.offset) { index, highlight in
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                        
+                        Text(highlight)
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    }
+                    .opacity(hasAppeared ? 1.0 : 0)
+                    .offset(x: hasAppeared ? 0 : -20)
+                    .animation(.easeOut(duration: 0.4).delay(0.3 + Double(index) * 0.1), value: hasAppeared)
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .fill(ModernDesignSystem.Colors.softCream)
+                    .shadow(color: ModernDesignSystem.Shadows.small.color,
+                            radius: ModernDesignSystem.Shadows.small.radius,
+                            x: ModernDesignSystem.Shadows.small.x,
+                            y: ModernDesignSystem.Shadows.small.y)
+            )
+            .padding(.horizontal, ModernDesignSystem.Spacing.xl)
+            
+            Spacer()
+            Spacer()
+        }
+        .onAppear {
+            hasAppeared = true
+        }
+        .onDisappear {
+            hasAppeared = false
+        }
     }
 }
 

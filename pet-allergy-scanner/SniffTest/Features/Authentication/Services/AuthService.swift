@@ -429,13 +429,22 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     authState = .authenticated(user)
                 }
+            } else {
+                // Even if showLoadingState is false, we should still set errorMessage on error
+                // This allows callers to check for errors
+                await MainActor.run {
+                    errorMessage = nil // Clear any previous errors on success
+                }
             }
         } catch {
+            // Always set errorMessage so callers can check for errors
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+            }
             // Restore previous state on error (only if we changed it)
             if showLoadingState {
                 await MainActor.run {
                     authState = .authenticated(currentUser)
-                    errorMessage = error.localizedDescription
                 }
             }
         }

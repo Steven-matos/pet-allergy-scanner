@@ -72,12 +72,19 @@ class ImageLoader: ObservableObject {
         
         task = Task {
             do {
+                // MEMORY OPTIMIZATION: Check for cancellation before network request
+                guard !Task.isCancelled else { return }
+                
                 let (data, response) = try await URLSession.shared.data(from: imageURL)
+                
+                // MEMORY OPTIMIZATION: Check for cancellation after network request
+                guard !Task.isCancelled else { return }
                 
                 // Check for HTTP errors
                 if let httpResponse = response as? HTTPURLResponse,
                    !(200...299).contains(httpResponse.statusCode) {
                     await MainActor.run {
+                        guard !Task.isCancelled else { return }
                         self.errorMessage = "Failed to load image (HTTP \(httpResponse.statusCode))"
                         self.isLoading = false
                     }
@@ -87,6 +94,7 @@ class ImageLoader: ObservableObject {
                 // Create image from data
                 guard let loadedImage = UIImage(data: data) else {
                     await MainActor.run {
+                        guard !Task.isCancelled else { return }
                         self.errorMessage = "Invalid image data"
                         self.isLoading = false
                     }
@@ -97,6 +105,7 @@ class ImageLoader: ObservableObject {
                 let optimizedImage = loadedImage.optimizeForMemory(maxMemoryUsage: 2_097_152) // 2MB limit
                 
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     self.image = optimizedImage
                     self.isLoading = false
                     
@@ -104,7 +113,10 @@ class ImageLoader: ObservableObject {
                     self.imageCache.setImage(optimizedImage, forKey: self.url)
                 }
             } catch {
+                // Only update UI if task wasn't cancelled
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     self.errorMessage = "Failed to load image: \(error.localizedDescription)"
                     self.isLoading = false
                 }
