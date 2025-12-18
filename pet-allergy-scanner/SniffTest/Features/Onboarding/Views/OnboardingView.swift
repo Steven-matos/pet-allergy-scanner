@@ -69,14 +69,14 @@ struct OnboardingView: View {
     }
     
     // Computed property to check if user should skip paywall
+    // App is fully free - always skip paywall
     private var shouldSkipPaywall: Bool {
-        // Skip paywall if app is in free mode (subscription bypass enabled)
-        if Configuration.subscriptionBypassEnabled {
-            return true
-        }
-        guard let user = authService.currentUser else { return false }
-        // Skip paywall if user has premium role or bypass subscription flag
-        return user.role == .premium || user.bypassSubscription
+        return true // App is fully free - always skip paywall
+        // if Configuration.subscriptionBypassEnabled {
+        //     return true
+        // }
+        // guard let user = authService.currentUser else { return false }
+        // return user.role == .premium || user.bypassSubscription
     }
     
     /// Total steps dynamically calculated based on whether profile setup is needed and if paywall should be shown
@@ -1496,46 +1496,72 @@ struct OnboardingView: View {
                 guard !Task.isCancelled else { return }
             }
             
-            await MainActor.run {
-                if petService.errorMessage == nil && !petService.isLoading {
-                    // Pet created successfully - verify it's in the pets array
-                    let createdPet = petService.pets.first(where: { $0.name == name })
-                    if createdPet != nil {
-                        print("✅ Pet created successfully: \(name) (ID: \(createdPet!.id))")
-                    } else {
-                        print("⚠️ Pet creation reported success but pet not found in array")
-                    }
+            if petService.errorMessage == nil && !petService.isLoading {
+                // Pet created successfully - verify it's in the pets array
+                let createdPet = petService.pets.first(where: { $0.name == name })
+                if createdPet != nil {
+                    print("✅ Pet created successfully: \(name) (ID: \(createdPet!.id))")
+                } else {
+                    print("⚠️ Pet creation reported success but pet not found in array")
+                }
+                
+                // Track onboarding completed
+                let timeToComplete = Date().timeIntervalSince(onboardingStartTime)
+                PostHogAnalytics.trackOnboardingCompleted(
+                    timeToCompleteSec: timeToComplete,
+                    petsCount: petService.pets.count
+                )
+                
+                // Mark onboarding as complete FIRST (updates user.onboarded in database)
+                // This ensures the user is marked as onboarded before dismissing
+                await petService.completeOnboarding()
+                
+                    // Additional refresh to ensure state is fully synchronized
+                    // This is critical for Apple ID users to ensure the state updates properly
+                    await authService.refreshUserProfile(forceRefresh: true)
                     
-                    // Track onboarding completed
-                    let timeToComplete = Date().timeIntervalSince(onboardingStartTime)
-                    PostHogAnalytics.trackOnboardingCompleted(
-                        timeToCompleteSec: timeToComplete,
-                        petsCount: petService.pets.count
-                    )
+                    // Wait to ensure state has propagated through SwiftUI's view updates
+                    // This prevents race conditions where ContentView checks before state is updated
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
                     
-                    // Mark onboarding as complete FIRST (updates user.onboarded in database)
-                    // This ensures the user is marked as onboarded before dismissing
-                    petService.completeOnboarding()
-                    
-                    // Wait a moment for completeOnboarding to finish
-                    Task { @MainActor in
+                    // One final refresh and check to ensure state is truly updated
+                    // Sometimes SwiftUI needs the state change to happen multiple times
+                    var userIsOnboarded = false
+                    for attempt in 1...3 {
+                        await authService.refreshUserProfile(forceRefresh: true)
                         try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
                         
-                        // Then dismiss the onboarding view
+                        if let user = await MainActor.run(body: { authService.currentUser }), user.onboarded {
+                            userIsOnboarded = true
+                            print("✅ User confirmed onboarded on attempt \(attempt)")
+                            break
+                        } else {
+                            print("⚠️ Attempt \(attempt): User still not marked as onboarded")
+                        }
+                    }
+                    
+                    // Dismiss onboarding regardless - pet was created successfully
+                    await MainActor.run {
+                        if userIsOnboarded {
+                            print("✅ Onboarding flow complete - user onboarded and pet created")
+                        } else {
+                            print("⚠️ Warning: Could not verify user onboarded status after 3 attempts, but pet was created - dismissing anyway")
+                        }
+                        
                         if shouldDismissOnboarding {
                             onSkip()
                         }
-                        
-                        print("✅ Onboarding flow complete - user onboarded and pet created")
+                        isCreatingPet = false
                     }
-                } else {
+            } else {
+                await MainActor.run {
                     let errorMsg = petService.errorMessage ?? "Unknown error"
                     print("❌ Pet creation failed: \(errorMsg)")
                     if petService.isLoading {
                         print("⚠️ Pet creation still loading after timeout")
                     }
+                    isCreatingPet = false
                 }
-                isCreatingPet = false
             }
         }
         validationTasks.append(createPetTask)

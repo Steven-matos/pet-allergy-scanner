@@ -126,20 +126,21 @@ struct AddHealthEventView: View {
         } message: {
             Text(errorMessage)
         }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
-        }
-        .sheet(isPresented: $showingUpgradePrompt) {
-            UpgradePromptView(
-                title: gatekeeper.upgradePromptTitle.isEmpty ? "Premium Feature" : gatekeeper.upgradePromptTitle,
-                message: gatekeeper.upgradePromptMessage.isEmpty ? "This feature is available with SniffTest Premium." : gatekeeper.upgradePromptMessage
-            )
-            .onDisappear {
-                // Reset both states when sheet dismisses
-                showingUpgradePrompt = false
-                gatekeeper.showingUpgradePrompt = false
-            }
-        }
+        // Subscription sheets hidden - app is fully free
+        // .sheet(isPresented: $showingPaywall) {
+        //     PaywallView()
+        // }
+        // .sheet(isPresented: $showingUpgradePrompt) {
+        //     UpgradePromptView(
+        //         title: gatekeeper.upgradePromptTitle.isEmpty ? "Premium Feature" : gatekeeper.upgradePromptTitle,
+        //         message: gatekeeper.upgradePromptMessage.isEmpty ? "This feature is available with SniffTest Premium." : gatekeeper.upgradePromptMessage
+        //     )
+        //     .onDisappear {
+        //         // Reset both states when sheet dismisses
+        //         showingUpgradePrompt = false
+        //         gatekeeper.showingUpgradePrompt = false
+        //     }
+        // }
     }
     
     // MARK: - Header Section
@@ -573,39 +574,18 @@ struct AddHealthEventView: View {
                 
                 Spacer()
                 
-                if gatekeeper.currentTier == .premium {
-                    Toggle("Create Reminders", isOn: $createReminder)
-                        .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
-                } else {
-                    HStack {
-                        Text("Create Reminders")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        
-                        Image(systemName: "crown.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
-                            .font(.caption)
-                        
-                        Button("Upgrade") {
-                            // Set the upgrade prompt message directly without triggering gatekeeper state
-                            gatekeeper.upgradePromptTitle = "Premium Feature"
-                            gatekeeper.upgradePromptMessage = "Medication reminders are available with SniffTest Premium. 💊\n\nSet up automatic reminders to never miss a dose!"
-                            // Show the sheet using local state
-                            showingUpgradePrompt = true
-                        }
-                        .font(ModernDesignSystem.Typography.caption)
-                        .foregroundColor(ModernDesignSystem.Colors.primary)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.sm)
-                        .padding(.vertical, ModernDesignSystem.Spacing.xs)
-                        .background(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
-                        )
-                    }
-                }
+                // App is fully free - always show reminder toggle
+                Toggle("Create Reminders", isOn: $createReminder)
+                    .toggleStyle(SwitchToggleStyle(tint: ModernDesignSystem.Colors.primary))
+                // Upgrade UI hidden - app is fully free
+                // if gatekeeper.currentTier == .premium {
+                // } else {
+                //     ... upgrade button UI ...
+                // }
             }
             
-            if createReminder && gatekeeper.currentTier == .premium {
+            // App is fully free - always show reminder options
+            if createReminder {
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.lg) {
                     // Reminder Times
                     VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
@@ -735,81 +715,18 @@ struct AddHealthEventView: View {
     
     private var vetDocumentSection: some View {
         VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
-            if gatekeeper.currentTier == .premium {
-                DocumentPickerView(
-                    selectedDocuments: $vetDocuments,
-                    userId: AuthService.shared.currentUser?.id ?? "",
-                    petId: selectedPet?.id ?? petService.pets.first?.id ?? "",
-                    healthEventId: temporaryEventId // Temporary ID for folder structure
-                )
-            } else {
-                VStack(spacing: ModernDesignSystem.Spacing.md) {
-                    HStack {
-                        Image(systemName: "doc.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.primary)
-                            .font(.title2)
-                        
-                        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                            Text("Document Upload")
-                                .font(ModernDesignSystem.Typography.title3)
-                                .fontWeight(.semibold)
-                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                            
-                            Text("Upload vet documents, test results, and medical records")
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "crown.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
-                            .font(.title3)
-                    }
-                    
-                    Button(action: {
-                        // Set the upgrade prompt message directly without triggering gatekeeper state
-                        gatekeeper.upgradePromptTitle = "Premium Feature"
-                        gatekeeper.upgradePromptMessage = "Document uploads are available with SniffTest Premium. 📄\n\nUpload vet documents, test results, and medical records to keep all your pet's health information in one place!"
-                        // Show the sheet using local state
-                        showingUpgradePrompt = true
-                    }) {
-                        HStack {
-                            Image(systemName: "crown.fill")
-                            Text("Upgrade to Upload Documents")
-                                .fontWeight(.semibold)
-                        }
-                        .font(ModernDesignSystem.Typography.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(ModernDesignSystem.Spacing.md)
-                        .background(
-                            LinearGradient(
-                                colors: [
-                                    ModernDesignSystem.Colors.primary,
-                                    ModernDesignSystem.Colors.primary.opacity(0.8)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-                        .shadow(
-                            color: ModernDesignSystem.Colors.primary.opacity(0.3),
-                            radius: 8,
-                            x: 0,
-                            y: 4
-                        )
-                    }
-                }
-                .padding(ModernDesignSystem.Spacing.lg)
-                .background(ModernDesignSystem.Colors.softCream)
-                .overlay(
-                    RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                        .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-                )
-                .cornerRadius(ModernDesignSystem.CornerRadius.medium)
-            }
+            // App is fully free - always show document picker, never show upgrade prompt
+            DocumentPickerView(
+                selectedDocuments: $vetDocuments,
+                userId: AuthService.shared.currentUser?.id ?? "",
+                petId: selectedPet?.id ?? petService.pets.first?.id ?? "",
+                healthEventId: temporaryEventId // Temporary ID for folder structure
+            )
+            // Upgrade UI hidden - app is fully free
+            // if gatekeeper.currentTier == .premium {
+            // } else {
+            //     ... upgrade button UI ...
+            // }
         }
     }
     
@@ -899,20 +816,16 @@ struct AddHealthEventView: View {
                 let finalTitle = selectedEventType == .other ? customEventName : title
                 
                 // Extract document URLs from uploaded documents (already uploaded when selected)
-                // Only allow document uploads for premium users
+                // App is fully free - always allow document uploads
                 var documentUrls: [String] = []
                 if selectedEventType == .vetVisit {
-                    if gatekeeper.currentTier == .premium {
-                        documentUrls = vetDocuments.map { $0.url }
-                    } else if !vetDocuments.isEmpty {
-                        // User tried to upload documents but doesn't have premium
-                        await MainActor.run {
-                            errorMessage = "Document uploads require a premium subscription. Please upgrade to use this feature."
-                            showingError = true
-                            isSubmitting = false
-                        }
-                        return
-                    }
+                    documentUrls = vetDocuments.map { $0.url }
+                    // Subscription check removed - app is fully free
+                    // if gatekeeper.currentTier == .premium {
+                    // } else if !vetDocuments.isEmpty {
+                    //     errorMessage = "Document uploads require a premium subscription..."
+                    //     return
+                    // }
                 }
                 
                 let healthEvent = try await healthEventService.createHealthEvent(
@@ -926,16 +839,13 @@ struct AddHealthEventView: View {
                 )
                 
                 // Create medication reminder if medication event and reminder is enabled
-                // Only allow if user has premium subscription
+                // App is fully free - always allow medication reminders
                 if selectedEventType == .medication && createReminder && !medicationName.isEmpty && !dosage.isEmpty {
-                    guard gatekeeper.currentTier == .premium else {
-                        await MainActor.run {
-                            errorMessage = "Medication reminders require a premium subscription. Please upgrade to use this feature."
-                            showingError = true
-                            isSubmitting = false
-                        }
-                        return
-                    }
+                    // Subscription check removed - app is fully free
+                    // guard gatekeeper.currentTier == .premium else {
+                    //     errorMessage = "Medication reminders require a premium subscription..."
+                    //     return
+                    // }
                     
                     let reminderService = MedicationReminderService.shared
                     _ = try await reminderService.createMedicationReminder(

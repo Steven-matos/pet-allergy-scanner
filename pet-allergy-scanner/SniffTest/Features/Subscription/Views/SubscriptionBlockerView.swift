@@ -116,17 +116,19 @@ struct SubscriptionGate: ViewModifier {
     @ObservedObject private var gatekeeper = SubscriptionGatekeeper.shared
     
     func body(content: Content) -> some View {
-        Group {
-            if gatekeeper.currentTier == .premium {
-                content
-            } else {
-                SubscriptionBlockerView(
-                    featureName: featureName,
-                    featureDescription: featureDescription,
-                    icon: icon
-                )
-            }
-        }
+        // App is fully free - always show content, never block
+        content
+        // Group {
+        //     if gatekeeper.currentTier == .premium {
+        //         content
+        //     } else {
+        //         SubscriptionBlockerView(
+        //             featureName: featureName,
+        //             featureDescription: featureDescription,
+        //             icon: icon
+        //         )
+        //     }
+        // }
     }
 }
 

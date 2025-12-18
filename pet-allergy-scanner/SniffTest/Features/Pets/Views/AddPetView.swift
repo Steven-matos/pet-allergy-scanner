@@ -106,18 +106,19 @@ struct AddPetView: View {
                     showingAlert = true
                 }
             }
-            .sheet(isPresented: $showingPaywall) {
-                PaywallView()
-            }
-            .sheet(isPresented: Binding(
-                get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
-                set: { gatekeeper.showingUpgradePrompt = $0 }
-            )) {
-                UpgradePromptView(
-                    title: gatekeeper.upgradePromptTitle,
-                    message: gatekeeper.upgradePromptMessage
-                )
-            }
+            // Subscription sheets hidden - app is fully free
+            // .sheet(isPresented: $showingPaywall) {
+            //     PaywallView()
+            // }
+            // .sheet(isPresented: Binding(
+            //     get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+            //     set: { gatekeeper.showingUpgradePrompt = $0 }
+            // )) {
+            //     UpgradePromptView(
+            //         title: gatekeeper.upgradePromptTitle,
+            //         message: gatekeeper.upgradePromptMessage
+            //     )
+            // }
         }
     }
     

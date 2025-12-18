@@ -118,31 +118,29 @@ class SubscriptionGatekeeper: ObservableObject {
     /// Get the current user's subscription tier
     /// Checks global bypass first, then user bypass_subscription flag, then RevenueCat, then backend role
     /// This ensures users with bypass flag or premium role get access even if RevenueCat isn't synced
+    /// App is fully free - always return premium tier
     var currentTier: SubscriptionTier {
-        // FREE APP MODE: Bypass all subscription checks when enabled globally
-        // Toggle Configuration.subscriptionBypassEnabled to false when ready to monetize
-        if Configuration.subscriptionBypassEnabled {
-            return .premium
-        }
+        // App is fully free - always return premium
+        return .premium
         
-        // Check if user has bypass_subscription flag (highest priority for individual users)
-        // This allows admin accounts to bypass all subscription checks
-        if let user = authService.currentUser, user.bypassSubscription {
-            return .premium
-        }
-        
-        // Check RevenueCat subscription status (primary source of truth for regular users)
-        if subscriptionProvider.hasActiveSubscription {
-            return .premium
-        }
-        
-        // Fallback: Check backend user role if RevenueCat subscription check fails
-        // This handles cases where user has premium role in backend but RevenueCat sync hasn't completed
-        if let user = authService.currentUser, user.role == .premium {
-            return .premium
-        }
-        
-        return .free
+        // Original subscription logic (commented out for free app mode)
+        // if Configuration.subscriptionBypassEnabled {
+        //     return .premium
+        // }
+        // 
+        // if let user = authService.currentUser, user.bypassSubscription {
+        //     return .premium
+        // }
+        // 
+        // if subscriptionProvider.hasActiveSubscription {
+        //     return .premium
+        // }
+        // 
+        // if let user = authService.currentUser, user.role == .premium {
+        //     return .premium
+        // }
+        // 
+        // return .free
     }
     
     /// Check if user can perform a scan

@@ -189,18 +189,19 @@ struct AdvancedNutritionView: View {
         .sheet(isPresented: $showingPeriodSelector) {
             PeriodSelectionView(selectedPeriod: $selectedPeriod)
         }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
-        }
-        .sheet(isPresented: Binding(
-            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
-            set: { gatekeeper.showingUpgradePrompt = $0 }
-        )) {
-            UpgradePromptView(
-                title: gatekeeper.upgradePromptTitle,
-                message: gatekeeper.upgradePromptMessage
-            )
-        }
+        // Subscription sheets hidden - app is fully free
+        // .sheet(isPresented: $showingPaywall) {
+        //     PaywallView()
+        // }
+        // .sheet(isPresented: Binding(
+        //     get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+        //     set: { gatekeeper.showingUpgradePrompt = $0 }
+        // )) {
+        //     UpgradePromptView(
+        //         title: gatekeeper.upgradePromptTitle,
+        //         message: gatekeeper.upgradePromptMessage
+        //     )
+        // }
         .onAppear {
             // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
             if TabNavigationCoordinator.shared.shouldBlockOperations() {

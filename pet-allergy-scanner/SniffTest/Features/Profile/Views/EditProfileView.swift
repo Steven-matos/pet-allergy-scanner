@@ -279,33 +279,33 @@ struct EditProfileView: View {
             }
             
             VStack(spacing: ModernDesignSystem.Spacing.sm) {
-                // Account Type
-                HStack {
-                    Text("Account Type")
-                        .font(ModernDesignSystem.Typography.body)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    Spacer()
-                    Text(authService.currentUser?.role.displayName ?? "Free")
-                        .font(ModernDesignSystem.Typography.body)
-                        .fontWeight(.medium)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(
-                            authService.currentUser?.role == .premium ? 
-                            ModernDesignSystem.Colors.goldenYellow : 
-                            ModernDesignSystem.Colors.textSecondary
-                        )
-                        .foregroundColor(
-                            authService.currentUser?.role == .premium ? 
-                            ModernDesignSystem.Colors.textOnAccent : 
-                            ModernDesignSystem.Colors.textOnPrimary
-                        )
-                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
-                }
-                .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
+                // Account Type hidden - app is fully free
+                // HStack {
+                //     Text("Account Type")
+                //         .font(ModernDesignSystem.Typography.body)
+                //         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                //     Spacer()
+                //     Text(authService.currentUser?.role.displayName ?? "Free")
+                //         .font(ModernDesignSystem.Typography.body)
+                //         .fontWeight(.medium)
+                //         .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                //         .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                //         .background(
+                //             authService.currentUser?.role == .premium ? 
+                //             ModernDesignSystem.Colors.goldenYellow : 
+                //             ModernDesignSystem.Colors.textSecondary
+                //         )
+                //         .foregroundColor(
+                //             authService.currentUser?.role == .premium ? 
+                //             ModernDesignSystem.Colors.textOnAccent : 
+                //             ModernDesignSystem.Colors.textOnPrimary
+                //         )
+                //         .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                // }
+                // .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                // 
+                // Divider()
+                //     .background(ModernDesignSystem.Colors.borderPrimary)
                 
                 // Member Since
                 HStack {

@@ -472,45 +472,55 @@ final class CachedPetService {
     }
     
     /// Complete onboarding with cache invalidation
-    func completeOnboarding() {
-        Task {
-            do {
-                let userUpdate = UserUpdate(
-                    username: nil,
-                    firstName: nil,
-                    lastName: nil,
-                    imageUrl: nil,
-                    role: nil,
-                    onboarded: true
-                )
-                _ = try await apiService.updateUser(userUpdate)
-                
-                // Track onboarding completion
-                PostHogAnalytics.trackOnboardingCompleted(petsCount: self.pets.count)
-                
-                // Refresh user data
-                await AuthService.shared.refreshCurrentUser()
-                
-                // Invalidate user-related caches
-                invalidateUserCaches()
-                
-                LoggingManager.debug("Onboarding completed successfully", category: .pets)
-                
-            } catch APIError.authenticationError {
-                // Authentication error during onboarding completion
-                // This could happen if the token is invalid or expired
-                // Don't fail the entire flow - the pet was created successfully
-                LoggingManager.warning("Auth error during onboarding - pet created successfully", category: .pets)
-                
-                // Try to refresh the user data anyway to get the latest state
-                await AuthService.shared.refreshCurrentUser()
-                
-            } catch {
-                LoggingManager.error("Failed to update onboarded status: \(error)", category: .pets)
-                
-                // Try to refresh the user data anyway to get the latest state
-                await AuthService.shared.refreshCurrentUser()
-            }
+    /// Now async to properly await completion and ensure user state is updated
+    func completeOnboarding() async {
+        do {
+            let userUpdate = UserUpdate(
+                username: nil,
+                firstName: nil,
+                lastName: nil,
+                imageUrl: nil,
+                role: nil,
+                onboarded: true
+            )
+            _ = try await apiService.updateUser(userUpdate)
+            
+            // Track onboarding completion
+            PostHogAnalytics.trackOnboardingCompleted(petsCount: self.pets.count)
+            
+            // Invalidate user-related caches first to ensure fresh data is fetched
+            invalidateUserCaches()
+            
+            // Force refresh user data from server to get updated onboarded status
+            // This is critical for Apple ID users to ensure state updates properly
+            await AuthService.shared.refreshUserProfile(forceRefresh: true)
+            
+            // CRITICAL: Also update CachedProfileService's internal state
+            // This ensures all service instances have the updated user data
+            // Wait a brief moment to ensure the refresh has propagated
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            
+            // Force update the profile service cache as well to ensure consistency
+            _ = try? await CachedProfileService.shared.getCurrentUser(forceRefresh: true)
+            
+            LoggingManager.debug("Onboarding completed successfully", category: .pets)
+            
+        } catch APIError.authenticationError {
+            // Authentication error during onboarding completion
+            // This could happen if the token is invalid or expired
+            // Don't fail the entire flow - the pet was created successfully
+            LoggingManager.warning("Auth error during onboarding - pet created successfully", category: .pets)
+            
+            // Try to refresh the user data anyway to get the latest state
+            await AuthService.shared.refreshUserProfile(forceRefresh: true)
+            _ = try? await CachedProfileService.shared.getCurrentUser(forceRefresh: true)
+            
+        } catch {
+            LoggingManager.error("Failed to update onboarded status: \(error)", category: .pets)
+            
+            // Try to refresh the user data anyway to get the latest state
+            await AuthService.shared.refreshUserProfile(forceRefresh: true)
+            _ = try? await CachedProfileService.shared.getCurrentUser(forceRefresh: true)
         }
     }
     

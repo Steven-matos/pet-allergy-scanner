@@ -173,10 +173,11 @@ struct ProfileSettingsView: View {
                 GDPRView()
                     .environmentObject(gdprService)
             }
-            .sheet(isPresented: $showingSubscriptionView) {
-                SubscriptionView()
-                    .environmentObject(authService)
-            }
+            // Subscription sheet hidden - app is fully free
+            // .sheet(isPresented: $showingSubscriptionView) {
+            //     SubscriptionView()
+            //         .environmentObject(authService)
+            // }
             .sheet(isPresented: $showingEditProfile) {
                 EditProfileView()
                     .environmentObject(authService)
@@ -255,23 +256,23 @@ struct ProfileSettingsView: View {
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                         .multilineTextAlignment(.center)
                     
-                    // Role badge with Trust & Nature colors
-                    Text(user.role.displayName)
-                        .font(ModernDesignSystem.Typography.caption)
-                        .fontWeight(.medium)
-                        .padding(.horizontal, ModernDesignSystem.Spacing.md)
-                        .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                        .background(
-                            user.role == .premium ? 
-                            ModernDesignSystem.Colors.goldenYellow : 
-                            ModernDesignSystem.Colors.textSecondary
-                        )
-                        .foregroundColor(
-                            user.role == .premium ? 
-                            ModernDesignSystem.Colors.textOnAccent : 
-                            ModernDesignSystem.Colors.textOnPrimary
-                        )
-                        .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                    // Role badge hidden - app is fully free
+                    // Text(user.role.displayName)
+                    //     .font(ModernDesignSystem.Typography.caption)
+                    //     .fontWeight(.medium)
+                    //     .padding(.horizontal, ModernDesignSystem.Spacing.md)
+                    //     .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                    //     .background(
+                    //         user.role == .premium ? 
+                    //         ModernDesignSystem.Colors.goldenYellow : 
+                    //         ModernDesignSystem.Colors.textSecondary
+                    //     )
+                    //     .foregroundColor(
+                    //         user.role == .premium ? 
+                    //         ModernDesignSystem.Colors.textOnAccent : 
+                    //         ModernDesignSystem.Colors.textOnPrimary
+                    //     )
+                    //     .cornerRadius(ModernDesignSystem.CornerRadius.small)
                 }
             } else {
                 Text("No user data available")
@@ -329,28 +330,29 @@ struct ProfileSettingsView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 
-                Divider()
-                    .background(ModernDesignSystem.Colors.borderPrimary)
-                
-                // Subscription
-                Button(action: { showingSubscriptionView = true }) {
-                    HStack {
-                        Image(systemName: "crown.fill")
-                            .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
-                        Text("Subscription")
-                            .font(ModernDesignSystem.Typography.body)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                        Spacer()
-                        Text(authService.currentUser?.role.rawValue.capitalized ?? "Free")
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
-                    .padding(.vertical, ModernDesignSystem.Spacing.sm)
-                }
-                .buttonStyle(PlainButtonStyle())
+                // Subscription button hidden - app is fully free
+                // Divider()
+                //     .background(ModernDesignSystem.Colors.borderPrimary)
+                // 
+                // // Subscription
+                // Button(action: { showingSubscriptionView = true }) {
+                //     HStack {
+                //         Image(systemName: "crown.fill")
+                //             .foregroundColor(ModernDesignSystem.Colors.goldenYellow)
+                //         Text("Subscription")
+                //             .font(ModernDesignSystem.Typography.body)
+                //             .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                //         Spacer()
+                //         Text(authService.currentUser?.role.rawValue.capitalized ?? "Free")
+                //             .font(ModernDesignSystem.Typography.caption)
+                //             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                //         Image(systemName: "chevron.right")
+                //             .font(.caption)
+                //             .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                //     }
+                //     .padding(.vertical, ModernDesignSystem.Spacing.sm)
+                // }
+                // .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(ModernDesignSystem.Spacing.lg)

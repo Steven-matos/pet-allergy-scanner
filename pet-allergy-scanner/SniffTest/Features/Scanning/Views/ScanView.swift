@@ -69,9 +69,10 @@ struct ScanView: View {
         showingProductFound ||
         showingProductNotFound ||
         showingNutritionalLabelScan ||
-        showingOCRResults ||
-        showingPaywall ||
-        gatekeeper.showingUpgradePrompt
+        showingOCRResults
+        // Subscription sheets removed - app is fully free
+        // showingPaywall ||
+        // gatekeeper.showingUpgradePrompt
     }
     
     /**
@@ -750,18 +751,19 @@ struct ScanView: View {
         .onChange(of: hybridScanService.isScanning) { _, _ in
             // Handle scanning state updates
         }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
-        }
-        .sheet(isPresented: Binding(
-            get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
-            set: { gatekeeper.showingUpgradePrompt = $0 }
-        )) {
-            UpgradePromptView(
-                title: gatekeeper.upgradePromptTitle,
-                message: gatekeeper.upgradePromptMessage
-            )
-        }
+        // Subscription sheets hidden - app is fully free
+        // .sheet(isPresented: $showingPaywall) {
+        //     PaywallView()
+        // }
+        // .sheet(isPresented: Binding(
+        //     get: { gatekeeper.showingUpgradePrompt && !showingPaywall },
+        //     set: { gatekeeper.showingUpgradePrompt = $0 }
+        // )) {
+        //     UpgradePromptView(
+        //         title: gatekeeper.upgradePromptTitle,
+        //         message: gatekeeper.upgradePromptMessage
+        //     )
+        // }
         .onAppear {
             // Track analytics (non-blocking)
             Task.detached(priority: .utility) { @MainActor in

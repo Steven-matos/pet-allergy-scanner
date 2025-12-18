@@ -95,9 +95,10 @@ struct NutritionalTrendsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingPaywall) {
-            PaywallView()
-        }
+        // Subscription sheets hidden - app is fully free
+        // .sheet(isPresented: $showingPaywall) {
+        //     PaywallView()
+        // }
         .sheet(isPresented: $showingBreakdownSheet) {
             if let pet = selectedPet {
                 NutritionalBalanceBreakdownSheet(petId: pet.id)
@@ -105,12 +106,12 @@ struct NutritionalTrendsView: View {
                     .presentationDragIndicator(.visible)
             }
         }
-        .sheet(isPresented: $gatekeeper.showingUpgradePrompt) {
-            UpgradePromptView(
-                title: gatekeeper.upgradePromptTitle,
-                message: gatekeeper.upgradePromptMessage
-            )
-        }
+        // .sheet(isPresented: $gatekeeper.showingUpgradePrompt) {
+        //     UpgradePromptView(
+        //         title: gatekeeper.upgradePromptTitle,
+        //         message: gatekeeper.upgradePromptMessage
+        //     )
+        // }
         .onAppear {
             // CRITICAL: Check navigation coordinator first - skip all operations if in cooldown
             if TabNavigationCoordinator.shared.shouldBlockOperations() {
