@@ -170,6 +170,10 @@ class DatabaseOperationService:
                 serialized_data["updated_at"] = DateTimeService.now_iso()
             
             # Perform the update
+            # Log what we're updating for debugging
+            if table_name == "users":
+                logger.info(f"[DB_UPDATE] Updating user {record_id} with data: {serialized_data}")
+            
             update_response = await execute_async(
                 lambda: self.supabase.table(table_name)
                     .update(serialized_data)
@@ -177,8 +181,23 @@ class DatabaseOperationService:
                     .execute()
             )
             
+            # Check if update was successful
+            if table_name == "users":
+                logger.info(f"[DB_UPDATE] Update response: {update_response}")
+                logger.info(f"[DB_UPDATE] Update response type: {type(update_response)}")
+                if hasattr(update_response, 'data'):
+                    logger.info(f"[DB_UPDATE] Update response data: {update_response.data}")
+                if hasattr(update_response, 'status_code'):
+                    logger.info(f"[DB_UPDATE] Update response status_code: {update_response.status_code}")
+                if hasattr(update_response, 'count'):
+                    logger.info(f"[DB_UPDATE] Update response count: {update_response.count}")
+            
             # Fetch the updated record separately since Supabase update doesn't return data by default
             # This ensures we get the complete updated record with all fields
+            # Use a small delay to ensure the update has been committed
+            import asyncio
+            await asyncio.sleep(0.01)  # 10ms delay to ensure database consistency
+            
             response = await execute_async(
                 lambda: self.supabase.table(table_name)
                     .select("*")
@@ -192,8 +211,14 @@ class DatabaseOperationService:
                     f"record {record_id}"
                 )
             
+            updated_record = response.data[0]
+            
+            # Log the updated record for debugging (especially for users table)
+            if table_name == "users":
+                logger.info(f"[DB_UPDATE] Updated user {record_id} - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
+            
             logger.debug(f"✅ Updated {table_name} record {record_id}")
-            return response.data[0]
+            return updated_record
         
         except Exception as e:
             logger.error(

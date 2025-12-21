@@ -684,6 +684,7 @@ async def update_user_profile(
         if "image_url" in update_data and update_data["image_url"] is not None:
             db_update["image_url"] = update_data["image_url"]
         
+        result = None
         if db_update:
             # Use DatabaseOperationService for non-role user updates
             from app.shared.services.database_operation_service import DatabaseOperationService
@@ -691,24 +692,37 @@ async def update_user_profile(
             logger.info(f"[UPDATE_PROFILE] Calling update_with_timestamp with: {db_update}")
             db_service = DatabaseOperationService(supabase)
             result = await db_service.update_with_timestamp("users", user_id, db_update)
-            logger.info(f"[UPDATE_PROFILE] Update result: {result}")
+            logger.info(f"[UPDATE_PROFILE] Update result from update_with_timestamp: {result}")
+            logger.info(f"[UPDATE_PROFILE] Update result keys: {list(result.keys()) if result else 'None'}")
+            if result:
+                logger.info(f"[UPDATE_PROFILE] Update result firstName: {result.get('first_name')}, lastName: {result.get('last_name')}, username: {result.get('username')}")
         else:
             logger.warning(f"[UPDATE_PROFILE] db_update is empty, no fields to update")
         
-        # Get updated user data
-        from app.shared.utils.async_supabase import execute_async
-        updated_response = await execute_async(
-            lambda: supabase.table("users").select("*").eq("id", user_id).execute()
-        )
-        
-        if not updated_response.data:
-            logger.error(f"Failed to fetch updated user {user_id}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to fetch updated user profile"
+        # Get updated user data - use result from update_with_timestamp which already fetched the updated record
+        # This avoids an extra database query and ensures we get the actual updated data
+        if result:
+            # Use the result directly from update_with_timestamp which already selected all fields
+            updated_user_data = result
+            logger.info(f"[UPDATE_PROFILE] Using result from update_with_timestamp as updated_user_data")
+        else:
+            # Fallback: fetch if no update was performed (e.g., only role update)
+            from app.shared.utils.async_supabase import execute_async
+            updated_response = await execute_async(
+                lambda: supabase.table("users").select("*").eq("id", user_id).execute()
             )
+            
+            if not updated_response.data:
+                logger.error(f"Failed to fetch updated user {user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to fetch updated user profile"
+                )
+            
+            updated_user_data = updated_response.data[0]
+            logger.info(f"[UPDATE_PROFILE] Fetched user data from database (fallback)")
         
-        updated_user_data = updated_response.data[0]
+        logger.info(f"[UPDATE_PROFILE] Final updated_user_data firstName: {updated_user_data.get('first_name')}, lastName: {updated_user_data.get('last_name')}, username: {updated_user_data.get('username')}")
         
         # Return the updated user data using response model service
         from app.shared.services.response_model_service import ResponseModelService
