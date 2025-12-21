@@ -696,6 +696,43 @@ async def update_user_profile(
             logger.info(f"[UPDATE_PROFILE] Update result keys: {list(result.keys()) if result else 'None'}")
             if result:
                 logger.info(f"[UPDATE_PROFILE] Update result firstName: {result.get('first_name')}, lastName: {result.get('last_name')}, username: {result.get('username')}")
+            
+            # CRITICAL: Also update auth.users user_metadata to keep them in sync
+            # This prevents the handle_user_update() trigger from overwriting our values
+            # when auth.users is updated elsewhere
+            if any(field in db_update for field in ["first_name", "last_name", "username"]):
+                try:
+                    from app.shared.utils.async_supabase import execute_async
+                    
+                    # Get current auth user to preserve existing metadata
+                    auth_user_response = await execute_async(
+                        lambda: supabase.auth.admin.get_user_by_id(user_id)
+                    )
+                    
+                    if auth_user_response and hasattr(auth_user_response, 'user'):
+                        auth_user = auth_user_response.user
+                        current_metadata = auth_user.user_metadata or {}
+                        
+                        # Merge our updates with existing metadata
+                        updated_metadata = current_metadata.copy()
+                        if "first_name" in db_update:
+                            updated_metadata["first_name"] = db_update["first_name"]
+                        if "last_name" in db_update:
+                            updated_metadata["last_name"] = db_update["last_name"]
+                        if "username" in db_update:
+                            updated_metadata["username"] = db_update["username"]
+                        
+                        # Update auth.users user_metadata
+                        await execute_async(
+                            lambda: supabase.auth.admin.update_user_by_id(
+                                user_id,
+                                {"user_metadata": updated_metadata}
+                            )
+                        )
+                        logger.info(f"[UPDATE_PROFILE] ✅ Updated auth.users user_metadata to keep in sync")
+                except Exception as metadata_error:
+                    # Log but don't fail - metadata update is best effort
+                    logger.warning(f"[UPDATE_PROFILE] ⚠️ Failed to update auth.users metadata (non-critical): {metadata_error}")
         else:
             logger.warning(f"[UPDATE_PROFILE] db_update is empty, no fields to update")
         
