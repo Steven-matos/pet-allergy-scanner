@@ -17,6 +17,7 @@ from supabase import Client
 from app.models.core.user import User, UserResponse
 from app.core.database import get_supabase_service_role_client
 from app.core.config import settings
+from app.shared.services.database_operation_service import DatabaseOperationService
 
 logger = logging.getLogger(__name__)
 
@@ -152,13 +153,16 @@ class UserDataService:
             UserResponse with merged data
         """
         try:
-            # Get data from public.users table
+            # Get data from public.users table - select all fields to ensure we have the latest data
             from app.shared.utils.async_supabase import execute_async
             user_response = await execute_async(
                 lambda: self.supabase.table("users").select(
-                    "onboarded, image_url, bypass_subscription, role"
+                    "onboarded, image_url, bypass_subscription, role, username, first_name, last_name"
                 ).eq("id", user_id).execute()
             )
+            
+            # Extract auth metadata for fallback values
+            user_metadata = auth_metadata.get("user_metadata", {})
             
             # Extract public.users data or use defaults
             if user_response.data:
@@ -167,6 +171,11 @@ class UserDataService:
                 image_url = public_data.get("image_url")
                 bypass_subscription = public_data.get("bypass_subscription", False)
                 role = public_data.get("role", "free")
+                # Get username, first_name, last_name from database (more authoritative than auth metadata)
+                # These can be updated via the profile update endpoint
+                username = public_data.get("username") or user_metadata.get("username")
+                first_name = public_data.get("first_name") or user_metadata.get("first_name")
+                last_name = public_data.get("last_name") or user_metadata.get("last_name")
             else:
                 # User doesn't exist in public.users - create them
                 logger.info(f"User {user_id} not found in public.users, creating with defaults")
@@ -176,6 +185,9 @@ class UserDataService:
                     image_url = created_user.image_url
                     bypass_subscription = created_user.bypass_subscription if hasattr(created_user, 'bypass_subscription') else False
                     role = created_user.role.value if hasattr(created_user.role, 'value') else created_user.role
+                    username = created_user.username or user_metadata.get("username")
+                    first_name = created_user.first_name or user_metadata.get("first_name")
+                    last_name = created_user.last_name or user_metadata.get("last_name")
                 except Exception as create_error:
                     logger.error(f"Error creating user in get_merged_user_data: {create_error}")
                     # Use defaults if creation fails
@@ -183,17 +195,19 @@ class UserDataService:
                     image_url = None
                     bypass_subscription = False
                     role = "free"
+                    # Fall back to auth metadata if database creation fails
+                    username = user_metadata.get("username")
+                    first_name = user_metadata.get("first_name")
+                    last_name = user_metadata.get("last_name")
             
-            # Extract auth metadata
-            user_metadata = auth_metadata.get("user_metadata", {})
-            
-            # Merge the data
+            # Merge the data - prioritize database values for username, first_name, last_name
+            # since they can be updated via the profile update endpoint
             merged_data = {
                 "id": user_id,
                 "email": auth_metadata.get("email", ""),
-                "username": user_metadata.get("username"),
-                "first_name": user_metadata.get("first_name"),
-                "last_name": user_metadata.get("last_name"),
+                "username": username,  # From database (or auth metadata if not in DB)
+                "first_name": first_name,  # From database (or auth metadata if not in DB)
+                "last_name": last_name,  # From database (or auth metadata if not in DB)
                 "role": role,  # Use role from public.users (more authoritative)
                 "onboarded": onboarded,
                 "bypass_subscription": bypass_subscription,
