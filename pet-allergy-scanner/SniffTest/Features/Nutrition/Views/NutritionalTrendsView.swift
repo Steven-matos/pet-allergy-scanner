@@ -212,14 +212,6 @@ struct NutritionalTrendsView: View {
                 // Summary Cards
                 summaryCardsSection(for: pet)
                 
-                // Nutritional Balance Summary Card (tappable)
-                NutritionalBalanceSummaryCard(
-                    score: trendsService.nutritionalBalanceScore(for: pet.id),
-                    onTap: {
-                        showingBreakdownSheet = true
-                    }
-                )
-                
                 // Log Meal Section - Button and Recent Meals List
                 logMealSection
                 
@@ -299,15 +291,6 @@ struct NutritionalTrendsView: View {
                     color: ModernDesignSystem.Colors.primary
                 )
                 
-                // Nutritional Balance
-                SummaryCard(
-                    title: "Nutritional Balance",
-                    value: "\(Int(trendsService.nutritionalBalanceScore(for: pet.id)))",
-                    unit: "%",
-                    trend: trendsService.balanceTrend(for: pet.id),
-                    color: ModernDesignSystem.Colors.primary
-                )
-                
                 // Weight Change
                 SummaryCard(
                     title: "Weight Change",
@@ -315,6 +298,14 @@ struct NutritionalTrendsView: View {
                     unit: unitService.getUnitSymbol(),
                     trend: trendsService.weightChangeTrend(for: pet.id),
                     color: ModernDesignSystem.Colors.warmCoral
+                )
+                
+                // Nutritional Balance (compact tappable square)
+                NutritionalBalanceCompactCard(
+                    score: trendsService.nutritionalBalanceScore(for: pet.id),
+                    onTap: {
+                        showingBreakdownSheet = true
+                    }
                 )
             }
         }
@@ -816,8 +807,12 @@ struct SummaryCard: View {
                 
                 trendIcon
             }
+            
+            Spacer()
         }
         .padding(ModernDesignSystem.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
         .background(ModernDesignSystem.Colors.softCream)
         .overlay(
             RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
@@ -1910,12 +1905,13 @@ struct MealRow: View {
 // MARK: - Nutritional Balance Breakdown Components
 
 /**
- * Nutritional Balance Summary Card
+ * Nutritional Balance Compact Card
  * 
- * Tappable card that displays overall nutritional balance score
+ * Compact square tappable card that displays nutritional balance index
+ * Designed to fit in the 2-column grid next to Weight Change
  * Opens bottom sheet with detailed breakdown when tapped
  */
-struct NutritionalBalanceSummaryCard: View {
+struct NutritionalBalanceCompactCard: View {
     let score: Double
     let onTap: () -> Void
     
@@ -1928,41 +1924,39 @@ struct NutritionalBalanceSummaryCard: View {
             onTap()
         }) {
             VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                HStack {
+                // Icon and title
+                HStack(spacing: ModernDesignSystem.Spacing.xs) {
                     Image(systemName: "leaf.circle.fill")
-                        .font(.title2)
+                        .font(.subheadline)
                         .foregroundColor(ModernDesignSystem.Colors.primary)
                     
-                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
-                        Text("Nutritional Balance")
-                            .font(ModernDesignSystem.Typography.subheadline)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        
-                        HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
-                            Text("\(Int(score))")
-                                .font(ModernDesignSystem.Typography.title2)
-                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                            
-                            Text("%")
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                        }
-                    }
+                    Text("Nutritional Balance Index")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
                     
                     Spacer()
-                    
-                    VStack(spacing: ModernDesignSystem.Spacing.xs) {
-                        Text("Tap for details")
-                            .font(ModernDesignSystem.Typography.caption2)
-                            .foregroundColor(ModernDesignSystem.Colors.primary)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.primary)
-                    }
+                }
+                
+                // Balance index value
+                Text("\(Int(score))")
+                    .font(ModernDesignSystem.Typography.title2)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Spacer()
+                
+                // Tap indicator
+                HStack {
+                    Spacer()
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
             .padding(ModernDesignSystem.Spacing.lg)
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1, contentMode: .fit)
             .background(ModernDesignSystem.Colors.softCream)
             .overlay(
                 RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
@@ -1971,15 +1965,15 @@ struct NutritionalBalanceSummaryCard: View {
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .shadow(
                 color: colorScheme == .dark
-                    ? ModernDesignSystem.Shadows.medium.color.opacity(0.3)
-                    : ModernDesignSystem.Shadows.medium.color,
-                radius: ModernDesignSystem.Shadows.medium.radius,
-                x: ModernDesignSystem.Shadows.medium.x,
-                y: ModernDesignSystem.Shadows.medium.y
+                    ? ModernDesignSystem.Shadows.small.color.opacity(0.3)
+                    : ModernDesignSystem.Shadows.small.color,
+                radius: ModernDesignSystem.Shadows.small.radius,
+                x: ModernDesignSystem.Shadows.small.x,
+                y: ModernDesignSystem.Shadows.small.y
             )
         }
         .buttonStyle(PlainButtonStyle())
-        .accessibilityLabel("Nutritional Balance: \(Int(score))%. Tap to view detailed breakdown")
+        .accessibilityLabel("Nutritional Balance: Balance Index \(Int(score)). Tap to view detailed breakdown")
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -2008,14 +2002,21 @@ struct NutritionalBalanceBreakdownSheet: View {
             ScrollView {
                 VStack(spacing: ModernDesignSystem.Spacing.lg) {
                     if let breakdown = breakdown, !breakdown.hasInsufficientData {
-                        // Overall Score
-                        overallScoreCard(score: breakdown.overallScore)
+                        // Balance Summary (replaces Overall Score)
+                        if let summary = breakdown.summary {
+                            BalanceSummaryCard(summary: summary)
+                        }
                         
                         // Macro Breakdown
                         VStack(spacing: ModernDesignSystem.Spacing.md) {
                             macroProgressBar(data: breakdown.protein)
                             macroProgressBar(data: breakdown.fat)
                             macroProgressBar(data: breakdown.fiber)
+                        }
+                        
+                        // Action Plan
+                        if let plan = breakdown.plan {
+                            NutrientPlanCard(plan: plan)
                         }
                         
                         // Educational Info
@@ -2049,32 +2050,131 @@ struct NutritionalBalanceBreakdownSheet: View {
         .accessibilityLabel(breakdown?.accessibilityDescription ?? "Nutritional balance requires more data")
     }
     
-    // MARK: - Overall Score Card
+    // MARK: - Balance Summary Card
     
-    @ViewBuilder
-    private func overallScoreCard(score: Double) -> some View {
-        VStack(spacing: ModernDesignSystem.Spacing.md) {
-            Text("Overall Score")
-                .font(ModernDesignSystem.Typography.title3)
-                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-            
-            Text("\(Int(score))%")
-                .font(.system(size: 48, weight: .bold, design: .rounded))
-                .foregroundColor(ModernDesignSystem.Colors.primary)
-            
-            Text("Based on protein, fat, and fiber intake compared to veterinary recommendations")
-                .font(ModernDesignSystem.Typography.caption)
-                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+    /**
+     * Balance Summary Card
+     * Replaces the old "Overall Score 100%" card with a status-based summary
+     */
+    struct BalanceSummaryCard: View {
+        let summary: NutritionalBalanceSummary
+        
+        var body: some View {
+            VStack(spacing: ModernDesignSystem.Spacing.md) {
+                // Status badge
+                Text(summary.status.displayText)
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(summary.status.color)
+                    .fontWeight(.semibold)
+                
+                // Targets met or balance index
+                if let index = summary.balanceIndex {
+                    Text("Balance Index: \(Int(index))")
+                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                } else {
+                    Text("\(summary.targetsMet) of \(summary.targetsTotal) targets met")
+                        .font(.system(size: 32, weight: .semibold, design: .rounded))
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                }
+                
+                // Driver attribution
+                Text("\(summary.primaryDriver) is the biggest issue today (\(Int(summary.primaryDriverPercent))% of recommended)")
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                
+                // Explanation
+                Text(summary.explanation)
+                    .font(ModernDesignSystem.Typography.caption)
+                    .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(summary.accessibilityLabel)
         }
-        .padding(ModernDesignSystem.Spacing.lg)
-        .background(ModernDesignSystem.Colors.softCream)
-        .overlay(
-            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
-        )
-        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+    }
+    
+    // MARK: - Nutrient Plan Card
+    
+    /**
+     * Nutrient Plan Card
+     * Shows prioritized actions to improve nutritional balance
+     */
+    struct NutrientPlanCard: View {
+        let plan: NutrientPlan
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
+                Text("Your Action Plan")
+                    .font(ModernDesignSystem.Typography.title3)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                    ForEach(plan.actions.prefix(3)) { action in
+                        PlanActionRow(action: action)
+                    }
+                }
+            }
+            .padding(ModernDesignSystem.Spacing.lg)
+            .background(ModernDesignSystem.Colors.softCream)
+            .overlay(
+                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+            )
+            .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(planAccessibilityLabel)
+        }
+        
+        private var planAccessibilityLabel: String {
+            var label = "Your Action Plan. "
+            for (index, action) in plan.actions.prefix(3).enumerated() {
+                label += "Priority \(index + 1): \(action.instruction). Currently \(Int(action.current)) grams versus recommended \(Int(action.target)) grams. "
+            }
+            return label
+        }
+    }
+    
+    /**
+     * Plan Action Row
+     * Individual action item in the plan
+     */
+    struct PlanActionRow: View {
+        let action: PlanAction
+        
+        var body: some View {
+            HStack(alignment: .top, spacing: ModernDesignSystem.Spacing.sm) {
+                Text(action.priorityIndicator)
+                    .font(ModernDesignSystem.Typography.body)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .frame(width: 24, alignment: .leading)
+                
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                    Text(action.instruction)
+                        .font(ModernDesignSystem.Typography.body)
+                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    
+                    Text("Currently \(Int(action.current))g vs recommended \(Int(action.target))g")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                Spacer()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Priority \(action.priority): \(action.instruction). Currently \(Int(action.current)) grams versus recommended \(Int(action.target)) grams")
+        }
     }
     
     // MARK: - Macro Progress Bar

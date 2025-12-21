@@ -255,8 +255,19 @@ class CachedNutritionalTrendsService: ObservableObject {
      * - Parameter petId: The pet's ID
      * - Returns: Nutritional balance score (0-100)
      */
+    /**
+     * Get nutritional balance index (0-100) for a pet
+     * Uses the new balance index calculation from breakdown summary
+     * - Parameter petId: The pet's ID
+     * - Returns: Balance index (0-100), or 0.0 if insufficient data
+     */
     func nutritionalBalanceScore(for petId: String) -> Double {
-        return nutritionalBalanceScoresCache[petId] ?? 0.0
+        // Get breakdown to retrieve the balance index
+        guard let breakdown = getNutritionalBreakdown(for: petId),
+              let summary = breakdown.summary else {
+            return 0.0
+        }
+        return summary.balanceIndex ?? 0.0
     }
     
     /**
@@ -309,7 +320,9 @@ class CachedNutritionalTrendsService: ObservableObject {
                     icon: "leaf",
                     contextText: "Unable to load nutritional requirements"
                 ),
-                hasInsufficientData: true
+                hasInsufficientData: true,
+                summary: nil,  // No summary when insufficient data
+                plan: nil      // No plan when insufficient data
             )
         }
         
@@ -348,7 +361,9 @@ class CachedNutritionalTrendsService: ObservableObject {
                     icon: "leaf",
                     contextText: "Start logging meals to track fiber intake"
                 ),
-                hasInsufficientData: true
+                hasInsufficientData: true,
+                summary: nil,  // No summary when insufficient data
+                plan: nil      // No plan when insufficient data
             )
         }
         
@@ -428,12 +443,52 @@ class CachedNutritionalTrendsService: ObservableObject {
         let fatContext = generateContextText(macro: "Fat", status: fatStatus, percentage: fatComparison)
         let fiberContext = generateContextText(macro: "Fiber", status: fiberStatus, percentage: fiberComparison)
         
-        // Calculate overall score (average of the three macro scores)
-        let overallScore = (proteinComparison + fatComparison + fiberComparison) / 3.0
-        let clampedScore = max(0.0, min(100.0, overallScore))
+        // Calculate balance index and summary (new approach)
+        let (balanceIndex, balanceStatus, primaryDriver, primaryDriverPercent) = calculateBalanceIndex(
+            proteinPercent: proteinComparison,
+            fatPercent: fatComparison,
+            fiberPercent: fiberComparison
+        )
+        
+        let (targetsMet, targetsTotal, _) = calculateTargetsMet(
+            proteinPercent: proteinComparison,
+            fatPercent: fatComparison,
+            fiberPercent: fiberComparison
+        )
+        
+        // Generate explanation text
+        let explanation = "Based on protein, fat, and fiber intake compared to veterinary recommendations."
+        
+        let summary = NutritionalBalanceSummary(
+            balanceIndex: balanceIndex,
+            status: balanceStatus,
+            targetsMet: targetsMet,
+            targetsTotal: targetsTotal,
+            primaryDriver: primaryDriver,
+            primaryDriverPercent: primaryDriverPercent,
+            explanation: explanation
+        )
+        
+        // Generate action plan
+        let plan = generatePlan(
+            proteinPercent: proteinComparison,
+            fatPercent: fatComparison,
+            fiberPercent: fiberComparison,
+            actualProteinG: totalProteinG,
+            actualFatG: totalFatG,
+            actualFiberG: totalFiberG,
+            recommendedProtein: recommendedProtein,
+            recommendedFat: recommendedFat,
+            recommendedFiber: recommendedFiber,
+            totalWeightG: totalWeightG
+        )
+        
+        // Calculate overall score (deprecated, kept for backwards compatibility)
+        // This is no longer used in the UI but kept in the model
+        let overallScore = balanceIndex
         
         return NutritionalBreakdown(
-            overallScore: clampedScore,
+            overallScore: overallScore,
             protein: MacroNutrientData(
                 name: "Protein",
                 actual: actualProteinPercent,
@@ -461,7 +516,9 @@ class CachedNutritionalTrendsService: ObservableObject {
                 icon: "leaf",
                 contextText: fiberContext
             ),
-            hasInsufficientData: false
+            hasInsufficientData: false,
+            summary: summary,
+            plan: plan
         )
     }
     
@@ -508,6 +565,197 @@ class CachedNutritionalTrendsService: ObservableObject {
         case .tooHigh:
             return "\(macro) is significantly high - consider reducing intake"
         }
+    }
+    
+    /**
+     * Calculate balance index (0-100) based on distance from optimal ranges
+     * Penalizes both underages and overages proportionally
+     * - Parameters:
+     *   - proteinPercent: Protein as percentage of recommended (e.g., 48)
+     *   - fatPercent: Fat as percentage of recommended (e.g., 100)
+     *   - fiberPercent: Fiber as percentage of recommended (e.g., 374)
+     * - Returns: Tuple with (balanceIndex, status, primaryDriver, primaryDriverPercent)
+     */
+    private func calculateBalanceIndex(
+        proteinPercent: Double,
+        fatPercent: Double,
+        fiberPercent: Double
+    ) -> (balanceIndex: Double, status: BalanceStatus, primaryDriver: String, primaryDriverPercent: Double) {
+        
+        // Optimal range: 90-110% of recommended
+        let optimalMin = 90.0
+        let optimalMax = 110.0
+        let optimalCenter = 100.0
+        
+        /**
+         * Calculate penalty score for a nutrient (0-100, where 100 = perfect)
+         * - Within optimal range (90-110%): score = 100
+         * - Below optimal: linear penalty from 100 to 0
+         * - Above optimal: exponential penalty (overages are worse)
+         */
+        func penaltyScore(percent: Double) -> Double {
+            if percent >= optimalMin && percent <= optimalMax {
+                // Within optimal range: score = 100
+                return 100.0
+            } else if percent < optimalMin {
+                // Below optimal: linear penalty from 100 to 0
+                // At 0%: score = 0, at 90%: score = 100
+                return max(0, (percent / optimalMin) * 100.0)
+            } else {
+                // Above optimal: exponential penalty (overages are worse)
+                // At 110%: score = 100, at 200%: score ~45, at 374%: score ~11
+                let excess = percent - optimalMax
+                // Calculate penalty: excess / optimalMax gives us a multiplier
+                // At 200% (excess = 90, optimalMax = 110): penalty ~82% -> score ~18
+                // Use a more aggressive penalty: (excess / optimalMax) * 100
+                // This ensures that 374% gives a very low score
+                let excessRatio = excess / optimalMax
+                let penalty = min(100.0, excessRatio * 100.0)
+                return max(0, 100.0 - penalty)
+            }
+        }
+        
+        let proteinScore = penaltyScore(percent: proteinPercent)
+        let fatScore = penaltyScore(percent: fatPercent)
+        let fiberScore = penaltyScore(percent: fiberPercent)
+        
+        // Weighted average (protein and fat are more critical than fiber)
+        let balanceIndex = (proteinScore * 0.4) + (fatScore * 0.4) + (fiberScore * 0.2)
+        
+        // Determine overall status based on count of nutrients out of range
+        let outOfRangeCount = [
+            proteinPercent < optimalMin || proteinPercent > optimalMax,
+            fatPercent < optimalMin || fatPercent > optimalMax,
+            fiberPercent < optimalMin || fiberPercent > optimalMax
+        ].filter { $0 }.count
+        
+        let status: BalanceStatus
+        if outOfRangeCount == 0 {
+            status = .optimal
+        } else if outOfRangeCount == 1 {
+            status = .good
+        } else if outOfRangeCount == 2 {
+            status = .needsAttention
+        } else {
+            status = .critical
+        }
+        
+        // Identify primary driver (nutrient with largest absolute deviation from 100)
+        let deviations = [
+            ("Protein", abs(proteinPercent - optimalCenter)),
+            ("Fat", abs(fatPercent - optimalCenter)),
+            ("Fiber", abs(fiberPercent - optimalCenter))
+        ]
+        let primaryDriver = deviations.max(by: { $0.1 < $1.1 })?.0 ?? "Unknown"
+        let primaryDriverPercent = primaryDriver == "Protein" ? proteinPercent : 
+                                    primaryDriver == "Fat" ? fatPercent : fiberPercent
+        
+        return (balanceIndex, status, primaryDriver, primaryDriverPercent)
+    }
+    
+    /**
+     * Calculate targets met count
+     * - Parameters:
+     *   - proteinPercent: Protein as percentage of recommended
+     *   - fatPercent: Fat as percentage of recommended
+     *   - fiberPercent: Fiber as percentage of recommended
+     * - Returns: Tuple with (met count, total count, message)
+     */
+    private func calculateTargetsMet(
+        proteinPercent: Double,
+        fatPercent: Double,
+        fiberPercent: Double
+    ) -> (met: Int, total: Int, message: String) {
+        let optimalRange = 90.0...110.0
+        let met = [
+            optimalRange.contains(proteinPercent),
+            optimalRange.contains(fatPercent),
+            optimalRange.contains(fiberPercent)
+        ].filter { $0 }.count
+        
+        let message = met == 3 
+            ? "All nutrients in ideal range"
+            : "\(met) of 3 targets met"
+        
+        return (met, 3, message)
+    }
+    
+    /**
+     * Generate action plan for improving nutritional balance
+     * - Parameters:
+     *   - proteinPercent: Protein as percentage of recommended
+     *   - fatPercent: Fat as percentage of recommended
+     *   - fiberPercent: Fiber as percentage of recommended
+     *   - actualProteinG: Actual protein in grams per day
+     *   - actualFatG: Actual fat in grams per day
+     *   - actualFiberG: Actual fiber in grams per day
+     *   - recommendedProtein: Recommended protein percentage
+     *   - recommendedFat: Recommended fat percentage
+     *   - recommendedFiber: Recommended fiber percentage
+     *   - totalWeightG: Total food weight in grams per day
+     * - Returns: NutrientPlan with prioritized actions, or nil if all optimal
+     */
+    private func generatePlan(
+        proteinPercent: Double,
+        fatPercent: Double,
+        fiberPercent: Double,
+        actualProteinG: Double,
+        actualFatG: Double,
+        actualFiberG: Double,
+        recommendedProtein: Double,
+        recommendedFat: Double,
+        recommendedFiber: Double,
+        totalWeightG: Double
+    ) -> NutrientPlan? {
+        
+        let optimalMin = 90.0
+        let optimalMax = 110.0
+        let optimalCenter = 100.0
+        
+        // Calculate target grams for each nutrient (aim for 100% of recommended)
+        let targetProteinG = (recommendedProtein / 100.0) * totalWeightG
+        let targetFatG = (recommendedFat / 100.0) * totalWeightG
+        let targetFiberG = (recommendedFiber / 100.0) * totalWeightG
+        
+        // Build list of actions for nutrients that are out of range
+        var actions: [PlanAction] = []
+        var priority = 1
+        
+        // Calculate deviations for prioritization (largest deviation = highest priority)
+        let deviations: [(name: String, percent: Double, actualG: Double, targetG: Double, deviation: Double)] = [
+            ("Protein", proteinPercent, actualProteinG, targetProteinG, abs(proteinPercent - optimalCenter)),
+            ("Fat", fatPercent, actualFatG, targetFatG, abs(fatPercent - optimalCenter)),
+            ("Fiber", fiberPercent, actualFiberG, targetFiberG, abs(fiberPercent - optimalCenter))
+        ]
+        
+        // Sort by deviation (largest first)
+        let sortedDeviations = deviations.sorted { $0.deviation > $1.deviation }
+        
+        // Create actions for nutrients outside optimal range
+        for deviation in sortedDeviations {
+            let percent = deviation.percent
+            if percent < optimalMin || percent > optimalMax {
+                let adjustmentNeeded = abs(deviation.targetG - deviation.actualG)
+                let direction = deviation.actualG < deviation.targetG ? "Increase" : "Reduce"
+                
+                actions.append(PlanAction(
+                    nutrient: deviation.name,
+                    direction: direction,
+                    amountGrams: adjustmentNeeded,
+                    current: deviation.actualG,
+                    target: deviation.targetG,
+                    priority: priority
+                ))
+                priority += 1
+            }
+        }
+        
+        // Return nil if no actions needed (all optimal)
+        guard !actions.isEmpty else {
+            return nil
+        }
+        
+        return NutrientPlan(actions: actions)
     }
     
     /**
