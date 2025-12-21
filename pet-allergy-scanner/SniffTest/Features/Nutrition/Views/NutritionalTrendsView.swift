@@ -273,31 +273,21 @@ struct NutritionalTrendsView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: ModernDesignSystem.Spacing.md) {
-                // Average Daily Calories
-                SummaryCard(
-                    title: "Avg Daily Calories",
-                    value: "\(Int(trendsService.averageDailyCalories(for: pet.id)))",
-                    unit: "kcal",
-                    trend: trendsService.calorieTrend(for: pet.id),
-                    color: ModernDesignSystem.Colors.goldenYellow
+                // Average Daily Calories with circular progress
+                AverageDailyCaloriesCard(
+                    averageCalories: trendsService.averageDailyCalories(for: pet.id),
+                    goalCalories: calorieGoalsService.getGoal(for: pet.id)
                 )
                 
-                // Feeding Frequency
-                SummaryCard(
-                    title: "Feeding Frequency",
-                    value: "\(String(format: "%.1f", trendsService.averageFeedingFrequency(for: pet.id)))",
-                    unit: "times/day",
-                    trend: trendsService.feedingTrend(for: pet.id),
-                    color: ModernDesignSystem.Colors.primary
+                // Feeding Frequency with orange arrow
+                FeedingFrequencyCard(
+                    frequency: trendsService.averageFeedingFrequency(for: pet.id)
                 )
                 
-                // Weight Change
-                SummaryCard(
-                    title: "Weight Change",
-                    value: "\(String(format: "%.1f", trendsService.totalWeightChange(for: pet.id)))",
-                    unit: unitService.getUnitSymbol(),
-                    trend: trendsService.weightChangeTrend(for: pet.id),
-                    color: ModernDesignSystem.Colors.warmCoral
+                // Weight Change with horizontal bar
+                WeightChangeCard(
+                    weightChange: trendsService.totalWeightChange(for: pet.id),
+                    unit: unitService.getUnitSymbol()
                 )
                 
                 // Nutritional Balance (compact tappable square)
@@ -644,6 +634,12 @@ struct NutritionalTrendsView: View {
 
 // MARK: - Supporting Views
 
+/**
+ * Calorie Goal Card
+ * 
+ * Displays the daily calorie goal with edit option.
+ * Matches mockup design with title, value, and tap-to-edit link.
+ */
 struct CalorieGoalCard: View {
     let pet: Pet
     let onTap: () -> Void
@@ -657,45 +653,43 @@ struct CalorieGoalCard: View {
         Button(action: {
             onTap()
         }) {
-            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                HStack {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
                     Text("Daily Calorie Goal")
                         .font(ModernDesignSystem.Typography.caption)
                         .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     
-                    Spacer()
-                    
-                    // Show tap indicator
-                    HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                        Text(hasGoal ? "Tap to edit" : "Tap to set")
-                            .font(ModernDesignSystem.Typography.caption2)
-                            .foregroundColor(ModernDesignSystem.Colors.primary)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(ModernDesignSystem.Typography.caption2)
-                            .foregroundColor(ModernDesignSystem.Colors.primary)
+                    if let goal = calorieGoalsService.getGoal(for: pet.id) {
+                        HStack(alignment: .bottom, spacing: 4) {
+                            Text("\(Int(goal))")
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("kcal")
+                                .font(.system(size: 16, weight: .regular, design: .rounded))
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        }
+                    } else {
+                        Text("Not Set")
+                            .font(.system(size: 24, weight: .medium, design: .rounded))
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
                     }
                 }
                 
-                HStack(alignment: .bottom, spacing: ModernDesignSystem.Spacing.xs) {
-                    if let goal = calorieGoalsService.getGoal(for: pet.id) {
-                        Text("\(Int(goal))")
-                            .font(ModernDesignSystem.Typography.title2)
-                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                        
-                        Text("kcal")
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    } else {
-                        Text("Not Set")
-                            .font(ModernDesignSystem.Typography.title3)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
-                    }
+                Spacer()
+                
+                // Tap to edit link with target icon
+                HStack(spacing: 4) {
+                    Text(hasGoal ? "Tap to edit" : "Tap to set")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                     
-                    Spacer()
+                    Text(">")
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
                     
                     Image(systemName: "target")
-                        .font(ModernDesignSystem.Typography.caption)
+                        .font(.system(size: 16))
                         .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
@@ -703,7 +697,7 @@ struct CalorieGoalCard: View {
             .background(ModernDesignSystem.Colors.softCream)
             .overlay(
                 RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.3), lineWidth: 1)
             )
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .shadow(
@@ -843,6 +837,176 @@ struct SummaryCard: View {
                 .font(ModernDesignSystem.Typography.caption)
                 .foregroundColor(ModernDesignSystem.Colors.textSecondary)
         }
+    }
+}
+
+/**
+ * Average Daily Calories Card
+ * 
+ * Displays average daily calories with circular progress bar showing goal percentage.
+ * Matches mockup design with progress visualization.
+ */
+struct AverageDailyCaloriesCard: View {
+    let averageCalories: Double
+    let goalCalories: Double?
+    
+    private var progress: Double {
+        guard let goal = goalCalories, goal > 0 else { return 0 }
+        return min(1.0, averageCalories / goal)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            Text("Avg Daily Calories")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            HStack(alignment: .bottom, spacing: 4) {
+                Text("\(Int(averageCalories))")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text("kcal")
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
+            
+            Spacer()
+            
+            // Circular progress bar
+            ZStack {
+                // Background circle
+                Circle()
+                    .stroke(ModernDesignSystem.Colors.textSecondary.opacity(0.2), lineWidth: 8)
+                
+                // Progress circle
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(ModernDesignSystem.Colors.primary, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 60, height: 60)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.3), lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+}
+
+/**
+ * Feeding Frequency Card
+ * 
+ * Displays average feeding frequency with orange downward arrow icon.
+ * Matches mockup design with centered icon.
+ */
+struct FeedingFrequencyCard: View {
+    let frequency: Double
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            Text("Feeding Frequency")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            HStack(alignment: .bottom, spacing: 4) {
+                Text(String(format: "%.1f", frequency))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text("times/day")
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
+            
+            Spacer()
+            
+            // Orange downward arrow icon
+            Image(systemName: "arrow.down.right")
+                .font(.system(size: 32, weight: .medium))
+                .foregroundColor(ModernDesignSystem.Colors.warmCoral)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.3), lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
+    }
+}
+
+/**
+ * Weight Change Card
+ * 
+ * Displays weight change with horizontal gray bar indicator.
+ * Matches mockup design with neutral indicator.
+ */
+struct WeightChangeCard: View {
+    let weightChange: Double
+    let unit: String
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+            Text("Weight Change")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+            
+            HStack(alignment: .bottom, spacing: 4) {
+                Text(String(format: "%.1f", weightChange))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                
+                Text(unit)
+                    .font(.system(size: 16, weight: .regular, design: .rounded))
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+            }
+            
+            Spacer()
+            
+            // Horizontal gray bar
+            Rectangle()
+                .fill(ModernDesignSystem.Colors.textSecondary)
+                .frame(height: 4)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .frame(width: 40)
+        }
+        .padding(ModernDesignSystem.Spacing.lg)
+        .frame(maxWidth: .infinity)
+        .aspectRatio(1, contentMode: .fit)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.3), lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
+        .shadow(
+            color: ModernDesignSystem.Shadows.small.color,
+            radius: ModernDesignSystem.Shadows.small.radius,
+            x: ModernDesignSystem.Shadows.small.x,
+            y: ModernDesignSystem.Shadows.small.y
+        )
     }
 }
 
@@ -1911,6 +2075,12 @@ struct MealRow: View {
  * Designed to fit in the 2-column grid next to Weight Change
  * Opens bottom sheet with detailed breakdown when tapped
  */
+/**
+ * Nutritional Balance Compact Card
+ * 
+ * Displays nutritional balance index with leaf icon and tap indicator.
+ * Matches mockup design with leaf icon top-left, value centered, arrow bottom-right.
+ */
 struct NutritionalBalanceCompactCard: View {
     let score: Double
     let onTap: () -> Void
@@ -1923,11 +2093,11 @@ struct NutritionalBalanceCompactCard: View {
             haptics.impactOccurred()
             onTap()
         }) {
-            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                // Icon and title
+            VStack(alignment: .leading, spacing: 0) {
+                // Icon and title at top
                 HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                    Image(systemName: "leaf.circle.fill")
-                        .font(.subheadline)
+                    Image(systemName: "leaf.fill")
+                        .font(.system(size: 14))
                         .foregroundColor(ModernDesignSystem.Colors.primary)
                     
                     Text("Nutritional Balance Index")
@@ -1939,18 +2109,21 @@ struct NutritionalBalanceCompactCard: View {
                     Spacer()
                 }
                 
-                // Balance index value
+                Spacer()
+                
+                // Balance index value centered
                 Text("\(Int(score))")
-                    .font(ModernDesignSystem.Typography.title2)
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
                     .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 
                 Spacer()
                 
-                // Tap indicator
+                // Green arrow in bottom-right
                 HStack {
                     Spacer()
-                    Image(systemName: "chevron.right.circle.fill")
-                        .font(.caption)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(ModernDesignSystem.Colors.primary)
                 }
             }
@@ -1960,7 +2133,7 @@ struct NutritionalBalanceCompactCard: View {
             .background(ModernDesignSystem.Colors.softCream)
             .overlay(
                 RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
-                    .stroke(ModernDesignSystem.Colors.primary, lineWidth: 1)
+                    .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.3), lineWidth: 1)
             )
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .shadow(
