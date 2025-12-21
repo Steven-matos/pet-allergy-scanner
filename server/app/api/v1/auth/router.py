@@ -327,8 +327,9 @@ async def sign_in_with_apple(request: Request):
             - id_token: The identity token from Apple Sign-In (JWT)
             - nonce: The nonce used during Apple Sign-In (unhashed)
             - email: Optional user email (only on first sign-in)
-            - first_name: Optional user's first name (only on first sign-in)
+            - first_name: Optional user's first name (only on first sign-in, required for new users)
             - last_name: Optional user's last name (only on first sign-in)
+            - username: Optional username (only on first sign-in)
         
     Returns:
         Dictionary with access token, refresh token, and user data
@@ -344,6 +345,7 @@ async def sign_in_with_apple(request: Request):
         email = body.get("email")
         first_name = body.get("first_name")
         last_name = body.get("last_name")
+        username = body.get("username")
         
         if not id_token:
             raise HTTPException(
@@ -399,52 +401,77 @@ async def sign_in_with_apple(request: Request):
         session = auth_response.session
         user_metadata = user.user_metadata or {}
         
-        # Update user metadata if name was provided (only available on first sign-in)
-        if first_name or last_name:
-            try:
+        # Prepare user data from request (prioritize request values over metadata)
+        # This ensures we capture the name data that's only available on first sign-in
+        user_first_name = first_name or user_metadata.get("first_name")
+        user_last_name = last_name or user_metadata.get("last_name")
+        user_username = username or user_metadata.get("username")
+        
+        # Ensure user exists in public.users table with all provided data
+        # This must happen BEFORE any update operations
+        try:
+            from app.shared.services.user_data_service import UserDataService
+            from app.shared.services.supabase_auth_service import SupabaseAuthService
+            
+            user_service = UserDataService()
+            service_supabase = SupabaseAuthService.create_service_role_client()
+            
+            # Check if user already exists in public.users
+            from app.shared.utils.async_supabase import execute_async
+            existing_user_response = await execute_async(
+                lambda: service_supabase.table("users")
+                    .select("id, first_name, last_name, username")
+                    .eq("id", user.id)
+                    .execute()
+            )
+            
+            user_exists = existing_user_response.data and len(existing_user_response.data) > 0
+            
+            if user_exists:
+                # User exists - update with any new data provided in the request
+                # Only update fields that were explicitly provided in the request body
                 update_data = {}
-                if first_name:
+                if first_name is not None:  # Explicitly provided in request
                     update_data["first_name"] = first_name
-                if last_name:
+                if last_name is not None:  # Explicitly provided in request (could be empty string)
                     update_data["last_name"] = last_name
+                if username is not None:  # Explicitly provided in request (could be empty string)
+                    update_data["username"] = username
                 
                 if update_data:
-                    # Use service role to update user metadata
-                    from app.shared.services.supabase_auth_service import SupabaseAuthService
-                    service_supabase = SupabaseAuthService.create_service_role_client()
-                    
-                    # Update users table
-                    from app.shared.utils.async_supabase import execute_async
                     await execute_async(
                         lambda: service_supabase.table("users")
                             .update(update_data)
                             .eq("id", user.id)
                             .execute()
                     )
-            except Exception as update_error:
-                # Log but don't fail - name update is optional
-                logger.warning(f"Failed to update Apple user name: {update_error}")
-        
-        # Ensure user exists in public.users table
-        try:
-            from app.shared.services.user_data_service import UserDataService
-            
-            user_service = UserDataService()
-            # Use get_user_by_id with create_if_not_exists to ensure user record exists
-            await user_service.get_user_by_id(
-                user.id,
-                create_if_not_exists=True,
-                auth_metadata={
-                    "email": user.email,
-                    "user_metadata": {
-                        "first_name": first_name or user_metadata.get("first_name"),
-                        "last_name": last_name or user_metadata.get("last_name"),
-                        "apple_user": True
+                    logger.info(f"Updated Apple user {user.id} with: {list(update_data.keys())}")
+            else:
+                # User doesn't exist - create with all provided data
+                # Use create_user which will properly handle the data
+                await user_service.create_user(
+                    user.id,
+                    auth_metadata={
+                        "email": user.email or email or "",
+                        "user_metadata": {
+                            "first_name": user_first_name,
+                            "last_name": user_last_name,
+                            "username": user_username,
+                            "apple_user": True
+                        }
+                    },
+                    additional_data={
+                        "email": user.email or email or "",
+                        "first_name": user_first_name,
+                        "last_name": user_last_name,
+                        "username": user_username
                     }
-                }
-            )
-        except Exception as ensure_error:
-            logger.warning(f"Failed to ensure Apple user exists: {ensure_error}")
+                )
+                logger.info(f"Created Apple user {user.id} with first_name={user_first_name}, last_name={user_last_name}, username={user_username}")
+                
+        except Exception as user_error:
+            # Log but don't fail - user creation/update errors shouldn't block sign-in
+            logger.error(f"Failed to create/update Apple user in public.users: {user_error}", exc_info=True)
         
         # Get merged user data
         user_data = await get_merged_user_data(user.id, {
