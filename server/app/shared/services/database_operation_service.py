@@ -186,65 +186,39 @@ class DatabaseOperationService:
             if table_name == "users":
                 logger.info(f"[DB_UPDATE] Updating user {record_id} with data: {serialized_data}")
             
-            # Use .select("*") to ensure we get the actual updated row data back
+            # Execute the update (Supabase update doesn't return data by default)
             update_response = await execute_async(
                 lambda: self.supabase.table(table_name)
                     .update(serialized_data)
                     .eq(id_column, record_id)
-                    .select("*")
                     .execute()
             )
             
-            # Check if update was successful and if it returned data
-            if table_name == "users":
-                logger.info(f"[DB_UPDATE] Update response: {update_response}")
-                logger.info(f"[DB_UPDATE] Update response type: {type(update_response)}")
-                if hasattr(update_response, 'data') and update_response.data:
-                    logger.info(f"[DB_UPDATE] Update response data: {update_response.data}")
-                    logger.info(f"[DB_UPDATE] Update response data firstName: {update_response.data[0].get('first_name')}, lastName: {update_response.data[0].get('last_name')}, username: {update_response.data[0].get('username')}")
-                if hasattr(update_response, 'status_code'):
-                    logger.info(f"[DB_UPDATE] Update response status_code: {update_response.status_code}")
-                if hasattr(update_response, 'count'):
-                    logger.info(f"[DB_UPDATE] Update response count: {update_response.count}")
+            # Supabase update().execute() may return data, but we always fetch separately to ensure accuracy
+            # Small delay to ensure update is committed to the database
+            import asyncio
+            await asyncio.sleep(0.1)  # 100ms delay to ensure database consistency
             
-            # With .select("*"), update_response should always contain the updated row
-            if not hasattr(update_response, 'data') or not update_response.data:
+            # Fetch the updated record to get the actual persisted data
+            response = await execute_async(
+                lambda: self.supabase.table(table_name)
+                    .select("*")
+                    .eq(id_column, record_id)
+                    .execute()
+            )
+            
+            if not response.data:
                 raise Exception(
                     f"Update failed: No data returned for {table_name} "
                     f"record {record_id}"
                 )
             
-            updated_record = update_response.data[0]
+            updated_record = response.data[0]
             
-            # For users table, always verify the data was actually saved by querying the database
+            # For users table, log what was actually saved
             if table_name == "users":
-                logger.info(f"[DB_UPDATE] Using update response data - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
-                # Verify by querying the database directly to confirm persistence
-                import asyncio
-                await asyncio.sleep(0.1)  # Small delay to ensure update is committed
-                verify_response = await execute_async(
-                    lambda: self.supabase.table(table_name)
-                        .select("first_name, last_name, username")
-                        .eq(id_column, record_id)
-                        .execute()
-                )
-                if verify_response.data:
-                    verify_data = verify_response.data[0]
-                    logger.info(f"[DB_UPDATE] Verified in database - firstName: {verify_data.get('first_name')}, lastName: {verify_data.get('last_name')}, username: {verify_data.get('username')}")
-                    
-                    # If verification shows different values, log a warning
-                    if (verify_data.get('first_name') != updated_record.get('first_name') or
-                        verify_data.get('last_name') != updated_record.get('last_name') or
-                        verify_data.get('username') != updated_record.get('username')):
-                        logger.warning(f"[DB_UPDATE] ⚠️ Data mismatch! Update response shows different values than database query. This may indicate a database trigger or RLS issue.")
-                        # Use the verified data instead
-                        updated_record.update({
-                            'first_name': verify_data.get('first_name'),
-                            'last_name': verify_data.get('last_name'),
-                            'username': verify_data.get('username')
-                        })
+                logger.info(f"[DB_UPDATE] Fetched from database after update - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
             
-            # Continue with the rest of the function using updated_record
             response_data = updated_record
             
             # Log the updated record for debugging (especially for users table)
