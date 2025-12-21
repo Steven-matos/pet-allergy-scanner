@@ -640,42 +640,53 @@ async def update_user_profile(
         user_id = current_user.id
         
         # Update user metadata
-        update_data = user_update.dict(exclude_unset=True)
+        # This endpoint is used by:
+        # 1. Apple Sign-In users during onboarding (when they complete profile setup)
+        # 2. Regular email sign-up users (if they edit their profile later)
+        # Both scenarios use the same updateProfile() method, so we handle both here.
+        
+        # Log received update data for debugging
+        logger.info(f"[UPDATE_PROFILE] UserUpdate model fields: first_name={user_update.first_name}, last_name={user_update.last_name}, username={user_update.username}")
+        logger.info(f"[UPDATE_PROFILE] User ID: {user_id}")
         
         # Update the users table directly with service role
-        if update_data:
-            # Convert field names to match database schema
-            # Only include fields that are not None to prevent clearing existing values
-            db_update = {}
-            if "first_name" in update_data and update_data["first_name"] is not None:
-                db_update["first_name"] = update_data["first_name"]
-            if "last_name" in update_data and update_data["last_name"] is not None:
-                db_update["last_name"] = update_data["last_name"]
-            if "username" in update_data and update_data["username"] is not None:
-                db_update["username"] = update_data["username"]
-            # Role updates must go through centralized role manager
-            if "role" in update_data and update_data["role"] is not None:
-                from app.shared.services.user_role_manager import UserRoleManager
-                role_manager = UserRoleManager(supabase)
-                new_role = UserRole(update_data["role"]) if isinstance(update_data["role"], str) else update_data["role"]
-                await role_manager.update_user_role(
-                    user_id, 
-                    new_role, 
-                    "User profile update"
-                )
-                # Remove role from db_update since it's handled by role manager
-                update_data.pop("role", None)
-            if "onboarded" in update_data and update_data["onboarded"] is not None:
-                db_update["onboarded"] = update_data["onboarded"]
-            if "image_url" in update_data and update_data["image_url"] is not None:
-                db_update["image_url"] = update_data["image_url"]
+        # Build db_update dict with only non-None values to prevent clearing existing fields
+        # Directly access Pydantic model attributes to ensure all provided values are captured
+        db_update = {}
+        if user_update.first_name is not None:
+            db_update["first_name"] = user_update.first_name
+        if user_update.last_name is not None:
+            db_update["last_name"] = user_update.last_name
+        if user_update.username is not None:
+            db_update["username"] = user_update.username
+        
+        logger.info(f"[UPDATE_PROFILE] Prepared db_update from model: {db_update}")
+        
+        # Role updates must go through centralized role manager
+        if user_update.role is not None:
+            from app.shared.services.user_role_manager import UserRoleManager
+            role_manager = UserRoleManager(supabase)
+            new_role = UserRole(user_update.role) if isinstance(user_update.role, str) else user_update.role
+            await role_manager.update_user_role(
+                user_id, 
+                new_role, 
+                "User profile update"
+            )
+        if user_update.onboarded is not None:
+            db_update["onboarded"] = user_update.onboarded
+        if user_update.image_url is not None:
+            db_update["image_url"] = user_update.image_url
+        
+        if db_update:
+            # Use DatabaseOperationService for non-role user updates
+            from app.shared.services.database_operation_service import DatabaseOperationService
             
-            if db_update:
-                # Use DatabaseOperationService for non-role user updates
-                from app.shared.services.database_operation_service import DatabaseOperationService
-                
-                db_service = DatabaseOperationService(supabase)
-                await db_service.update_with_timestamp("users", user_id, db_update)
+            logger.info(f"[UPDATE_PROFILE] Calling update_with_timestamp with: {db_update}")
+            db_service = DatabaseOperationService(supabase)
+            result = await db_service.update_with_timestamp("users", user_id, db_update)
+            logger.info(f"[UPDATE_PROFILE] Update result: {result}")
+        else:
+            logger.warning(f"[UPDATE_PROFILE] db_update is empty, no fields to update")
         
         # Get updated user data
         from app.shared.utils.async_supabase import execute_async
