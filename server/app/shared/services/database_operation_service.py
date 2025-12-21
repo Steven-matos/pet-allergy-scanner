@@ -169,6 +169,18 @@ class DatabaseOperationService:
             if include_updated_at and "updated_at" not in serialized_data:
                 serialized_data["updated_at"] = DateTimeService.now_iso()
             
+            # IMPORTANT: Query BEFORE the update to verify what was there
+            if table_name == "users":
+                logger.info(f"[DB_UPDATE] Querying user BEFORE update to check existing values")
+                before_response = await execute_async(
+                    lambda: self.supabase.table(table_name)
+                        .select("first_name, last_name, username")
+                        .eq(id_column, record_id)
+                        .execute()
+                )
+                if before_response.data:
+                    logger.info(f"[DB_UPDATE] User BEFORE update: firstName={before_response.data[0].get('first_name')}, lastName={before_response.data[0].get('last_name')}, username={before_response.data[0].get('username')}")
+            
             # Perform the update
             # Log what we're updating for debugging
             if table_name == "users":
@@ -181,44 +193,56 @@ class DatabaseOperationService:
                     .execute()
             )
             
-            # Check if update was successful
+            # Check if update was successful and if it returned data
             if table_name == "users":
                 logger.info(f"[DB_UPDATE] Update response: {update_response}")
                 logger.info(f"[DB_UPDATE] Update response type: {type(update_response)}")
-                if hasattr(update_response, 'data'):
+                if hasattr(update_response, 'data') and update_response.data:
                     logger.info(f"[DB_UPDATE] Update response data: {update_response.data}")
+                    logger.info(f"[DB_UPDATE] Update response data firstName: {update_response.data[0].get('first_name')}, lastName: {update_response.data[0].get('last_name')}, username: {update_response.data[0].get('username')}")
                 if hasattr(update_response, 'status_code'):
                     logger.info(f"[DB_UPDATE] Update response status_code: {update_response.status_code}")
                 if hasattr(update_response, 'count'):
                     logger.info(f"[DB_UPDATE] Update response count: {update_response.count}")
             
-            # Fetch the updated record separately since Supabase update doesn't return data by default
-            # This ensures we get the complete updated record with all fields
-            # Use a small delay to ensure the update has been committed
-            import asyncio
-            await asyncio.sleep(0.01)  # 10ms delay to ensure database consistency
-            
-            response = await execute_async(
-                lambda: self.supabase.table(table_name)
-                    .select("*")
-                    .eq(id_column, record_id)
-                    .execute()
-            )
-            
-            if not response.data:
-                raise Exception(
-                    f"Update failed: No data returned for {table_name} "
-                    f"record {record_id}"
+            # Use update response data if available, otherwise fetch separately
+            # Supabase update().execute() can return data when using service role client
+            if hasattr(update_response, 'data') and update_response.data:
+                # Use data from update response directly
+                updated_record = update_response.data[0]
+                if table_name == "users":
+                    logger.info(f"[DB_UPDATE] Using update response data directly - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
+            else:
+                # Fallback: Fetch the updated record separately
+                import asyncio
+                await asyncio.sleep(0.01)  # Small delay to ensure update is committed
+                
+                response = await execute_async(
+                    lambda: self.supabase.table(table_name)
+                        .select("*")
+                        .eq(id_column, record_id)
+                        .execute()
                 )
+                
+                if not response.data:
+                    raise Exception(
+                        f"Update failed: No data returned for {table_name} "
+                        f"record {record_id}"
+                    )
+                
+                updated_record = response.data[0]
+                if table_name == "users":
+                    logger.info(f"[DB_UPDATE] Fetched record separately - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
             
-            updated_record = response.data[0]
+            # Continue with the rest of the function using updated_record
+            response_data = updated_record
             
             # Log the updated record for debugging (especially for users table)
             if table_name == "users":
-                logger.info(f"[DB_UPDATE] Updated user {record_id} - firstName: {updated_record.get('first_name')}, lastName: {updated_record.get('last_name')}, username: {updated_record.get('username')}")
+                logger.info(f"[DB_UPDATE] Updated user {record_id} - firstName: {response_data.get('first_name')}, lastName: {response_data.get('last_name')}, username: {response_data.get('username')}")
             
             logger.debug(f"✅ Updated {table_name} record {record_id}")
-            return updated_record
+            return response_data
         
         except Exception as e:
             logger.error(
