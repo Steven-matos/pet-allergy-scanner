@@ -1063,11 +1063,11 @@ struct AdvancedAnalyticsView: View {
                     color: healthScoreColor(healthScore)
                 )
 
-                // Nutritional Balance Card
+                // Nutritional Balance Index Card
                 AnalyticsSummaryCard(
-                    title: "Nutritional Balance",
+                    title: "NBI",
                     value: nutritionalScore,
-                    unit: "%",
+                    unit: "",
                     icon: "leaf.fill",
                     color: scoreColor(nutritionalScore)
                 )

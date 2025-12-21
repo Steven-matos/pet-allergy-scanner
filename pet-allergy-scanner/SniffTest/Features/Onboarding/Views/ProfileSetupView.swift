@@ -8,8 +8,9 @@
 
 import SwiftUI
 
-/// Profile setup view for collecting user's name and optional username
+/// Profile setup view for collecting user's name and username
 /// Displayed during onboarding when the user's name is not available (e.g., Apple Sign-In)
+/// First name and username are required; last name is optional
 struct ProfileSetupView: View {
     
     // MARK: - Bindings
@@ -19,6 +20,8 @@ struct ProfileSetupView: View {
     @Binding var username: String
     @Binding var showFirstNameError: Bool
     @Binding var firstNameShimmy: Bool
+    @Binding var showUsernameError: Bool
+    @Binding var usernameShimmy: Bool
     
     // MARK: - State
     
@@ -38,9 +41,9 @@ struct ProfileSetupView: View {
         firstName.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
     
-    /// Check if username is valid (if provided)
+    /// Check if username is valid (required)
     var isUsernameValid: Bool {
-        username.isEmpty || InputValidator.isValidUsername(username)
+        !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && InputValidator.isValidUsername(username.trimmingCharacters(in: .whitespacesAndNewlines))
     }
     
     // MARK: - Body
@@ -68,77 +71,9 @@ struct ProfileSetupView: View {
             
             // Form Fields
             VStack(spacing: ModernDesignSystem.Spacing.lg) {
-                // First Name (Required)
+                // Username (Required)
                 VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                    Text("First Name *")
-                        .font(ModernDesignSystem.Typography.bodyEmphasized)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    TextField("Enter your first name", text: $firstName)
-                        .modernInputField()
-                        .autocapitalization(.words)
-                        .textContentType(.givenName)
-                        .submitLabel(.next)
-                        .focused($focusedField, equals: .firstName)
-                        .background(
-                            showFirstNameError ?
-                                Color.red.opacity(0.1) : // Light red background for validation error
-                                Color.clear
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
-                                .stroke(
-                                    showFirstNameError ?
-                                        Color.red : // Red border for validation error
-                                        Color.clear,
-                                    lineWidth: showFirstNameError ? 2 : 0
-                                )
-                        )
-                        .offset(x: firstNameShimmy ? 10 : -10)
-                        .animation(.spring(response: 0.08, dampingFraction: 0.4), value: firstNameShimmy)
-                        .onAppear {
-                            firstNameShimmy = false
-                        }
-                        .animation(.easeInOut(duration: 0.3), value: showFirstNameError)
-                        .onSubmit {
-                            focusedField = .lastName
-                        }
-                        .onChange(of: firstName) { _, _ in
-                            showFirstNameError = false
-                            firstNameShimmy = false
-                        }
-                    
-                    if showFirstNameError {
-                        HStack(spacing: ModernDesignSystem.Spacing.xs) {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(.red)
-                            Text("First name is required (at least 2 characters)")
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(.red)
-                        }
-                    }
-                }
-                
-                // Last Name (Optional)
-                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                    Text("Last Name (Optional)")
-                        .font(ModernDesignSystem.Typography.bodyEmphasized)
-                        .foregroundColor(ModernDesignSystem.Colors.textPrimary)
-                    
-                    TextField("Enter your last name", text: $lastName)
-                        .modernInputField()
-                        .autocapitalization(.words)
-                        .textContentType(.familyName)
-                        .submitLabel(.next)
-                        .focused($focusedField, equals: .lastName)
-                        .onSubmit {
-                            focusedField = .username
-                        }
-                }
-                
-                // Username (Optional)
-                VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
-                    Text("Username (Optional)")
+                    Text("Username *")
                         .font(ModernDesignSystem.Typography.bodyEmphasized)
                         .foregroundColor(ModernDesignSystem.Colors.textPrimary)
                     
@@ -146,24 +81,121 @@ struct ProfileSetupView: View {
                         .modernInputField()
                         .autocapitalization(.none)
                         .textContentType(.username)
-                        .submitLabel(.done)
+                        .submitLabel(.next)
                         .focused($focusedField, equals: .username)
+                        .background(
+                            showUsernameError ?
+                                Color.red.opacity(0.1) : // Light red background for validation error
+                                Color.clear
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                .stroke(
+                                    showUsernameError ?
+                                        Color.red : // Red border for validation error
+                                        Color.clear,
+                                    lineWidth: showUsernameError ? 2 : 0
+                                )
+                        )
+                        .offset(x: usernameShimmy ? 10 : -10)
+                        .animation(.spring(response: 0.08, dampingFraction: 0.4), value: usernameShimmy)
+                        .onAppear {
+                            usernameShimmy = false
+                        }
+                        .animation(.easeInOut(duration: 0.3), value: showUsernameError)
                         .onSubmit {
-                            focusedField = nil
+                            focusedField = .firstName
+                        }
+                        .onChange(of: username) { _, _ in
+                            showUsernameError = false
+                            usernameShimmy = false
                         }
                     
-                    if !username.isEmpty && !isUsernameValid {
+                    if showUsernameError {
                         HStack(spacing: ModernDesignSystem.Spacing.xs) {
                             Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundColor(Color(hex: "#FFB300"))
-                            Text("Username must be 3-30 characters, letters, numbers, underscores, and hyphens only")
-                                .font(ModernDesignSystem.Typography.caption)
-                                .foregroundColor(Color(hex: "#FFB300"))
+                                .foregroundColor(.red)
+                            if username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("Username is required (3-30 characters)")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(.red)
+                            } else {
+                                Text("Username must be 3-30 characters, letters, numbers, underscores, and hyphens only")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(.red)
+                            }
                         }
-                    } else if username.isEmpty {
-                        Text("You can set a username later in your profile settings")
-                            .font(ModernDesignSystem.Typography.caption)
-                            .foregroundColor(ModernDesignSystem.Colors.textSecondary.opacity(0.7))
+                    }
+                }
+                
+                // First Name and Last Name (side by side)
+                HStack(spacing: ModernDesignSystem.Spacing.md) {
+                    // First Name (Required)
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        Text("First Name *")
+                            .font(ModernDesignSystem.Typography.bodyEmphasized)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        TextField("First name", text: $firstName)
+                            .modernInputField()
+                            .autocapitalization(.words)
+                            .textContentType(.givenName)
+                            .submitLabel(.next)
+                            .focused($focusedField, equals: .firstName)
+                            .background(
+                                showFirstNameError ?
+                                    Color.red.opacity(0.1) : // Light red background for validation error
+                                    Color.clear
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                                    .stroke(
+                                        showFirstNameError ?
+                                            Color.red : // Red border for validation error
+                                            Color.clear,
+                                        lineWidth: showFirstNameError ? 2 : 0
+                                    )
+                            )
+                            .offset(x: firstNameShimmy ? 10 : -10)
+                            .animation(.spring(response: 0.08, dampingFraction: 0.4), value: firstNameShimmy)
+                            .onAppear {
+                                firstNameShimmy = false
+                            }
+                            .animation(.easeInOut(duration: 0.3), value: showFirstNameError)
+                            .onSubmit {
+                                focusedField = .lastName
+                            }
+                            .onChange(of: firstName) { _, _ in
+                                showFirstNameError = false
+                                firstNameShimmy = false
+                            }
+                        
+                        if showFirstNameError {
+                            HStack(spacing: ModernDesignSystem.Spacing.xs) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.red)
+                                Text("First name is required (at least 2 characters)")
+                                    .font(ModernDesignSystem.Typography.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                    
+                    // Last Name (Optional)
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        Text("Last Name (Optional)")
+                            .font(ModernDesignSystem.Typography.bodyEmphasized)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        TextField("Last name", text: $lastName)
+                            .modernInputField()
+                            .autocapitalization(.words)
+                            .textContentType(.familyName)
+                            .submitLabel(.done)
+                            .focused($focusedField, equals: .lastName)
+                            .onSubmit {
+                                focusedField = nil
+                            }
                     }
                 }
             }
@@ -204,6 +236,34 @@ struct ProfileSetupView: View {
             }
             return false
         }
+        
+        if !isUsernameValid {
+            showUsernameError = true
+            usernameShimmy = true
+            focusedField = .username
+            
+            // Trigger shimmy animation sequence
+            Task { @MainActor in
+                // First shake right
+                usernameShimmy = true
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Then shake left
+                usernameShimmy = false
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Shake right again
+                usernameShimmy = true
+                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                // Return to center
+                usernameShimmy = false
+            }
+            
+            // Auto-hide error after 2 seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                showUsernameError = false
+            }
+            return false
+        }
+        
         return true
     }
 }
@@ -216,7 +276,9 @@ struct ProfileSetupView: View {
         lastName: .constant(""),
         username: .constant(""),
         showFirstNameError: .constant(false),
-        firstNameShimmy: .constant(false)
+        firstNameShimmy: .constant(false),
+        showUsernameError: .constant(false),
+        usernameShimmy: .constant(false)
     )
 }
 

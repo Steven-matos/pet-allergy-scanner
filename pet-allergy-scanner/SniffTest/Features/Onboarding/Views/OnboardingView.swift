@@ -53,10 +53,12 @@ struct OnboardingView: View {
     @State private var userUsername = ""
     @State private var isSavingProfile = false
     @State private var showProfileNameError = false
+    @State private var showUsernameError = false
     
     // Animation state for validation feedback
     @State private var nameFieldShimmy = false
     @State private var profileNameFieldShimmy = false
+    @State private var usernameFieldShimmy = false
     
     // Feature tour state
     @State private var showFeatureTour = false
@@ -214,8 +216,14 @@ struct OnboardingView: View {
                                     withAnimation {
                                         // Profile setup step validation
                                         if needsProfileSetup && oldValue == 5 {
-                                            showProfileNameError = true
-                                            profileNameFieldShimmy = true
+                                            // Show appropriate error based on what's invalid
+                                            if !isUserFirstNameValid {
+                                                showProfileNameError = true
+                                                profileNameFieldShimmy = true
+                                            } else if !isUserUsernameValid {
+                                                showUsernameError = true
+                                                usernameFieldShimmy = true
+                                            }
                                         }
                                         // Pet name validation
                                         else if oldValue == (5 + stepOffset) {
@@ -231,20 +239,32 @@ struct OnboardingView: View {
                                     let animationTask = Task { @MainActor in
                                         guard !Task.isCancelled else { return }
                                         if needsProfileSetup && oldValue == 5 {
-                                            // First shake right
-                                            profileNameFieldShimmy = true
-                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
-                                            guard !Task.isCancelled else { return }
-                                            // Then shake left
-                                            profileNameFieldShimmy = false
-                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
-                                            guard !Task.isCancelled else { return }
-                                            // Shake right again
-                                            profileNameFieldShimmy = true
-                                            try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
-                                            guard !Task.isCancelled else { return }
-                                            // Return to center
-                                            profileNameFieldShimmy = false
+                                            // Shake first name field if invalid
+                                            if !isUserFirstNameValid {
+                                                profileNameFieldShimmy = true
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                profileNameFieldShimmy = false
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                profileNameFieldShimmy = true
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                profileNameFieldShimmy = false
+                                            }
+                                            // Shake username field if invalid
+                                            if !isUserUsernameValid {
+                                                usernameFieldShimmy = true
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                usernameFieldShimmy = false
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                usernameFieldShimmy = true
+                                                try? await Task.sleep(nanoseconds: 50_000_000) // 0.05s
+                                                guard !Task.isCancelled else { return }
+                                                usernameFieldShimmy = false
+                                            }
                                         } else if oldValue == (5 + stepOffset) {
                                             // First shake right
                                             nameFieldShimmy = true
@@ -271,6 +291,7 @@ struct OnboardingView: View {
                                         withAnimation {
                                             showNameValidationError = false
                                             showProfileNameError = false
+                                            showUsernameError = false
                                         }
                                     }
                                     dispatchWorkItems.append(workItem)
@@ -279,8 +300,10 @@ struct OnboardingView: View {
                                     // Validation passed, hide any errors
                                     showNameValidationError = false
                                     showProfileNameError = false
+                                    showUsernameError = false
                                     nameFieldShimmy = false
                                     profileNameFieldShimmy = false
+                                    usernameFieldShimmy = false
                                     
                                     // Save profile when moving from profile setup step
                                     if needsProfileSetup && oldValue == 5 {
@@ -683,11 +706,17 @@ struct OnboardingView: View {
             lastName: $userLastName,
             username: $userUsername,
             showFirstNameError: $showProfileNameError,
-            firstNameShimmy: $profileNameFieldShimmy
+            firstNameShimmy: $profileNameFieldShimmy,
+            showUsernameError: $showUsernameError,
+            usernameShimmy: $usernameFieldShimmy
         )
         .onChange(of: userFirstName) { _, _ in
             showProfileNameError = false
             profileNameFieldShimmy = false
+        }
+        .onChange(of: userUsername) { _, _ in
+            showUsernameError = false
+            usernameFieldShimmy = false
         }
         .overlay {
             if isSavingProfile {
@@ -1161,9 +1190,9 @@ struct OnboardingView: View {
         userFirstName.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
     
-    /// Check if username is valid (if provided)
+    /// Check if username is valid (required)
     private var isUserUsernameValid: Bool {
-        userUsername.isEmpty || InputValidator.isValidUsername(userUsername)
+        !userUsername.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && InputValidator.isValidUsername(userUsername.trimmingCharacters(in: .whitespacesAndNewlines))
     }
     
     private var canProceed: Bool {
@@ -1383,10 +1412,27 @@ struct OnboardingView: View {
             return
         }
         
+        // Validate that username is provided and valid (required)
+        guard !trimmedUsername.isEmpty else {
+            print("❌ User profile save failed: Username is required")
+            await MainActor.run {
+                showUsernameError = true
+            }
+            return
+        }
+        
+        guard InputValidator.isValidUsername(trimmedUsername) else {
+            print("❌ User profile save failed: Username is invalid")
+            await MainActor.run {
+                showUsernameError = true
+            }
+            return
+        }
+        
         // Use showLoadingState: false to prevent authState from changing to .loading
         // This prevents ContentView from resetting the OnboardingView and losing the current step
         await authService.updateProfile(
-            username: trimmedUsername.isEmpty ? nil : trimmedUsername,
+            username: trimmedUsername,
             firstName: trimmedFirstName,
             lastName: trimmedLastName.isEmpty ? nil : trimmedLastName,
             showLoadingState: false
