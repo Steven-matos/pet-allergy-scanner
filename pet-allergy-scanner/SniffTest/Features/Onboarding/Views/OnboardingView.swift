@@ -54,6 +54,7 @@ struct OnboardingView: View {
     @State private var isSavingProfile = false
     @State private var showProfileNameError = false
     @State private var showUsernameError = false
+    @State private var profileJustSaved = false // Track if profile was just saved to prevent duplicate saves
     
     // Animation state for validation feedback
     @State private var nameFieldShimmy = false
@@ -191,23 +192,32 @@ struct OnboardingView: View {
                                 // Feature tour screens
                                 let featureNames = ["feature_scan", "feature_tracking", "feature_vet", "feature_safety", "feature_timeline"]
                                 stepName = featureNames[newValue]
-                            case 5 where needsProfileSetup:
+                            case 5 where needsProfileSetup || profileSetupWasShown:
                                 stepName = "profile_setup"
-                            case 5 where !needsProfileSetup, 6 where needsProfileSetup:
+                            case 5 where !needsProfileSetup && !profileSetupWasShown, 6 where needsProfileSetup:
                                 stepName = "add_pet"
-                            case 6 where !needsProfileSetup, 7 where needsProfileSetup:
+                            case 6 where !needsProfileSetup && !profileSetupWasShown, 7 where needsProfileSetup:
                                 stepName = "pet_details"
-                            case 7 where !needsProfileSetup, 8 where needsProfileSetup:
+                            case 7 where !needsProfileSetup && !profileSetupWasShown, 8 where needsProfileSetup:
                                 stepName = "allergies_vet"
-                            case 8 where !needsProfileSetup, 9 where needsProfileSetup:
+                            case 8 where !needsProfileSetup && !profileSetupWasShown, 9 where needsProfileSetup:
                                 stepName = shouldSkipPaywall ? "completion" : "paywall"
                             default:
                                 stepName = "unknown"
                             }
                             PostHogAnalytics.trackOnboardingStepViewed(step: stepName)
+                            
                             // Prevent swiping forward if validation fails
+                            // Skip validation if we just saved the profile and are navigating away from step 5
                             if newValue > oldValue {
                                 // User is trying to move forward
+                                // Don't validate/reset if we just saved the profile and are moving from step 5
+                                if profileJustSaved && oldValue == 5 {
+                                    // Profile was just saved, allow navigation to proceed without validation reset
+                                    // The validation already passed in the Next button handler
+                                    return
+                                }
+                                
                                 if !canProceedFromStep(oldValue) {
                                     // Haptic feedback for validation error
                                     HapticFeedback.error()
@@ -306,12 +316,19 @@ struct OnboardingView: View {
                                     usernameFieldShimmy = false
                                     
                                     // Save profile when moving from profile setup step
-                                    if needsProfileSetup && oldValue == 5 {
+                                    // Only save if we haven't already saved (prevents duplicate saves)
+                                    if needsProfileSetup && oldValue == 5 && !profileJustSaved {
                                         // MEMORY OPTIMIZATION: Store task for cancellation
                                         // Note: OnboardingView is a struct, so no weak reference needed
                                         let profileTask = Task { @MainActor in
                                             guard !Task.isCancelled else { return }
+                                            profileSetupWasShown = true
+                                            profileJustSaved = true
                                             await saveUserProfile()
+                                            // Clear flag after save completes
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                                profileJustSaved = false
+                                            }
                                         }
                                         validationTasks.append(profileTask)
                                     }
@@ -428,6 +445,9 @@ struct OnboardingView: View {
                         // Note: OnboardingView is a struct, so no weak reference needed
                         let buttonTask = Task { @MainActor in
                             guard !Task.isCancelled else { return }
+                            
+                            // Dismiss keyboard before proceeding to next step
+                            dismissKeyboard()
                             // Check if we're on the final step (paywall or completion)
                             // The final step tag is (8 + stepOffset)
                             let isFinalStep = currentStep == (8 + stepOffset) || currentStep == totalSteps - 1
@@ -449,25 +469,34 @@ struct OnboardingView: View {
                                     
                                     // Save profile when moving from profile setup step
                                     if needsProfileSetup && currentStep == 5 {
+                                        // Ensure profileSetupWasShown is set before saving
+                                        // This ensures the step structure remains consistent after save
+                                        profileSetupWasShown = true
+                                        profileJustSaved = true // Mark that we're saving to prevent duplicate in onChange
+                                        
                                         await saveUserProfile()
-                                        // Note: profileSetupWasShown is already set in onAppear
-                                        // This ensures the profile setup step remains in the TabView
-                                        // so users can go back to it if needed
-                                        // After saving profile, needsProfileSetup becomes false
-                                        // This changes the TabView structure (removes profile setup step)
-                                        // We need to navigate to basic pet info step (tag = 5 + stepOffset)
-                                        // After saving, stepOffset = 5, so tag = 10
-                                        // Wait for SwiftUI to update the view structure first
-                                        try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                                        
+                                        // After saving, navigate to the next step
+                                        // Since profileSetupWasShown is true, stepOffset = 6
+                                        // Basic pet info tag is 5 + stepOffset = 5 + 6 = 11
+                                        // Wait a moment for SwiftUI to process the state change
+                                        try? await Task.sleep(nanoseconds: 150_000_000) // 0.15 seconds
+                                        
                                         await MainActor.run {
-                                            // Now stepOffset should be 5 (needsProfileSetup is false)
-                                            // Basic pet info tag is 5 + stepOffset = 5 + 5 = 10
+                                            // Calculate the target step: basic pet info is at 5 + stepOffset
+                                            // stepOffset = 5 + (profileSetupWasShown ? 1 : 0) = 5 + 1 = 6
+                                            let targetStep = 5 + stepOffset // Will be 11
                                             withAnimation {
-                                                currentStep = 5 + stepOffset
+                                                currentStep = targetStep
                                                 showNameValidationError = false
                                                 showProfileNameError = false
                                                 nameFieldShimmy = false
                                                 profileNameFieldShimmy = false
+                                            }
+                                            
+                                            // Clear the flag after a short delay to allow onChange to process
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                                profileJustSaved = false
                                             }
                                         }
                                     } else {
@@ -1201,8 +1230,11 @@ struct OnboardingView: View {
             // Feature tour screens - always proceed
             return true
         case 5:
-            if needsProfileSetup {
-                // Profile setup step - first name required
+            // Profile setup step exists when: needsProfileSetup is true OR profileSetupWasShown is true
+            // Check if we're on the profile setup step (not the basic pet info step)
+            // Basic pet info uses tag (5 + stepOffset), so step 5 is always profile setup when it exists
+            if profileSetupWasShown || needsProfileSetup {
+                // Profile setup step - first name and username required
                 return isUserFirstNameValid && isUserUsernameValid
             } else {
                 // Basic pet info step - pet name required (when profile setup wasn't shown)
@@ -1261,8 +1293,11 @@ struct OnboardingView: View {
             // Feature tour screens - always proceed
             return true
         case 5:
-            if needsProfileSetup {
-                // Profile setup step - first name required
+            // Profile setup step exists when: needsProfileSetup is true OR profileSetupWasShown is true
+            // Check if we're on the profile setup step (not the basic pet info step)
+            // Basic pet info uses tag (5 + stepOffset), so step 5 is always profile setup when it exists
+            if profileSetupWasShown || needsProfileSetup {
+                // Profile setup step - first name and username required
                 return isUserFirstNameValid && isUserUsernameValid
             } else {
                 // Basic pet info step - pet name required (when profile setup wasn't shown)
@@ -1322,6 +1357,21 @@ struct OnboardingView: View {
     }
     
     // MARK: - Methods
+    
+    /// Dismisses the keyboard by clearing all focus states
+    /// Handles both OnboardingView's focus states and ProfileSetupView's focus state
+    /// Must be called from the main actor context
+    @MainActor
+    private func dismissKeyboard() {
+        // Dismiss keyboard for OnboardingView's own focus states
+        isNameFieldFocused = false
+        isBreedFieldFocused = false
+        isWeightFieldFocused = false
+        
+        // Use KeyboardManager to dismiss keyboard for ProfileSetupView and other text fields
+        // This ensures keyboard is dismissed even if ProfileSetupView has focus
+        KeyboardManager.dismiss()
+    }
     
     /// Get the previous step number, accounting for dynamic step structure
     /// Handles the case where profile setup step is removed after saving
@@ -1447,19 +1497,28 @@ struct OnboardingView: View {
             return
         }
         
-        // Refresh user profile to get the updated user from the server
-        // This ensures we have the latest data including the saved profile
-        // CRITICAL: This updates authState, but we're about to navigate away anyway
-        await authService.refreshUserProfile(forceRefresh: true)
-        
-        // Verify the profile was saved
+        // Verify the profile was saved by checking currentUser
+        // updateProfile now updates authState even when showLoadingState is false,
+        // so currentUser should reflect the updated data immediately
         if let updatedUser = authService.currentUser,
-           updatedUser.firstName == trimmedFirstName {
+           updatedUser.firstName == trimmedFirstName,
+           updatedUser.username == trimmedUsername {
             print("✅ User profile saved successfully: firstName=\(updatedUser.firstName ?? "nil"), lastName=\(updatedUser.lastName ?? "nil"), username=\(updatedUser.username ?? "nil")")
         } else {
-            print("⚠️ User profile save may have failed - firstName mismatch")
-            await MainActor.run {
-                showProfileNameError = true
+            // If verification fails, refresh from server as fallback
+            print("⚠️ User profile verification failed - refreshing from server")
+            await authService.refreshUserProfile(forceRefresh: true)
+            
+            // Check again after refresh
+            if let refreshedUser = authService.currentUser,
+               refreshedUser.firstName == trimmedFirstName,
+               refreshedUser.username == trimmedUsername {
+                print("✅ User profile verified after refresh: firstName=\(refreshedUser.firstName ?? "nil"), lastName=\(refreshedUser.lastName ?? "nil"), username=\(refreshedUser.username ?? "nil")")
+            } else {
+                print("⚠️ User profile save may have failed - firstName/username mismatch after refresh. Expected firstName=\(trimmedFirstName), username=\(trimmedUsername), got firstName=\(authService.currentUser?.firstName ?? "nil"), username=\(authService.currentUser?.username ?? "nil")")
+                await MainActor.run {
+                    showProfileNameError = true
+                }
             }
         }
     }

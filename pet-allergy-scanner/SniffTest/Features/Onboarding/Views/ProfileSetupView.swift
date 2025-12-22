@@ -207,6 +207,11 @@ struct ProfileSetupView: View {
     
     // MARK: - Methods
     
+    /// Dismisses the keyboard by clearing focus from all fields
+    func dismissKeyboard() {
+        focusedField = nil
+    }
+    
     /// Validate the form and show errors if invalid
     /// - Returns: True if form is valid
     func validateAndShowErrors() -> Bool {

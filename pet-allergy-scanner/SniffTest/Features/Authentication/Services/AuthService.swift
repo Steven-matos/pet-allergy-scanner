@@ -410,6 +410,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
                 authState = .loading
                 errorMessage = nil
             }
+        } else {
+            // Clear error message even when not showing loading state
+            await MainActor.run {
+                errorMessage = nil
+            }
         }
         
         let userUpdate = UserUpdate(
@@ -424,17 +429,11 @@ class AuthService: ObservableObject, @unchecked Sendable {
         do {
             let user = try await apiService.updateUser(userUpdate)
             cacheAuthenticatedUser(user)
-            // Only update authState if we showed loading, otherwise silently update cache
-            if showLoadingState {
-                await MainActor.run {
-                    authState = .authenticated(user)
-                }
-            } else {
-                // Even if showLoadingState is false, we should still set errorMessage on error
-                // This allows callers to check for errors
-                await MainActor.run {
-                    errorMessage = nil // Clear any previous errors on success
-                }
+            // Always update authState with the updated user, even when showLoadingState is false
+            // This ensures currentUser reflects the latest data without showing loading UI
+            await MainActor.run {
+                authState = .authenticated(user)
+                errorMessage = nil // Clear any previous errors on success
             }
         } catch {
             // Always set errorMessage so callers can check for errors
