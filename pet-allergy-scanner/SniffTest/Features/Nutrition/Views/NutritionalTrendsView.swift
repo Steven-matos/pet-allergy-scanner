@@ -2163,12 +2163,20 @@ struct NutritionalBalanceBreakdownSheet: View {
     @StateObject private var trendsService = CachedNutritionalTrendsService.shared
     @StateObject private var nutritionService = CachedNutritionService.shared
     @StateObject private var feedingLogService = FeedingLogService.shared
+    @State private var petService = CachedPetService.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
     @State private var showFeedingLog = false
     @State private var isLoadingData = false
     @State private var breakdown: NutritionalBreakdown?
     @State private var dataLoadTimestamp: Date = Date()
+    
+    /**
+     * Get pet from petId
+     */
+    private func getPet() -> Pet? {
+        return petService.pets.first { $0.id == petId }
+    }
     
     var body: some View {
         NavigationStack {
@@ -2188,8 +2196,9 @@ struct NutritionalBalanceBreakdownSheet: View {
                         }
                         
                         // Action Plan
-                        if let plan = breakdown.plan {
-                            NutrientPlanCard(plan: plan)
+                        if let plan = breakdown.plan,
+                           let pet = getPet() {
+                            NutrientPlanCard(plan: plan, pet: pet)
                         }
                         
                         // Educational Info
@@ -2284,6 +2293,8 @@ struct NutritionalBalanceBreakdownSheet: View {
      */
     struct NutrientPlanCard: View {
         let plan: NutrientPlan
+        let pet: Pet
+        @State private var showingRecommendations = false
         
         var body: some View {
             VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.md) {
@@ -2296,6 +2307,27 @@ struct NutritionalBalanceBreakdownSheet: View {
                         PlanActionRow(action: action)
                     }
                 }
+                
+                // Recommendation Button
+                Button(action: {
+                    showingRecommendations = true
+                }) {
+                    HStack {
+                        Image(systemName: "sparkles")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                        Text("View Recommended Products")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .fontWeight(.medium)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(ModernDesignSystem.Typography.caption)
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                    .padding(ModernDesignSystem.Spacing.md)
+                    .background(ModernDesignSystem.Colors.primary.opacity(0.1))
+                    .cornerRadius(ModernDesignSystem.CornerRadius.small)
+                }
+                .buttonStyle(PlainButtonStyle())
             }
             .padding(ModernDesignSystem.Spacing.lg)
             .background(ModernDesignSystem.Colors.softCream)
@@ -2306,6 +2338,9 @@ struct NutritionalBalanceBreakdownSheet: View {
             .cornerRadius(ModernDesignSystem.CornerRadius.medium)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(planAccessibilityLabel)
+            .sheet(isPresented: $showingRecommendations) {
+                ProductRecommendationsView(pet: pet)
+            }
         }
         
         private var planAccessibilityLabel: String {
@@ -2626,6 +2661,244 @@ struct VeterinaryDisclaimerView: View {
                 .stroke(ModernDesignSystem.Colors.borderPrimary.opacity(0.5), lineWidth: 1)
         )
         .cornerRadius(ModernDesignSystem.CornerRadius.small)
+    }
+}
+
+// MARK: - Product Recommendations View
+
+/**
+ * Product Recommendations View
+ * 
+ * Displays recommended food products specific to the pet's species (dog or cat)
+ * to help balance nutritional deficiencies identified in the action plan.
+ * Follows Trust & Nature Design System with clean, intuitive UI.
+ */
+struct ProductRecommendationsView: View {
+    let pet: Pet
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var foodService = FoodService.shared
+    @State private var recommendedProducts: [FoodItem] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    
+    /**
+     * Determine search category based on pet species
+     */
+    private var searchCategory: String {
+        switch pet.species {
+        case .dog:
+            return "Dog Food"
+        case .cat:
+            return "Cat Food"
+        }
+    }
+    
+    /**
+     * Search query based on pet species
+     */
+    private var searchQuery: String {
+        switch pet.species {
+        case .dog:
+            return "dog"
+        case .cat:
+            return "cat"
+        }
+    }
+    
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: ModernDesignSystem.Spacing.lg) {
+                    // Header description
+                    VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.sm) {
+                        Text("Recommended Products")
+                            .font(ModernDesignSystem.Typography.title2)
+                            .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                        
+                        Text("Products specifically designed for \(pet.species.rawValue)s to help balance your pet's nutrition")
+                            .font(ModernDesignSystem.Typography.subheadline)
+                            .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    
+                    // Loading state
+                    if isLoading {
+                        ProgressView("Loading recommendations...")
+                            .padding(ModernDesignSystem.Spacing.xl)
+                    }
+                    
+                    // Error state
+                    else if let errorMessage = errorMessage {
+                        VStack(spacing: ModernDesignSystem.Spacing.md) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.largeTitle)
+                                .foregroundColor(ModernDesignSystem.Colors.error)
+                            
+                            Text("Unable to load recommendations")
+                                .font(ModernDesignSystem.Typography.title3)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text(errorMessage)
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                            
+                            Button("Try Again") {
+                                loadRecommendations()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(ModernDesignSystem.Colors.primary)
+                        }
+                        .padding(ModernDesignSystem.Spacing.xl)
+                    }
+                    
+                    // Products list
+                    else if recommendedProducts.isEmpty && !isLoading {
+                        VStack(spacing: ModernDesignSystem.Spacing.md) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.largeTitle)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                            
+                            Text("No products found")
+                                .font(ModernDesignSystem.Typography.title3)
+                                .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                            
+                            Text("We couldn't find any recommended products at this time. Please try again later.")
+                                .font(ModernDesignSystem.Typography.subheadline)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                                .multilineTextAlignment(.center)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(ModernDesignSystem.Spacing.xl)
+                    }
+                    
+                    // Products grid
+                    else {
+                        LazyVStack(spacing: ModernDesignSystem.Spacing.md) {
+                            ForEach(recommendedProducts.prefix(20)) { product in
+                                ProductRecommendationRow(product: product)
+                            }
+                        }
+                        .padding(.horizontal, ModernDesignSystem.Spacing.lg)
+                    }
+                }
+                .padding(.vertical, ModernDesignSystem.Spacing.lg)
+            }
+            .background(ModernDesignSystem.Colors.background)
+            .navigationTitle("Product Recommendations")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(ModernDesignSystem.Colors.primary)
+                }
+            }
+            .task {
+                loadRecommendations()
+            }
+        }
+    }
+    
+    /**
+     * Load recommended products based on pet species
+     */
+    private func loadRecommendations() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                // Search for products specific to pet's species using category filter
+                let products = try await foodService.searchFoodsWithFilters(
+                    query: searchQuery,
+                    category: searchCategory
+                )
+                
+                await MainActor.run {
+                    recommendedProducts = products
+                    isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Product Recommendation Row
+ * 
+ * Displays a single recommended product with key information
+ */
+struct ProductRecommendationRow: View {
+    let product: FoodItem
+    
+    var body: some View {
+        HStack(spacing: ModernDesignSystem.Spacing.md) {
+            // Product icon placeholder
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.small)
+                .fill(ModernDesignSystem.Colors.primary.opacity(0.1))
+                .frame(width: 60, height: 60)
+                .overlay(
+                    Image(systemName: "bag.fill")
+                        .foregroundColor(ModernDesignSystem.Colors.primary)
+                        .font(.title3)
+                )
+            
+            // Product details
+            VStack(alignment: .leading, spacing: ModernDesignSystem.Spacing.xs) {
+                Text(product.name)
+                    .font(ModernDesignSystem.Typography.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(ModernDesignSystem.Colors.textPrimary)
+                    .lineLimit(2)
+                
+                if let brand = product.brand {
+                    Text(brand)
+                        .font(ModernDesignSystem.Typography.caption)
+                        .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                }
+                
+                // Nutritional highlights if available
+                if let nutritionalInfo = product.nutritionalInfo {
+                    HStack(spacing: ModernDesignSystem.Spacing.sm) {
+                        if let protein = nutritionalInfo.proteinPercentage {
+                            Label("\(Int(protein))%", systemImage: "flame.fill")
+                                .font(ModernDesignSystem.Typography.caption2)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                        
+                        if let fat = nutritionalInfo.fatPercentage {
+                            Label("\(Int(fat))%", systemImage: "drop.fill")
+                                .font(ModernDesignSystem.Typography.caption2)
+                                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+                        }
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Chevron indicator
+            Image(systemName: "chevron.right")
+                .font(ModernDesignSystem.Typography.caption)
+                .foregroundColor(ModernDesignSystem.Colors.textSecondary)
+        }
+        .padding(ModernDesignSystem.Spacing.md)
+        .background(ModernDesignSystem.Colors.softCream)
+        .overlay(
+            RoundedRectangle(cornerRadius: ModernDesignSystem.CornerRadius.medium)
+                .stroke(ModernDesignSystem.Colors.borderPrimary, lineWidth: 1)
+        )
+        .cornerRadius(ModernDesignSystem.CornerRadius.medium)
     }
 }
 
