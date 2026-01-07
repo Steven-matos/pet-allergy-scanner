@@ -320,9 +320,10 @@ extension FoodService {
      * - Parameter query: Search query
      * - Parameter brand: Brand filter
      * - Parameter category: Category filter
+     * - Parameter forceRefresh: If true, bypasses HTTP cache to fetch fresh data from server
      * - Returns: Array of matching food items
      */
-    func searchFoodsWithFilters(query: String, brand: String? = nil, category: String? = nil) async throws -> [FoodItem] {
+    func searchFoodsWithFilters(query: String, brand: String? = nil, category: String? = nil, forceRefresh: Bool = false) async throws -> [FoodItem] {
         struct SearchResponse: Codable {
             let items: [FoodItem]
             let totalCount: Int
@@ -347,7 +348,8 @@ extension FoodService {
         
         let response = try await apiService.get(
             endpoint: endpoint,
-            responseType: SearchResponse.self
+            responseType: SearchResponse.self,
+            bypassCache: forceRefresh
         )
         
         return response.items

@@ -438,9 +438,10 @@ class CachedFoodService: ObservableObject {
      * - Parameter query: Search query
      * - Parameter brand: Brand filter
      * - Parameter category: Category filter
+     * - Parameter forceRefresh: If true, bypasses both UnifiedCacheCoordinator and HTTP cache to fetch fresh data
      * - Returns: Array of filtered food items
      */
-    func searchFoodsWithFilters(query: String, brand: String? = nil, category: String? = nil) async throws -> [FoodItem] {
+    func searchFoodsWithFilters(query: String, brand: String? = nil, category: String? = nil, forceRefresh: Bool = false) async throws -> [FoodItem] {
         var endpoint = "/nutrition/foods/search?q=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
         
         if let brand = brand {
@@ -454,15 +455,21 @@ class CachedFoodService: ObservableObject {
         // Create cache key based on search parameters
         let searchCacheKey = "food_search_filtered_\(query.lowercased())_\(brand ?? "")_\(category ?? "")"
         
-        // Try cache first using UnifiedCacheCoordinator
-        if let cached = cacheCoordinator.get([FoodItem].self, forKey: searchCacheKey) {
-            return cached
+        // If force refresh is requested, invalidate cache and bypass it
+        if forceRefresh {
+            cacheCoordinator.invalidate(forKey: searchCacheKey)
+        } else {
+            // Try cache first using UnifiedCacheCoordinator
+            if let cached = cacheCoordinator.get([FoodItem].self, forKey: searchCacheKey) {
+                return cached
+            }
         }
         
-        // Fallback to server
+        // Fallback to server with cache bypass if force refresh
         let response = try await apiService.get(
             endpoint: endpoint,
-            responseType: [FoodItem].self
+            responseType: [FoodItem].self,
+            bypassCache: forceRefresh
         )
         
         // Cache the result (15 minutes for filtered searches) using UnifiedCacheCoordinator

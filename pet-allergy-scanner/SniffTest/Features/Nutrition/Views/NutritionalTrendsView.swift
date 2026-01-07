@@ -2806,6 +2806,9 @@ struct ProductRecommendationsView: View {
     
     /**
      * Load recommended products based on pet species
+     * 
+     * Always fetches fresh data from the database to ensure
+     * recommended products reflect the latest cleaned data
      */
     private func loadRecommendations() {
         isLoading = true
@@ -2814,9 +2817,11 @@ struct ProductRecommendationsView: View {
         Task {
             do {
                 // Search for products specific to pet's species using category filter
+                // Force refresh to bypass cache and get fresh data from database
                 let products = try await foodService.searchFoodsWithFilters(
                     query: searchQuery,
-                    category: searchCategory
+                    category: searchCategory,
+                    forceRefresh: true
                 )
                 
                 await MainActor.run {
